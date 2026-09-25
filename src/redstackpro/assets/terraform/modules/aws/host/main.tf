@@ -54,7 +54,9 @@ resource "aws_instance" "this" {
   # GOAD's canonical octets, see 0055); null lets AWS assign one from the
   # subnet's range, the unchanged default.
   private_ip                  = var.private_ip != "" ? var.private_ip : null
-  key_name                    = var.key_name
+  # Windows AMIs reject ed25519 key pairs on AWS, and a Windows host is reached
+  # over WinRM with the lab password rather than SSH, so it takes no key pair.
+  key_name                    = var.windows ? null : var.key_name
   vpc_security_group_ids      = [aws_security_group.this.id]
   associate_public_ip_address = var.public_address
 

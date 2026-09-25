@@ -74,13 +74,16 @@ Python 3.11 or newer, and Node 24 for the canvas.
 `redstackpro serve --port 8787` moves the API. Point the canvas dev server at it
 with `REDSTACKPRO_API=http://127.0.0.1:8787`.
 
-Open it, load a template from the library, press Compile, then Download. You get
-a zip of the working directory described below.
+Open it, load a template from the library, choose your cloud in the toolbar
+provider selector (GCP or AWS), press Compile, then Download. You get a zip of the
+working directory described below.
 
 **Or skip the canvas entirely** and compile a shipped template from the command
 line -- same compiler, same output:
 
     redstackpro compile frontend/public/goad/goad-light.json -o export
+
+The command line defaults to GCP. Pass `--provider aws` for AWS.
 
 That writes **190 files**: Terraform for the cloud, Ansible for everything that
 happens on the boxes, a `deploy.sh`, and a `RANGE-BRIEFING.md` telling you the
