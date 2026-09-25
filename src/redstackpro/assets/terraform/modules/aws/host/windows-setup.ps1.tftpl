@@ -1,0 +1,111 @@
+<powershell>
+# redStackPRO Windows operator, self-provisioned at boot. It creates the
+# operator account, sets the shared lab password, and enables RDP, so the box is
+# reachable from Guacamole with no WinRM push and no jumpbox VPN. This is the
+# low-touch path: every box comes up ready without the configuration layer having
+# to reach into it. The password is generated at apply and lives only in your
+# state and on this box, never in the export. See 0001.
+$ErrorActionPreference = "Stop"
+
+$user = "${operator_username}"
+$pass = ConvertTo-SecureString "${lab_password}" -AsPlainText -Force
+
+$existing = Get-LocalUser -Name $user -ErrorAction SilentlyContinue
+if (-not $existing) {
+    New-LocalUser -Name $user -Password $pass -FullName $user `
+        -Description "redStackPRO operator" -PasswordNeverExpires -AccountNeverExpires
+} else {
+    Set-LocalUser -Name $user -Password $pass
+}
+Add-LocalGroupMember -Group "Administrators" -Member $user -ErrorAction SilentlyContinue
+Add-LocalGroupMember -Group "Remote Desktop Users" -Member $user -ErrorAction SilentlyContinue
+
+# Enable Remote Desktop with network level authentication. The security group is
+# what restricts the source; this only turns the service on.
+Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" `
+    -Name fDenyTSConnections -Value 0
+Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" `
+    -Name UserAuthentication -Value 1
+if (-not (Get-NetFirewallRule -Name "redstackpro-rdp" -ErrorAction SilentlyContinue)) {
+    New-NetFirewallRule -Name "redstackpro-rdp" -DisplayName "redStackPRO RDP" `
+        -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 3389
+}
+Set-Service -Name TermService -StartupType Automatic
+Start-Service -Name TermService
+
+%{ if enable_winrm ~}
+# A range host is provisioned over WinRM (psrp), so the boot script sets the
+# built-in Administrator password to the shared lab password and stands up an
+# HTTPS listener. Ansible connects as Administrator; once the forest root is
+# promoted this local account becomes the domain Administrator with the same
+# password, so the connection survives the promotion. The range is an isolated
+# subnet, so the listener is self signed and the control node does not validate
+# it. See redStackPRO goad-native-recreation.
+Set-LocalUser -Name "Administrator" -Password $pass
+Enable-LocalUser -Name "Administrator"
+
+# Rebuild the HTTPS listener idempotently: <persist> reruns this script on every
+# boot, and winrm create fails if the listener already exists.
+Set-Service -Name WinRM -StartupType Automatic
+Start-Service -Name WinRM
+Get-ChildItem WSMan:\localhost\Listener |
+    Where-Object { $_.Keys -contains "Transport=HTTPS" } |
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+$winrmCert = New-SelfSignedCertificate -DnsName $env:COMPUTERNAME `
+    -CertStoreLocation Cert:\LocalMachine\My
+New-Item -Path WSMan:\localhost\Listener -Transport HTTPS -Address * `
+    -Hostname $env:COMPUTERNAME -CertificateThumbPrint $winrmCert.Thumbprint -Force
+Set-Item -Path WSMan:\localhost\Service\Auth\Negotiate -Value $true
+if (-not (Get-NetFirewallRule -Name "redstackpro-winrm-https" -ErrorAction SilentlyContinue)) {
+    New-NetFirewallRule -Name "redstackpro-winrm-https" -DisplayName "redStackPRO WinRM HTTPS" `
+        -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 5986
+}
+%{ endif ~}
+
+%{ if operator_setup ~}
+# The offense Windows operator has no WinRM and is never provisioned by Ansible,
+# so its operator kit (MobaXterm, browser, tools) and its hosts file ride this
+# boot script. operator_setup.ps1 is embedded encoded -- the script uses
+# PowerShell here-strings of its own, so encoding is what lets it ride inside
+# user_data without breaking either terraform templating or the outer script --
+# and run once, guarded by a marker so <persist> does not reinstall on reboot.
+# RSP_HOSTS names the range hosts so MobaXterm sessions and bookmarks resolve.
+#
+# GZIPPED, not plain base64, and that is load bearing on AWS specifically:
+# user_data is capped at 16384 bytes. Plain base64 of the setup script is 13808
+# of them, which plus this wrapper is ~18.6KB and fails apply outright with
+# "expected length of user_data to be in the range (0 - 16384)". base64gzip
+# brings the payload to ~5.3KB and the whole thing to ~10KB. GCP carries the
+# same script in a metadata key with a 256KB budget and needs no such trick, so
+# this compression is an AWS-local concern.
+# See operator_setup.ps1 and the /etc/hosts PAI item.
+$rspDone = "C:\Windows\Temp\operator-setup.done"
+if (-not (Test-Path $rspDone)) {
+    try {
+        $env:RSP_OPERATOR = "${operator_username}"
+        $env:RSP_HOSTS = @'
+${operator_hosts}
+'@
+        # The stack's SSH key, so operator_setup can wire MobaXterm to key-auth.
+        $env:RSP_SSH_KEY = @'
+${operator_ssh_key}
+'@
+        $rspScript = "C:\Windows\Temp\operator_setup.ps1"
+        $rspGz = New-Object IO.MemoryStream(
+            ,[Convert]::FromBase64String('${operator_setup_script_b64}'))
+        $rspOut = New-Object IO.MemoryStream
+        $rspZip = New-Object IO.Compression.GzipStream(
+            $rspGz, [IO.Compression.CompressionMode]::Decompress)
+        $rspZip.CopyTo($rspOut)
+        $rspZip.Dispose()
+        [IO.File]::WriteAllBytes($rspScript, $rspOut.ToArray())
+        $rspOut.Dispose()
+        & powershell.exe -ExecutionPolicy Bypass -File $rspScript
+        New-Item -ItemType File -Path $rspDone -Force | Out-Null
+    } catch {
+        Write-Host "operator setup failed: $_"
+    }
+}
+%{ endif ~}
+</powershell>
+<persist>true</persist>

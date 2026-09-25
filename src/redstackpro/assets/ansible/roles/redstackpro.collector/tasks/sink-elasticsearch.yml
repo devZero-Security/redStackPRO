@@ -1,0 +1,63 @@
+---
+# The elastic repository and signing key are added by receiver.yml, which needs
+# them for logstash. Ordering puts the sink first, so they are added here too
+# and the second add is a no op.
+
+- name: Add the elastic signing key
+  ansible.builtin.get_url:
+    url: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+    dest: /etc/apt/keyrings/elastic.asc
+    mode: "0644"
+
+- name: Add the elastic repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/elastic.asc]
+      https://artifacts.elastic.co/packages/8.x/apt stable main
+    filename: elastic-8x
+    state: present
+
+- name: Install elasticsearch
+  ansible.builtin.apt:
+    name: elasticsearch
+    state: present
+    update_cache: true
+
+# Same shape as the opensearch sink: single node on loopback, security off
+# because it would generate an enrollment token and a password on first boot
+# and neither belongs in an export.
+- name: Configure elasticsearch
+  ansible.builtin.copy:
+    content: |
+      cluster.name: redstackpro
+      node.name: {{ inventory_hostname }}
+      network.host: 127.0.0.1
+      http.port: 9200
+      discovery.type: single-node
+      xpack.security.enabled: false
+      xpack.security.enrollment.enabled: false
+    dest: /etc/elasticsearch/elasticsearch.yml
+    owner: root
+    group: elasticsearch
+    mode: "0660"
+  notify: Restart elasticsearch
+
+- name: Start elasticsearch
+  ansible.builtin.service:
+    name: elasticsearch
+    state: started
+    enabled: true
+
+# The sink is where events come to rest, so it answering is the one fact worth
+# asserting about it. The receiver's own check would catch a dead sink eventually
+# -- logstash cannot start a pipeline it cannot connect to -- but it would report
+# it as a receiver problem, which is a worse place to start looking. A JVM on a
+# lab box is slow to open a port, hence the patience.
+- name: Confirm the sink is really listening, not merely started
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: 9200
+    timeout: 300
+    msg: >-
+      elasticsearch is running but nothing is bound to 9200. Check its journal: it exits on
+      a bad configuration or too little memory and the unit still reports active.

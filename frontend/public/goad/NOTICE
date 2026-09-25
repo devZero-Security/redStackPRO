@@ -1,0 +1,26 @@
+GOAD range templates
+=====================
+
+The range templates in this directory (goad.json, goad-light.json,
+goad-mini.json, goad-wazuh.json, nha.json, sccm.json, dracarys.json, and
+minilab.json) are derived from GOAD (Game of Active Directory) and its family of
+vulnerable Active Directory labs by Orange Cyberdefense:
+
+    https://github.com/Orange-Cyberdefense/GOAD
+
+GOAD is licensed under the GNU General Public License v3.0. These templates
+reproduce GOAD's lab content (its domains, hosts, users, groups, and planted
+attack paths) as redStackPRO range documents, and are therefore a derivative
+work of GOAD. They are distributed under the same license, GPLv3, a copy of
+which sits alongside this notice in LICENSE.
+
+This applies only to the files in this directory. The rest of redStackPRO,
+including the code that reads and writes the GOAD config format, is the project's
+own work under the MIT license (see the repository LICENSE). goad-wazuh.json adds
+the Wazuh and ws01 extensions on top of GOAD-Light; those additions are the
+project's, but the file as a whole remains a GOAD derivative and stays GPLv3.
+
+goad-wazuh.json is redStackPRO's composition on top of GOAD-Light; goad.json,
+goad-light.json, goad-mini.json, nha.json (Ninja Hacker Academy), sccm.json,
+dracarys.json, and minilab.json follow the upstream GOAD, GOAD-Light, GOAD-Mini,
+NHA, SCCM, DRACARYS, and MINI labs respectively.

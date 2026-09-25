@@ -1,0 +1,17 @@
+---
+# Groups Active Directory ships with. The canvas may list one as a user's
+# membership, but the dc role never creates them, only adds users to them. Every
+# other group a user references is defined on the domain and created first.
+redstackpro_dc_builtin_groups:
+  - Domain Admins
+  - Enterprise Admins
+  - Schema Admins
+  - Domain Users
+  - Domain Computers
+  - Domain Controllers
+  - Protected Users
+  - Administrators
+  - Account Operators
+  - Backup Operators
+  - Server Operators
+  - Group Policy Creator Owners

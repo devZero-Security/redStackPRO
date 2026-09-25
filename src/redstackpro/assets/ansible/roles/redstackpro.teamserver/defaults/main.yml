@@ -1,0 +1,61 @@
+---
+# Defaults only. Real values come from host_vars, generated from the topology.
+
+redstackpro_teamserver_c2: none
+redstackpro_teamserver_version: ""
+
+# Injected by the fronts edge, so the C2 profile and the redirector gating
+# cannot drift apart.
+gating_header_name: ""
+gating_header_value: ""
+uri_prefix: /
+
+# Injected by the logs_to edge, if there is one.
+log_sink_address: ""
+
+redstackpro_teamserver_user: "{{ ansible_user }}"
+redstackpro_teamserver_root: /opt/redstackpro
+
+# Mythic only. Installs the upstream logging container, which subscribes to
+# Mythic's RabbitMQ event stream and writes new_callback / new_task /
+# new_response as JSON. Without it a Mythic teamserver can be charted but never
+# attributed: its server container names no operator and no callback on any code
+# path, so the collector sees health and nothing else.
+#
+# On by default because the attribution is the point of shipping c2 logs at all,
+# and because it is an image pull rather than a build. Turn it off for a
+# teamserver that is not reporting to a collector.
+redstackpro_teamserver_mythic_logger: true
+
+# Adaptix only. Polls its SQLite database for task history and writes JSON lines
+# the shipper collects. Same reason as the Mythic logger: without it an Adaptix
+# teamserver reports health and nothing else, because its stdout names no
+# operator and no agent on any code path. Read only; it never writes to the
+# database it reads.
+redstackpro_teamserver_adaptix_export: true
+
+# The operator port in AdaptixC2's own shipped dist/profile.yaml, which we do not
+# template. Here only so the post-start check has something to probe; if upstream
+# changes the profile's port this has to follow, and the check failing loudly is
+# the intended way to find that out.
+redstackpro_adaptix_teamserver_port: 4321
+
+# The C2 listener the role creates so a fronts edge has something to reach. The
+# port matches what a redirector proxies to, which is the fronts edge's
+# upstream_port and 443 everywhere it is not set; changing one without the other
+# puts the 502 back. The user agent is the beacon's, so it should look like
+# traffic the cover page would plausibly serve.
+redstackpro_adaptix_listener_name: redstackpro-http
+redstackpro_adaptix_listener_port: 443
+redstackpro_adaptix_listener_user_agent: >-
+  Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like
+  Gecko) Chrome/120.0.0.0 Safari/537.36
+
+# The C2 listens on loopback plus the private interface only. Public exposure is
+# the redirector's job, and EXP002 rejects a teamserver holding a public address.
+redstackpro_teamserver_bind: 0.0.0.0
+
+# The port the C2 listener binds. This is not a free choice: the compiler already
+# tells the redirector to proxy to https://<teamserver>:443, so a different value
+# here means the redirector forwards to nothing. See the upstreams var it renders.
+redstackpro_teamserver_c2_port: 443

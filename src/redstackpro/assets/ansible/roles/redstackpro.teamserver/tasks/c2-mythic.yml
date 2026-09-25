@@ -1,0 +1,235 @@
+---
+- name: Install Docker and make
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - make
+    state: present
+
+# Debian ships no compose v2 package, so the plugin binary is dropped in by hand
+# the way Mythic's own setup does. mythic-cli calls `docker compose`, so the
+# plugin has to sit in the cli-plugins directory.
+- name: Create the docker cli-plugins directory
+  ansible.builtin.file:
+    path: /usr/local/lib/docker/cli-plugins
+    state: directory
+    mode: "0755"
+
+- name: Install the docker compose v2 plugin
+  ansible.builtin.get_url:
+    url: "https://github.com/docker/compose/releases/download/v{{ redstackpro_docker_compose_version }}/docker-compose-linux-x86_64"
+    dest: /usr/local/lib/docker/cli-plugins/docker-compose
+    mode: "0755"
+  vars:
+    redstackpro_docker_compose_version: "2.24.5"
+
+# Container output has to reach the journal, or the shipper never sees it. See
+# the same block in redstackpro.jumpbox/tasks/service-guacamole.yml for the full
+# account: Debian's docker defaults to the json-file driver, the shipper matches
+# on CONTAINER_NAME which is journald, and so mythic_server contributed ZERO
+# documents to the c2 index while sliver and adaptix contributed hundreds.
+#
+# This also decides whether the logging container is worth anything: basic_logger
+# is the only source of Mythic operator and callback attribution, and on the
+# json-file driver none of it would ever have left the host.
+#
+# BEFORE mythic-cli start, deliberately. The log driver is fixed when a container
+# is CREATED, so setting this later and restarting leaves every existing
+# container on the old driver -- proven on a live host, where a restarted
+# container still read json-file and a brand new one landed in the journal.
+- name: Send container output to the journal, where the shipper reads
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    mode: "0644"
+    content: |
+      {"log-driver": "journald"}
+  register: redstackpro_mythic_log_driver
+
+- name: Start Docker
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Restart Docker when the log driver changed
+  ansible.builtin.service:
+    name: docker
+    state: restarted
+  when: redstackpro_mythic_log_driver is changed
+
+- name: Let the operator account use Docker
+  ansible.builtin.user:
+    name: "{{ redstackpro_teamserver_user }}"
+    groups: docker
+    append: true
+
+- name: Clone Mythic
+  ansible.builtin.git:
+    repo: https://github.com/its-a-feature/Mythic
+    dest: "{{ redstackpro_teamserver_root }}/Mythic"
+    version: "{{ redstackpro_teamserver_version | default('master', true) }}"
+  become: true
+  become_user: "{{ redstackpro_teamserver_user }}"
+
+- name: Build the Mythic CLI
+  community.general.make:
+    chdir: "{{ redstackpro_teamserver_root }}/Mythic"
+
+- name: Start Mythic
+  # mythic-cli start generates the nginx SSL certs on its first run, but the nginx
+  # container is created before those certs exist and stays down, so the first run
+  # exits non-zero. A second run (certs now present) brings nginx up. Retry until
+  # it succeeds rather than fail the whole deploy on that first-start ordering.
+  ansible.builtin.command:
+    # Bound the start: mythic-cli calls docker compose, which can wedge on a
+    # slow image pull. timeout turns a wedge into a retryable non-zero rather
+    # than blocking the play until the global task ceiling.
+    cmd: timeout 600 ./mythic-cli start
+    chdir: "{{ redstackpro_teamserver_root }}/Mythic"
+  register: redstackpro_mythic_start
+  changed_when: redstackpro_mythic_start.rc == 0
+  retries: 4
+  delay: 20
+  until: redstackpro_mythic_start.rc == 0
+
+- name: Wait for the web interface
+  ansible.builtin.uri:
+    url: https://127.0.0.1:7443/new/login
+    validate_certs: false
+    status_code: [200, 302]
+  register: redstackpro_mythic_ui
+  retries: 60
+  delay: 5
+  until: redstackpro_mythic_ui is succeeded
+
+- name: Install the HTTP profile and the Apollo agent
+  ansible.builtin.command:
+    # install clones a repo and builds an agent container (Apollo is a heavy
+    # .NET build); a flaky fetch or a wedged build would otherwise hang the play
+    # with no bound. timeout + retries make it recover on its own.
+    #
+    # -f is load bearing, not tidiness. The image already carries http and apollo
+    # under InstalledServices, so install finds an older copy and PROMPTS to
+    # overwrite. A command task has no stdin to answer with, so it blocks for the
+    # full 1500s, gets killed, and retries twice more: about seventy-five minutes
+    # of a deploy that looks like a slow build and then fails. --force is exactly
+    # the documented escape ("don't prompt to overwrite files if an older version
+    # is already installed").
+    #
+    # stdin is emptied as well, so a prompt this flag does not cover reads EOF and
+    # the command fails in seconds rather than hanging until the timeout. Found
+    # live 2026-09-13 on split-horizon, where the process sat idle with no child
+    # and no socket -- the shape of something waiting on a tty nobody was at.
+    # (command runs no shell, so this is the module's own stdin, not a redirect.)
+    cmd: "timeout 1500 ./mythic-cli install github {{ item }} -f"
+    chdir: "{{ redstackpro_teamserver_root }}/Mythic"
+    stdin: ""
+  loop:
+    - https://github.com/MythicC2Profiles/http
+    - https://github.com/MythicAgents/apollo
+  register: redstackpro_mythic_install
+  changed_when: redstackpro_mythic_install.rc == 0
+  retries: 2
+  delay: 30
+  until: redstackpro_mythic_install is succeeded
+
+# Mythic's own server container says nothing about who did what: its stdout is
+# developer diagnostics (func, line, error) and carries no operator and no
+# callback id on any code path. The structured events -- new_callback, new_task,
+# new_response -- are published to RabbitMQ and only reach disk if something
+# subscribes. A logging container is that subscriber.
+#
+# This is the stock upstream one, and it is installed rather than forked because
+# the fork would have bought nothing. Its task handler discards the message
+# envelope, which loses `operation_name` and `server_name`, but the TASK PAYLOAD
+# itself carries `operator_username` and `callback_id`, and those two are the
+# whole point. It also ships as a prebuilt image (remote_images in its
+# config.json), so this adds a pull rather than a Go build to every deploy.
+- name: Install the Mythic logging container
+  ansible.builtin.command:
+    # Same three guards as the agent install above, for the same reasons: -f so a
+    # reinstall never prompts, empty stdin so a prompt this flag misses fails in
+    # seconds instead of hanging, and a timeout so a wedged pull is retryable.
+    cmd: "timeout 900 ./mythic-cli install github https://github.com/MythicC2Profiles/basic_logger -f"
+    chdir: "{{ redstackpro_teamserver_root }}/Mythic"
+    stdin: ""
+  register: redstackpro_mythic_logger
+  changed_when: redstackpro_mythic_logger.rc == 0
+  retries: 2
+  delay: 20
+  until: redstackpro_mythic_logger is succeeded
+  when: redstackpro_teamserver_mythic_logger | bool
+
+- name: Start the Mythic logging container
+  ansible.builtin.command:
+    cmd: "timeout 300 ./mythic-cli start basic_logger"
+    chdir: "{{ redstackpro_teamserver_root }}/Mythic"
+    stdin: ""
+  register: redstackpro_mythic_logger_start
+  changed_when: redstackpro_mythic_logger_start.rc == 0
+  when: redstackpro_teamserver_mythic_logger | bool
+
+# The daemon default set above does not reach Mythic, and that is the whole
+# reason no Mythic ever appeared in the C2 index. mythic-cli GENERATES
+# docker-compose.yml with `logging: driver: json-file` pinned on every service,
+# and a per-service driver beats the daemon default. So the shipper's journald
+# inputs for mythic_server and basic_logger matched nothing, on a host whose
+# daemon default was journald and whose every other service collected fine.
+#
+# Nothing looks wrong. Mythic runs, the deploy is green, the other two
+# teamservers report, and the dashboard's teamserver panel simply has no mythic
+# row. Confirmed live: 661 C2 documents, 580 sliver and 81 adaptix, 0 mythic.
+#
+# This runs LAST, after every mythic-cli install, because each install
+# regenerates the compose file and would put the pin back. Recreation is
+# required as well as the edit: the driver is fixed when a container is
+# created, so the running containers stay on json-file until they are replaced.
+- name: Stop Mythic pinning its containers to a log driver the shipper cannot read
+  ansible.builtin.script:
+    cmd: mythic-unpin-logging.py "{{ redstackpro_teamserver_root }}/Mythic/docker-compose.yml"
+  register: redstackpro_mythic_unpin
+  changed_when: "'stripped' in redstackpro_mythic_unpin.stdout"
+
+- name: Recreate the containers the shipper reads, so they inherit journald
+  ansible.builtin.command:
+    cmd: timeout 300 docker compose up -d --force-recreate mythic_server basic_logger
+    chdir: "{{ redstackpro_teamserver_root }}/Mythic"
+  register: redstackpro_mythic_recreate
+  changed_when: redstackpro_mythic_recreate.rc == 0
+  when: redstackpro_mythic_unpin is changed
+
+- name: Serve the HTTP profile over TLS on 443
+  ansible.builtin.replace:
+    path: "{{ redstackpro_teamserver_root }}/Mythic/InstalledServices/http/http/c2_code/config.json"
+    regexp: '"{{ item.key }}": {{ item.from }}'
+    replace: '"{{ item.key }}": {{ item.to }}'
+  loop:
+    - { key: use_ssl, from: "false", to: "true" }
+    - { key: port, from: "80", to: "443" }
+
+# The profile only reads config.json when its container (re)starts, and the first
+# start after boot races container readiness -- start_stop returns success with no
+# output and the listener silently never binds, so the redirector gets 503. Restart
+# the profile and confirm 443 is actually listening, retrying stop/start until it
+# binds; fail loudly if it never does rather than ship a dead C2.
+- name: Bind the HTTP C2 listener on 443 (retry stop/start until it is up)
+  ansible.builtin.shell:
+    chdir: "{{ redstackpro_teamserver_root }}/Mythic"
+    executable: /bin/bash
+    cmd: |
+      set -o pipefail
+      for i in $(seq 1 6); do
+        ./mythic-cli stop http >/dev/null 2>&1 || true
+        sleep 5
+        ./mythic-cli start http >/dev/null 2>&1 || true
+        sleep 25
+        if ss -Htln 2>/dev/null | grep -q ':443 '; then
+          echo "BOUND on attempt $i"
+          exit 0
+        fi
+      done
+      echo "NOTBOUND after retries; current listeners:"
+      ss -Htln 2>/dev/null | grep ':443 ' || echo "(nothing on 443)"
+      exit 1
+  register: redstackpro_mythic_c2_bind
+  changed_when: true

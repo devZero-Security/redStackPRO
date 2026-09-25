@@ -1,0 +1,17 @@
+;SQL Server Express unattended configuration (redStackPRO, clean-room). Handed to
+;the chocolatey package via its ConfigurationFile parameter so the install sets a
+;sysadmin the deploy can use and turns on sa + mixed mode.
+[OPTIONS]
+IACCEPTSQLSERVERLICENSETERMS="True"
+ACTION="Install"
+QUIET="True"
+FEATURES=SQLENGINE
+INSTANCENAME="{{ redstackpro_mssql_instance }}"
+INSTANCEID="{{ redstackpro_mssql_instance }}"
+SQLSVCSTARTUPTYPE="Automatic"
+SQLSYSADMINACCOUNTS="BUILTIN\Administrators"
+SECURITYMODE="SQL"
+SAPWD="{{ redstackpro_lab_password }}"
+TCPENABLED="1"
+NPENABLED="0"
+UPDATEENABLED="False"

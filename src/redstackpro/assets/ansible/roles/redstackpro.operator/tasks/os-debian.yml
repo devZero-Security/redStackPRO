@@ -1,0 +1,42 @@
+---
+- name: Install operator tooling
+  ansible.builtin.apt:
+    name: "{{ redstackpro_operator_debian_packages }}"
+    state: present
+    update_cache: true
+
+- name: Create the operator account
+  ansible.builtin.user:
+    name: "{{ redstackpro_operator_user }}"
+    shell: /bin/bash
+    create_home: true
+    groups: sudo
+    append: true
+    state: present
+
+- name: Create the operator working directory
+  ansible.builtin.file:
+    path: "{{ redstackpro_operator_root }}"
+    state: directory
+    owner: "{{ redstackpro_operator_user }}"
+    mode: "0750"
+
+- name: Create the operator ssh directory
+  ansible.builtin.file:
+    path: "/home/{{ redstackpro_operator_user }}/.ssh"
+    state: directory
+    owner: "{{ redstackpro_operator_user }}"
+    mode: "0700"
+
+# The whole estate is reached through the jumpbox, so the box an operator works
+# from should already know that rather than making them remember it.
+- name: Point ssh at the jumpbox for everything else in the estate
+  ansible.builtin.template:
+    src: ssh-config.j2
+    dest: "/home/{{ redstackpro_operator_user }}/.ssh/config"
+    owner: "{{ redstackpro_operator_user }}"
+    mode: "0600"
+  when: groups['jumpboxes'] | default([]) | length > 0
+
+- name: Install the pinned offensive toolchain
+  ansible.builtin.include_tasks: toolchain.yml

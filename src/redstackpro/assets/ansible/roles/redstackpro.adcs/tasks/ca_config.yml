@@ -1,0 +1,110 @@
+---
+# redStackPRO AD CS: CA-wide misconfigurations (clean-room MIT). Unlike the ESCx
+# certificate templates (planted in plant_templates.yml), these weaken the CA
+# itself through its policy/interface registry, so they are set with certutil on
+# the CA host (the play's session is a local admin on the CA, which is enough to
+# write the CA's HKLM registry) and take effect after a CertSvc restart. Each is
+# gated on the host declaring that esc id. GOAD is the fidelity benchmark; this is
+# our own role. See goad-fidelity-build.
+
+# ESC6: the CA honours a subject alternative name supplied in the request for any
+# template (EDITF_ATTRIBUTESUBJECTALTNAME2), so a low-priv user can request a cert
+# for an arbitrary principal (e.g. a domain admin) and authenticate as them.
+- name: ESC6 - let the CA honour a requester-supplied SAN
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = "Stop"
+      $before = (certutil -getreg policy\EditFlags) -join "`n"
+      certutil -setreg policy\EditFlags +EDITF_ATTRIBUTESUBJECTALTNAME2 | Out-Null
+      $after = (certutil -getreg policy\EditFlags) -join "`n"
+      $changed = $after -match "EDITF_ATTRIBUTESUBJECTALTNAME2" -and `
+                 ($before -notmatch "EDITF_ATTRIBUTESUBJECTALTNAME2")
+      [Ordered]@{ changed = [bool]$changed; set = ($after -match "EDITF_ATTRIBUTESUBJECTALTNAME2") }
+  register: redstackpro_esc6
+  changed_when: redstackpro_esc6.output[0].changed | default(false)
+  notify: Restart CertSvc
+  when: "'esc6' in (redstackpro_adcs_templates | default([]))"
+
+# ESC11: the CA's RPC enrollment interface no longer requires request encryption
+# (IF_ENFORCEENCRYPTICERTREQUEST cleared), enabling an NTLM-relay to the CA's
+# ICertPassage (RPC) endpoint.
+- name: ESC11 - stop the CA enforcing encrypted RPC enrollment
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = "Stop"
+      $before = (certutil -getreg CA\InterfaceFlags) -join "`n"
+      certutil -setreg CA\InterfaceFlags -IF_ENFORCEENCRYPTICERTREQUEST | Out-Null
+      $after = (certutil -getreg CA\InterfaceFlags) -join "`n"
+      # -IF_... clears the bit; "changed" if the flag was present before and is not now.
+      $changed = ($before -match "IF_ENFORCEENCRYPTICERTREQUEST") -and `
+                 ($after -notmatch "IF_ENFORCEENCRYPTICERTREQUEST")
+      [Ordered]@{ changed = [bool]$changed; cleared = ($after -notmatch "IF_ENFORCEENCRYPTICERTREQUEST") }
+  register: redstackpro_esc11
+  changed_when: redstackpro_esc11.output[0].changed | default(false)
+  notify: Restart CertSvc
+  when: "'esc11' in (redstackpro_adcs_templates | default([]))"
+
+# ESC16: the CA is told to leave the SID security extension
+# (szOID_NTDS_CA_SECURITY_EXT, 1.3.6.1.4.1.311.25.2) out of EVERY certificate it
+# issues. ESC9 is a single template asking for that; this is the CA-wide version,
+# so every template it publishes behaves as though it carried
+# CT_FLAG_NO_SECURITY_EXTENSION, whatever that template actually says.
+#
+# The name reads backwards: DisableExtensionList is a list of extensions to
+# DISABLE, so adding an OID to it removes that extension rather than enabling it.
+# Some write-ups describe the same command as "allowing" the extension, which is
+# the opposite of what it does.
+- name: ESC16 - stop the CA issuing the SID security extension at all
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = "Stop"
+      $oid = "1.3.6.1.4.1.311.25.2"
+      $before = (certutil -getreg policy\DisableExtensionList) -join "`n"
+      certutil -setreg policy\DisableExtensionList +$oid | Out-Null
+      $after = (certutil -getreg policy\DisableExtensionList) -join "`n"
+      $changed = ($after -match [regex]::Escape($oid)) -and `
+                 ($before -notmatch [regex]::Escape($oid))
+      [Ordered]@{ changed = [bool]$changed; set = ($after -match [regex]::Escape($oid)) }
+  register: redstackpro_esc16
+  changed_when: redstackpro_esc16.output[0].changed | default(false)
+  notify: Restart CertSvc
+  when: "'esc16' in (redstackpro_adcs_templates | default([]))"
+
+# ESC7: grant a low-privileged user the CA "ManageCA" role, so they can (for
+# example) enable a vulnerable template or issue a pending request. The CA's role
+# assignments live in a security descriptor in the CA's own registry, so this is a
+# local-admin registry edit on the CA host (no PSPKI / internet needed); ManageCA
+# is access mask 1 in the CA's descriptor. Takes effect on a CertSvc restart.
+- name: ESC7 - grant a user the ManageCA role on the CA
+  ansible.windows.win_powershell:
+    script: |
+      param($Ca, $Mgr)
+      $ErrorActionPreference = "Stop"
+      $key = "HKLM:\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\$Ca"
+      $bytes = (Get-ItemProperty -Path $key -Name Security).Security
+      $sd = New-Object System.Security.AccessControl.RawSecurityDescriptor($bytes, 0)
+      $sid = (New-Object System.Security.Principal.NTAccount($Mgr)).Translate([System.Security.Principal.SecurityIdentifier])
+      $has = $false
+      foreach ($ace in $sd.DiscretionaryAcl) {
+        if ($ace.SecurityIdentifier -eq $sid -and ($ace.AccessMask -band 1)) { $has = $true }
+      }
+      if (-not $has) {
+        $ace = New-Object System.Security.AccessControl.CommonAce(
+          [System.Security.AccessControl.AceFlags]::None,
+          [System.Security.AccessControl.AceQualifier]::AccessAllowed,
+          1, $sid, $false, $null)
+        $sd.DiscretionaryAcl.InsertAce($sd.DiscretionaryAcl.Count, $ace)
+        $out = New-Object byte[] ($sd.BinaryLength)
+        $sd.GetBinaryForm($out, 0)
+        Set-ItemProperty -Path $key -Name Security -Value $out
+      }
+      [Ordered]@{ changed = (-not $has); manager = $Mgr }
+    parameters:
+      Ca: "{{ redstackpro_adcs_ca_name }}"
+      Mgr: "{{ redstackpro_adcs_esc7_manager }}"
+  register: redstackpro_esc7
+  changed_when: redstackpro_esc7.output[0].changed | default(false)
+  notify: Restart CertSvc
+  when:
+    - "'esc7' in (redstackpro_adcs_templates | default([]))"
+    - redstackpro_adcs_esc7_manager | length > 0

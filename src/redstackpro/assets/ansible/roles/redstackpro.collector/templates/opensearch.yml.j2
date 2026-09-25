@@ -1,0 +1,17 @@
+{{ ansible_managed | comment }}
+# Bound to loopback. The receiver on this host is the only client; shippers
+# reach the beats port and never the sink.
+
+cluster.name: redstackpro
+node.name: {{ inventory_hostname }}
+network.host: 127.0.0.1
+http.port: 9200
+discovery.type: single-node
+
+path.data: /var/lib/opensearch
+path.logs: /var/log/opensearch
+
+# The demo security plugin generates its own certificates and its own admin
+# password on first boot. Neither belongs in a generated export, and the
+# transport is loopback only, so it is off.
+plugins.security.disabled: true

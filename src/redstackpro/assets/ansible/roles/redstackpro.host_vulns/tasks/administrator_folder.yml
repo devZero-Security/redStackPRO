@@ -1,0 +1,19 @@
+---
+# administrator_folder: drop a CTF flag file on the local administrator's desktop
+# (the reward for reaching admin on this host). Content and name come from
+# vulns_vars.administrator_folder; a placeholder flag is generated if none given.
+# See goad-fidelity-build.
+
+- name: Ensure the administrator desktop exists
+  ansible.windows.win_file:
+    path: C:\Users\Administrator\Desktop
+    state: directory
+
+- name: Drop the flag file
+  vars:
+    _af: "{{ redstackpro_host_vulns_vars.administrator_folder | default({}) }}"
+  ansible.windows.win_copy:
+    dest: "C:\\Users\\Administrator\\Desktop\\{{ _af.name | default('flag.txt') }}"
+    content: >-
+      {{ _af.content
+         | default('flag{' ~ (redstackpro_node_id | default('host')) ~ '_owned}') }}

@@ -1,0 +1,37 @@
+---
+# Defaults only. Real values come from host_vars, generated from the topology.
+# See 0011.
+
+redstackpro_collector_sink: opensearch
+redstackpro_collector_shipper: filebeat
+redstackpro_collector_ingest_port: 5044
+redstackpro_collector_tls: true
+
+redstackpro_collector_user: "{{ ansible_user }}"
+redstackpro_collector_root: /opt/redstackpro
+redstackpro_collector_tls_dir: /etc/redstackpro/tls
+
+# The receiver speaks the shipper's wire protocol. filebeat pushes the beats
+# protocol, so the receiver is logstash regardless of which sink sits behind it.
+redstackpro_collector_receiver_heap: 1g
+redstackpro_logstash_version: "8.15.0"
+
+redstackpro_opensearch_version: "2.17.1"
+redstackpro_opensearch_heap: 2g
+# opensearch 2.12+ refuses to configure without a strong initial admin password
+# set in the environment at install time. The sink is a single node bound to
+# loopback and the admin account is not used from outside, but the package
+# requires one, so a strong lab default stands in; override per deployment.
+redstackpro_opensearch_admin_password: "R3dStackPro-Lab-2026!"
+redstackpro_elasticsearch_version: "8.15.0"
+
+# Splunk receives over HEC rather than by hosting a search head here. The token
+# is generated on the host at run time, never in the export.
+redstackpro_splunk_hec_port: 8088
+redstackpro_splunk_index: redstackpro
+
+# The UI. Only built for the opensearch sink: Dashboards is OpenSearch's own, and
+# an elasticsearch or splunk collector brings its own front end.
+redstackpro_dashboards_enabled: true
+redstackpro_dashboards_port: 5601
+redstackpro_opensearch_admin_user: admin

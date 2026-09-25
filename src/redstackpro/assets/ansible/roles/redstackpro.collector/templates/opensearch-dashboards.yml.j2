@@ -1,0 +1,39 @@
+# {{ ansible_managed }}
+#
+# Bound to every interface, which is safe here and only here: the collector holds
+# no public address (EXP002 forbids one) and in ops mode the plan's networks are
+# internally open, so the reachable set is the operator's own stack. The operator
+# arrives through the portal on the jumpbox, which proxies this under /dashboards.
+server.host: "0.0.0.0"
+server.port: {{ redstackpro_dashboards_port }}
+
+# Served under a path rather than at the root, because the portal's 443 already
+# belongs to Guacamole. rewriteBasePath makes Dashboards generate its own links
+# with the prefix, without which every asset 404s one click in.
+server.basePath: "/dashboards"
+server.rewriteBasePath: true
+
+# PLAIN http, no credentials. opensearch.yml sets plugins.security.disabled --
+# the demo security plugin would generate its own certificates and admin password
+# on first boot, and neither belongs in a generated export. The hop is loopback.
+#
+# The admin password 2.12 demands at INSTALL time is for the package's own
+# post-install step, not evidence the running node speaks TLS. Assuming it was
+# cost a deploy on the logstash side ("Unsupported or unrecognized SSL message",
+# a TLS client meeting a plaintext server); this config had the same mistake and
+# would have failed the same way one task later.
+opensearch.hosts: ["http://127.0.0.1:9200"]
+
+# With the security plugin off there are no tenants and no security headers to
+# forward, so neither requestHeadersWhitelist nor the multitenancy switch has
+# anything to act on.
+
+# No first-run tour standing between the operator and the data.
+#
+# telemetry.enabled, telemetry.optIn and newsfeed.enabled are KIBANA keys and
+# Dashboards rejects them outright -- "Unknown configuration key(s)" -- then
+# exits 64, and systemd restarts it forever. It had gone round 57 times before
+# the port check failed the play. OpenSearch Dashboards dropped telemetry and the
+# newsfeed when it forked; not phoning home was a large part of the point, so
+# there is nothing here to switch off.
+home.disableWelcomeScreen: true

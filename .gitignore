@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Canvas build
+frontend/node_modules/
+frontend/dist/
+
+# Local database
+*.db
+
+# Terraform and exports (produced when you run a generated working directory)
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!example.tfvars
+exports/
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# OS and editors
+.DS_Store
+.idea/
+.vscode/

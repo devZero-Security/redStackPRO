@@ -1,0 +1,40 @@
+---
+- name: Fail early if the topology did not supply a collector
+  ansible.builtin.assert:
+    that: redstackpro_shipper_sink | length > 0
+    fail_msg: >
+      This host ships nowhere. The sink address comes from the logs_to edge, so
+      the topology is incomplete rather than the role being wrong. The generated
+      play skips this role when there is no edge; reaching this means the role
+      was run on its own.
+
+- name: Install filebeat
+  ansible.builtin.apt:
+    deb: https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-8.15.0-amd64.deb
+
+- name: Ensure the certificate directory exists
+  ansible.builtin.file:
+    path: "{{ redstackpro_shipper_ca_path | dirname }}"
+    state: directory
+    mode: "0755"
+  when: redstackpro_shipper_tls | bool
+
+- name: Trust the certificate authority the collector's receiver is signed by
+  ansible.builtin.copy:
+    src: "{{ redstackpro_ca_local_path }}"
+    dest: "{{ redstackpro_shipper_ca_path }}"
+    mode: "0644"
+  when: redstackpro_shipper_tls | bool
+
+- name: Point filebeat at the collector
+  ansible.builtin.template:
+    src: filebeat.yml.j2
+    dest: /etc/filebeat/filebeat.yml
+    mode: "0600"
+  notify: Restart filebeat
+
+- name: Start filebeat
+  ansible.builtin.service:
+    name: filebeat
+    state: started
+    enabled: true

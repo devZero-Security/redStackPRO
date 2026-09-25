@@ -1,0 +1,173 @@
+---
+# The place a person actually looks at the logs.
+#
+# The collector held OpenSearch and Logstash and no UI at all, so until now
+# "we collect your infrastructure's telemetry" ended at an API nobody opens. This
+# adds OpenSearch Dashboards and the saved objects that make it useful on the
+# first login rather than after an afternoon of building panels.
+#
+# It binds on the private address only. The collector has no public address --
+# EXP002 forbids one -- and in ops mode every network in the plan is internally
+# open (d6a00cc), so the jumpbox reaches it without a rule of its own and the
+# internet cannot reach it at all. The operator arrives through the portal's 443,
+# which is the one public door the range already had.
+
+# Dashboards ships from its OWN repository, not the opensearch one the sink
+# added. They are published as separate bundles -- the sink repo carries no
+# opensearch-dashboards package at all, and apt says exactly that: "No package
+# matching 'opensearch-dashboards' is available". The signing key is shared, so
+# only the repository line is new.
+- name: Add the opensearch dashboards repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/opensearch.pgp]
+      https://artifacts.opensearch.org/releases/bundle/opensearch-dashboards/2.x/apt
+      stable main
+    filename: opensearch-dashboards-2x
+    state: present
+
+- name: Install opensearch dashboards
+  ansible.builtin.apt:
+    name: opensearch-dashboards
+    state: present
+    update_cache: true
+
+# The security plugin has to go, because the sink it would authenticate against
+# has none: opensearch.yml sets plugins.security.disabled. Left installed, every
+# request answers 401 "Authentication required" -- including the saved objects
+# API this role imports through, and including the operator opening the portal
+# link, who would meet a login form with no account behind it.
+#
+# Removing the plugin is the pairing OpenSearch documents for a cluster with
+# security off.
+#
+# --allow-root is required and is not optional politeness: ansible runs this as
+# root, and without the flag the tool prints "OpenSearch Dashboards should not be
+# run as root" and EXITS 0 having done nothing. A silent no-op behind a success,
+# which is the same family as everything else caught today, so the task asserts
+# the directory is really gone rather than trusting the return code.
+- name: Remove the dashboards security plugin, since the sink has none
+  ansible.builtin.command:
+    cmd: >-
+      /usr/share/opensearch-dashboards/bin/opensearch-dashboards-plugin
+      remove securityDashboards --allow-root
+    removes: /usr/share/opensearch-dashboards/plugins/securityDashboards
+  notify: Restart opensearch dashboards
+
+- name: Confirm the security plugin is really gone
+  ansible.builtin.stat:
+    path: /usr/share/opensearch-dashboards/plugins/securityDashboards
+  register: redstackpro_dashboards_sec
+  failed_when: redstackpro_dashboards_sec.stat.exists
+  # The removal above exits 0 whether or not it did anything, so this is the
+  # only thing that actually knows. Left installed, every request answers 401 and
+  # the import below fails with no useful message.
+
+- name: Configure opensearch dashboards
+  ansible.builtin.template:
+    src: opensearch-dashboards.yml.j2
+    dest: /etc/opensearch-dashboards/opensearch_dashboards.yml
+    owner: root
+    group: opensearch-dashboards
+    mode: "0640"
+  notify: Restart opensearch dashboards
+
+- name: Start opensearch dashboards
+  ansible.builtin.service:
+    name: opensearch-dashboards
+    state: started
+    enabled: true
+
+- name: Apply any pending restart before proving the UI
+  ansible.builtin.meta: flush_handlers
+
+# Dashboards boots a node process and waits on OpenSearch, so it answers late.
+# The check is the rule this role learned the hard way: a unit reporting active
+# says nothing about whether anything is listening.
+- name: Confirm the dashboard is really serving, not merely started
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ redstackpro_dashboards_port }}"
+    timeout: 300
+    msg: >-
+      opensearch-dashboards is running but nothing is bound to
+      {{ redstackpro_dashboards_port }}. Check
+      /var/log/opensearch-dashboards/opensearch-dashboards.log -- it exits when
+      it cannot reach the sink, and the unit still reports active.
+
+# The saved objects. Posted through the API rather than dropped into a data
+# directory, because the index that holds them is Dashboards' own and its layout
+# is not ours to write. overwrite=true makes a re-run idempotent.
+- name: Stage the dashboard
+  ansible.builtin.template:
+    src: dashboard-objects.ndjson.j2
+    dest: /etc/redstackpro/dashboard-objects.ndjson
+    mode: "0644"
+
+- name: Wait for the saved objects API to answer
+  ansible.builtin.uri:
+    # Under the basePath: rewriteBasePath moves EVERY path, the APIs
+    # included, so /api/status is a 404 and /dashboards/api/status is the
+    # real one.
+    url: "http://127.0.0.1:{{ redstackpro_dashboards_port }}/dashboards/api/status"
+    status_code: [200]
+  register: redstackpro_dashboards_status
+  retries: 30
+  delay: 10
+  until: redstackpro_dashboards_status is succeeded
+
+- name: Import the redStackPRO dashboard
+  ansible.builtin.shell:
+    cmd: >-
+      curl -sS -X POST
+      "http://127.0.0.1:{{ redstackpro_dashboards_port }}/dashboards/api/saved_objects/_import?overwrite=true"
+      -H "osd-xsrf:true"
+      --form file=@/etc/redstackpro/dashboard-objects.ndjson
+  register: redstackpro_dashboards_import
+  changed_when: "'\"success\":true' in redstackpro_dashboards_import.stdout"
+  failed_when:
+    - "'\"success\":true' not in redstackpro_dashboards_import.stdout"
+  # An import that half succeeds leaves panels referencing index patterns that
+  # are not there, which looks like a broken product rather than a failed task.
+  retries: 3
+  delay: 10
+  until: redstackpro_dashboards_import is succeeded
+
+# An imported index pattern carries no field list, and Dashboards does NOT go and
+# fetch one when a panel first renders. Every visualisation then fails with
+# "Trying to initialize aggs without index pattern" -- the data is there, the
+# aggregations work when asked directly, and the dashboard still shows five empty
+# boxes with an error in each.
+#
+# That was invisible to every check made through the API: indices had documents,
+# fields aggregated, saved objects imported, the port answered. It took a
+# screenshot of the actual page to see it. So the field list is populated here,
+# from the same endpoint the UI's own "refresh field list" button uses.
+#
+# Runs after the import, because the objects have to exist first, and it is
+# idempotent: refreshing an already-populated pattern just rewrites the same list.
+- name: Give each index pattern its field list
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      B=http://127.0.0.1:{{ redstackpro_dashboards_port }}/dashboards
+      for id in rsp-redirtraffic rsp-callbacks rsp-auth rsp-c2; do
+        title=$(curl -sS "$B/api/saved_objects/index-pattern/$id"           | python3 -c 'import json,sys; print(json.load(sys.stdin)["attributes"]["title"])')
+        fields=$(curl -sS "$B/api/index_patterns/_fields_for_wildcard?pattern=$title"           | python3 -c 'import json,sys; print(json.dumps(json.dumps(json.load(sys.stdin)["fields"])))')
+        curl -sS -X PUT "$B/api/saved_objects/index-pattern/$id"           -H "osd-xsrf:true" -H "Content-Type: application/json"           -d "{\"attributes\":{\"title\":\"$title\",\"timeFieldName\":\"@timestamp\",\"fields\":$fields}}"           >/dev/null
+        echo "refreshed $id"
+      done
+  register: redstackpro_dashboards_fields
+  changed_when: "'refreshed' in redstackpro_dashboards_fields.stdout"
+
+# A pattern with an empty field list renders as a broken dashboard, so this is
+# worth asserting rather than hoping.
+- name: Confirm the patterns actually carry fields now
+  ansible.builtin.shell:
+    cmd: >-
+      curl -sS
+      "http://127.0.0.1:{{ redstackpro_dashboards_port }}/dashboards/api/saved_objects/index-pattern/rsp-redirtraffic"
+      | python3 -c 'import json,sys; print(len(json.loads(json.load(sys.stdin)["attributes"]["fields"])))'
+  register: redstackpro_dashboards_fieldcount
+  changed_when: false
+  failed_when: redstackpro_dashboards_fieldcount.stdout | int < 10

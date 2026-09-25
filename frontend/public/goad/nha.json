@@ -1,0 +1,731 @@
+{
+  "schema_version": "0.4.0",
+  "mode": "range",
+  "name": "NHA",
+  "prefix": "cyb",
+  "auto_stop": {
+    "enabled": true,
+    "after_hours": 8,
+    "timezone": "UTC"
+  },
+  "nodes": [
+    {
+      "id": "net01",
+      "kind": "network",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "overlay": {
+        "cidr": "192.168.0.0/16"
+      }
+    },
+    {
+      "id": "sub01",
+      "kind": "segment",
+      "position": {
+        "x": 16,
+        "y": 44
+      },
+      "overlay": {
+        "cidr": "192.168.56.0/24",
+        "egress": "allowed",
+        "exposure": "local"
+      }
+    },
+    {
+      "id": "ninja",
+      "kind": "domain",
+      "position": {
+        "x": 16,
+        "y": 48
+      },
+      "overlay": {
+        "fqdn": "ninja.hack",
+        "netbios": "NINJA",
+        "users": [
+          {
+            "username": "alice.johnson",
+            "display_name": "Alice johnson",
+            "email": "alice.johnson@ninja.hack",
+            "groups": [
+              "Hokage",
+              "Domain Admins"
+            ],
+            "privilege": "domain_admin",
+            "description": "hokage",
+            "password": "Ih@teC0mputeRs"
+          },
+          {
+            "username": "david.wilson",
+            "display_name": "david wilson",
+            "email": "david.wilson@ninja.hack",
+            "groups": [
+              "Jonin"
+            ],
+            "privilege": "user",
+            "description": "Team 7 captain",
+            "password": "Sh@r1ngAnnFTW"
+          },
+          {
+            "username": "yara.yuhi",
+            "display_name": "yara yuhi",
+            "email": "yara.yuhi@ninja.hack",
+            "groups": [
+              "Jonin"
+            ],
+            "privilege": "user",
+            "description": "Team 8 captain",
+            "password": "IgotR3dEy3s"
+          },
+          {
+            "username": "katherine.white",
+            "display_name": "katherine white",
+            "email": "katherine.white@ninja.hack",
+            "groups": [
+              "Jonin"
+            ],
+            "privilege": "user",
+            "description": "Team 9 captain",
+            "password": "StrongOfTheYoung!!"
+          },
+          {
+            "username": "uma.johnson",
+            "display_name": "Uma Johnson",
+            "email": "uma.johnson@ninja.hack",
+            "groups": [
+              "Jonin"
+            ],
+            "privilege": "user",
+            "description": "Team 10 captain",
+            "password": "Il0veSmOOking"
+          },
+          {
+            "username": "frank.umino",
+            "display_name": "frank umino",
+            "email": "frank.umino@ninja.hack",
+            "groups": [
+              "Academy_Teacher"
+            ],
+            "privilege": "user",
+            "description": "Academy teacher",
+            "password": "Il0ve!R4men_"
+          },
+          {
+            "username": "olivia.davis",
+            "display_name": "olivia davis",
+            "email": "olivia.davis@ninja.hack",
+            "groups": [
+              "Academy_Teacher"
+            ],
+            "privilege": "user",
+            "description": "Academy teacher",
+            "password": "Il0veSexyJuTsu"
+          },
+          {
+            "username": "rachel.philips",
+            "display_name": "Rachel Phillips",
+            "email": "rachel.philips@ninja.hack",
+            "groups": [
+              "Sanin"
+            ],
+            "privilege": "user",
+            "description": "Sanin",
+            "password": "Il0ve_S4keee"
+          },
+          {
+            "username": "ava.brown",
+            "display_name": "Ava Brown",
+            "email": "ava.brown@ninja.hack",
+            "groups": [
+              "Sanin"
+            ],
+            "privilege": "user",
+            "description": "Sanin",
+            "password": "Il0v3Pl@yingGamesss"
+          },
+          {
+            "username": "henry.martinez",
+            "display_name": "Henry Martinez",
+            "email": "henry.martinez@ninja.hack",
+            "groups": [
+              "Sanin"
+            ],
+            "privilege": "user",
+            "description": "Sanin",
+            "password": "Legend4_ryS4n1nFTW"
+          }
+        ],
+        "acls": [
+          {
+            "principal": "Sanin",
+            "target": "Jonin",
+            "right": "GenericAll"
+          },
+          {
+            "principal": "olivia.davis",
+            "target": "rachel.philips",
+            "right": "WriteDacl"
+          },
+          {
+            "principal": "hokage",
+            "target": "Domain Admins",
+            "right": "GenericAll"
+          },
+          {
+            "principal": "hokage",
+            "target": "CN=AdminSDHolder,CN=System,DC=ninja,DC=hack",
+            "right": "GenericAll"
+          },
+          {
+            "principal": "Jonin",
+            "target": "CN=SignatureValidation,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,DC=ninja,DC=hack",
+            "right": "GenericAll"
+          }
+        ]
+      }
+    },
+    {
+      "id": "academy",
+      "kind": "domain",
+      "position": {
+        "x": 16,
+        "y": 224
+      },
+      "overlay": {
+        "fqdn": "academy.ninja.lan",
+        "netbios": "ACADEMY",
+        "users": [
+          {
+            "username": "alice",
+            "display_name": "alice johnson",
+            "email": "alice@academy.ninja.lan",
+            "groups": [
+              "Sensei",
+              "Domain Admins"
+            ],
+            "privilege": "domain_admin",
+            "description": "hokage",
+            "password": "C0mplexP@ssAD456"
+          },
+          {
+            "username": "david",
+            "display_name": "david wilson",
+            "email": "david@academy.ninja.lan",
+            "groups": [
+              "Sensei",
+              "Team7"
+            ],
+            "privilege": "user",
+            "description": "Team 7 sensei",
+            "password": "MySh@r1ngCanSeeYuu"
+          },
+          {
+            "username": "noah",
+            "display_name": "Noah Young",
+            "email": "noah@academy.ninja.lan",
+            "groups": [
+              "Genin",
+              "Team7"
+            ],
+            "privilege": "user",
+            "description": "Team 7",
+            "password": "ILoveRamen"
+          },
+          {
+            "username": "samuel",
+            "display_name": "Samuel Evans",
+            "email": "samuel@academy.ninja.lan",
+            "groups": [
+              "Genin",
+              "Team7"
+            ],
+            "privilege": "user",
+            "description": "Team 7",
+            "password": "Ih@teAct1veDirectory"
+          },
+          {
+            "username": "willa",
+            "display_name": "Willa Wilson",
+            "email": "willa@academy.ninja.lan",
+            "groups": [
+              "Genin",
+              "Team7"
+            ],
+            "privilege": "user",
+            "description": "Team 7",
+            "password": "IL0veW3b"
+          },
+          {
+            "username": "yara",
+            "display_name": "Yara Yuhi",
+            "email": "yara@academy.ninja.lan",
+            "groups": [
+              "Sensei",
+              "Team8"
+            ],
+            "privilege": "user",
+            "description": "Team 8 sensei",
+            "password": "IgotR3dEyes"
+          },
+          {
+            "username": "zane",
+            "display_name": "Zane Harris",
+            "email": "zane@academy.ninja.lan",
+            "groups": [
+              "Genin",
+              "Team8"
+            ],
+            "privilege": "user",
+            "description": "Team 8",
+            "password": "IL0veRaclette"
+          },
+          {
+            "username": "ethan",
+            "display_name": "Ethan Miller",
+            "email": "ethan@academy.ninja.lan",
+            "groups": [
+              "Genin",
+              "Team8"
+            ],
+            "privilege": "user",
+            "description": "Team 8",
+            "password": "InTartifletteWetrust"
+          },
+          {
+            "username": "scott",
+            "display_name": "Scott Quinn",
+            "email": "scott@academy.ninja.lan",
+            "groups": [
+              "Genin",
+              "Team8"
+            ],
+            "privilege": "user",
+            "description": "Team 8",
+            "password": "BugsBugsBugs"
+          },
+          {
+            "username": "katherine",
+            "display_name": "Katherine White",
+            "email": "katherine@academy.ninja.lan",
+            "groups": [
+              "Sensei",
+              "Team9"
+            ],
+            "privilege": "user",
+            "description": "Team 9 sensei",
+            "password": "TeamStrongOfTheYoung!!"
+          },
+          {
+            "username": "victor",
+            "display_name": "Victor Gonzalez",
+            "email": "victor@academy.ninja.lan",
+            "groups": [
+              "Genin",
+              "Team9"
+            ],
+            "privilege": "user",
+            "description": "Team 9",
+            "password": "ByaKugaN!"
+          },
+          {
+            "username": "lee",
+            "display_name": "Lee Liam",
+            "email": "lee@academy.ninja.lan",
+            "groups": [
+              "Genin",
+              "Team9"
+            ],
+            "privilege": "user",
+            "description": "Team 9",
+            "password": "katherineSenseiIsTheBest"
+          },
+          {
+            "username": "taylor",
+            "display_name": "Taylor Brown",
+            "email": "taylor@academy.ninja.lan",
+            "groups": [
+              "Genin",
+              "Team9"
+            ],
+            "privilege": "user",
+            "description": "Team 9",
+            "password": "KunaiAreMyBestFriends"
+          },
+          {
+            "username": "uma",
+            "display_name": "Uma Johnson",
+            "email": "uma@academy.ninja.lan",
+            "groups": [
+              "Sensei",
+              "Team10"
+            ],
+            "privilege": "user",
+            "description": "Team 10 sensei",
+            "password": "SmOOkingL0v3"
+          },
+          {
+            "username": "sophia",
+            "display_name": "Sophia Taylor",
+            "email": "sophia@academy.ninja.lan",
+            "groups": [
+              "Genin",
+              "Team10"
+            ],
+            "privilege": "user",
+            "description": "Team 10",
+            "password": "PffBooring"
+          },
+          {
+            "username": "charlie",
+            "display_name": "Charlie Davis",
+            "email": "charlie@academy.ninja.lan",
+            "groups": [
+              "Genin",
+              "Team10"
+            ],
+            "privilege": "user",
+            "description": "Team 10",
+            "password": "imnotBigOk"
+          },
+          {
+            "username": "isabella",
+            "display_name": "Isabella Yamanaka",
+            "email": "isabella@academy.ninja.lan",
+            "groups": [
+              "Genin",
+              "Team10"
+            ],
+            "privilege": "user",
+            "description": "Team 10",
+            "password": "SophiaIsTooCute"
+          },
+          {
+            "username": "frank",
+            "display_name": "frank umino",
+            "email": "frank@academy.ninja.lan",
+            "groups": [
+              "Teacher"
+            ],
+            "privilege": "user",
+            "description": "Academy teacher",
+            "flaws": [
+              "kerberoastable"
+            ],
+            "spns": [
+              "HTTP/WEB.academy.ninja.lan"
+            ],
+            "password": "Il0ve!R4men_<3"
+          },
+          {
+            "username": "olivia",
+            "display_name": "olivia davis",
+            "email": "olivia@academy.ninja.lan",
+            "groups": [
+              "Teacher"
+            ],
+            "privilege": "user",
+            "description": "Academy teacher",
+            "password": "Il0veSexyJuTsu"
+          },
+          {
+            "username": "backup",
+            "display_name": "backup user",
+            "email": "backup@academy.ninja.lan",
+            "groups": [],
+            "privilege": "user",
+            "description": "Backup Account",
+            "password": "N1nj4_b4ckup_U$er"
+          },
+          {
+            "username": "sql_svc",
+            "display_name": "sql service",
+            "email": "sql_svc@academy.ninja.lan",
+            "groups": [],
+            "privilege": "user",
+            "description": "sql service",
+            "flaws": [
+              "kerberoastable"
+            ],
+            "spns": [
+              "MSSQLSvc/sql.academy.ninja.lan:1433",
+              "MSSQLSvc/sql.academy.ninja.lan"
+            ],
+            "password": "MssqlD@tabase_On_lan"
+          }
+        ],
+        "acls": [
+          {
+            "principal": "SQL$",
+            "target": "CN=Computers,DC=academy,DC=ninja,DC=lan",
+            "right": "GenericAll"
+          },
+          {
+            "principal": "backup",
+            "target": "Sensei",
+            "right": "WriteOwner"
+          },
+          {
+            "principal": "backup",
+            "target": "CN=AdminSDHolder,CN=System,DC=academy,DC=ninja,DC=lan",
+            "right": "WriteOwner"
+          },
+          {
+            "principal": "gmsaNFS$",
+            "target": "backup",
+            "right": "Ext-User-Force-Change-Password"
+          }
+        ],
+        "gmsa": [
+          {
+            "name": "gmsaNFS",
+            "dns": "gmsaNFS.academy.ninja.lan",
+            "spns": [
+              "NFS/share",
+              "NFS/share.academy.ninja.lan"
+            ],
+            "hosts": [
+              "share"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "dc-vil",
+      "kind": "dc",
+      "position": {
+        "x": 16,
+        "y": 48
+      },
+      "overlay": {
+        "os": "windows_server_2019",
+        "hostname": "dc-vil",
+        "vulns": [
+          "administrator_folder"
+        ],
+        "notes": "Unmapped GOAD vulns: administrator_folder, directory, files.",
+        "role": "adcs",
+        "services": [
+          "adcs"
+        ],
+        "vulns_vars": {
+          "administrator_folder": {
+            "name": "dc_final.txt"
+          }
+        }
+      }
+    },
+    {
+      "id": "dc-ac",
+      "kind": "dc",
+      "position": {
+        "x": 16,
+        "y": 48
+      },
+      "overlay": {
+        "os": "windows_server_2019",
+        "hostname": "dc-ac",
+        "notes": "Unmapped GOAD vulns: administrator_folder, files.",
+        "vulns": [
+          "administrator_folder"
+        ],
+        "vulns_vars": {
+          "administrator_folder": {
+            "name": "dc_academy.txt"
+          }
+        }
+      }
+    },
+    {
+      "id": "web",
+      "kind": "srv",
+      "position": {
+        "x": 268,
+        "y": 48
+      },
+      "overlay": {
+        "os": "windows_server_2019",
+        "hostname": "web",
+        "notes": "Unmapped GOAD vulns: administrator_folder, files, enable_credssp_server.",
+        "role": "web",
+        "services": [
+          "iis"
+        ],
+        "vulns": [
+          "iis_webshell",
+          "writable_share",
+          "enable_credssp_server",
+          "administrator_folder"
+        ],
+        "vulns_vars": {
+          "administrator_folder": {
+            "name": "web.txt"
+          }
+        }
+      }
+    },
+    {
+      "id": "sql",
+      "kind": "srv",
+      "position": {
+        "x": 520,
+        "y": 48
+      },
+      "overlay": {
+        "os": "windows_server_2019",
+        "hostname": "sql",
+        "vulns": [
+          "mssql_impersonation",
+          "mssql_linked",
+          "administrator_folder"
+        ],
+        "notes": "Unmapped GOAD vulns: administrator_folder, files, disable_firewall.",
+        "role": "sql",
+        "services": [
+          "mssql"
+        ],
+        "vulns_vars": {
+          "administrator_folder": {
+            "name": "flag.txt"
+          }
+        }
+      }
+    },
+    {
+      "id": "share",
+      "kind": "srv",
+      "position": {
+        "x": 772,
+        "y": 48
+      },
+      "overlay": {
+        "os": "windows_server_2019",
+        "hostname": "share",
+        "notes": "Unmapped GOAD vulns: administrator_folder, files, enable_credssp_client, schedule.",
+        "vulns": [
+          "enable_credssp_client",
+          "schedule",
+          "administrator_folder"
+        ],
+        "vulns_vars": {
+          "schedule": {
+            "name": "connect_bot",
+            "script_path": "C:\\bot.ps1",
+            "script_content": "Start-Sleep -Seconds 10\n",
+            "command": "& C:\\bot.ps1",
+            "interval_minutes": 1
+          },
+          "administrator_folder": {
+            "name": "share.txt"
+          }
+        }
+      }
+    },
+    {
+      "id": "jumpbox",
+      "kind": "jumpbox",
+      "position": {
+        "x": 16,
+        "y": 424
+      },
+      "overlay": {
+        "services": [
+          "ssh",
+          "guacamole",
+          "wireguard"
+        ],
+        "certificate_authority": true
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-sub01-net01",
+      "role": "attached",
+      "source": "sub01",
+      "target": "net01"
+    },
+    {
+      "id": "e-dc-vil-sub01",
+      "role": "attached",
+      "source": "dc-vil",
+      "target": "sub01"
+    },
+    {
+      "id": "e-dc-vil-joins",
+      "role": "joins",
+      "source": "dc-vil",
+      "target": "ninja"
+    },
+    {
+      "id": "e-dc-ac-sub01",
+      "role": "attached",
+      "source": "dc-ac",
+      "target": "sub01"
+    },
+    {
+      "id": "e-dc-ac-joins",
+      "role": "joins",
+      "source": "dc-ac",
+      "target": "academy"
+    },
+    {
+      "id": "e-web-sub01",
+      "role": "attached",
+      "source": "web",
+      "target": "sub01"
+    },
+    {
+      "id": "e-web-joins",
+      "role": "joins",
+      "source": "web",
+      "target": "academy"
+    },
+    {
+      "id": "e-sql-sub01",
+      "role": "attached",
+      "source": "sql",
+      "target": "sub01"
+    },
+    {
+      "id": "e-sql-joins",
+      "role": "joins",
+      "source": "sql",
+      "target": "academy"
+    },
+    {
+      "id": "e-share-sub01",
+      "role": "attached",
+      "source": "share",
+      "target": "sub01"
+    },
+    {
+      "id": "e-share-joins",
+      "role": "joins",
+      "source": "share",
+      "target": "academy"
+    },
+    {
+      "id": "e-academy-ninja-trust",
+      "role": "trusts",
+      "source": "ninja",
+      "target": "academy",
+      "trust_type": "forest",
+      "direction": "bidirectional",
+      "transitive": true
+    },
+    {
+      "id": "e-jumpbox-sub01",
+      "role": "attached",
+      "source": "jumpbox",
+      "target": "sub01"
+    },
+    {
+      "id": "e-jumpbox-net01-manages",
+      "role": "manages",
+      "source": "jumpbox",
+      "target": "net01"
+    }
+  ]
+}

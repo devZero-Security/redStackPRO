@@ -1,0 +1,67 @@
+---
+# The CA the redirector and collector TLS depend on.
+#
+# The key is generated here and never leaves. redStackPRO emits no key material, so
+# there is nothing to leak out of the export: the only thing that travels is the
+# public certificate, and it goes to the control node so other roles can trust
+# it. See 0001 and 0011.
+
+- name: Create the certificate authority directory
+  ansible.builtin.file:
+    path: "{{ redstackpro_ca_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Generate the certificate authority key
+  ansible.builtin.command:
+    cmd: openssl genrsa -out {{ redstackpro_ca_dir }}/ca.key 4096
+    creates: "{{ redstackpro_ca_dir }}/ca.key"
+
+- name: Lock down the certificate authority key
+  ansible.builtin.file:
+    path: "{{ redstackpro_ca_dir }}/ca.key"
+    owner: root
+    group: root
+    mode: "0400"
+
+- name: Self sign the certificate authority certificate
+  ansible.builtin.command:
+    cmd: >
+      openssl req -x509 -new -nodes
+      -key {{ redstackpro_ca_dir }}/ca.key
+      -sha256 -days {{ redstackpro_ca_days }}
+      -subj "{{ redstackpro_ca_subject }}"
+      -out {{ redstackpro_ca_dir }}/ca.crt
+    creates: "{{ redstackpro_ca_dir }}/ca.crt"
+
+- name: Start the issued certificate serial
+  ansible.builtin.copy:
+    content: "01\n"
+    dest: "{{ redstackpro_ca_dir }}/ca.srl"
+    force: false
+    mode: "0600"
+
+- name: Publish the certificate authority to the host trust store
+  ansible.builtin.copy:
+    src: "{{ redstackpro_ca_dir }}/ca.crt"
+    dest: /usr/local/share/ca-certificates/redstackpro-ca.crt
+    remote_src: true
+    mode: "0644"
+  notify: Update ca certificates
+
+- name: Also place it where the roles look for it
+  ansible.builtin.copy:
+    src: "{{ redstackpro_ca_dir }}/ca.crt"
+    dest: /etc/redstackpro/tls/redstackpro-ca.crt
+    remote_src: true
+    mode: "0644"
+
+# Other hosts trust this CA, and they are configured from the control node
+# rather than from here. The public certificate is the only thing that moves.
+- name: Fetch the certificate authority certificate to the control node
+  ansible.builtin.fetch:
+    src: "{{ redstackpro_ca_dir }}/ca.crt"
+    dest: "{{ redstackpro_ca_local_path }}"
+    flat: true

@@ -1,0 +1,10 @@
+---
+# Lower the LAN Manager authentication level so the host will send and accept the
+# weak NTLMv1 (and LM) responses, which are trivial to relay or crack. Level 1 =
+# send LM & NTLM, use NTLMv2 only if negotiated.
+- name: Downgrade the LAN Manager authentication level
+  ansible.windows.win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Control\Lsa
+    name: LmCompatibilityLevel
+    data: 1
+    type: dword

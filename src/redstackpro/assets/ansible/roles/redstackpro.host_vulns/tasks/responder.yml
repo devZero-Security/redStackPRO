@@ -1,0 +1,23 @@
+---
+# Responder-friendly posture: a recurring "victim" scheduled task that reaches a
+# deliberately unresolvable host, so its name lookup falls through to LLMNR/NBT-NS
+# and a rogue responder captures the bot user's NetNTLM hash. Runs as a domain
+# user (the range shares one lab password). Pairs with llmnr_poisoning /
+# nbtns_poisoning. See goad-fidelity-build.
+
+- name: Create the Responder coercion bot
+  ansible.windows.win_powershell:
+    script: |
+      param($User, $Pass, $Target)
+      $ErrorActionPreference = "Stop"
+      $cmd = "New-PSDrive -Name Public -PSProvider FileSystem -Root $Target -ErrorAction SilentlyContinue"
+      $a = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -Command `"$cmd`""
+      $t = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 2)
+      Register-ScheduledTask -TaskName responder_bot -Action $a -Trigger $t `
+        -User $User -Password $Pass -RunLevel Limited -Force | Out-Null
+    parameters:
+      User: "{{ redstackpro_host_vulns_vars.bot_user | default('') }}"
+      Pass: "{{ (redstackpro_user_passwords | default({})).get(redstackpro_host_vulns_vars.bot_user | default(''), redstackpro_lab_password) }}"
+      Target: "{{ redstackpro_host_vulns_vars.responder_target | default('\\\\Bravos\\private') }}"
+  changed_when: true
+  when: redstackpro_host_vulns_vars.bot_user | default('') | length > 0

@@ -1,0 +1,40 @@
+---
+# PrintNightmare (CVE-2021-34527 / CVE-2021-1675): re-open the print spooler's
+# Point-and-Print driver install to non-administrators. The August 2021 patch did
+# not remove the feature; it changed the DEFAULT policy so a non-admin driver
+# install is refused (the solution saw this as RPRN 0x8001011b). These policy
+# keys deliberately restore the pre-patch behaviour, so the classic spooler driver
+# load (RCE / local privesc to SYSTEM) fires again on a fully patched host. This is
+# a config toggle, not a patch-level dependency -- it lands on the modern build.
+# Secure by default: only planted when the host declares `printnightmare`. GOAD is
+# the fidelity benchmark; this is our own role. See goad-fidelity-build.
+
+- name: Point-and-Print - suppress the install/update elevation prompts
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers\PointAndPrint
+    name: "{{ pnp_reg.name }}"
+    data: "{{ pnp_reg.data }}"
+    type: dword
+  loop:
+    # No elevation prompt when installing a printer/driver from a server.
+    - { name: NoWarningNoElevationOnInstall, data: 1 }
+    # Suppress the prompt on a driver update as well.
+    - { name: UpdatePromptSettings, data: 2 }
+    # The KB5005652 mitigation knob: 0 lets non-administrators install drivers,
+    # which is exactly what the patch flipped to 1 by default. Set it explicitly so
+    # a later cumulative update that tightens the default does not re-close the path.
+    - { name: RestrictDriverInstallationToAdministrators, data: 0 }
+  loop_control:
+    # A distinct loop_var: this file is included from host_vulns' own `item` loop,
+    # so reusing `item` here collides with it.
+    loop_var: pnp_reg
+    label: "{{ pnp_reg.name }}={{ pnp_reg.data }}"
+
+# The spooler must be running to serve MS-RPRN / MS-PAR. It is on by default on
+# GOAD hosts, but assert it for the vuln role so a hardened base image still exposes
+# the surface the technique needs.
+- name: Ensure the Print Spooler service is running
+  ansible.windows.win_service:
+    name: Spooler
+    start_mode: auto
+    state: started

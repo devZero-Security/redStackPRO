@@ -1,0 +1,35 @@
+provider: proxmox
+# The network belongs to the operator, so nothing enforces a reservation the way
+# a cloud does. Only the network address and the gateway the backend derives as
+# net[1] are unusable, plus broadcast at the top.
+reserved_addresses:
+  head: 2
+  tail: 1
+maturity: preview
+description: >
+  On-prem target per 0003. A Proxmox host has no concept of an allocated public
+  address and no managed private DNS. Outbound routing exists only if the host
+  network already provides it, which is a precondition rather than a resource, so
+  it is declared here and enforced by a preflight check.
+
+capabilities:
+  - routing_domain
+  - subnet
+  - compute
+  - linux_image
+  - windows_image
+  - outbound_routing
+
+unsupported:
+  - name: public_address
+    reason: >
+      No allocated external address. Reachability from outside depends on the
+      host network and any upstream NAT or firewall, neither of which redStackPRO
+      controls or can declare.
+  - name: private_dns
+    reason: No managed private DNS zone. Use static hosts entries.
+  - name: network_peering
+    reason: >
+      No managed network peering. Joining two networks is a property of the host
+      network's routing, which redStackPRO does not control or declare, so a peers
+      edge has nothing to compile to.

@@ -1,0 +1,63 @@
+---
+- name: Fail early if the topology declared no services
+  ansible.builtin.assert:
+    that: redstackpro_jumpbox_services | length > 0
+    fail_msg: >
+      This jumpbox offers nothing. The service list comes from the overlay, so
+      the topology is incomplete rather than the role being wrong.
+
+- name: Create redstackpro directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /etc/redstackpro
+    - /etc/redstackpro/tls
+    - "{{ redstackpro_jumpbox_root }}"
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - openssl
+      - jq
+    state: present
+    update_cache: true
+
+# Every other host in the export is reached through this one, and it is the only
+# host with a public address. Hardening is not optional here the way it would be
+# on a box behind the segment boundary.
+- name: Harden the one host on the internet
+  ansible.builtin.include_tasks: hardening.yml
+
+- name: Build the certificate authority
+  ansible.builtin.include_tasks: certificate-authority.yml
+  when: redstackpro_jumpbox_certificate_authority | bool
+
+# The assumed-breach foothold accounts, if the range declared any. Local admins
+# so an operator can SSH in as patient zero (the domain side is a low-priv member
+# seeded by the dc role). See range-access-model and P2.5.
+- name: Create the assumed-breach foothold accounts
+  ansible.builtin.include_tasks: foothold.yml
+  when: redstackpro_jumpbox_foothold_users | default([]) | length > 0
+
+# The operator works FROM this box in a range, so the toolchain lands before the
+# services: a solution step should never be the thing that discovers a missing
+# tool. Opens no ports. See toolkit.yml for why each tool gets its own venv.
+- name: Install the foothold's offensive toolchain
+  ansible.builtin.include_tasks: toolkit.yml
+  when: redstackpro_jumpbox_offensive_toolkit | bool
+
+- name: Configure each declared service
+  ansible.builtin.include_tasks: "service-{{ service }}.yml"
+  loop: "{{ redstackpro_jumpbox_services }}"
+  loop_control:
+    loop_var: service
+
+# Last, because it writes into the drop folder the guacamole service creates.
+# Only a range with a declared patient zero has anywhere to launch a beacon.
+- name: Install the headless beacon launcher
+  ansible.builtin.include_tasks: beacon-launcher.yml
+  when: (redstackpro_jumpbox_foothold_tiles | default([])) | length > 0

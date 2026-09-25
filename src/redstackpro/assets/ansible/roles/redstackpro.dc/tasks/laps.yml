@@ -1,0 +1,34 @@
+---
+# LAPS: extend the schema, let computers self-store their managed local-admin
+# password, and delegate read of it to the declared reader principals -- the
+# laps_read attack path (a low-priv principal who can read a box's local admin
+# password). Uses Windows LAPS (built into current Windows Server); if the LAPS
+# module is not present (an unpatched image) it no-ops rather than failing, so the
+# path is best-effort. Runs on the controller as domain admin. See
+# goad-fidelity-build.
+
+- name: Configure LAPS schema and reader delegation
+  ansible.windows.win_powershell:
+    script: |
+      param($ReadersJson)
+      $ErrorActionPreference = "Stop"
+      if (-not (Get-Command Update-LapsADSchema -ErrorAction SilentlyContinue)) {
+        [Ordered]@{ status = "laps module unavailable" }; return
+      }
+      Import-Module LAPS
+      Update-LapsADSchema -Confirm:$false | Out-Null
+      $dn = (Get-ADDomain -Server localhost).DistinguishedName
+      Set-LapsADComputerSelfPermission -Identity $dn | Out-Null
+      $granted = @()
+      foreach ($r in ($ReadersJson | ConvertFrom-Json)) {
+        try {
+          Set-LapsADReadPasswordPermission -Identity $dn -AllowedPrincipals $r -ErrorAction Stop | Out-Null
+          $granted += $r
+        } catch {}
+      }
+      [Ordered]@{ status = "configured"; readers = $granted }
+    parameters:
+      ReadersJson: "{{ redstackpro_domain.laps_readers | default([]) | to_json }}"
+  register: redstackpro_laps
+  changed_when: true
+  when: (redstackpro_domain.laps_readers | default([])) | length > 0

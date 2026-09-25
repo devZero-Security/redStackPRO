@@ -1,0 +1,31 @@
+---
+# The Enterprise CA's common name (the caller derives it from the domain short
+# name so each forest's CA reads clearly: ESSOS-CA, SEVENKINGDOMS-CA) and the
+# forest-root Administrator the scheduled task logs on as to carry an Enterprise
+# Admin token. Both are set by the calling role.
+redstackpro_adcs_ca_name: "redStackPro-CA"
+redstackpro_adcs_enterprise_admin: ""
+# The certificate-template attack paths to plant (esc ids from the host's vulns)
+# and the low-privileged group granted enrolment on them.
+redstackpro_adcs_templates: []
+# Certificate templates named as a domain-ACL target (ESC4, or a lab's own name
+# like SignatureValidation). The CA host plants a generic enrollable template of
+# each name so the ACL resolves. Injected by the compiler on the CA host.
+redstackpro_adcs_acl_templates: []
+redstackpro_adcs_enroll_group: "Domain Users"
+# ESC7: the user granted the ManageCA role (domain-qualified, e.g.
+# ESSOS\viserys.targaryen). Empty disables the grant.
+redstackpro_adcs_esc7_manager: ""
+# ESC13: the privileged group its issuance policy is linked to.
+redstackpro_adcs_esc13_group: "greatmaster"
+# ESC5: who gets write control over the PKI's own objects. Defaults to the same
+# low-privileged group that gets enrolment, because the point of the technique is
+# that somebody who should not be able to rewrite the forest's trust can.
+redstackpro_adcs_esc5_principal: "{{ redstackpro_adcs_enroll_group }}"
+# ESC14: the account given a weak explicit certificate mapping, and the subject
+# that mapping accepts. Empty target disables it -- planting a standing
+# authentication bypass onto a guessed account is not a safe default. The subject
+# is what an attacker asks an enrollee-supplies-subject template (ESC1) for, so
+# the two are meant to be planted together.
+redstackpro_adcs_esc14_target: ""
+redstackpro_adcs_esc14_subject: "CN=rsp-esc14"

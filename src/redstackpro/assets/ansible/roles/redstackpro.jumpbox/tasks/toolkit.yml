@@ -1,0 +1,301 @@
+---
+# The foothold's offensive toolchain (PZ-2). A range jumpbox is the documented
+# assumed-breach foothold and patient zero ([[range-access-model]]), so the operator
+# works FROM here: this is the box the GOAD solution runs from. Arming it is what
+# makes the solution zero-touch. Opt out with `offensive_toolkit: false` on the
+# jumpbox overlay; ops-mode bastions never get it, since there the tooling belongs
+# on the kali/operator box rather than the perimeter host.
+#
+# Nothing here opens a port, so this does not widen the jumpbox's internet surface
+# ([[minimize-jumpbox-web-surface]]). It only changes what is installed locally.
+#
+# WHY pipx AND NOT pip: the tools disagree about impacket and cannot share an
+# environment. coercer 2.4.3 pins impacket<0.11 while certipy needs 0.13.x, so a
+# single site-packages forces a loser, and the loser fails at run time in the middle
+# of a solution step. pipx gives each application its own venv, so both versions
+# coexist and neither is downgraded. That is also why dsinternals is INJECTED into
+# impacket's venv rather than installed globally: ntlmrelayx imports it for the
+# shadow-credentials path and crashes without it.
+
+- name: Install the toolchain's system packages
+  ansible.builtin.apt:
+    name:
+      - pipx
+      - git
+      - python3-dev
+      - libkrb5-dev          # impacket/kerberos wheels build against this
+      - krb5-user
+      - build-essential
+      # ntlmrelayx and responder want a real terminal: run them under screen or
+      # tmux, never as a bare ansible/ssh command. See PZ-3.
+      - screen
+      - tmux
+      - hashcat
+      # hashcat has no GPU on a cloud jumpbox; this is the CPU OpenCL backend, without
+      # which it refuses to start at all rather than falling back.
+      - pocl-opencl-icd
+      - ldap-utils           # ldapsearch, for checking binds by hand
+      - smbclient
+      - dnsutils
+      - nmap
+      # cross-compiling the occasional C payload for a Windows target
+      - mingw-w64
+    state: present
+    update_cache: true
+
+- name: Make pipx applications available on PATH for every user
+  ansible.builtin.copy:
+    dest: /etc/profile.d/redstackpro-toolkit.sh
+    mode: "0644"
+    content: |
+      # Rendered by redStackPRO. pipx installs into a shared root for this box so
+      # the foothold accounts see the same tools as the platform account.
+      export PIPX_HOME=/opt/pipx
+      export PIPX_BIN_DIR=/usr/local/bin
+      export PATH="$PATH:/usr/local/bin"
+
+- name: Install each tool in its own environment
+  ansible.builtin.command:
+    cmd: "pipx install --force {{ item.spec }}"
+    creates: "/usr/local/bin/{{ item.binary }}"
+  environment: &pipx_env
+    PIPX_HOME: /opt/pipx
+    PIPX_BIN_DIR: /usr/local/bin
+  loop:
+    # impacket carries ntlmrelayx, secretsdump, getST, getUserSPNs and the rest of
+    # the workhorses the solution leans on.
+    - { spec: "impacket", binary: "ntlmrelayx.py" }
+    - { spec: "certipy-ad", binary: "certipy" }
+    # The console script is lowercase, whatever the project calls itself. Getting
+    # this wrong does not fail, it silently breaks idempotency: the creates guard
+    # never matches and the tool is reinstalled on every run.
+    - { spec: "coercer", binary: "coercer" }
+    # Both BloodHound collectors, since the solution and the docs differ about
+    # which is meant and pipx isolation makes carrying both free.
+    - { spec: "bloodhound-ce", binary: "bloodhound-ce-python" }
+    - { spec: "bloodhound", binary: "bloodhound-python" }
+  loop_control:
+    label: "{{ item.spec }}"
+  register: redstackpro_toolkit_pipx
+  retries: 3
+  delay: 10
+  until: redstackpro_toolkit_pipx is succeeded
+  # One tool that will not install must not abort the whole toolchain and leave the
+  # later tasks unrun -- that is how a netexec typo also cost the git clones. The
+  # assertion at the end of this file is what decides whether the box is usable.
+  failed_when: false
+
+# Four packages injected into impacket's OWN venv. Each is here because a fresh
+# install is missing it or pulls something too new, and every one was found by an
+# attack failing on a live range, not by a check -- these are runtime import and
+# code paths that `--help` never touches.
+#
+#   dsinternals    ntlmrelayx imports it for the shadow-credentials path and
+#                  raises on import when it is absent, which reads like a relay
+#                  failure rather than a missing dependency.
+#
+#   pyOpenSSL<24   the AD CS relay (ESC8) builds a CSR with crypto.X509Req, which
+#                  pyOpenSSL removed in 24.0. A fresh install pulls 26.x, so
+#                  `ntlmrelayx ... --adcs` crashed with "module 'OpenSSL.crypto'
+#                  has no attribute 'X509Req'" AFTER coercing the DC and catching
+#                  the relayed auth -- the whole attack, failing at the last step.
+#
+#   pycryptodome   any AUTHENTICATED impacket operation computes an NT hash with
+#                  MD4, which OpenSSL 3 (Debian) dropped from its default
+#                  provider: hashlib raises "unsupported hash type MD4". impacket
+#                  falls back to pycryptodome's MD4 when it is present, and a
+#                  fresh venv does not have it. Also supplies the Crypto module
+#                  ldap3's NTLM bind needs. Relaying (ntlmrelayx, part 6) never
+#                  hit this because it forwards auth rather than computing a hash;
+#                  the git tools below, which log IN as a user, all did.
+#
+#   future         krbrelayx / dnstool import it and a fresh venv lacks it.
+- name: Pin impacket's dependencies that a fresh install breaks
+  ansible.builtin.command:
+    cmd: "pipx inject impacket {{ item }}"
+  environment: *pipx_env
+  loop:
+    - dsinternals
+    - "pyOpenSSL<24.0"
+    - pycryptodome
+    - future
+  loop_control:
+    label: "{{ item }}"
+  register: redstackpro_toolkit_inject
+  changed_when: "'injected package' in (redstackpro_toolkit_inject.stdout | lower)"
+  failed_when:
+    - redstackpro_toolkit_inject.rc != 0
+    - "'already' not in (redstackpro_toolkit_inject.stderr | lower)"
+
+# Not on PyPI as console scripts, so they come from git. They import impacket,
+# which lives in ITS OWN pipx venv, not in the system python -- so running them
+# with `python3` fails at "No module named 'impacket'". They have to run with the
+# impacket venv's interpreter, which is also where the injected deps above live.
+# krbrelayx carries addspn.py, which the solution uses to write an SPN it then
+# roasts, and dnstool.py for the DNS records a relay chain needs.
+#
+# Found on a live range 2026-09-18: the part-14 kerberos relay could not even
+# start, because nothing made these tools see impacket.
+- name: Clone the tools that ship no package
+  ansible.builtin.git:
+    repo: "{{ item.repo }}"
+    dest: "/opt/{{ item.name }}"
+    version: "{{ item.version }}"
+    depth: 1
+  loop:
+    - name: krbrelayx
+      repo: https://github.com/dirkjanm/krbrelayx.git
+      version: master
+    - name: PKINITtools
+      repo: https://github.com/dirkjanm/PKINITtools.git
+      version: master
+  loop_control:
+    label: "{{ item.name }}"
+  register: redstackpro_toolkit_clone
+  retries: 3
+  delay: 10
+
+# Wrappers so these run like any other tool, with the interpreter that can import
+# impacket, from the tool's own directory (krbrelayx imports its lib/ by relative
+# path, so cwd matters). Without these the operator has to know the venv path and
+# the cwd rule, and the run-check below can exercise them by name.
+# The comment is a literal rather than {{ ansible_managed }}, and that is the
+# whole point of this task working at all. `ansible_managed` is injected by the
+# TEMPLATE module, not by ordinary task templating, so a .j2 file may use it and
+# an inline `content:` may not. On ansible-core 2.21 the inline reference raises
+#
+#   Error while resolving value for 'content': 'ansible_managed' is undefined
+#
+# which fails the task without failing the play, so the deploy reports success
+# and none of these wrappers exist. That silently undoes the reason they were
+# added: krbrelayx and dnstool then run under the system python, which has no
+# impacket, and the operator meets an ImportError instead of a tool.
+#
+# Proven on the live jumpbox: the template module renders "Ansible managed"
+# here, and `copy` with the same expression raises. Sixteen files in this tree
+# reference the variable; fifteen are templates and are fine.
+- name: Make the git-cloned tools runnable with the impacket interpreter
+  ansible.builtin.copy:
+    dest: "/usr/local/bin/{{ item.bin }}"
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      # Managed by redStackPRO. Edits are overwritten on the next converge.
+      cd /opt/{{ item.dir }} && exec /opt/pipx/venvs/impacket/bin/python \
+        /opt/{{ item.dir }}/{{ item.script }} "$@"
+  loop:
+    - { bin: krbrelayx, dir: krbrelayx, script: krbrelayx.py }
+    - { bin: addspn, dir: krbrelayx, script: addspn.py }
+    - { bin: dnstool, dir: krbrelayx, script: dnstool.py }
+    - { bin: gettgtpkinit, dir: PKINITtools, script: gettgtpkinit.py }
+    - { bin: getnthash, dir: PKINITtools, script: getnthash.py }
+  loop_control:
+    label: "{{ item.bin }}"
+  until: redstackpro_toolkit_clone is succeeded
+
+- name: Record what the foothold carries, so the operator does not have to guess
+  ansible.builtin.copy:
+    dest: "{{ redstackpro_jumpbox_root }}/TOOLKIT.md"
+    mode: "0644"
+    content: |
+      # Foothold toolchain
+
+      Rendered by redStackPRO. Each tool has its OWN python environment (pipx), so
+      they do not share an impacket: coercer needs an older one than certipy, and a
+      single environment would break whichever lost.
+
+      | tool | run it as | note |
+      |------|-----------|------|
+      | ntlmrelayx.py | `ntlmrelayx.py` | run under `screen -dmS relay`, it needs a pty. Add `--no-http-server`: nginx owns :80 for Guacamole. |
+      | secretsdump.py, getST.py, getUserSPNs.py | same names | the rest of impacket |
+      | certipy | `certipy` | AD CS / ESC abuse |
+      | coercer | `coercer` | authentication coercion. Target the DC's OWN domain. |
+      | (no nxc) | use impacket + smbclient + ldapsearch | see the note below |
+      | bloodhound-python, bloodhound-ce-python | either name | collect over the pivot. The jumpbox resolver does NOT point at the range DC, so pass `-ns <dc-ip>`. |
+      | hashcat | `hashcat` | CPU only here (pocl); `-m 13100` for a roast ticket |
+      | krbrelayx / addspn / dnstool | `krbrelayx`, `addspn`, `dnstool` | cloned to /opt, wrapped to run with the impacket interpreter |
+      | PKINITtools | `gettgtpkinit`, `getnthash` | certificate to TGT |
+
+      These are wrappers: the tools import impacket, which lives in its own venv,
+      so a bare `python3` cannot run them. Authenticate with the NETBIOS domain
+      (`NORTH\user`), not the FQDN, or ldap3's NTLM returns
+      NO_AUTHENTICATING_AUTHORITY.
+
+      Kerberos: `/etc/krb5.conf` is NOT pre-pointed at the range realm. Set
+      `KRB5CCNAME` and write a realm stanza before the Kerberos-only paths work.
+      And krbrelayx wants port 80 for its HTTP server, which nginx (the portal)
+      holds on this host -- free it, or run krbrelayx from a host without the
+      portal, before an AD CS kerberos relay (part 14) can land.
+
+      ## Why nxc (netexec) is not here
+
+      It cannot be installed cheaply on this image and it is convenience rather
+      than capability. NetExec is not on PyPI under any name, publishes no release
+      binaries, and its `aardwolf` dependency ships source-only and needs
+      rustc >= 1.65. That was decisive on Debian 12, which carries 1.63 with no
+      newer backport. This foothold now runs Debian 13, whose rustc is well past
+      that floor, so the compiler objection no longer holds and only the build
+      time does. Nobody has tried it since the move; if you do and it is quick,
+      it is worth reconsidering.
+
+      Everything nxc does is already here: impacket for the protocol work,
+      `smbclient` for shares, `ldapsearch` for directory queries, certipy for AD CS.
+      It is one command instead of three, not a capability you lack.
+
+      If you want it anyway:
+
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          . "$HOME/.cargo/env"
+          PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install \n            git+https://github.com/Pennyw0rth/NetExec
+
+# This is the task that decides whether the foothold is usable, and it is why the
+# per-tool install above can tolerate a single failure without aborting.
+#
+# It RUNS each tool. It used to stat the binary, under this same name and a
+# comment saying "what matters is whether the operator can run the tool" -- and
+# then check only that a file existed. That is not the same question, and the gap
+# between them hid a completely dead certipy on every jumpbox we ever deployed:
+# installed, on PATH, stat happy, and raising ModuleNotFoundError before it did
+# anything (certipy 4.8.2 imports pkg_resources, which setuptools removed in v81).
+# Nothing noticed until someone ran it on a live range, months later.
+#
+# An import error is exactly what a file-existence check cannot see, and it is
+# also the most likely way one of these breaks, because each is a python entry
+# point in its own venv resolving its own dependency tree.
+- name: Verify the toolchain actually runs
+  ansible.builtin.command:
+    cmd: "/usr/local/bin/{{ item }} --help"
+  environment: *pipx_env
+  loop:
+    - ntlmrelayx.py
+    - secretsdump.py
+    - certipy
+    - coercer
+    - bloodhound-python
+  register: redstackpro_toolkit_runs
+  loop_control:
+    label: "{{ item }}"
+  changed_when: false
+  # Collect every failure rather than stopping at the first, so one run names all
+  # the broken tools instead of one per deploy.
+  failed_when: false
+
+- name: Fail loudly when a tool the solution needs cannot run
+  ansible.builtin.assert:
+    # A missing binary and a binary that raises both land here. Some tools exit
+    # non-zero on --help, so a traceback in the output counts as broken too --
+    # that is the signature of the dependency breakage this exists to catch.
+    that: >-
+      {{ redstackpro_toolkit_runs.results
+         | selectattr('rc', 'ne', 0)
+         | selectattr('stderr', 'search', '(Traceback|ModuleNotFoundError|ImportError|No such file)')
+         | list | length == 0 }}
+    fail_msg: >-
+      The foothold cannot run {{ redstackpro_toolkit_runs.results
+        | selectattr('rc', 'ne', 0)
+        | selectattr('stderr', 'search', '(Traceback|ModuleNotFoundError|ImportError|No such file)')
+        | map(attribute='item') | join(', ') }}.
+      A solution step should not be what discovers this, so the deploy stops
+      here. Check /opt/pipx/logs for the pip output, and note that a tool can be
+      installed and on PATH and still not start.
+    success_msg: the foothold carries the toolchain, and every tool starts

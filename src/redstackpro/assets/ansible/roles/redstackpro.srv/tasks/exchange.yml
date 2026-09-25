@@ -1,0 +1,152 @@
+---
+# Exchange Server 2019 on a domain member (GOAD's the-eyrie extension). Clean-
+# room MIT and deliberately heavy: prerequisites, then AD schema/domain prep as
+# an enterprise admin, then an unattended mailbox-role install that can run over
+# an hour. The ISO is large and version-specific, so its URL is a variable the
+# operator sets (redstackpro_exchange_iso_url). Runs as the domain admin because
+# schema prep needs it. See goad-native-recreation.
+
+- name: Authenticate as the domain administrator for Exchange setup
+  ansible.builtin.set_fact:
+    ansible_user: "{{ redstackpro_join_netbios }}\\Administrator"
+
+- name: Install the Exchange prerequisite Windows features
+  ansible.windows.win_feature:
+    name:
+      - NET-Framework-45-Features
+      - RPC-over-HTTP-proxy
+      - RSAT-Clustering
+      - RSAT-Clustering-CmdInterface
+      - RSAT-Clustering-Mgmt
+      - RSAT-Clustering-PowerShell
+      - WAS-Process-Model
+      - Web-Asp-Net45
+      - Web-Basic-Auth
+      - Web-Client-Auth
+      - Web-Digest-Auth
+      - Web-Dir-Browsing
+      - Web-Dyn-Compression
+      - Web-Http-Errors
+      - Web-Http-Logging
+      - Web-Http-Redirect
+      - Web-Http-Tracing
+      - Web-ISAPI-Ext
+      - Web-ISAPI-Filter
+      - Web-Lgcy-Mgmt-Console
+      - Web-Metabase
+      - Web-Mgmt-Console
+      - Web-Mgmt-Service
+      - Web-Net-Ext45
+      - Web-Request-Monitor
+      - Web-Server
+      - Web-Stat-Compression
+      - Web-Static-Content
+      - Web-Windows-Auth
+      - Web-WMI
+      - Windows-Identity-Foundation
+      - RSAT-ADDS
+    include_management_tools: true
+  register: redstackpro_exch_features
+
+- name: Reboot after the prerequisite features
+  ansible.windows.win_reboot:
+    reboot_timeout: 1200
+  when: redstackpro_exch_features.reboot_required | default(false)
+
+- name: Download the Exchange runtime prerequisites
+  ansible.windows.win_get_url:
+    url: "{{ item.url }}"
+    dest: 'C:\Windows\Temp\{{ item.dest }}'
+  loop:
+    - url: https://download.microsoft.com/download/2/C/4/2C47A5C1-A1F3-4843-B9FE-84C0032C61EC/UcmaRuntimeSetup.exe
+      dest: UcmaRuntimeSetup.exe
+    - url: https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x64.exe
+      dest: vcredist2013_x64.exe
+    - url: https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi
+      dest: rewrite_amd64.msi
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Install the Exchange runtime prerequisites
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = "Stop"
+      Start-Process -Wait -FilePath C:\Windows\Temp\vcredist2013_x64.exe -ArgumentList "/install","/passive","/norestart"
+      Start-Process -Wait -FilePath C:\Windows\Temp\UcmaRuntimeSetup.exe -ArgumentList "/passive","/norestart"
+      Start-Process -Wait -FilePath msiexec.exe -ArgumentList "/i","C:\Windows\Temp\rewrite_amd64.msi","/quiet"
+  changed_when: true
+
+# UCMA 4.0 is not recognized by Exchange setup until the host reboots, so reboot
+# before the install runs.
+- name: Reboot so the runtime prerequisites register
+  ansible.windows.win_reboot:
+    reboot_timeout: 1200
+
+- name: Note when Exchange install is skipped for lack of an ISO url
+  ansible.builtin.debug:
+    msg: >-
+      redstackpro_exchange_iso_url is unset, so Exchange was not installed; the
+      host has joined the domain and the prerequisites are in place. Set the ISO
+      url to complete the install.
+  when: redstackpro_exchange_iso_url | default('') | length == 0
+
+- name: Download the Exchange ISO
+  ansible.windows.win_get_url:
+    url: "{{ redstackpro_exchange_iso_url }}"
+    dest: 'C:\Windows\Temp\exchange.iso'
+    timeout: 3600
+  when: redstackpro_exchange_iso_url | default('') | length > 0
+
+- name: Prepare AD, then install Exchange (mailbox role)
+  ansible.windows.win_powershell:
+    script: |
+      param($Org, $User, $Pass)
+      $ErrorActionPreference = "Stop"
+      $mount = Mount-DiskImage -ImagePath C:\Windows\Temp\exchange.iso -PassThru
+      $letter = ($mount | Get-Volume).DriveLetter
+      $setup = "$letter`:\Setup.exe"
+      # Setup runs under a scheduled task logged on as the domain admin, not over
+      # this WinRM session: a network logon cannot prove Schema/Enterprise Admin
+      # membership to the schema master or delegate to it (the double-hop), so
+      # setup would refuse the schema prep. A batch logon carries the full token.
+      $body = @"
+      `$ErrorActionPreference = 'Continue'
+      & '$setup' /PrepareSchema /IAcceptExchangeServerLicenseTerms *> C:\Windows\Temp\exch-schema.log
+      & '$setup' /PrepareAD /OrganizationName:$Org /IAcceptExchangeServerLicenseTerms *> C:\Windows\Temp\exch-ad.log
+      & '$setup' /Mode:Install /Role:Mailbox /IAcceptExchangeServerLicenseTerms *> C:\Windows\Temp\exch-install.log
+      `$c = `$LASTEXITCODE; if (`$null -eq `$c) { `$c = 1 }
+      Set-Content C:\Windows\Temp\exch-done.txt `$c
+      "@
+      Set-Content -Path C:\Windows\Temp\exch-setup.ps1 -Value $body
+      Remove-Item C:\Windows\Temp\exch-done.txt -ErrorAction SilentlyContinue
+      $action = New-ScheduledTaskAction -Execute "powershell.exe" `
+        -Argument "-ExecutionPolicy Bypass -File C:\Windows\Temp\exch-setup.ps1"
+      Register-ScheduledTask -TaskName RSPExchange -Action $action -User $User `
+        -Password $Pass -RunLevel Highest -Force | Out-Null
+      Start-ScheduledTask -TaskName RSPExchange
+      # Wait up to ~100 minutes for the setup to finish.
+      $done = $false
+      for ($i = 0; $i -lt 200; $i++) {
+        Start-Sleep -Seconds 30
+        if (Test-Path C:\Windows\Temp\exch-done.txt) { $done = $true; break }
+      }
+      Dismount-DiskImage -ImagePath C:\Windows\Temp\exchange.iso
+      if (-not $done) { throw "Exchange setup did not finish in time" }
+      $code = (Get-Content C:\Windows\Temp\exch-done.txt) -as [int]
+      if ($code -ne 0) { throw "Exchange setup exit code $code; see C:\Windows\Temp\exch-*.log" }
+    parameters:
+      Org: "{{ redstackpro_exchange_org | default('redstackpro') }}"
+      User: "{{ redstackpro_join_netbios }}\\Administrator"
+      Pass: "{{ redstackpro_lab_password }}"
+  register: redstackpro_exch_install
+  changed_when: true
+  # A mailbox-role install runs over an hour, longer than the global
+  # task_timeout (ansible.cfg) that guards every other task. Run it async so it
+  # is not bound by that cap: async gives it its own 2 hour ceiling and ansible
+  # polls for completion, so a finished install reports success instead of the
+  # task being killed at 60 minutes while the scheduled task keeps going. The
+  # inner wait loop is shorter than this ceiling, so it is what actually reports
+  # the result. See goad-native-recreation.
+  async: 7200
+  poll: 60
+  when: redstackpro_exchange_iso_url | default('') | length > 0

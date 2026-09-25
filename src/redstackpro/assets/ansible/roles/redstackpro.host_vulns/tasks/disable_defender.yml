@@ -1,0 +1,46 @@
+---
+# Disable Windows Defender, the GOAD default. mayfly's GOAD ships Defender off so
+# the lab's tooling and payloads run without an EDR in the way; redStackPRO matches
+# that by DEFAULT and exposes an opt-in toggle (redstackpro_defender_enabled) to
+# leave it on. Set-MpPreference alone is unreliable because Tamper Protection can
+# refuse it, so the durable control is the policy registry (DisableAntiSpyware and
+# the Real-Time Protection keys), which Tamper Protection does not override and
+# which takes effect on the next boot. Set-MpPreference is still attempted for an
+# immediate effect when Tamper Protection is off. A reboot is triggered only when a
+# policy key actually changed, so a re-run is idempotent. See goad-fidelity-build
+# and productize-temp-fixes (PZ-5).
+
+- name: Set the Windows Defender policy keys (master + real-time protection)
+  ansible.windows.win_regedit:
+    path: "{{ def_reg.path }}"
+    name: "{{ def_reg.name }}"
+    data: 1
+    type: dword
+  loop:
+    - { path: 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender', name: DisableAntiSpyware }
+    - { path: 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection', name: DisableRealtimeMonitoring }
+    - { path: 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection', name: DisableBehaviorMonitoring }
+    - { path: 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection', name: DisableScanOnRealtimeEnable }
+    - { path: 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection', name: DisableOnAccessProtection }
+  loop_control:
+    loop_var: def_reg
+    label: "{{ def_reg.name }}"
+  register: redstackpro_defender_regkeys
+
+# Best-effort immediate disable (works when Tamper Protection is off; ignored when
+# it refuses). The policy keys above are the reliable control after the reboot.
+- name: Best-effort immediate Set-MpPreference disable
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = "SilentlyContinue"
+      Set-MpPreference -DisableRealtimeMonitoring $true
+      Set-MpPreference -DisableIOAVProtection $true
+      Set-MpPreference -DisableScriptScanning $true
+      "attempted"
+  changed_when: false
+  failed_when: false
+
+- name: Reboot so the Defender policy takes effect (only when a key changed)
+  ansible.windows.win_reboot:
+    reboot_timeout: 600
+  when: redstackpro_defender_regkeys is changed

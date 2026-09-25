@@ -1,0 +1,11 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+# The teamserver reads its profile once, at start, so a credential change only
+# takes effect on a restart.
+- name: Restart adaptix
+  ansible.builtin.service:
+    name: adaptix
+    state: restarted

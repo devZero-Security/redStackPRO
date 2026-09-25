@@ -1,0 +1,12 @@
+---
+# Force NetBIOS over TCP/IP on for every interface so NBT-NS lookups leak onto the
+# segment for a responder to poison. NetbiosOptions=1 = enabled.
+- name: Enable NBT-NS on all interfaces
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = "Stop"
+      $base = "HKLM:\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces"
+      Get-ChildItem $base | ForEach-Object {
+        Set-ItemProperty -Path $_.PSPath -Name NetbiosOptions -Value 1
+      }
+  changed_when: true

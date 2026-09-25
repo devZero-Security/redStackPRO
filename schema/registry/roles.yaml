@@ -1,0 +1,158 @@
+# Edge roles. Closed set, so one file rather than one file per role.
+# Each role declares what it injects and into which endpoint, which is what
+# lets the compiler derive firewall rules, Ansible variables, and play order
+# from a single drawn line. See decision 0007.
+
+roles:
+  - role: attached
+    requires_reachability: false
+    endpoints:
+      - source: host
+        target: segment
+      - source: segment
+        target: network
+    injects: []
+
+  - role: fronts
+    requires_reachability: true
+    endpoints:
+      - source: redirector
+        target: teamserver
+    injects:
+      # A redirector fronts as many teamservers as it has edges, routing each on
+      # its own prefix. That is redStack's shape and a common one, so the
+      # injection collects rather than overwrites: one entry per edge.
+      - into: source
+        name: upstreams
+        collect: true
+        entry:
+          name:
+            from: target
+            rendered_name: true
+          address:
+            from: target
+            derived_field: private_address
+          uri_prefix:
+            edge_field: uri_prefix
+          protocol:
+            edge_field: protocol
+          port:
+            edge_field: upstream_port
+      # The teamserver learns what the redirector will demand of a beacon, so
+      # the C2 profile and the redirector gating cannot drift apart.
+      - into: target
+        name: gating_header_name
+        from: source
+        overlay_field: gating.header_name
+      - into: target
+        name: gating_header_value
+        from: source
+        overlay_field: gating.header_value
+      # The teamserver serves under its own prefix, which is a scalar because a
+      # teamserver has one.
+      - into: target
+        name: uri_prefix
+        edge_field: uri_prefix
+      # The names a beacon has to call, which are the REDIRECTORS': a teamserver
+      # holds a private address and never answers the internet, so it cannot
+      # derive its own callback, and a C2 listener created at provision has no
+      # address to hand an implant without this. See the adaptix role.
+      #
+      # Collected, not scalar. A rollover pool puts several front doors on
+      # DIFFERENT hostnames in front of one teamserver, which is the whole point
+      # of the shape, so a scalar would be a conflict by design rather than a
+      # mistake. A list is also what the listener wants: give the beacon every
+      # door and it can roll to the next when one is burned.
+      - into: target
+        name: redirector_callbacks
+        collect: true
+        entry:
+          hostname:
+            from: source
+            overlay_field: hostname
+          port:
+            edge_field: listen_port
+
+  - role: logs_to
+    requires_reachability: true
+    endpoints:
+      - source: host
+        target: collector
+    injects:
+      - into: source
+        name: log_sink_address
+        from: target
+        derived_field: private_address
+      # The wire is defined at the collector, so the port and the TLS choice
+      # travel to every shipper rather than each side carrying its own default.
+      # Two defaults that happen to agree today drift the moment someone edits
+      # the overlay, and the failure is a shipper talking to a closed port.
+      - into: source
+        name: redstackpro_shipper_port
+        from: target
+        overlay_field: ingest_port
+      - into: source
+        name: redstackpro_shipper_tls
+        from: target
+        overlay_field: tls
+
+  - role: manages
+    requires_reachability: true
+    endpoints:
+      - source: jumpbox
+        target: network
+      - source: jumpbox
+        target: segment
+    injects:
+      - into: target_members
+        name: proxy_jump
+        from: source
+        derived_field: public_address
+
+  - role: peers
+    # Peering is the thing that provides reachability, not a relationship that
+    # needs it, so it asserts nothing about a prior path. It injects nothing into
+    # a host either: the two networks are wired at the Terraform layer, and what
+    # crosses the peering is decided by the manages and logs_to edges that now
+    # reach across it. See 0029.
+    requires_reachability: false
+    endpoints:
+      - source: network
+        target: network
+    injects: []
+
+  # Range mode (0047, goad-native-recreation). Joins is domain membership;
+  # trusts is between domains. A joins edge carries the domain's identity onto
+  # the joining host: a controller learns the domain it anchors, a member learns
+  # the domain it joins. Both are overlay fields on the domain, known at compile
+  # time, so neither creates a play-order constraint. The bulk of a domain (its
+  # users, groups, ACLs, and trusts) travels in the per-domain vars file the dc
+  # role reads, not as host injects, because a user nests a group list.
+  - role: joins
+    requires_reachability: false
+    endpoints:
+      - source: dc
+        target: domain
+      - source: srv
+        target: domain
+      - source: wks
+        target: domain
+    injects:
+      - into: source
+        name: redstackpro_join_fqdn
+        from: target
+        overlay_field: fqdn
+      - into: source
+        name: redstackpro_join_netbios
+        from: target
+        overlay_field: netbios
+
+  # A trust runs between two domains. It is established by the dc role from the
+  # per-domain vars file (the trusts this domain is the source of), so it injects
+  # nothing onto a host directly.
+  - role: trusts
+    requires_reachability: false
+    endpoints:
+      - source: domain
+        target: domain
+    injects: []

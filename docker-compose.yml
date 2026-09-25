@@ -1,0 +1,32 @@
+# Run the canvas locally.
+#   docker compose up                      SQLite, http://127.0.0.1:8000
+#   docker compose --profile postgres up   Postgres (set REDSTACKPRO_DATABASE_URL to the db URL)
+# The app retries until Postgres is ready, so no hard depends_on is needed.
+
+services:
+  redstackpro:
+    build: .
+    image: ghcr.io/devzero-security/redstackpro:0.9.0
+    ports:
+      - "8000:8000"
+    volumes:
+      - redstackpro-data:/data
+    environment:
+      REDSTACKPRO_DATABASE_URL: ${REDSTACKPRO_DATABASE_URL:-sqlite+pysqlite:////data/redstackpro.db}
+    restart: unless-stopped
+
+  db:
+    image: postgres:16
+    profiles:
+      - postgres
+    environment:
+      POSTGRES_DB: redstackpro
+      POSTGRES_USER: redstackpro
+      POSTGRES_PASSWORD: redstackpro
+    volumes:
+      - redstackpro-pg:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  redstackpro-data:
+  redstackpro-pg:

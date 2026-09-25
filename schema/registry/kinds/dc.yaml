@@ -1,0 +1,23 @@
+kind: dc
+abbrev: dc
+category: host
+ansible_group: domain_controllers
+description: Domain controller. Holds the directory for the domain it anchors.
+
+display:
+  label: Domain controller
+  blurb: Anchors a domain
+  icon: tabler/outline/shield-check
+  group: hosts
+  color: "#1971c2"
+
+modes:
+  - range
+
+derived:
+  - name: private_address
+    source: provider
+
+requirements:
+  - name: compute
+  - name: windows_image

@@ -1,0 +1,19 @@
+{{ ansible_managed | comment }}
+# Every host in this export except the jumpbox is on a private address, so it is
+# reached through the jumpbox. Same ProxyJump the generated inventory uses, and
+# the same host key policy: new keys are accepted, changed ones are not.
+
+{% set jump = groups['jumpboxes'] | first %}
+Host {{ jump }}
+    HostName {{ hostvars[jump].ansible_host }}
+    User {{ hostvars[jump].ansible_user | default('rtadmin') }}
+    StrictHostKeyChecking accept-new
+
+{% for host in groups['all'] | sort if host not in [jump, inventory_hostname] %}
+Host {{ host }}
+    HostName {{ hostvars[host].ansible_host }}
+    User {{ hostvars[host].ansible_user | default('rtadmin') }}
+    ProxyJump {{ jump }}
+    StrictHostKeyChecking accept-new
+
+{% endfor %}

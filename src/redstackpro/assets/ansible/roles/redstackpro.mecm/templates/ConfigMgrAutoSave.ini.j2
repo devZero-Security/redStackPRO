@@ -1,0 +1,34 @@
+[Identification]
+Action=InstallPrimarySite
+
+[Options]
+ProductID=EVAL
+SiteCode={{ redstackpro_mecm_site_code }}
+SiteName={{ redstackpro_mecm_site_name }}
+SMSInstallDir=C:\Program Files\Microsoft Configuration Manager
+SDKServer={{ redstackpro_mecm_fqdn }}
+RoleCommunicationProtocol=HTTPorHTTPS
+ClientsUsePKICertificate=0
+PrerequisiteComp=0
+PrerequisitePath=C:\updates
+ManagementPoint={{ redstackpro_mecm_fqdn }}
+ManagementPointProtocol=HTTP
+DistributionPoint={{ redstackpro_mecm_fqdn }}
+DistributionPointProtocol=HTTP
+DistributionPointInstallIIS=0
+AdminConsole=1
+JoinCEIP=0
+
+[SQLConfigOptions]
+SQLServerName={{ redstackpro_mecm_sql_fqdn }}
+DatabaseName=CM_{{ redstackpro_mecm_site_code }}
+SQLSSBPort=4022
+
+[CloudConnectorOptions]
+CloudConnector=1
+CloudConnectorServer={{ redstackpro_mecm_fqdn }}
+UseProxy=0
+
+[SystemCenterOptions]
+
+[HierarchyExpansionOption]

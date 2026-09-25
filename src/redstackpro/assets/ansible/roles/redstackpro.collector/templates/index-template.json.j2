@@ -1,0 +1,108 @@
+{
+  "index_patterns": ["redstackpro-*"],
+  "priority": 100,
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0
+    },
+    "mappings": {
+      "dynamic_templates": [
+        {
+          "strings_are_keywords": {
+            "match_mapping_type": "string",
+            "mapping": { "type": "keyword", "ignore_above": 1024 }
+          }
+        }
+      ],
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "message": { "type": "text" },
+        "source": {
+          "properties": {
+{#- ignore_malformed, because a strict type can throw away a whole EVENT.
+    Sliver's audit log writes a Go net.Addr into what reads like an address
+    field, so source.ip received '127.0.0.1:54962' and OpenSearch rejected the
+    entire document with mapper_parsing_exception: operator, method and session
+    all lost to one bad field, on a parse that was otherwise perfect.
+    The c2 branch now splits host:port properly. This is the second line of
+    defence, so the next source that surprises us costs one field rather than
+    the event. A Jinja comment, because JSON has none and a "_comment" key
+    inside properties would be read as a field with an invalid mapping. #}
+            "ip": { "type": "ip", "ignore_malformed": true },
+            "port": { "type": "integer", "ignore_malformed": true },
+            "geo": {
+              "properties": {
+                "location": { "type": "geo_point" },
+                "country_name": { "type": "keyword" },
+                "country_iso_code": { "type": "keyword" },
+                "city_name": { "type": "keyword" },
+                "region_name": { "type": "keyword" }
+              }
+            }
+          }
+        },
+        "http": {
+          "properties": {
+            "response": {
+              "properties": {
+                "status_code": { "type": "integer" },
+                "body": { "properties": { "bytes": { "type": "long" } } }
+              }
+            }
+          }
+        },
+        "redstackpro": {
+          "properties": {
+            "node_id": { "type": "keyword" },
+            "kind": { "type": "keyword" },
+            "log_type": { "type": "keyword" },
+            "gate": { "type": "keyword" },
+            "gate_presented": { "type": "keyword" },
+            "proxied": { "type": "keyword" },
+            "backend": { "type": "keyword" },
+            "uri_prefix": { "type": "keyword" },
+            "c2": {
+              "properties": {
+                "product": { "type": "keyword" },
+                "stream": { "type": "keyword" },
+                "method": { "type": "keyword" },
+                "session": { "type": "keyword" },
+                "beacon": { "type": "keyword" },
+                "implant": { "type": "keyword" },
+                "implant_uuid": { "type": "keyword" },
+                "implant_label": { "type": "keyword" },
+                "implant_user": { "type": "keyword" },
+                "event": { "type": "keyword" },
+                "entry": { "type": "keyword" },
+                "command": { "type": "keyword", "ignore_above": 2048 }
+              }
+            }
+          }
+        },
+        "log": { "properties": { "level": { "type": "keyword" } } },
+        "user_agent": {
+          "properties": {
+            "name": { "type": "keyword" },
+            "os": { "properties": { "name": { "type": "keyword" } } },
+            "device": { "properties": { "name": { "type": "keyword" } } }
+          }
+        },
+        "user": { "properties": { "name": { "type": "keyword" } } },
+        "event": {
+          "properties": {
+            "outcome": { "type": "keyword" },
+            "kind": { "type": "keyword" },
+            "category": { "type": "keyword" }
+          }
+        },
+        "url": {
+          "properties": {
+            "original": { "type": "keyword", "ignore_above": 2048 },
+            "domain": { "type": "keyword" }
+          }
+        }
+      }
+    }
+  }
+}

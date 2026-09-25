@@ -1,0 +1,34 @@
+---
+# A recurring scheduled task (GOAD's connect_bot / a login bot). Generalizes the
+# coercion-bot pattern: runs a command on a repeating interval, optionally as a
+# domain user (the range's shared lab password) so an interactive logon / stored
+# credential is present for capture. Parameters from vulns_vars.schedule. See
+# goad-fidelity-build.
+
+- name: Stage the bot script if one is provided
+  ansible.windows.win_copy:
+    dest: "{{ (redstackpro_host_vulns_vars.schedule | default({})).script_path }}"
+    content: "{{ (redstackpro_host_vulns_vars.schedule | default({})).script_content | default('Start-Sleep -Seconds 5\n') }}"
+  when: (redstackpro_host_vulns_vars.schedule | default({})).script_path is defined
+
+- name: Create the scheduled task
+  ansible.windows.win_powershell:
+    script: |
+      param($Name, $Cmd, $Mins, $User, $Pass)
+      $ErrorActionPreference = "Stop"
+      $a = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -Command `"$Cmd`""
+      $t = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes $Mins)
+      if ($User) {
+        Register-ScheduledTask -TaskName $Name -Action $a -Trigger $t `
+          -User $User -Password $Pass -RunLevel Limited -Force | Out-Null
+      } else {
+        $p = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        Register-ScheduledTask -TaskName $Name -Action $a -Trigger $t -Principal $p -Force | Out-Null
+      }
+    parameters:
+      Name: "{{ (redstackpro_host_vulns_vars.schedule | default({})).name | default('connect_bot') }}"
+      Cmd: "{{ (redstackpro_host_vulns_vars.schedule | default({})).command | default('Start-Sleep -Seconds 5') }}"
+      Mins: "{{ (redstackpro_host_vulns_vars.schedule | default({})).interval_minutes | default(1) }}"
+      User: "{{ (redstackpro_host_vulns_vars.schedule | default({})).user | default('') }}"
+      Pass: "{{ (redstackpro_user_passwords | default({})).get((redstackpro_host_vulns_vars.schedule | default({})).user | default(''), redstackpro_lab_password) }}"
+  changed_when: true

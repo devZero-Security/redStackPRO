@@ -1,0 +1,308 @@
+---
+# The portal. A PostgreSQL database, guacd, and the web application (ADR 0056).
+# The database is what buys named accounts and per-user TOTP: both need writable
+# user records the old read-only file provider had nowhere to keep. The
+# connection list is still derived from the inventory -- every host the export
+# creates is a pre-authenticated tile -- but it is seeded as SQL now rather than
+# rendered into an XML file the container reads.
+#
+# Everything is loopback-only. nginx terminates TLS on 443; the database, guacd,
+# and the web application never publish a port off the host.
+
+- name: Install docker
+  ansible.builtin.apt:
+    name: docker.io
+    state: present
+
+# Container output has to reach the journal, or the shipper never sees it.
+#
+# Debian's docker defaults to the json-file driver, which writes under
+# /var/lib/docker/containers and nowhere else. The shipper collects portal
+# logins with `CONTAINER_NAME=redstackpro-guacamole`, a journald match, so on
+# every range ever deployed it matched nothing: the auth index carried 324
+# documents and not one was a portal login. Guacamole IS the operator's front
+# door -- sshd never sees a portal login -- so the more important half of "who
+# logged in" was silently absent, and the index looked healthy because sshd
+# filled it.
+#
+# BEFORE any container is created, deliberately: the log driver is fixed at
+# creation time, so setting this afterwards and restarting a container leaves it
+# on the old driver. Proven on a live host 2026-09-18 -- a restarted container
+# still reported json-file while a brand new one landed in the journal.
+- name: Send container output to the journal, where the shipper reads
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    mode: "0644"
+    content: |
+      {"log-driver": "journald"}
+  register: redstackpro_guac_log_driver
+
+- name: Start docker
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Restart docker when the log driver changed
+  ansible.builtin.service:
+    name: docker
+    state: restarted
+  when: redstackpro_guac_log_driver is changed
+
+# One user-defined network so the web application resolves the database and guacd
+# by container name. The default bridge does not do name resolution, and links
+# are legacy.
+- name: Create the portal network
+  community.docker.docker_network:
+    name: redstackpro-portal
+
+# The operator login, the shared lab password, and the key the portal connects
+# with are generated at apply and written here by cloud-init. redStackPRO never
+# sees them: they live only in your state and on this host. See 0001.
+- name: Read the operator username
+  ansible.builtin.slurp:
+    src: /etc/redstackpro/operator-username
+  register: redstackpro_operator_slurp
+
+- name: Read the lab password
+  ansible.builtin.slurp:
+    src: /etc/redstackpro/lab-password
+  register: redstackpro_password_slurp
+
+- name: Read the guacamole ssh key
+  ansible.builtin.slurp:
+    src: /etc/redstackpro/guacamole-ssh-key
+  register: redstackpro_guackey_slurp
+
+- name: Name the portal credentials
+  ansible.builtin.set_fact:
+    redstackpro_guac_operator: "{{ redstackpro_operator_slurp.content | b64decode | trim }}"
+    redstackpro_guac_password: "{{ redstackpro_password_slurp.content | b64decode | trim }}"
+    redstackpro_guac_ssh_key: "{{ redstackpro_guackey_slurp.content | b64decode }}"
+
+# ----------------------------------------------------------------- database
+
+# The database password is generated on this host and kept, so it is stable
+# across re-runs (the volume outlives them) and never enters the export. Written
+# only if absent, so a re-run reuses the same one the volume was initialised with.
+- name: Generate the database password once
+  ansible.builtin.shell:
+    cmd: "openssl rand -hex 24 > {{ redstackpro_guacamole_db_password_file }}"
+    creates: "{{ redstackpro_guacamole_db_password_file }}"
+
+- name: Read the database password
+  ansible.builtin.slurp:
+    src: "{{ redstackpro_guacamole_db_password_file }}"
+  register: redstackpro_guac_db_slurp
+
+- name: Name the database password
+  ansible.builtin.set_fact:
+    redstackpro_guac_db_password: "{{ redstackpro_guac_db_slurp.content | b64decode | trim }}"
+
+- name: Create the database volume directory
+  ansible.builtin.file:
+    path: "{{ redstackpro_guacamole_db_volume }}"
+    state: directory
+    mode: "0700"
+
+- name: Start the database
+  community.docker.docker_container:
+    name: redstackpro-guac-db
+    image: "{{ redstackpro_guacamole_db_image }}"
+    state: started
+    restart_policy: unless-stopped
+    networks:
+      - name: redstackpro-portal
+    env:
+      POSTGRES_DB: "{{ redstackpro_guacamole_db_name }}"
+      POSTGRES_USER: "{{ redstackpro_guacamole_db_user }}"
+      POSTGRES_PASSWORD: "{{ redstackpro_guac_db_password }}"
+    volumes:
+      - "{{ redstackpro_guacamole_db_volume }}:/var/lib/postgresql/data"
+
+- name: Wait for the database to accept connections
+  ansible.builtin.command:
+    cmd: docker exec redstackpro-guac-db pg_isready -U {{ redstackpro_guacamole_db_user }}
+  register: rsp_pg_ready
+  until: rsp_pg_ready.rc == 0
+  retries: 30
+  delay: 2
+  changed_when: false
+
+# The schema ships inside the guacamole image, not the postgres one. Generate it
+# from there, then load it -- but only when the database is empty, so a re-run
+# does not wipe the account and TOTP state the volume is holding.
+- name: Check whether the schema is already loaded
+  ansible.builtin.command:
+    cmd: >
+      docker exec redstackpro-guac-db psql -U {{ redstackpro_guacamole_db_user }}
+      -d {{ redstackpro_guacamole_db_name }} -tAc
+      "SELECT to_regclass('public.guacamole_connection')"
+  register: rsp_schema
+  changed_when: false
+
+- name: Generate and load the schema on first run
+  when: rsp_schema.stdout | trim != 'guacamole_connection'
+  block:
+    - name: Generate the schema from the guacamole image
+      ansible.builtin.shell:
+        cmd: >
+          docker run --rm guacamole/guacamole:{{ redstackpro_guacamole_version }}
+          /opt/guacamole/bin/initdb.sh --postgresql
+          > /etc/redstackpro/guac-initdb.sql
+      args:
+        creates: /etc/redstackpro/guac-initdb.sql
+
+    - name: Load the schema
+      ansible.builtin.shell:
+        cmd: >
+          docker exec -i redstackpro-guac-db psql -U {{ redstackpro_guacamole_db_user }}
+          -d {{ redstackpro_guacamole_db_name }} < /etc/redstackpro/guac-initdb.sql
+      changed_when: true
+
+# ------------------------------------------------------------- application
+
+# The drop folder. guacd is what actually mounts a drive into an RDP session, so
+# the shared directory has to be visible to that container -- without the bind
+# mount the drive lives inside it and nothing on this host can reach the files.
+# World-writable because the accounts that use it differ by mode (redop, blueop,
+# a foothold user) and guacd writes as its own uid; this is a lab drop folder on
+# the host that is already the range's foothold, so the permission buys an
+# attacker nothing they do not already have.
+- name: Create the beacon drop folder
+  ansible.builtin.file:
+    path: "{{ redstackpro_guacamole_drop_dir }}"
+    state: directory
+    mode: "0777"
+
+- name: Start guacd
+  community.docker.docker_container:
+    name: redstackpro-guacd
+    image: "guacamole/guacd:{{ redstackpro_guacamole_version }}"
+    state: started
+    restart_policy: unless-stopped
+    networks:
+      - name: redstackpro-portal
+    volumes:
+      - "{{ redstackpro_guacamole_drop_dir }}:/drop"
+
+- name: Start the guacamole web application
+  community.docker.docker_container:
+    name: redstackpro-guacamole
+    image: "guacamole/guacamole:{{ redstackpro_guacamole_version }}"
+    state: started
+    restart_policy: unless-stopped
+    networks:
+      - name: redstackpro-portal
+    # TOTP is presence-based in the image: the entrypoint installs the extension
+    # whenever TOTP_ENABLED is present, so setting it to "false" would still
+    # install it. The env therefore OMITS the TOTP keys entirely when the toggle
+    # is off, and adds them only when it is on. Once installed, TOTP is mandatory
+    # for the single admin (GUACAMOLE-2140 rules out a present-but-off state); see
+    # the defaults and ADR 0056. Owed a live check on the first deploy with it on.
+    env: "{{ _rsp_guac_env | combine(_rsp_totp_env if (redstackpro_jumpbox_totp | default(false)) else {}) }}"
+    # Loopback: nginx fronts it with TLS on 443, so the container's plain http
+    # never leaves the host.
+    published_ports:
+      - "127.0.0.1:{{ redstackpro_guacamole_http_port }}:8080"
+  vars:
+    _rsp_guac_env:
+      GUACD_HOSTNAME: redstackpro-guacd
+      GUACD_PORT: "4822"
+      POSTGRESQL_HOSTNAME: redstackpro-guac-db
+      POSTGRESQL_PORT: "5432"
+      POSTGRESQL_DATABASE: "{{ redstackpro_guacamole_db_name }}"
+      POSTGRESQL_USER: "{{ redstackpro_guacamole_db_user }}"
+      POSTGRESQL_PASSWORD: "{{ redstackpro_guac_db_password }}"
+    _rsp_totp_env:
+      TOTP_ENABLED: "true"
+      TOTP_ISSUER: redStackPRO
+
+# The accounts and the connection list. Runs every time: the connections are
+# rebuilt from the inventory so a converged re-run reconciles to the topology, while
+# the accounts are created-if-absent so a password change or a TOTP enrollment
+# survives. See guacamole-seed.sql.j2 for the two idempotency rules.
+- name: Render the seed SQL
+  ansible.builtin.template:
+    src: guacamole-seed.sql.j2
+    dest: /etc/redstackpro/guac-seed.sql
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Seed accounts and connections
+  ansible.builtin.shell:
+    cmd: >
+      docker exec -i -e PGPASSWORD='{{ redstackpro_guac_db_password }}'
+      redstackpro-guac-db psql -U {{ redstackpro_guacamole_db_user }}
+      -d {{ redstackpro_guacamole_db_name }}
+      -v ON_ERROR_STOP=1 -v labpw={{ redstackpro_guac_password | quote }}
+      < /etc/redstackpro/guac-seed.sql
+  changed_when: true
+
+# ------------------------------------------------------------------- nginx
+
+# The portal is reached over HTTPS on 443, not the container's plain http. nginx
+# terminates TLS with a self signed certificate, a lab portal not a public site,
+# and proxies to the loopback web application.
+- name: Install nginx for the portal
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+
+- name: Create the portal tls directory
+  ansible.builtin.file:
+    path: /etc/redstackpro/tls
+    state: directory
+    mode: "0755"
+
+- name: Generate the portal certificate
+  ansible.builtin.command:
+    cmd: >
+      openssl req -x509 -nodes -days 365 -newkey rsa:2048
+      -keyout /etc/redstackpro/tls/guacamole.key
+      -out /etc/redstackpro/tls/guacamole.crt
+      -subj "/CN=guacamole"
+    creates: /etc/redstackpro/tls/guacamole.crt
+
+- name: Front the portal with nginx
+  ansible.builtin.template:
+    src: guacamole-nginx.conf.j2
+    dest: /etc/nginx/sites-available/redstackpro-guacamole
+    mode: "0644"
+
+- name: Disable the default nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+
+- name: Enable the portal site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/redstackpro-guacamole
+    dest: /etc/nginx/sites-enabled/redstackpro-guacamole
+    state: link
+
+# A direct reload, NOT a handler. This host is the range's only entry point, and
+# a handler runs only at the end of the play -- so a later task failing (as the
+# beacon-launcher bug did) aborts the play before the handler fires and strands
+# the portal behind an un-reloaded nginx, with idempotent retries never
+# re-notifying. Reloading here, in line, means the portal is live the moment its
+# config is in place, whatever happens afterward. Validate first so a bad config
+# never takes nginx down. Live-proven: the reload alone took the portal 000->200.
+- name: Check the nginx configuration parses
+  ansible.builtin.command:
+    cmd: nginx -t
+  changed_when: false
+
+- name: Reload nginx with the portal site
+  ansible.builtin.service:
+    name: nginx
+    state: reloaded
+
+- name: Say where the portal is
+  ansible.builtin.debug:
+    msg: >-
+      Guacamole is at https://<jumpbox-address>/guacamole as
+      {{ redstackpro_guac_operator }} (break-glass admin; the password is in the
+      Terraform outputs). Connections are pre-authenticated, so every box opens
+      on a click.

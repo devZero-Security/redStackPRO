@@ -1,0 +1,118 @@
+---
+# Defaults only. Real values come from host_vars, generated from the topology.
+# See 0011.
+
+redstackpro_jumpbox_services:
+  - ssh
+redstackpro_jumpbox_certificate_authority: true
+
+# How this jumpbox reaches what it manages. Peer expansion for the wireguard
+# value is a compiler concern that is not built; the role configures the server
+# side either way. See schema.md.
+redstackpro_jumpbox_transport: ssh
+
+redstackpro_jumpbox_user: "{{ ansible_user }}"
+# The account service-ssh.yml ensures exists. It is the single platform account
+# (redop for ops, blueop for a range), the same identity ansible connects as and
+# the boot script created -- not a separate "operator". See P1.7 and
+# naming.platform_account.
+redstackpro_jumpbox_operator: "{{ ansible_user }}"
+redstackpro_jumpbox_root: /opt/redstackpro
+
+# The certificate authority. The key is generated here and never leaves. redStackPRO
+# emits variables and paths, never key material, so the CA is created at run
+# time on your own infrastructure. See 0001.
+redstackpro_ca_dir: /etc/redstackpro/ca
+redstackpro_ca_days: 1825
+redstackpro_ca_subject: "/O=redStackPRO/CN=redStackPRO issuing CA"
+
+# Hardening. This is the only host with a public address, so it carries the
+# most of it. AllowTcpForwarding stays on because every other host in the export
+# is reached by ProxyJump through here. See 0011.
+# Assumed-breach foothold accounts (P2.5): domain users the canvas flagged
+# assumed_breach, created here as local admins so an operator can SSH in as
+# patient zero. The compiler fills this from the range's users; empty otherwise.
+redstackpro_jumpbox_foothold_users: []
+# The offensive toolchain (PZ-2). The compiler turns this on for a RANGE jumpbox,
+# which is the assumed-breach foothold the solution runs from, and leaves it off
+# for an ops bastion. Off by default here so the role is safe standalone.
+redstackpro_jumpbox_offensive_toolkit: false
+redstackpro_jumpbox_allow_users:
+  - "{{ ansible_user }}"
+redstackpro_jumpbox_max_auth_tries: 3
+# The jail stays on as defense in depth on the one host with a public address.
+# It guards less than it used to -- sshd here is now key-only for every account,
+# patient zero included -- but it still costs a scanner its persistence.
+# The ban is SURVIVABLE, not an hour. This host is the range's only entry
+# point, so a ban costs access to everything behind it, and five failed
+# publickey attempts is a low bar to clear by accident -- a monitoring loop or
+# a script using the wrong account name (redop for ops, blueop for a range)
+# gets there on its own. The symptom misleads too: fail2ban rejects with ICMP
+# port-unreachable, so ssh reports "Connection refused" while sshd is healthy,
+# which reads as a dead host rather than a ban. An hour of that on the only
+# way in is not a cost worth paying; ten minutes is.
+redstackpro_jumpbox_fail2ban_bantime: 600
+redstackpro_jumpbox_fail2ban_maxretry: 5
+# The operator's own source ranges, comma separated, as terraform received them.
+# The compiler fills this from the apply; empty means nobody told us. Whatever
+# is here that is actually NARROW becomes a fail2ban ignoreip, so the operator
+# cannot be locked out of the range's only door by their own tooling.
+#
+# A world open range is deliberately NOT exempted. operator_source_ranges
+# defaults to 0.0.0.0/0, so exempting it verbatim would set ignoreip to the
+# whole internet and leave the jail installed, enabled, and a no-op -- a
+# protection that silently guards nothing is worse than one that is honestly
+# absent. Narrow the ranges and the exemption appears; leave them open and the
+# jail stays fully armed.
+redstackpro_operator_source_ranges: ""
+redstackpro_jumpbox_fail2ban_world_ranges:
+  - 0.0.0.0/0
+  - ::/0
+
+redstackpro_wireguard_port: 51820
+redstackpro_wireguard_address: 10.99.0.1/24
+
+redstackpro_openvpn_port: 1194
+redstackpro_openvpn_subnet: 10.98.0.0
+redstackpro_openvpn_netmask: 255.255.255.0
+
+# The portal. Authentication is a PostgreSQL database (ADR 0056): named accounts
+# and per-user TOTP both need writable user records, which the old read-only
+# file provider could not hold. The connection list is still derived from the
+# inventory -- it is seeded as SQL now instead of a rendered XML file.
+redstackpro_guacamole_version: "1.5.5"
+redstackpro_guacamole_http_port: 8080
+# The database behind the portal. Loopback-only like guacd and the web app; the
+# password is generated on this host at first run and never leaves it or enters
+# the export, the same guarantee the lab password has (0001).
+redstackpro_guacamole_db_image: "postgres:15-alpine"
+redstackpro_guacamole_db_name: guacamole
+redstackpro_guacamole_db_user: guacamole
+redstackpro_guacamole_db_password_file: /etc/redstackpro/guac-db-password
+redstackpro_guacamole_db_volume: /opt/redstackpro/guac-db
+# TOTP for the portal. Off by default: the extension is not installed at all,
+# so there is no second factor and no enrollment step. Turn it on (a jumpbox
+# node's `totp` overlay flag) and the extension is installed, which makes TOTP
+# MANDATORY for the single admin account -- a QR enrollment at first login.
+#
+# There is deliberately no per-account opt-in here. Guacamole's TOTP extension
+# is all-or-nothing whenever it is installed: the 1.6.0 "Disable TOTP" checkbox
+# that would allow a present-but-off state is defeated by GUACAMOLE-2140, which
+# ignores and deletes a pre-seeded disable flag during rollout and force-enrols
+# everyone. So "enable TOTP" is a deploy-time choice for the whole portal, not a
+# click. Named accounts with mixed enforcement are an Enterprise concern (ADR
+# 0056); this base tier is one admin who either wants 2FA on their login or not.
+redstackpro_jumpbox_totp: false
+# The beacon drop. Every RDP tile maps this one directory as a drive, and it is
+# bind-mounted here on the jumpbox, so a file put in it by any route -- scp,
+# the portal's own upload, a build script -- appears in every RDP session, and
+# anything saved to the drive from a session lands back here. One folder rather
+# than a copy-and-execute pipeline: the operator is already sitting in a
+# patient-zero desktop, so the beacon only has to be reachable from it.
+redstackpro_guacamole_drop_dir: /opt/redstackpro/drop
+# Where the jumpbox's own operator tooling lives (the headless beacon launcher
+# and its playbook), and where the deploy staged the inventory those tools run
+# against. The launcher reuses the provisioning psrp connection rather than
+# reimplementing remote execution, so it needs to run from that directory.
+redstackpro_jumpbox_share_dir: /opt/redstackpro
+redstackpro_provision_dir: "/home/{{ ansible_user }}/provision"

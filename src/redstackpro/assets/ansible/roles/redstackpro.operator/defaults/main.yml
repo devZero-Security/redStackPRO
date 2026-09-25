@@ -1,0 +1,94 @@
+---
+# Defaults only. Real values come from host_vars, generated from the topology.
+# See 0011.
+
+redstackpro_operator_os: debian
+redstackpro_operator_user: operator
+redstackpro_operator_root: /opt/redstackpro
+
+# Kali ships its tooling in metapackages. headless is the default because an
+# operator box reached over ssh or through the portal has no use for a desktop,
+# and the desktop metapackages are several gigabytes.
+redstackpro_operator_kali_metapackage: kali-linux-headless
+redstackpro_operator_kali_keyring_url: https://archive.kali.org/archive-keyring.gpg
+
+redstackpro_operator_debian_packages:
+  - build-essential
+  - git
+  - curl
+  - jq
+  - python3-pip
+  - python3-venv
+  - pipx
+  - tmux
+  - screen
+  - nmap
+  - proxychains4
+  - openssh-client
+  # ntlmrelayx wants a pty (run it under screen/tmux); hashcat needs an OpenCL
+  # implementation for a compute device; addspn/krbrelayx and a few pip builds
+  # want the Kerberos and Windows toolchains. See PZ-2.
+  - hashcat
+  # Mesa's llvmpipe gives a CPU/software OpenCL device on a GPU-less VM, which is
+  # what hashcat runs on here. This replaces pocl-opencl-icd, which a live deploy
+  # found is no longer in the Kali repo -- its absence failed the whole operator
+  # install (apt is atomic over the list). mesa-opencl-icd is present and serves
+  # the same role.
+  - mesa-opencl-icd
+  - mingw-w64
+  - libkrb5-dev
+  - gcc-mingw-w64
+
+# The offensive Python toolchain, each in its own pipx environment so their
+# impacket pins cannot collide: Coercer pins impacket < 0.11 while Certipy pulls
+# impacket 0.13+, which is the exact conflict that breaks a single shared venv.
+# Isolating each tool is the clean resolution (PZ-2). ntlmrelayx crashes without
+# DSInternals, so it is injected into impacket's own environment.
+# `binary` is the CONSOLE SCRIPT, which is not the package name: certipy-ad
+# installs `certipy`, bloodhound-ce installs `bloodhound-ce-python`, and impacket
+# installs a whole set of which ntlmrelayx.py is the one the solutions lean on.
+# The run check needs the script, and getting the name wrong there would report a
+# working tool as broken.
+redstackpro_operator_pipx_tools:
+  - name: impacket
+    binary: ntlmrelayx.py
+    inject:
+      - dsinternals
+      # The AD CS relay (ESC8) uses crypto.X509Req, gone from pyOpenSSL 24.0; a
+      # fresh install pulls 26.x and the relay crashes at CSR generation, after
+      # the coercion and the relayed auth have already succeeded. Found live
+      # 2026-09-18. --help runs clean, so only a version floor catches it.
+      - "pyOpenSSL<24.0"
+  - name: certipy-ad
+    binary: certipy
+  - name: coercer
+    binary: coercer
+  # netexec (nxc) is deliberately NOT here: it publishes no PyPI package, so
+  # `pipx install netexec` fails with "No matching distribution found" and, as the
+  # sole host in the operators play, took the whole deploy down with it. This
+  # mirrors the jumpbox toolkit decision (PZ-2). Install it by hand from git when
+  # needed: pipx install git+https://github.com/Pennyw0rth/NetExec
+  - name: bloodhound-ce
+    binary: bloodhound-ce-python
+
+# Extra offensive repos cloned into the operator root (no pip package, or a
+# script used as-is): krbrelayx (addspn.py / krbrelayx.py) for the LDAP/RBCD
+# relay path. See PZ-2 and PZ-3.
+redstackpro_operator_git_tools:
+  - repo: https://github.com/dirkjanm/krbrelayx.git
+    dest: krbrelayx
+
+# The Windows operator kit, matching the original redStack windows_setup
+# (mobaxterm/vscode/git/7zip/chromium), plus sysinternals and python3. MobaXterm
+# is the operator's SSH client to every lab box, VS Code the editor. NOTE: the
+# offense win-op01 self-provisions at boot and has no WinRM, so this list only
+# reaches a Windows operator that IS managed (a range operator, or win-op once it
+# gets a WinRM listener); the boot-script port covers win-op01 itself. See PAI.
+redstackpro_operator_windows_packages:
+  - mobaxterm
+  - vscode
+  - git
+  - 7zip
+  - chromium
+  - sysinternals
+  - python3

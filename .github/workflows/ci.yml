@@ -1,0 +1,184 @@
+name: ci
+
+# What this enforces is not style. It is the set of claims the project makes
+# about its own output: that a topology compiles, that the compiled Terraform is
+# valid and already formatted, that the compiled Ansible parses down to every
+# branch, and that no export carries a credential.
+#
+# It also runs on Linux, which matters: ansible-core does not run on Windows, so
+# a contributor on Windows cannot syntax check an export locally without WSL.
+# That is the check most likely to be skipped and the one that catches a role
+# nothing ever ran.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+      - name: The worked examples still validate
+        # --hostname stands in for the operator. An example with a redirector ships
+        # one field short on purpose (RDR001), because a domain has to be registered
+        # and pointed at the box by a human and nothing can invent one. CI fills it
+        # the way a person would in the canvas before pressing Compile. The rule is
+        # not relaxed: test_every_shipped_redirector_example_demands_a_hostname_first
+        # asserts the raw examples still refuse.
+        run: python tools/validate.py --hostname cdn.redops.design
+
+  postgres:
+    # The rest of the suite runs on SQLite, where create_app builds the schema
+    # with create_all. This is the one job that takes the other branch, alembic
+    # upgrade against a real Postgres, so the migration path and the JSON columns
+    # are not shipped untested. See 0023.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: redstackpro
+          POSTGRES_DB: redstackpro
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[dev,postgres]"
+      - name: Migrate and serve on Postgres
+        env:
+          REDSTACKPRO_TEST_DATABASE_URL: postgresql+psycopg://postgres:redstackpro@localhost:5432/redstackpro
+        run: pytest -q tests/test_postgres.py
+
+  conventions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # No em dashes anywhere, and no credentials or tfvars values tracked.
+      # Both are rules in the project conventions that nothing else checks.
+      - run: python tools/check_conventions.py
+      # The per-lab solution folders are generated. A stale one reads as a
+      # maintained guide while describing a lab that has moved on, so the
+      # committed output has to match what the tool writes today.
+      - run: python tools/gen_solutions.py --check
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # 22 or newer: @testing-library/jest-dom 7 requires node >=22, and the
+          # lockfile is resolved by the npm that ships with 24.
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      # The build is the only thing that catches a bad import or a syntax error
+      # in a component the tests do not render.
+      - run: npm run build
+
+  export:
+    # The claim is that a person unzips this and runs it. That is worth checking
+    # on the artifact rather than on the generator.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # peered carries the peers role, so the AWS and GCP peering codegen is
+        # checked on the artifact rather than only in the generator. See 0029.
+        example: [redstack, peered]
+        provider: [gcp, aws]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: pip install -e .
+
+      - name: Compile the worked example
+        # --hostname is the operator's one keystroke; see the python job.
+        run: |
+          python tools/compile.py \
+            schema/topology/examples/0.4.0/${{ matrix.example }}.json \
+            --provider ${{ matrix.provider }} --hostname cdn.redops.design -o export
+
+      - name: The generated HCL is already formatted
+        # The export panel is the product, so the file a person reads should be
+        # the file they would keep.
+        run: terraform -chdir=export/terraform fmt -check -recursive
+
+      - name: terraform validate
+        run: |
+          terraform -chdir=export/terraform init -backend=false -input=false
+          terraform -chdir=export/terraform validate
+
+      - name: No credential reached the export
+        # 0001. redStackPRO emits variables, never values, and never holds a key.
+        run: |
+          if grep -rIn -e 'BEGIN .*PRIVATE KEY' -e 'ssh-rsa AAAA' -e 'ssh-ed25519 AAAA' export; then
+            echo "key material in the export"
+            exit 1
+          fi
+          grep -q 'ssh_public_key = ""' export/terraform/terraform.tfvars
+
+  ansible:
+    # ansible-core does not run on Windows, so this is the check a contributor
+    # is least able to run locally and most likely to skip.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e . ansible-core
+
+      - name: Compile the worked example
+        # --hostname is the operator's one keystroke; see the python job.
+        run: |
+          python tools/compile.py \
+            schema/topology/examples/0.4.0/redstack.json \
+            --hostname cdn.redops.design -o export
+
+      - name: Install the collections the export declares
+        run: ansible-galaxy collection install -r export/ansible/requirements.yml
+
+      - name: ansible-playbook --syntax-check
+        working-directory: export/ansible
+        run: ansible-playbook -i inventory.yml site.yml --syntax-check
+
+      - name: Every role branch parses and every module resolves
+        # A syntax check never opens a file reached by include_tasks with a
+        # templated name, which is every branch these roles have.
+        run: python tools/check_roles.py export/ansible

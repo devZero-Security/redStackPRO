@@ -1,0 +1,178 @@
+---
+# redStackPRO Phase 2 attack paths (clean-room MIT). Plants the recognizable
+# GOAD paths from the range's own data: kerberoastable and AS-REP-roastable
+# accounts, weak credentials, and the ACL escalation chain. Majority-coverage by
+# design, prioritized by how recognizable the path is, not a vuln-by-vuln clone.
+# Runs as the domain administrator, after the directory is populated. See
+# goad-native-recreation.
+
+- name: Set SPNs on kerberoastable accounts
+  microsoft.ad.user:
+    name: "{{ item.username }}"
+    domain_server: localhost
+    spn:
+      add: "{{ item.spns | default([item.spn | default('MSSQLSvc/' ~ item.username ~ '.' ~ redstackpro_domain.domain_fqdn ~ ':1433')]) }}"
+  when: "'kerberoastable' in (item.flaws | default([])) or 'spn_set' in (item.flaws | default([]))"
+  loop: "{{ redstackpro_domain.users }}"
+  loop_control:
+    label: "{{ item.username }}"
+
+# Kerberoasting needs a service ticket the KDC will issue AND that hashcat can
+# crack. A modern (patched) Server 2019 KDC refuses RC4 when the account leaves
+# msDS-SupportedEncryptionTypes unset (KDC_ERR_ETYPE_NOSUPP, no hash), and if the
+# account also advertises AES the KDC issues an AES ticket whose salt handling
+# makes it unreliable to crack. So pin the kerberoastable service account to RC4
+# only (0x4): the KDC issues the classic $krb5tgs$23$ ticket that hashcat -m 13100
+# cracks, exactly like GOAD's legacy service accounts.
+- name: Pin kerberoastable accounts to RC4 so a crackable roast ticket issues
+  ansible.windows.win_powershell:
+    script: |
+      param($Sam)
+      $ErrorActionPreference = "Stop"
+      Set-ADUser -Server localhost -Identity $Sam -Replace @{ 'msDS-SupportedEncryptionTypes' = 4 }
+    parameters:
+      Sam: "{{ item.username }}"
+  changed_when: true
+  when: "'kerberoastable' in (item.flaws | default([])) or 'spn_set' in (item.flaws | default([]))"
+  loop: "{{ redstackpro_domain.users }}"
+  loop_control:
+    label: "{{ item.username }}"
+
+# Constrained delegation with protocol transition (T2A4D) on a user account: the
+# account can obtain a ticket to itself for any user, then delegate to the listed
+# services -- a classic S4U abuse. The delegation targets come from the user's
+# delegate_to list. (The Kerberos-only, no-T2A4D variant on a computer account is
+# applied in the domain_vulns role, after the members join.)
+- name: Configure constrained delegation (protocol transition) on flagged users
+  ansible.windows.win_powershell:
+    script: |
+      param($Sam, $DelegateTo)
+      $ErrorActionPreference = "Stop"
+      $targets = $DelegateTo | ConvertFrom-Json
+      Set-ADAccountControl -Server localhost -Identity $Sam -TrustedToAuthForDelegation $true
+      if ($targets.Count -gt 0) {
+        Set-ADUser -Server localhost -Identity $Sam -Add @{'msDS-AllowedToDelegateTo' = $targets}
+      }
+    parameters:
+      Sam: "{{ item.username }}"
+      DelegateTo: "{{ item.delegate_to | default([]) | to_json }}"
+  changed_when: true
+  when: "'constrained_delegation' in (item.flaws | default([]))"
+  loop: "{{ redstackpro_domain.users }}"
+  loop_control:
+    label: "{{ item.username }}"
+
+# Flag an account sensitive and not delegable (UAC NOT_DELEGATED). In the lab this
+# is a defensive tell that shapes a delegation path, not a weakness in itself.
+- name: Flag accounts as sensitive / not delegable
+  ansible.windows.win_powershell:
+    script: |
+      param($Sam)
+      $ErrorActionPreference = "Stop"
+      Set-ADUser -Server localhost -Identity $Sam -AccountNotDelegated $true
+    parameters:
+      Sam: "{{ item.username }}"
+  changed_when: true
+  when: "'account_is_sensitive' in (item.flaws | default([]))"
+  loop: "{{ redstackpro_domain.users }}"
+  loop_control:
+    label: "{{ item.username }}"
+
+- name: Disable Kerberos pre-authentication on AS-REP-roastable accounts
+  ansible.windows.win_powershell:
+    script: |
+      param($Sam)
+      Set-ADAccountControl -Server localhost -Identity $Sam -DoesNotRequirePreAuth $true
+    parameters:
+      Sam: "{{ item.username }}"
+  changed_when: true
+  when: "'asrep_roastable' in (item.flaws | default([])) or 'no_preauth' in (item.flaws | default([]))"
+  loop: "{{ redstackpro_domain.users }}"
+  loop_control:
+    label: "{{ item.username }}"
+
+# A weak, sprayable password for an account the lab flagged but gave no credential
+# of its own. It deliberately does NOT touch an account that declares a password:
+# that password is the lab's DOCUMENTED credential, and an already-weak one is
+# sprayable as it stands, so overwriting it achieves nothing and breaks the
+# documented path.
+#
+# Found live on minilab, which declares both fields with different values. This ran
+# after the users were created and silently replaced alice's spongebob with
+# superman, so the credential the lab documents no longer authenticated. Worse, it
+# deadlocked the deploy: stored_credential registers a scheduled task as alice using
+# the declared password and got "The user name or password is incorrect", failing
+# every attempt. Only dave worked, because his two values happened to match. See
+# goad-fidelity-build.
+- name: Set a weak, sprayable password on flagged accounts that declare none
+  microsoft.ad.user:
+    name: "{{ item.username }}"
+    domain_server: localhost
+    password: "{{ item.weak_password | default('Summer2024!') }}"
+    update_password: always
+  when:
+    - "'weak_password' in (item.flaws | default([]))"
+    - not (item.password | default(''))
+  loop: "{{ redstackpro_domain.users }}"
+  loop_control:
+    label: "{{ item.username }}"
+
+# The ACL escalation chain: the marquee GOAD path, applied from the domain's own
+# acls list. The script creates any group the chain references but the directory
+# does not have yet, skips a target it cannot resolve, and reports what it did.
+- name: Apply the ACL escalation chain
+  ansible.windows.win_powershell:
+    script: "{{ lookup('ansible.builtin.file', 'apply_acls.ps1') }}"
+    parameters:
+      AclsJson: "{{ redstackpro_domain.acls | default([]) | to_json }}"
+  register: redstackpro_acl_result
+  changed_when: true
+  when: (redstackpro_domain.acls | default([])) | length > 0
+
+- name: Report the ACL chain result
+  ansible.builtin.debug:
+    var: redstackpro_acl_result.output
+  when: redstackpro_acl_result is not skipped
+
+# GPO abuse: a Group Policy Object linked to the domain that a low-privileged user
+# is granted edit/modify-security rights over, so they can push a policy (a scheduled
+# task, a script) to every computer the GPO applies to. GOAD grants samwell.tarly
+# edit rights on a domain-linked GPO. Gated on the controller declaring gpo_abuse;
+# the target principal and GPO name come from vulns_vars.gpo_abuse.
+- name: Install the Group Policy Management tools for GPO abuse
+  ansible.windows.win_feature:
+    name: GPMC
+    state: present
+  when: "'gpo_abuse' in (redstackpro_dc_vulns | default([]))"
+
+- name: GPO abuse - create a domain-linked GPO a low-priv user can edit
+  ansible.windows.win_powershell:
+    script: |
+      param($GpoName, $Principal, $LinkTarget)
+      $ErrorActionPreference = "Stop"
+      Import-Module GroupPolicy
+      Import-Module ActiveDirectory
+      if ([string]::IsNullOrEmpty($LinkTarget)) {
+        $LinkTarget = (Get-ADDomain -Server localhost).DistinguishedName
+      }
+      if (-not (Get-GPO -Name $GpoName -ErrorAction SilentlyContinue)) {
+        New-GPO -Name $GpoName | Out-Null
+        New-GPLink -Name $GpoName -Target $LinkTarget -ErrorAction SilentlyContinue | Out-Null
+      }
+      Set-GPPermission -Name $GpoName -PermissionLevel GpoEditDeleteModifySecurity `
+        -TargetName $Principal -TargetType User -Replace | Out-Null
+    parameters:
+      GpoName: "{{ (redstackpro_dc_vulns_vars | default({})).gpo_abuse.name | default('StarkWallpaper') }}"
+      Principal: "{{ (redstackpro_dc_vulns_vars | default({})).gpo_abuse.principal | default('') }}"
+      LinkTarget: "{{ (redstackpro_dc_vulns_vars | default({})).gpo_abuse.link | default('') }}"
+  changed_when: true
+  # The GroupPolicy module binds AD Web Services, which lags a fresh promotion, so
+  # Get-GPO throws "security context is not associated with a domain" on the first
+  # try. Retry until ADWS answers rather than failing the whole play.
+  register: redstackpro_gpo_abuse
+  until: redstackpro_gpo_abuse is succeeded
+  retries: 15
+  delay: 20
+  when:
+    - "'gpo_abuse' in (redstackpro_dc_vulns | default([]))"
+    - (redstackpro_dc_vulns_vars | default({})).gpo_abuse.principal | default('') | length > 0

@@ -1,0 +1,267 @@
+---
+# GCP-specific domain promotion. On GCP the WinRM/psrp runspace is torn down by
+# the heavy directory operations: installing the AD-Domain-Services role drops
+# the connection (RemoteDisconnected), and Install-ADDSForest / Install-ADDSDomain
+# do the same the instant they begin, so the shared path aborts mid-promote and
+# leaves the directory half-built (this is what left a lab with NTDS missing). So
+# BOTH the role install and the promotion are handed to a SYSTEM scheduled task
+# that runs independently of the WinRM session, the same pattern the Exchange
+# install uses for the double-hop. Ansible only stages the script, starts the
+# task, and waits for the host to come back a controller; nothing heavy runs over
+# WinRM. Included only when redstackpro_platform == 'gcp', so this never touches
+# the AWS-proven path in promote_default.yml. See goad-native-recreation and
+# redstackpro_platform.
+
+# Is this host already a promoted controller? A re-run of the play (the deploy
+# loop retries site.yml) must be idempotent: if the box is already a DC, the
+# whole promotion sequence -- staging, the scheduled task, and above all the
+# "wait for the promotion reboot to take the port down" -- must be skipped, or
+# that 1200s down-wait times out forever because an already-promoted box never
+# reboots again. This is the re-run half of P1-CHILDDC. DomainRole 4=backup DC,
+# 5=primary DC.
+- name: Detect whether this host is already a domain controller
+  ansible.windows.win_powershell:
+    script: |
+      [Ordered]@{ is_dc = ((Get-CimInstance Win32_ComputerSystem).DomainRole -in 4,5) }
+  register: redstackpro_dc_state
+  changed_when: false
+
+- name: Record the controller state
+  ansible.builtin.set_fact:
+    redstackpro_already_dc: "{{ redstackpro_dc_state.output[0].is_dc | default(false) }}"
+
+# A child must resolve and reach its parent forest before it can be promoted.
+# The forest root has no parent, so these two steps are child-only. These are
+# light WinRM calls (a DNS change and nltest), not the role install that drops
+# the connection, so they stay over WinRM; the DNS change retries for resilience.
+- name: Point DNS at the parent controller
+  ansible.windows.win_dns_client:
+    adapter_names: '*'
+    dns_servers:
+      - "{{ redstackpro_domain.parent_dc_address }}"
+  register: redstackpro_parent_dns
+  until: redstackpro_parent_dns is succeeded
+  retries: 10
+  delay: 15
+  when: not (redstackpro_domain.forest_root | bool) and not redstackpro_already_dc
+
+- name: Wait for the parent forest to be reachable
+  ansible.windows.win_powershell:
+    script: |
+      param($Parent)
+      $r = nltest /dsgetdc:$Parent 2>&1
+      if ($LASTEXITCODE -ne 0) { throw "parent $Parent not located yet: $r" }
+    parameters:
+      Parent: "{{ redstackpro_domain.parent_fqdn }}"
+  register: redstackpro_parent_ready
+  until: redstackpro_parent_ready is succeeded
+  retries: 40
+  delay: 20
+  changed_when: false
+  when: not (redstackpro_domain.forest_root | bool) and not redstackpro_already_dc
+
+# The promotion script the scheduled task runs. It reboots the host from inside,
+# after promotion completes, because the promotion replaces the local SAM and no
+# WinRM task could reconnect to issue the reboot. It records an exit code first
+# so a failed promotion leaves a breadcrumb, then reboots regardless: on success
+# the host returns a controller; on failure it returns unpromoted and the wait
+# below times out loudly rather than hanging.
+- name: Stage the promotion script
+  ansible.windows.win_copy:
+    dest: C:\Windows\Temp\redstackpro-promote.ps1
+    content: |
+      $ErrorActionPreference = "Stop"
+      $safe = ConvertTo-SecureString "{{ redstackpro_lab_password }}" -AsPlainText -Force
+      try {
+        # Install the role here, under the scheduled task, not over WinRM: on GCP
+        # the role install drops the WinRM connection, so doing it off-session is
+        # what keeps it reliable. ADDSDeployment ships with the role.
+        Install-WindowsFeature -Name AD-Domain-Services, RSAT-AD-PowerShell `
+          -IncludeManagementTools *> C:\Windows\Temp\redstackpro-feature.log
+        Import-Module ADDSDeployment
+      {% if redstackpro_domain.forest_root | bool %}
+        Install-ADDSForest -DomainName "{{ redstackpro_domain.domain_fqdn }}" `
+          -DomainNetbiosName "{{ redstackpro_domain.domain_netbios }}" `
+          -SafeModeAdministratorPassword $safe `
+          -InstallDns -Force -NoRebootOnCompletion *> C:\Windows\Temp\redstackpro-promote.log
+        Set-Content C:\Windows\Temp\redstackpro-promote.done "0"
+      {% else %}
+        # A child DC must reach a live parent-forest DC to promote. The parent is
+        # often mid-promotion/reboot when this fires, and the pre-flight
+        # (VerifyUserCredentialPermissions) fails hard if it cannot contact the
+        # parent -- a real race that used to leave the child WORKGROUP forever,
+        # because the task is one-shot. That pre-flight runs BEFORE any directory
+        # change, so retrying is clean: wait for the parent's LDAP to actually
+        # answer, then attempt the promotion, and retry the whole thing a few
+        # times before giving up. See P1-CHILDDC.
+        $cred = New-Object System.Management.Automation.PSCredential(
+          "Administrator@{{ redstackpro_domain.parent_fqdn }}",
+          (ConvertTo-SecureString "{{ redstackpro_lab_password }}" -AsPlainText -Force))
+        $parent = "{{ redstackpro_domain.parent_dc_address }}"
+        $promoted = $false
+        for ($try = 1; $try -le 6 -and -not $promoted; $try++) {
+          "== promote attempt $try $(Get-Date) ==" | Add-Content C:\Windows\Temp\redstackpro-promote.log
+          $waited = 0
+          while (-not (Test-NetConnection -ComputerName $parent -Port 389 -InformationLevel Quiet) `
+                 -and $waited -lt 900) { Start-Sleep 20; $waited += 20 }
+          try {
+            Install-ADDSDomain -NewDomainName "{{ redstackpro_domain.domain_fqdn.split('.')[0] }}" `
+              -ParentDomainName "{{ redstackpro_domain.parent_fqdn }}" `
+              -NewDomainNetbiosName "{{ redstackpro_domain.domain_netbios }}" `
+              -DomainType ChildDomain -SafeModeAdministratorPassword $safe `
+              -Credential $cred -InstallDns -Force -NoRebootOnCompletion `
+              *>> C:\Windows\Temp\redstackpro-promote.log
+            $promoted = $true
+          } catch {
+            $_ | Out-File C:\Windows\Temp\redstackpro-promote.err -Encoding utf8 -Append
+            Start-Sleep 60
+          }
+        }
+        Set-Content C:\Windows\Temp\redstackpro-promote.done ($(if ($promoted) { "0" } else { "1" }))
+      {% endif %}
+      } catch {
+        $_ | Out-File C:\Windows\Temp\redstackpro-promote.err -Encoding utf8 -Append
+        Set-Content C:\Windows\Temp\redstackpro-promote.done "1"
+      } finally {
+        shutdown /r /t 20 /f
+      }
+  register: redstackpro_stage
+  until: redstackpro_stage is succeeded
+  retries: 15
+  delay: 15
+  when: not redstackpro_already_dc
+
+# Register the task with a self-start trigger 90s out, and do NOT start it from
+# here. Calling Start-ScheduledTask would trigger the promotion immediately, and
+# the promotion drops the WinRM listener before this task can return its result,
+# which surfaces as a RemoteDisconnected that neither failed_when nor
+# ignore_unreachable can catch (a connection aborted mid-execution has no result
+# to evaluate). Registering metadata alone does not touch the listener, so this
+# task returns cleanly and the trigger starts the promotion afterwards, while
+# ansible is already waiting on the port below rather than connected to the box.
+# A freshly booted GCP box has flaky WinRM that can still drop this metadata call,
+# so it retries; the guard makes a retry a no-op when a prior attempt registered
+# but lost its result, and -Force covers a genuine re-register. 90s leaves room
+# for the retries to finish before the promotion fires.
+- name: Register the promotion as a self-starting SYSTEM scheduled task
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = "Stop"
+      # Already a controller (DomainRole 4=backup, 5=primary DC): promotion is
+      # done, nothing to do. This is the idempotent success exit on a re-run.
+      if ((Get-CimInstance Win32_ComputerSystem).DomainRole -in 4,5) { return }
+      Remove-Item C:\Windows\Temp\redstackpro-promote.done, `
+        C:\Windows\Temp\redstackpro-promote.err -Force -ErrorAction SilentlyContinue
+      if (-not (Get-ScheduledTask -TaskName RSPPromote -ErrorAction SilentlyContinue)) {
+        # First run on a fresh box: register with a self-start trigger 90s out and
+        # do NOT start it here. Starting it now would drop the WinRM listener before
+        # this call returns (the promotion tears down the runspace), which surfaces
+        # as an uncatchable RemoteDisconnected. The trigger fires it after we are
+        # already waiting on the port below.
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" `
+          -Argument "-NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\redstackpro-promote.ps1"
+        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" `
+          -LogonType ServiceAccount -RunLevel Highest
+        $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddSeconds(90)
+        Register-ScheduledTask -TaskName RSPPromote -Action $action `
+          -Principal $principal -Trigger $trigger -Force | Out-Null
+      } else {
+        # Re-run: the task exists but the box is still not a controller, so a prior
+        # promotion failed or never completed (e.g. the parent forest was down when
+        # the one-shot trigger fired). The box is stable on a re-run, so re-fire the
+        # promotion directly rather than waiting for a trigger that already spent
+        # itself. This is what stops a transient parent outage from stalling the
+        # child DC forever. See P1-CHILDDC.
+        Start-ScheduledTask -TaskName RSPPromote
+      }
+  register: redstackpro_register
+  until: redstackpro_register is succeeded
+  retries: 15
+  delay: 15
+  changed_when: true
+  when: not redstackpro_already_dc
+
+# The promotion (running under the scheduled task) turns the local Administrator
+# into the domain Administrator with the same password and then reboots.
+# The post-promotion window on GCP defeats every WinRM-level wait: the box is up
+# but still promoting (domain account absent, auth fails), then the role install
+# and promotion drop the WinRM listener, then it reboots (connection refused), then
+# it restarts the listener once because the HTTPS SPN and certificate change with
+# the new domain identity (negotiate auth failure). ansible's until does not retry
+# an unreachable host, and ignore_unreachable breaks out of the until loop, so no
+# single WinRM task rides it. Instead, watch the WinRM PORT from the jumpbox: a TCP
+# check is immune to the auth flap and to the box being mid-reboot. Waiting for the
+# port to go DOWN first and then come back UP is robust without guessing timings:
+# the promotion reboot takes the port down, which confirms the promotion actually
+# started, and the port returning confirms the box is genuinely back rather than
+# still answering on its pre-promotion listener. delegate is the jumpbox, which
+# reaches the controller on 5986 (the same path ansible provisions over). The delay
+# skips the ~90s before the trigger fires so the down-wait does not match the
+# still-up starting state.
+- name: Wait from the jumpbox for the promotion reboot to take the port down
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host }}"
+    port: 5986
+    delay: 90
+    timeout: 1200
+    state: stopped
+  delegate_to: localhost
+  when: not redstackpro_already_dc
+
+- name: Wait from the jumpbox for the controller's WinRM port to return
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host }}"
+    port: 5986
+    delay: 30
+    timeout: 1800
+    state: started
+  delegate_to: localhost
+  when: not redstackpro_already_dc
+
+# The port answering does not mean domain auth is ready; Netlogon and the listener
+# settle a little after the port opens. Pause before the first authenticated call
+# rather than race it.
+# A plain delay on the jumpbox. ansible.builtin.pause bypasses the host loop and
+# is rejected under the free strategy this play runs with, so sleep on localhost
+# (per host) instead.
+- name: Let the listener and Netlogon settle after the restart
+  ansible.builtin.command: sleep 120
+  delegate_to: localhost
+  when: not redstackpro_already_dc
+  changed_when: false
+
+- name: Authenticate as the domain administrator
+  ansible.builtin.set_fact:
+    ansible_user: "{{ redstackpro_domain.domain_netbios }}\\Administrator"
+
+# Now the connection is stable, so this is an ordinary readiness poll: it fails
+# (throws) only while ADWS is still coming up, which until retries as a task
+# failure, not an unreachable. A promotion that never finished never answers here
+# and the play fails loudly. This leaves the shared gate in main.yml a clean no-op.
+- name: Wait for the directory to answer over the stabilized connection
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = "Stop"
+      Get-ADDomain -Server localhost | Out-Null
+      Get-ADGroup -Server localhost -Filter * | Out-Null
+  register: redstackpro_gcp_ready
+  until: redstackpro_gcp_ready is succeeded
+  retries: 40
+  delay: 20
+  changed_when: false
+
+# Point DNS at itself with the parent as fallback so the child resolves its own
+# domain. Forest-root DNS is already correct from the promotion, so this is
+# child-only hygiene. ignore_unreachable in case the listener is still settling.
+- name: Point DNS at itself after promotion
+  ansible.windows.win_dns_client:
+    adapter_names: '*'
+    dns_servers:
+      - "{{ ansible_host }}"
+      - "{{ redstackpro_domain.parent_dc_address }}"
+  register: redstackpro_child_dns
+  ignore_unreachable: true
+  until: redstackpro_child_dns is succeeded
+  retries: 10
+  delay: 15
+  when: not (redstackpro_domain.forest_root | bool)

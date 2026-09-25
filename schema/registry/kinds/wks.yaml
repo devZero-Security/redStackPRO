@@ -1,0 +1,23 @@
+kind: wks
+abbrev: wks
+category: host
+ansible_group: workstations
+description: Workstation. A domain-joined user endpoint.
+
+display:
+  label: Workstation
+  blurb: Domain-joined endpoint
+  icon: tabler/outline/device-desktop
+  group: hosts
+  color: "#4dabf7"
+
+modes:
+  - range
+
+derived:
+  - name: private_address
+    source: provider
+
+requirements:
+  - name: compute
+  - name: windows_image

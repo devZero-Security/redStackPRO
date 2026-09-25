@@ -1,0 +1,87 @@
+---
+# MECM site-server prerequisites: RDC + BITS, .NET 3.5, the IIS feature set MECM
+# needs, and the VC++ 2017 redist + MSSQL ODBC 18 driver. See goad-fidelity-build.
+
+- name: Ensure the setup staging directory exists
+  ansible.windows.win_file:
+    path: C:\setup
+    state: directory
+
+- name: Install RDC, BITS, and the AD PowerShell module
+  ansible.windows.win_feature:
+    name:
+      - RDC
+      - BITS
+      # ad_prep imports the ActiveDirectory module (and uses its AD: drive) to
+      # create the System Management container, grant the site server GenericAll,
+      # and extend the schema. Without RSAT-AD-PowerShell the import fails.
+      - RSAT-AD-PowerShell
+    include_management_tools: true
+  register: redstackpro_mecm_rdc
+
+- name: Reboot if the base features asked for it
+  ansible.windows.win_reboot:
+  when: redstackpro_mecm_rdc.reboot_required | default(false)
+
+# .NET 3.5 via the feature module (ServerManager), not raw DISM: DISM /Online over
+# psrp fails at the finalize step with "Access is denied" (error 5). win_feature
+# pulls the payload from Windows Update when the on-disk source is absent.
+- name: Enable .NET Framework 3.5
+  ansible.windows.win_feature:
+    name: NET-Framework-Core
+    state: present
+  register: redstackpro_mecm_netfx
+
+- name: Reboot if .NET 3.5 asked for it
+  ansible.windows.win_reboot:
+  when: redstackpro_mecm_netfx.reboot_required | default(false)
+
+- name: Install the IIS feature set MECM requires
+  ansible.windows.win_feature:
+    name:
+      - Web-Server
+      - Web-Dyn-Compression
+      - Web-Http-Redirect
+      - Web-Log-Libraries
+      - Web-Request-Monitor
+      - Web-Http-Tracing
+      - Web-Windows-Auth
+      - Web-App-Dev
+      - Web-Net-Ext
+      - Web-Net-Ext45
+      - Web-Asp-Net
+      - Web-Asp-Net45
+      - Web-Mgmt-Tools
+      - Web-Mgmt-Compat
+      - Web-WMI
+    include_management_tools: true
+  register: redstackpro_mecm_iis
+
+- name: Reboot if IIS asked for it
+  ansible.windows.win_reboot:
+  when: redstackpro_mecm_iis.reboot_required | default(false)
+
+- name: Download the VC++ 2017 redistributable
+  ansible.windows.win_get_url:
+    url: "{{ redstackpro_mecm_vcredist_url }}"
+    dest: C:\setup\vc_redist.x64.exe
+    force: false
+
+- name: Install the VC++ 2017 redistributable
+  ansible.windows.win_shell: C:\setup\vc_redist.x64.exe /quiet /norestart
+  register: redstackpro_mecm_vc
+  changed_when: redstackpro_mecm_vc.rc in [0, 3010]
+  failed_when: redstackpro_mecm_vc.rc not in [0, 1638, 3010]
+
+- name: Download the MSSQL ODBC 18 driver
+  ansible.windows.win_get_url:
+    url: "{{ redstackpro_mecm_odbc_url }}"
+    dest: C:\setup\msodbcsql.msi
+    force: false
+
+- name: Install the MSSQL ODBC 18 driver
+  ansible.windows.win_package:
+    path: C:\setup\msodbcsql.msi
+    arguments: IACCEPTMSODBCSQLLICENSETERMS=YES ALLUSERS=1
+    state: present
+    creates_path: C:\Windows\System32\msodbcsql18.dll

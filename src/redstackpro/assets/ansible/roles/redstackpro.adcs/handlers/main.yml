@@ -1,0 +1,7 @@
+---
+# Restarting CertSvc makes a CA policy/interface registry change (ESC6, ESC11)
+# take effect. Notified by the ca_config tasks.
+- name: Restart CertSvc
+  ansible.windows.win_service:
+    name: CertSvc
+    state: restarted

@@ -1,0 +1,41 @@
+---
+# The headless way to get a beacon running as patient zero. A person uses the
+# portal's patient-zero tile and the mapped drop drive; that needs a browser,
+# so a script or an automated solution run needs this instead. See
+# launch-beacon.yml for why staging uses the range admin and execution does not,
+# and range-access-model for which path is the product's and which is the
+# affordance.
+
+- name: Create the operator tooling directory
+  ansible.builtin.file:
+    path: "{{ redstackpro_jumpbox_share_dir }}"
+    state: directory
+    mode: "0755"
+
+# copy, not template: the playbook's {{ }} are its own runtime variables and
+# must reach the host unrendered. Templating it evaluates them at install time,
+# when they do not exist -- the "'target' is undefined" failure on the first
+# live deploy. See the file's own header.
+- name: Install the launch playbook
+  ansible.builtin.copy:
+    src: launch-beacon.yml
+    dest: "{{ redstackpro_jumpbox_share_dir }}/launch-beacon.yml"
+    mode: "0644"
+
+# 0755 and not 0750: the accounts that run this differ by mode (redop on an ops
+# range, blueop on a defend range) and the file carries no credential of its own
+# -- it reads the lab password at run time from a root-owned file, or takes the
+# patient-zero password the template baked in, which the lab documents anyway.
+- name: Install the launcher
+  ansible.builtin.template:
+    src: rsp-launch-beacon.j2
+    dest: /usr/local/bin/rsp-launch-beacon
+    mode: "0755"
+
+- name: Say how to use it
+  ansible.builtin.debug:
+    msg: >-
+      Headless beacon launch: put the payload in
+      {{ redstackpro_guacamole_drop_dir }} and run
+      `rsp-launch-beacon <file>`. The same folder is mapped as a drive in every
+      RDP tile, so a person can drag it in and double-click instead.

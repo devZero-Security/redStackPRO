@@ -1,0 +1,13 @@
+{# Rendered by redStackPRO. An rc script of sliver console commands.
+
+   This is how a listener gets started without a human at the console:
+   `sliver-client --rc <this file>` reads the file and runs each line as a console
+   command (client/cli/rc.go, client/console/console.go runRCScript).
+
+   Note there is deliberately no --persistent flag: current Sliver does not have
+   one on the https command, and its JobConfig ("Restart Jobs on Load") is defined
+   but no longer referenced from ServerConfig. So a listener does NOT survive a
+   restart of sliver.service, which is why the role also installs a unit that
+   re-applies this script whenever the daemon starts. #}
+https --lport {{ redstackpro_teamserver_c2_port }} --lhost {{ redstackpro_teamserver_bind }}
+jobs

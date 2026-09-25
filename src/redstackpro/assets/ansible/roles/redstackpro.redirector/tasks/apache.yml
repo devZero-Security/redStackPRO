@@ -1,0 +1,27 @@
+---
+- name: Enable the modules the gating rules need
+  community.general.apache2_module:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ redstackpro_apache_modules }}"
+  notify: Restart apache
+
+- name: Write the virtual hosts
+  ansible.builtin.template:
+    src: apache-redirector.conf.j2
+    dest: /etc/apache2/sites-available/redstackpro-redirector.conf
+    mode: "0644"
+  notify: Restart apache
+
+- name: Disable the default site
+  ansible.builtin.file:
+    path: /etc/apache2/sites-enabled/000-default.conf
+    state: absent
+  notify: Restart apache
+
+- name: Enable the redirector site
+  ansible.builtin.file:
+    src: /etc/apache2/sites-available/redstackpro-redirector.conf
+    dest: /etc/apache2/sites-enabled/redstackpro-redirector.conf
+    state: link
+  notify: Restart apache

@@ -1,0 +1,77 @@
+---
+# Wazuh single-node, via the project's official all-in-one installer. It stands
+# up the indexer, the manager, and the dashboard on this one box; the Windows
+# hosts enrol against it as agents. The dashboard is on 443, the manager
+# registration service on 1514/1515.
+
+- name: Fetch the Wazuh installer
+  become: true
+  ansible.builtin.get_url:
+    url: https://packages.wazuh.com/4.9/wazuh-install.sh
+    dest: /root/wazuh-install.sh
+    mode: "0700"
+
+- name: Install Wazuh all-in-one
+  become: true
+  ansible.builtin.command:
+    cmd: bash /root/wazuh-install.sh --all-in-one --ignore-check
+    creates: /var/ossec/bin/wazuh-control
+  register: redstackpro_wazuh_install
+
+- name: Ensure the Wazuh services are running
+  become: true
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - wazuh-manager
+    - wazuh-indexer
+    - wazuh-dashboard
+
+# started is not the same as working. The collector proved that the hard way on
+# 2026-09-13: logstash exited FATAL on every start while systemd reported the
+# unit active, so the range shipped nothing and the deploy still passed. Assert
+# the two ports that make this a SIEM rather than three idle units -- the agent
+# enrolment port an endpoint registers against, and the dashboard an operator
+# opens. Wazuh's indexer is a JVM and the dashboard waits on it, so the wait is
+# generous rather than a single probe.
+- name: Confirm Wazuh is really serving, not merely started
+  become: true
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ item.port }}"
+    timeout: 300
+    msg: >-
+      wazuh reports started but nothing is listening on {{ item.port }}
+      ({{ item.what }}). Check /var/ossec/logs/ossec.log and the indexer's
+      journal: a component that fails to come up leaves the unit active.
+  loop:
+    - { port: 1514, what: "agent enrolment, where endpoints register" }
+    - { port: 443, what: "the dashboard an operator opens" }
+  loop_control:
+    label: "{{ item.port }} -- {{ item.what }}"
+
+# The all-in-one installer generates a random dashboard admin password and then
+# cleans up the file that held it, so it is effectively lost. Set it to the
+# shared lab password instead, the same credential as everything else, so the
+# dashboard login is known (admin / lab password), matching the range briefing.
+#
+# Wazuh's password tool enforces its own complexity: it requires a symbol drawn
+# ONLY from the set (.*+?-) and rejects a password whose only symbols fall
+# outside it (e.g. the generated lab password's `#`). So the value handed to the
+# tool is the lab password with every character outside [A-Za-z0-9.*+?-] mapped
+# to `-`; that preserves the letters/digits, keeps it derivable from the lab
+# password, and guarantees a Wazuh-legal symbol. The briefing states this rule.
+- name: Set the Wazuh dashboard admin password to the lab password (Wazuh charset)
+  become: true
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      TOOL=$(find /usr/share/wazuh-indexer -name wazuh-passwords-tool.sh 2>/dev/null | head -1)
+      test -n "$TOOL" || { echo "wazuh-passwords-tool.sh not found"; exit 1; }
+      JAVA_HOME=/usr/share/wazuh-indexer/jdk bash "$TOOL" -u admin -p "$RSP_LAB_PASSWORD"
+  environment:
+    RSP_LAB_PASSWORD: "{{ redstackpro_lab_password | regex_replace('[^A-Za-z0-9.*+?-]', '-') }}"
+  changed_when: true
+  when: redstackpro_lab_password | default('') | length > 0

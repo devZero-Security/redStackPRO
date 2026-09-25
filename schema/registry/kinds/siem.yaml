@@ -1,0 +1,23 @@
+kind: siem
+abbrev: siem
+category: host
+ansible_group: siem
+description: Defensive telemetry server. A Wazuh or ELK box that collects from agents on the range hosts. Not domain joined.
+
+display:
+  label: SIEM
+  blurb: Wazuh or ELK collector
+  icon: tabler/outline/device-analytics
+  group: hosts
+  color: "#0ca678"
+
+modes:
+  - range
+
+derived:
+  - name: private_address
+    source: provider
+
+requirements:
+  - name: compute
+  - name: linux_image

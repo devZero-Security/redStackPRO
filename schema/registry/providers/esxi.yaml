@@ -1,0 +1,37 @@
+provider: esxi
+# Operator-owned network, as on proxmox: the network address and the gateway the
+# backend derives as net[1], plus broadcast.
+reserved_addresses:
+  head: 2
+  tail: 1
+maturity: preview
+description: >
+  ESXi / vSphere via the hashicorp/vsphere provider. On-prem per 0003, and more
+  constrained than Proxmox: no cloud-image download (Linux deploys from an OVA
+  URL, Windows clones a prepared template) and no managed per-VM firewall.
+  Segments isolate at layer 2 by VLAN on port groups; outbound routing is a
+  precondition of the physical network.
+
+capabilities:
+  - routing_domain
+  - subnet
+  - compute
+  - linux_image
+  - windows_image
+  - outbound_routing
+
+unsupported:
+  - name: public_address
+    reason: >
+      No allocated external address. Reachability from outside depends on the
+      physical network, which redStackPRO does not control or declare.
+  - name: private_dns
+    reason: No managed private DNS zone. Use static hosts entries.
+  - name: network_peering
+    reason: >
+      No managed network peering. Joining VLANs is a property of the physical
+      network's routing, which redStackPRO does not control or declare.
+  - name: host_firewall
+    reason: >
+      vSphere exposes no managed per-VM firewall via Terraform. Segments isolate
+      at layer 2 by VLAN; host-level or appliance firewalling is the operator's.

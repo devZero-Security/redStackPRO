@@ -1,0 +1,10 @@
+---
+# Leave LLMNR (multicast name resolution) enabled so a responder on the segment
+# can poison lookups. EnableMulticast=1 forces it on regardless of any hardening
+# policy that would set it to 0.
+- name: Ensure LLMNR is enabled
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient
+    name: EnableMulticast
+    data: 1
+    type: dword

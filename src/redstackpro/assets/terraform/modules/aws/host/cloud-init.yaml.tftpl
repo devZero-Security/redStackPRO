@@ -1,0 +1,37 @@
+#cloud-config
+# Creates the ${admin_username} account the configuration layer connects as. A Linux image
+# boots with the key pair on its default account only, so this adds ${admin_username} with
+# the same key and passwordless sudo, the AWS analogue of the ssh-keys metadata
+# the GCP host module sets. It also authorizes the jumpbox's Guacamole key so the
+# portal reaches this box, and sets the shared lab password so a direct login
+# works too. The password is generated at apply, never in the export. See 0001.
+users:
+  - default
+  - name: ${admin_username}
+    groups: [sudo]
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    shell: /bin/bash
+    lock_passwd: false
+    plain_text_passwd: "${lab_password}"
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+%{ if guac_public_key != "" ~}
+      - ${guac_public_key}
+%{ endif ~}
+ssh_pwauth: true
+%{ if guac_private_key != "" ~}
+write_files:
+  - path: /etc/redstackpro/guacamole-ssh-key
+    permissions: "0600"
+    owner: root:root
+    content: |
+      ${indent(6, guac_private_key)}
+  - path: /etc/redstackpro/operator-username
+    permissions: "0600"
+    owner: root:root
+    content: "${operator_username}"
+  - path: /etc/redstackpro/lab-password
+    permissions: "0600"
+    owner: root:root
+    content: "${lab_password}"
+%{ endif ~}

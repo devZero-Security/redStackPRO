@@ -1,0 +1,23 @@
+kind: srv
+abbrev: srv
+category: host
+ansible_group: servers
+description: Member server. Joined to a domain, runs a service such as MSSQL or IIS.
+
+display:
+  label: Server
+  blurb: Domain member server
+  icon: tabler/outline/server-2
+  group: hosts
+  color: "#1098ad"
+
+modes:
+  - range
+
+derived:
+  - name: private_address
+    source: provider
+
+requirements:
+  - name: compute
+  - name: windows_image

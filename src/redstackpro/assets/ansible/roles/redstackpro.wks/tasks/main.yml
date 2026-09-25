@@ -1,0 +1,55 @@
+---
+# redStackPRO workstation. Clean-room MIT: a domain-joined user endpoint. Same
+# baseline as a member server (join the domain the canvas points it at); the
+# endpoint's own attack surface comes in a later phase. See
+# goad-native-recreation.
+
+- name: Point DNS at the domain controller
+  ansible.windows.win_dns_client:
+    adapter_names: '*'
+    dns_servers:
+      - "{{ redstackpro_join_dc_address }}"
+
+- name: Join the domain
+  microsoft.ad.membership:
+    dns_domain_name: "{{ redstackpro_join_fqdn }}"
+    hostname: "{{ redstackpro_wks_hostname | default(omit) }}"
+    domain_admin_user: "Administrator@{{ redstackpro_join_fqdn }}"
+    domain_admin_password: "{{ redstackpro_lab_password }}"
+    state: domain
+    reboot: true
+  register: redstackpro_join
+  until: redstackpro_join is succeeded
+  retries: 20
+  delay: 30
+
+# The module's own reboot returns as soon as WinRM answers again, but a freshly
+# joined box drops it a second time while services and policy settle, so the very
+# next task dies on RemoteDisconnected. That is not cosmetic: it cost minilab an
+# entire run, where the controller had fully converged and the workstation failed
+# here on the last attempt, exhausting the retry budget. The dc role already waits
+# like this after its promotion reboot. See goad-fidelity-build.
+- name: Wait for the connection to settle after the domain join
+  ansible.builtin.wait_for_connection:
+    delay: 20
+    sleep: 10
+    timeout: 600
+  # noqa: no-handler - a handler runs at the end of the play, which is exactly too
+  # late: the point is to settle the connection before the NEXT task runs.
+  when: redstackpro_join is changed
+
+# A domain member should answer SMB (peer enumeration, shares, relay surface);
+# some base images ship with File and Printer Sharing disabled. Enable the
+# inbound SMB rule so every Windows endpoint is reachable on 445.
+- name: Ensure SMB is reachable (File and Printer Sharing inbound)
+  ansible.windows.win_powershell:
+    script: Enable-NetFirewallRule -DisplayGroup 'File and Printer Sharing'
+  changed_when: true
+
+# Host-level attack paths this workstation declares on the canvas.
+- name: Plant host-level attack paths
+  ansible.builtin.include_role:
+    name: redstackpro.host_vulns
+  vars:
+    redstackpro_host_vulns: "{{ redstackpro_wks_vulns | default([]) }}"
+    redstackpro_host_vulns_vars: "{{ redstackpro_wks_vulns_vars | default({}) }}"

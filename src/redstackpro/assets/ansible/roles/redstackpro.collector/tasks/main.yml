@@ -1,0 +1,53 @@
+---
+# The sink from the overlay, listening on ingest_port with TLS.
+#
+# Source restriction is in the generated firewall rules, which open this port to
+# exactly the hosts with a logs_to edge. It is not this role's job and nothing
+# here tries to duplicate it. See 0007.
+
+- name: Fail early if the topology supplied no ingest port
+  ansible.builtin.assert:
+    that:
+      - redstackpro_collector_ingest_port | int > 0
+      - redstackpro_collector_sink | length > 0
+    fail_msg: >
+      The ingest port and the sink both come from the collector overlay, so an
+      empty one means the topology is incomplete rather than the role being wrong.
+
+- name: Create redstackpro directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /etc/redstackpro
+    - "{{ redstackpro_collector_tls_dir }}"
+    - "{{ redstackpro_collector_root }}"
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - openssl
+    state: present
+    update_cache: true
+
+- name: Issue the receiver certificate from the jumpbox authority
+  ansible.builtin.include_tasks: tls.yml
+  when: redstackpro_collector_tls | bool
+
+- name: Install the sink
+  ansible.builtin.include_tasks: "sink-{{ redstackpro_collector_sink }}.yml"
+
+- name: Install the beats receiver
+  ansible.builtin.include_tasks: receiver.yml
+
+# Somewhere to actually look at what was collected. Last, because it imports
+# saved objects and wants the sink and the receiver already up.
+- name: Install the dashboard
+  ansible.builtin.include_tasks: dashboards.yml
+  when:
+    - redstackpro_dashboards_enabled | bool
+    - redstackpro_collector_sink == 'opensearch'

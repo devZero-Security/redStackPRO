@@ -1,0 +1,53 @@
+---
+# Plant the SCCM attack surface on the installed site. The ConfigurationManager
+# module and the SMS WMI provider require CM Full Administrator, which the site's
+# installing account (the forest-root admin) holds, so this runs under a scheduled
+# task logged on as that account. Best-effort per primitive. See goad-fidelity-build.
+
+- name: Stage the SCCM config script
+  ansible.windows.win_copy:
+    src: configure_sccm.ps1
+    dest: C:\Windows\Temp\configure_sccm.ps1
+
+- name: Configure the SCCM attack surface under the site admin
+  ansible.windows.win_powershell:
+    script: |
+      param($Ea, $Pass, $Sc, $Naa, $Push, $Da, $Grp, $Managed, $Fqdn)
+      $ErrorActionPreference = "Stop"
+      $inner = "& C:\Windows\Temp\configure_sccm.ps1 -SiteCode '$Sc' -Password '$Pass' " +
+               "-NaaAccount '$Naa' -PushAccount '$Push' -DaAccount '$Da' " +
+               "-AdminGroup '$Grp' -ManagedGroup '$Managed' -SiteFqdn '$Fqdn' " +
+               "*> C:\Windows\Temp\rsp-mecm-config-run.txt"
+      Set-Content C:\Windows\Temp\rsp-mecm-config-run.ps1 $inner
+      Remove-Item C:\Windows\Temp\rsp-mecm-config.txt -ErrorAction SilentlyContinue
+      $a = New-ScheduledTaskAction -Execute "powershell.exe" `
+        -Argument "-ExecutionPolicy Bypass -File C:\Windows\Temp\rsp-mecm-config-run.ps1"
+      Register-ScheduledTask -TaskName RSPMecmConfig -Action $a -User $Ea `
+        -Password $Pass -RunLevel Highest -Force | Out-Null
+      Start-ScheduledTask -TaskName RSPMecmConfig
+      $done = $false
+      # configure_sccm.ps1 may wait several minutes for the SMS provider to come up
+      # after a fresh install before it can run, so allow ~15 min overall.
+      for ($i = 0; $i -lt 100; $i++) {
+        Start-Sleep -Seconds 9
+        if (Test-Path C:\Windows\Temp\rsp-mecm-config.txt) { $done = $true; break }
+      }
+      Unregister-ScheduledTask -TaskName RSPMecmConfig -Confirm:$false -ErrorAction SilentlyContinue
+      if (-not $done) { throw "SCCM config did not finish in time" }
+      [Ordered]@{ result = (Get-Content C:\Windows\Temp\rsp-mecm-config.txt -Raw) }
+    parameters:
+      Ea: "{{ redstackpro_mecm_domain_admin }}"
+      Pass: "{{ redstackpro_lab_password }}"
+      Sc: "{{ redstackpro_mecm_site_code }}"
+      Naa: "{{ redstackpro_mecm_naa_account }}"
+      Push: "{{ redstackpro_mecm_client_push_account }}"
+      Da: "{{ redstackpro_mecm_da_account }}"
+      Grp: "{{ redstackpro_mecm_admin_group }}"
+      Managed: "{{ redstackpro_mecm_managed_group }}"
+      Fqdn: "{{ redstackpro_mecm_fqdn }}"
+  register: redstackpro_mecm_config
+  changed_when: true
+
+- name: Report the SCCM config result
+  ansible.builtin.debug:
+    var: redstackpro_mecm_config.output[0].result

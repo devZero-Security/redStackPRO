@@ -1,0 +1,162 @@
+---
+# Push over TCP with TLS, source restricted at the collector. See 0007.
+log_sink_address: ""
+
+# Where this host actually ships. Normally the logs_to edge supplies
+# log_sink_address; the JUMPBOX cannot carry that edge, because the collector's
+# receiver certificate is issued by the jumpbox's own authority and an edge back
+# would be a dependency cycle. It falls back to the collector address every host
+# knows as a group var, so the one machine operators log into still reports its
+# logins. Empty for a host that is neither, which the role asserts on.
+redstackpro_shipper_sink: >-
+  {{ log_sink_address | default('', true)
+     or redstackpro_collector_address | default('', true) }}
+
+# Overridden per host by the logs_to edge, which reads them off the collector
+# overlay. The jumpbox has no such edge (see the sink above), so it falls back to
+# the collector's own values carried as group vars rather than to a literal --
+# two defaults that happen to agree today drift the moment someone edits the
+# overlay, and the failure is a shipper talking to a closed port.
+redstackpro_shipper_port: "{{ redstackpro_collector_ingest_port | default(5044) }}"
+redstackpro_shipper_tls: "{{ redstackpro_collector_tls | default(true) }}"
+
+# Written by redstackpro.jumpbox, which holds the CA the collector's receiver
+# certificate is signed by.
+redstackpro_shipper_ca_path: /etc/redstackpro/tls/redstackpro-ca.crt
+# One entry per log class. The collector routes on the class name, so these are
+# a contract with the pipeline rather than a convenience: adding a class here
+# without a filter there indexes unparsed lines.
+#
+# Paths that do not exist on a given host cost nothing -- filebeat watches a glob
+# and finds no files -- so every host ships every class and the role needs no
+# per-kind branching.
+redstackpro_shipper_classes:
+  - name: redirtraffic
+    paths:
+      # The redstackpro format, not combined: it carries the gating header as
+      # presented and the backend that answered. See the redirector templates.
+      - /var/log/apache2/redstackpro-*access.log
+      - /var/log/nginx/redstackpro-*access.log
+  - name: auth
+    paths:
+      # Who logged in to the operator's own infrastructure. sshd writes here on
+      # Debian; the portal's own logins come from the Guacamole container, which
+      # reaches the journal through docker.
+      - /var/log/auth.log
+  # Sliver is the one teamserver that writes files. Root owned, and filebeat runs
+  # as root, so it can read them.
+  #
+  # It writes THREE, and which two you take decides whether this class is
+  # parseable. Its root logger uses a logrus JSONFormatter onto sliver.json, and
+  # a hook renders the SAME events as colourised text onto sliver.log
+  # (TextFormatter with ForceColors, so that file carries ANSI escapes). The
+  # earlier glob here was *.log, which took the coloured text copy, missed both
+  # JSON files, and left the class unparseable for no gain -- the two files hold
+  # the same events.
+  - name: c2
+    id: c2-sliver-app
+    product: sliver
+    stream: app
+    paths:
+      - /root/.sliver/logs/sliver.json
+  # audit.json is the one that answers "who did what to which implant". Sliver
+  # writes an entry per RPC carrying the operator (the TLS certificate CN), the
+  # session or beacon id, and the method called. It is the per-implant identity
+  # the callbacks index cannot supply, since a callback only knows which
+  # teamserver answered, never which implant called.
+  - name: c2
+    id: c2-sliver-audit
+    product: sliver
+    stream: audit
+    paths:
+      - /root/.sliver/logs/audit.json
+  # Cobalt Strike is licensed, so the role installs a JRE and a README and the
+  # operator supplies the archive; nothing here can know where they put it. It
+  # writes logs/ relative to wherever the teamserver was STARTED, so both the
+  # depths the README's instruction produces are globbed. Until now a Cobalt
+  # Strike teamserver shipped zero c2 events and looked exactly like a quiet one.
+  #
+  # Its beacon logs are the only source here that is not one line per event:
+  # an [output] record is a header line followed by the output itself, so the
+  # input needs the multiline parser or every response arrives as fragments.
+  # Adaptix writes no log at all, so this is not its log: it is the task history
+  # out of its database, exported to JSON lines by rsp-adaptix-export on a timer.
+  # Its journal (below) stays as health, the way mythic_server does.
+  - name: c2
+    id: c2-adaptix-events
+    product: adaptix
+    stream: events
+    paths:
+      - /var/log/redstackpro/adaptix-tasks.jsonl
+  - name: c2
+    id: c2-cobaltstrike
+    product: cobaltstrike
+    stream: beacon
+    multiline_pattern: '^\d{2}/\d{2} \d{2}:\d{2}:\d{2} '
+    paths:
+      - /opt/redstackpro/logs/*/*/beacon_*.log
+      - /opt/redstackpro/*/logs/*/*/beacon_*.log
+  - name: c2
+    id: c2-cobaltstrike-events
+    product: cobaltstrike
+    stream: events
+    multiline_pattern: '^\d{2}/\d{2} \d{2}:\d{2}:\d{2} '
+    paths:
+      - /opt/redstackpro/logs/*/events.log
+      - /opt/redstackpro/*/logs/*/events.log
+
+# The sources that are not files. Each entry keeps to ONE match field, because
+# journald ORs matches on the same field and ANDs them across fields -- a single
+# input mixing units and containers would match nothing.
+#
+# Verified live 2026-09-13: adaptix logs only to the journal; mythic and
+# guacamole are containers; sliver has both a unit and files. Guacamole is how
+# portal logins reach the auth class -- the operator's actual front door, which
+# sshd never sees.
+#
+# One input per PRODUCT as well as per match field, because the pipeline parses
+# each product differently and the stamp has to be unambiguous. adaptix and
+# sliver were one input while nothing read them apart; they cannot be now.
+redstackpro_shipper_journals:
+  - id: c2-adaptix
+    name: c2
+    product: adaptix
+    stream: unit
+    matches:
+      - _SYSTEMD_UNIT=adaptix.service
+  # Both units. sliver-listener.service is the one that actually holds the
+  # listeners, and it was absent here, so a listener failing to bind was
+  # invisible to the collector while the teamserver unit looked healthy.
+  - id: c2-sliver-unit
+    name: c2
+    product: sliver
+    stream: unit
+    matches:
+      - _SYSTEMD_UNIT=sliver.service
+      - _SYSTEMD_UNIT=sliver-listener.service
+  - id: c2-mythic
+    name: c2
+    product: mythic
+    stream: unit
+    matches:
+      - CONTAINER_NAME=mythic_server
+  # A SECOND input, not another match line on the one above, even though both are
+  # CONTAINER_NAME and journald would happily OR them. The two streams are
+  # different things: mythic_server prints colourised developer text, the logging
+  # container prints structured JSON. Merging them would stamp the JSON with
+  # stream: unit and route it into the health grok, which would parse none of it.
+  #
+  # Two container names because Mythic's naming for an installed service is the
+  # one thing here that has not been confirmed on a live host. Both are the same
+  # field, so journald ORs them and the wrong guess simply never matches.
+  - id: c2-mythic-events
+    name: c2
+    product: mythic
+    stream: events
+    matches:
+      - CONTAINER_NAME=basic_logger
+      - CONTAINER_NAME=mythic_basic_logger
+  - id: auth-portal
+    name: auth
+    matches:
+      - CONTAINER_NAME=redstackpro-guacamole

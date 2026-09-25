@@ -1,0 +1,119 @@
+---
+# A Linux member enrolled in Active Directory with realm/sssd, reached over SSH
+# and elevated to root. GOAD's lx01 and Dracarys's syrax are Linux domain
+# members. The controller must resolve, so DNS points at it first.
+
+# The AD computer object takes its name from the host's hostname at enrolment, so
+# the rename has to happen BEFORE realm join. Without it the box enrols under its
+# CLOUD name and the directory ends up with CYB-SYRAX, whose SPNs point at
+# cyb-syrax.<zone>.c.<project>.internal -- while every Windows host correctly gets
+# the bare node id (KINGSLANDING, VHAGAR). Found live on dracarys. That asymmetry
+# breaks the guarantee that `prefix` namespaces CLOUD resources only and never AD
+# identity, and upstream dracarys calls the host syrax. The Windows path already
+# passes this same variable to microsoft.ad.membership. See 0055 and the naming note
+# in goad-fidelity-build.
+- name: Set the hostname to the lab's node name before enrolling
+  become: true
+  ansible.builtin.hostname:
+    name: "{{ redstackpro_srv_hostname }}"
+  when: (redstackpro_srv_hostname | default('')) | length > 0
+
+# sudo and many tools warn or stall when the hostname does not resolve, and the
+# rename above breaks the cloud image's own 127.0.1.1 entry.
+- name: Make the new hostname resolvable
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.1\.1\s'
+    line: "127.0.1.1 {{ redstackpro_srv_hostname }}.{{ redstackpro_join_fqdn }} {{ redstackpro_srv_hostname }}"
+  when: (redstackpro_srv_hostname | default('')) | length > 0
+
+- name: Point resolv.conf at the domain controller
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/resolv.conf
+    content: |
+      nameserver {{ redstackpro_join_dc_address }}
+      search {{ redstackpro_join_fqdn }}
+    mode: "0644"
+
+- name: Preseed the Kerberos default realm
+  become: true
+  ansible.builtin.debconf:
+    name: krb5-config
+    question: krb5-config/default_realm
+    value: "{{ redstackpro_join_fqdn | upper }}"
+    vtype: string
+
+- name: Install the realm enrolment packages
+  become: true
+  ansible.builtin.apt:
+    name:
+      - realmd
+      - sssd
+      - sssd-tools
+      - adcli
+      - samba-common-bin
+      - krb5-user
+      - packagekit
+      - libnss-sss
+      - libpam-sss
+    state: present
+    update_cache: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Join the domain with realm
+  become: true
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      echo '{{ redstackpro_lab_password }}' |
+      realm join --user=Administrator {{ redstackpro_join_fqdn }}
+    executable: /bin/bash
+    creates: /etc/sssd/sssd.conf
+  register: redstackpro_realm
+  until: redstackpro_realm is succeeded
+  retries: 10
+  delay: 30
+  no_log: true
+
+- name: Allow password authentication for domain users
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/sssd/sssd.conf
+    regexp: '^use_fully_qualified_names'
+    line: 'use_fully_qualified_names = False'
+    insertafter: '^\[domain/'
+  notify: Restart sssd
+
+# Grant sudo to the domain groups the canvas names (Dracarys's LinuxAdmins), so a
+# member of that AD group becomes root on this box -- the Linux privilege-
+# escalation path from an AD foothold.
+- name: Grant sudo to the domain admin groups
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/redstackpro-domain
+    content: |
+      {% for g in redstackpro_srv_sudo_groups | default([]) %}
+      %{{ g }} ALL=(ALL:ALL) ALL
+      {% endfor %}
+    mode: "0440"
+    validate: "visudo -cf %s"
+  when: (redstackpro_srv_sudo_groups | default([])) | length > 0
+
+# Restrict interactive SSH to the permitted domain groups (Dracarys allows
+# LinuxAdmins + LinuxUsers only), so the box is reachable by exactly the accounts
+# the lab intends.
+- name: Restrict SSH logon to the permitted domain groups
+  become: true
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      realm deny --all
+      {% for g in redstackpro_srv_ssh_groups | default([]) %}
+      realm permit -g '{{ g }}@{{ redstackpro_join_fqdn }}'
+      {% endfor %}
+    executable: /bin/bash
+  when: (redstackpro_srv_ssh_groups | default([])) | length > 0
+  changed_when: true

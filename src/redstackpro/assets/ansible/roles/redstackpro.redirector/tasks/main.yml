@@ -1,0 +1,372 @@
+---
+- name: Fail early if the topology did not supply an upstream
+  ansible.builtin.assert:
+    that:
+      - upstreams | length > 0
+      - redstackpro_redirector_gating.header_value | length > 0
+    fail_msg: >
+      This redirector fronts nothing, or has no gating value. Both come from
+      the fronts edges, so the topology is incomplete rather than the role being
+      wrong.
+
+- name: Reject colliding prefixes
+  ansible.builtin.assert:
+    that: upstreams | map(attribute="uri_prefix") | unique | length
+          == upstreams | length
+    fail_msg: >
+      Two upstreams share a URI prefix, so the first rule would swallow the
+      second. The validator catches this as FRT002.
+
+- name: Create redstackpro directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /etc/redstackpro
+    - /etc/redstackpro/tls
+    - /var/www/redstackpro-decoy
+    - /var/www/redstackpro-acme
+
+- name: Install the web server and TLS tooling
+  ansible.builtin.apt:
+    name: "{{ redstackpro_redirector_packages }}"
+    state: present
+    update_cache: true
+  vars:
+    redstackpro_redirector_packages: >-
+      {{ ['openssl', 'ca-certificates', 'curl', 'certbot']
+         + (['apache2'] if redstackpro_redirector_server == 'apache' else ['nginx']) }}
+
+- name: Install the bundled scanner and AV blocklist
+  ansible.builtin.copy:
+    src: redirect.rules
+    dest: /etc/redstackpro/redirect.rules
+    mode: "0644"
+  when: redstackpro_redirector_gating.redirect_rules | bool
+
+- name: Overlay a custom blocklist, if one is configured
+  ansible.builtin.get_url:
+    url: "{{ redstackpro_redirect_rules_url }}"
+    dest: /etc/redstackpro/redirect.rules
+    mode: "0644"
+  when:
+    - redstackpro_redirector_gating.redirect_rules | bool
+    - redstackpro_redirect_rules_url | length > 0
+  failed_when: false
+
+- name: Disable the blocklist when gating is off
+  ansible.builtin.copy:
+    content: "# blocklist disabled\n"
+    dest: /etc/redstackpro/redirect.rules
+    mode: "0644"
+  when: not (redstackpro_redirector_gating.redirect_rules | bool)
+
+# The cover site's photographs are fetched here, on the redirector, rather than
+# shipped in the export. The bytes never cross Ansible, the host spends its own
+# egress, and because each redirector chooses its own images from its own seed
+# there is no asset hash that identifies a redStackPRO cover page. Nothing the
+# page later serves reaches a third party: a visitor's browser only ever talks
+# to this host. Every task below is allowed to come up empty, because the
+# template falls back to drawn SVG for any slot that has no file.
+# See redstackpro/decoyassets.py and files/rsp-decoy-fetch.py.
+- name: Create the decoy asset directory
+  ansible.builtin.file:
+    path: /var/www/redstackpro-decoy/assets
+    state: directory
+    mode: "0755"
+  when: redstackpro_decoy_assets is defined
+
+- name: Install the imaging library the cover photographs are cropped with
+  ansible.builtin.apt:
+    name: python3-pil
+    state: present
+  when: redstackpro_decoy_assets is defined
+  # Without it the photographs are kept at the size the thumbnailer returned and
+  # cropped by CSS instead, and the generated portraits are skipped. A heavier
+  # cover page is not worth failing a deploy for.
+  failed_when: false
+
+- name: Place the decoy asset fetcher
+  ansible.builtin.copy:
+    src: rsp-decoy-fetch.py
+    dest: /usr/local/sbin/rsp-decoy-fetch
+    mode: "0750"
+  when: redstackpro_decoy_assets is defined
+
+- name: Write the decoy asset plan
+  ansible.builtin.copy:
+    content: "{{ redstackpro_decoy_assets | to_nice_json }}"
+    dest: /etc/redstackpro/decoy-assets.json
+    mode: "0640"
+  when: redstackpro_decoy_assets is defined
+  register: redstackpro_decoy_plan
+
+- name: Fetch the decoy cover photographs
+  ansible.builtin.command:
+    cmd: >-
+      /usr/local/sbin/rsp-decoy-fetch
+      --plan /etc/redstackpro/decoy-assets.json
+      --out /var/www/redstackpro-decoy/assets
+      --pack {{ redstackpro_decoy_asset_pack | default('', true) | quote }}
+  when: redstackpro_decoy_assets is defined
+  register: redstackpro_decoy_fetch
+  changed_when: redstackpro_decoy_plan is changed
+  # rc 2 is a broken invocation -- an unreadable plan, an unwritable directory --
+  # which is a real fault and must not pass quietly. rc 0 with an empty result is
+  # the designed degradation, so it is not a failure.
+  failed_when: redstackpro_decoy_fetch.rc == 2
+
+- name: Record which cover photographs landed, and what they owe
+  ansible.builtin.set_fact:
+    redstackpro_decoy_images: >-
+      {{ (redstackpro_decoy_fetch.stdout | from_json).assets
+         if (redstackpro_decoy_fetch is not skipped and redstackpro_decoy_fetch.rc == 0)
+         else {} }}
+    # Photographers owed a credit. Empty when every photograph came from the
+    # operator's own pack, was generated, or carries a licence needing no
+    # credit -- in which case no credits page is written and the footer has no
+    # link to one, rather than a page that says nothing.
+    redstackpro_decoy_credits: >-
+      {{ (redstackpro_decoy_fetch.stdout | from_json).credits | default([], true)
+         if (redstackpro_decoy_fetch is not skipped and redstackpro_decoy_fetch.rc == 0)
+         else [] }}
+
+- name: Place the decoy site pages
+  ansible.builtin.template:
+    src: decoy-site.html.j2
+    dest: "/var/www/redstackpro-decoy/{{ 'index' if page.slug == 'index' else page.slug }}.html"
+    mode: "0644"
+  loop: "{{ redstackpro_decoy_sites[redstackpro_redirector_gating.decoy].pages }}"
+  loop_control:
+    loop_var: page
+  when: redstackpro_redirector_gating.decoy != 'none'
+  vars:
+    site: "{{ redstackpro_decoy_sites[redstackpro_redirector_gating.decoy] }}"
+    sections: "{{ redstackpro_decoy_sections[redstackpro_redirector_gating.decoy] }}"
+    # The artwork is drawn by the compiler, not here: it is seeded per build so
+    # two ranges never render the same shapes, and Jinja is the wrong tool for
+    # generating geometry. See redstackpro/decoyart.py.
+    art: "{{ redstackpro_decoy_art }}"
+
+# Written only when something is actually owed. A CC-BY photograph may be
+# cropped and served provided the photographer is named somewhere reachable,
+# and a footer-linked credits page is how an ordinary small site does that --
+# one more mundane inner page, which reads as more authentic rather than less.
+- name: Place the decoy credits page
+  ansible.builtin.template:
+    src: decoy-site.html.j2
+    dest: /var/www/redstackpro-decoy/credits.html
+    mode: "0644"
+  when:
+    - redstackpro_redirector_gating.decoy != 'none'
+    - redstackpro_decoy_credits | default([], true) | length > 0
+  vars:
+    site: "{{ redstackpro_decoy_sites[redstackpro_redirector_gating.decoy] }}"
+    sections: "{{ redstackpro_decoy_sections[redstackpro_redirector_gating.decoy] }}"
+    art: "{{ redstackpro_decoy_art }}"
+    page:
+      slug: credits
+      label: Credits
+      heading: Image credits
+      body: []
+
+- name: Place the decoy 404 page
+  ansible.builtin.template:
+    src: decoy-site.html.j2
+    dest: /var/www/redstackpro-decoy/404.html
+    mode: "0644"
+  when: redstackpro_redirector_gating.decoy != 'none'
+  vars:
+    site: "{{ redstackpro_decoy_sites[redstackpro_redirector_gating.decoy] }}"
+    sections: "{{ redstackpro_decoy_sections[redstackpro_redirector_gating.decoy] }}"
+    art: "{{ redstackpro_decoy_art }}"
+    page: "{{ redstackpro_decoy_sites[redstackpro_redirector_gating.decoy].notfound }}"
+
+- name: Generate a self signed certificate
+  ansible.builtin.command:
+    cmd: >
+      openssl req -x509 -nodes -days 365 -newkey rsa:2048
+      -keyout /etc/redstackpro/tls/redirector.key
+      -out /etc/redstackpro/tls/redirector.crt
+      -subj "/CN={{ redstackpro_redirector_hostname | default(inventory_hostname, true) }}"
+    creates: /etc/redstackpro/tls/redirector.crt
+  when: redstackpro_redirector_tls.cert_source != 'provided'
+
+- name: Configure the redirector
+  ansible.builtin.include_tasks: "{{ redstackpro_redirector_server }}.yml"
+
+# Let's Encrypt issuance. The web server already answers the acme-challenge path
+# on port 80 from /var/www/redstackpro-acme, so start it (flush the pending
+# restart) before certbot reaches for the challenge, obtain the certificate, then
+# point the server's certificate at the issued one and reload. The self signed
+# certificate above is the bootstrap that lets the 443 listener start until this
+# runs; a rerun with the certificate already present skips issuance.
+- name: Start the web server before issuance
+  ansible.builtin.meta: flush_handlers
+  when: redstackpro_redirector_tls.cert_source == 'letsencrypt'
+
+# Let's Encrypt validates over HTTP on port 80, so the operator's domain has to
+# point at this box's public address before a certificate can issue -- and only
+# the operator can create that DNS record at their registrar. Rather than fail
+# when it is not there yet, learn the public address, print the exact record to
+# create, then wait for DNS to resolve to it and continue on its own. The
+# redirector is the one host that is meant to be reachable from the internet, so
+# it discovers its own public address; ipify is a plain text echo over the egress
+# it already has. A rerun with the certificate already present skips all of this.
+- name: Learn the redirector's public address for the DNS call to action
+  ansible.builtin.command: curl -fsS --max-time 15 https://api.ipify.org
+  register: redstackpro_redirector_pubip
+  changed_when: false
+  retries: 5
+  delay: 10
+  until: redstackpro_redirector_pubip.rc == 0
+  when:
+    - redstackpro_redirector_tls.cert_source == 'letsencrypt'
+    - redstackpro_redirector_hostname | length > 0
+
+- name: ACTION REQUIRED -- create the redirector DNS record now
+  ansible.builtin.debug:
+    msg: >-
+      ACTION REQUIRED at your DNS registrar: create an A record
+      '{{ redstackpro_redirector_hostname }}' -> {{ redstackpro_redirector_pubip.stdout }}
+      now. Certificate issuance below waits until it resolves, then continues on
+      its own -- no need to re-run.
+  when:
+    - redstackpro_redirector_tls.cert_source == 'letsencrypt'
+    - redstackpro_redirector_hostname | length > 0
+
+- name: Wait for the domain to resolve to this redirector
+  ansible.builtin.command: "getent ahostsv4 {{ redstackpro_redirector_hostname }}"
+  register: redstackpro_redirector_dns
+  changed_when: false
+  # Never fatal. If the operator has not created the record inside the window,
+  # the range still deploys on its bootstrap self signed certificate and they are
+  # told how to finish issuance afterwards. A missing DNS record is the operator
+  # having other things to do, not a broken build.
+  failed_when: false
+  retries: "{{ redstackpro_redirector_dns_retries }}"
+  delay: "{{ redstackpro_redirector_dns_delay }}"
+  until: redstackpro_redirector_pubip.stdout in redstackpro_redirector_dns.stdout
+  when:
+    - redstackpro_redirector_tls.cert_source == 'letsencrypt'
+    - redstackpro_redirector_hostname | length > 0
+
+# One fact, so every task below reads the same answer rather than re-deriving it.
+# The address has to be non-empty as well as present in the lookup: `"" in x` is
+# true for any string, so an ipify call that came back blank would otherwise read
+# as a resolved record and send certbot at a name that points nowhere.
+- name: Note whether the record landed inside the window
+  ansible.builtin.set_fact:
+    redstackpro_redirector_dns_ok: "{{
+      (redstackpro_redirector_pubip.stdout | default('') | length > 0)
+      and (redstackpro_redirector_pubip.stdout | default('')
+           in (redstackpro_redirector_dns.stdout | default(''))) }}"
+
+- name: Obtain a Let's Encrypt certificate
+  ansible.builtin.command:
+    cmd: >
+      certbot certonly --webroot -w /var/www/redstackpro-acme
+      -d {{ redstackpro_redirector_hostname }}
+      --non-interactive --agree-tos --keep-until-expiring
+      {% if redstackpro_redirector_tls.email | default('') -%}
+      --email {{ redstackpro_redirector_tls.email }}
+      {%- else -%}
+      --register-unsafely-without-email
+      {%- endif %}
+    creates: "/etc/letsencrypt/live/{{ redstackpro_redirector_hostname }}/fullchain.pem"
+  register: redstackpro_redirector_certbot
+  # DNS can resolve locally a little before Let's Encrypt's own resolvers catch
+  # up, so give issuance a few tries rather than failing the first attempt.
+  retries: 5
+  delay: 60
+  until: redstackpro_redirector_certbot is succeeded
+  when:
+    - redstackpro_redirector_tls.cert_source == 'letsencrypt'
+    - redstackpro_redirector_hostname | length > 0
+    # Without the record there is nothing for certbot to validate against, and
+    # running it anyway is what used to end the deploy five minutes later.
+    - redstackpro_redirector_dns_ok
+
+- name: Point the redirector at the issued certificate
+  ansible.builtin.file:
+    src: "/etc/letsencrypt/live/{{ redstackpro_redirector_hostname }}/{{ item.live }}"
+    dest: "/etc/redstackpro/tls/{{ item.dest }}"
+    state: link
+    force: true
+  loop:
+    - { live: fullchain.pem, dest: redirector.crt }
+    - { live: privkey.pem, dest: redirector.key }
+  when:
+    - redstackpro_redirector_tls.cert_source == 'letsencrypt'
+    - redstackpro_redirector_hostname | length > 0
+    - redstackpro_redirector_dns_ok
+  notify: "Restart {{ redstackpro_redirector_server }}"
+
+# What the operator is left with when the record did not land in time. The
+# redirector is already serving on its bootstrap self signed certificate, so the
+# range works; what is missing is a publicly trusted certificate, and that is a
+# few minutes of the operator's time at their registrar plus one command here.
+#
+# The reminder is written down rather than only printed, because a line in a
+# deploy recap scrolls away and nobody reads it twice.
+# Installed on EVERY redirector, whatever it was built with. It is three jobs in
+# one command: finish issuance the deploy could not, renew a certificate that is
+# getting old, and move a redirector that was built self signed onto a real
+# certificate. The last one is why this is not gated on cert_source -- a person
+# who chose self signed at compile time and later bought a domain should not have
+# to redeploy the range to use it.
+- name: Install the certificate command
+  ansible.builtin.template:
+    src: rsp-issue-cert.j2
+    dest: /usr/local/sbin/rsp-issue-cert
+    mode: "0750"
+  when: redstackpro_redirector_hostname | length > 0
+
+- name: Leave the reminder where a login will find it
+  ansible.builtin.blockinfile:
+    path: /etc/motd
+    create: true
+    mode: "0644"
+    marker: "# {mark} REDSTACKPRO TLS"
+    # Removed once the certificate is issued, so a stale warning never outlives
+    # the problem it describes.
+    state: "{{ 'absent' if redstackpro_redirector_dns_ok else 'present' }}"
+    block: |
+      ============================================================
+      THIS REDIRECTOR HAS NO PUBLICLY TRUSTED CERTIFICATE YET.
+
+      Let's Encrypt could not be completed because
+        {{ redstackpro_redirector_hostname }}
+      did not resolve to
+        {{ redstackpro_redirector_pubip.stdout | default('this host') }}
+      within {{ ((redstackpro_redirector_dns_retries | int)
+                 * (redstackpro_redirector_dns_delay | int) / 60) | round | int }} minutes of the deploy.
+
+      The redirector is running on a self signed certificate, so the
+      range works. To finish:
+
+        1. At your registrar, create an A record
+             {{ redstackpro_redirector_hostname }} -> {{ redstackpro_redirector_pubip.stdout | default('this host') }}
+        2. Back on this host, run
+             sudo rsp-issue-cert
+
+      Re-running the deploy also works; it picks up where this left off.
+      ============================================================
+  when:
+    - redstackpro_redirector_tls.cert_source == 'letsencrypt'
+    - redstackpro_redirector_hostname | length > 0
+
+- name: ACTION STILL REQUIRED -- the certificate was not issued
+  ansible.builtin.debug:
+    msg: >-
+      {{ redstackpro_redirector_hostname }} did not resolve to
+      {{ redstackpro_redirector_pubip.stdout | default('this redirector') }} in time, so no
+      Let's Encrypt certificate was issued and this redirector is serving a SELF
+      SIGNED one. The range is up and usable. To finish: create the A record at
+      your registrar, then run 'sudo rsp-issue-cert' on this host, or simply
+      re-run the deploy.
+  when:
+    - redstackpro_redirector_tls.cert_source == 'letsencrypt'
+    - redstackpro_redirector_hostname | length > 0
+    - not redstackpro_redirector_dns_ok

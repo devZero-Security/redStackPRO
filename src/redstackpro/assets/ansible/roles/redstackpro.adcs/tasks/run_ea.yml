@@ -1,0 +1,44 @@
+---
+# Run a PowerShell command under a scheduled task logged on as the forest-root
+# Administrator, so it carries an Enterprise Admin token -- config-partition writes
+# (certificate templates, the CA's own AD objects) need it, and the play's WinRM
+# session (a member's local admin, or a network logon) does not have it. The caller
+# sets redstackpro_ea_taskname and redstackpro_ea_command; the command must write
+# its outcome (containing "planted" or "exists") to redstackpro_ea_outfile. This is
+# the same enterprise-admin trick the CA install uses. See goad-fidelity-build.
+
+- name: "Run an Enterprise-Admin scheduled task planter: {{ redstackpro_ea_taskname }}"
+  ansible.windows.win_powershell:
+    script: |
+      param($Ea, $Pass, $Cmd, $Out, $Task)
+      $ErrorActionPreference = "Stop"
+      Set-Content "C:\Windows\Temp\$Task.ps1" $Cmd
+      Remove-Item $Out -ErrorAction SilentlyContinue
+      $action = New-ScheduledTaskAction -Execute "powershell.exe" `
+        -Argument "-ExecutionPolicy Bypass -File C:\Windows\Temp\$Task.ps1"
+      Register-ScheduledTask -TaskName $Task -Action $action -User $Ea `
+        -Password $Pass -RunLevel Highest -Force | Out-Null
+      Start-ScheduledTask -TaskName $Task
+      # The planter redirects its output with *>, which creates the file EMPTY the
+      # instant the task starts -- so "the file exists" is not "the planter
+      # finished". Wait for the file to actually contain the planter's result
+      # (a longer ADSI planter can take many seconds to write it).
+      $o = $null
+      for ($i = 0; $i -lt 60; $i++) {
+        Start-Sleep -Seconds 6
+        if (Test-Path $Out) {
+          $c = Get-Content $Out -Raw
+          if ($c -and $c.Trim().Length -gt 0) { $o = $c.Trim(); break }
+        }
+      }
+      if ($null -eq $o) { throw "$Task did not finish in time" }
+      if ($o -notmatch "planted|exists") { throw "$Task failed: $o" }
+      [Ordered]@{ result = $o }
+    parameters:
+      Ea: "{{ redstackpro_adcs_enterprise_admin }}"
+      Pass: "{{ redstackpro_lab_password }}"
+      Cmd: "{{ redstackpro_ea_command }}"
+      Out: "{{ redstackpro_ea_outfile }}"
+      Task: "{{ redstackpro_ea_taskname }}"
+  register: redstackpro_ea_result
+  changed_when: "'planted' in (redstackpro_ea_result.output[0].result | default(''))"

@@ -1,0 +1,345 @@
+---
+# The teamserver is headless. The operator GUI client runs on an operator box,
+# so nothing here installs a desktop.
+- name: Install build dependencies
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - mingw-w64
+      - g++-mingw-w64
+      - libssl-dev
+      - make
+    state: present
+
+- name: Install Go
+  ansible.builtin.unarchive:
+    src: "https://go.dev/dl/go{{ redstackpro_adaptix_go_version }}.linux-amd64.tar.gz"
+    dest: /usr/local
+    remote_src: true
+    creates: /usr/local/go/bin/go
+  vars:
+    redstackpro_adaptix_go_version: "1.25.4"
+
+- name: Clone AdaptixC2
+  ansible.builtin.git:
+    repo: https://github.com/Adaptix-Framework/AdaptixC2.git
+    dest: "{{ redstackpro_teamserver_root }}/AdaptixC2"
+    version: "{{ redstackpro_teamserver_version | default('HEAD', true) }}"
+    # Clone once and leave it: the build writes artifacts into the tree, so a
+    # later run must not try to pull over a now-dirty checkout, which fails.
+    update: false
+
+- name: Build the server and extenders
+  # AdaptixC2 compiles seven Go extenders; a module fetch for one of them
+  # occasionally hangs (0% CPU, blocked on the network), which would otherwise
+  # wedge the whole deploy until the global task timeout. Bound each build with
+  # `timeout` and retry: the Go build cache persists, so a retry recompiles the
+  # finished plugins from cache and gets another shot at the fetch that stalled.
+  ansible.builtin.command:
+    cmd: timeout -k 30 900 make server-ext
+    chdir: "{{ redstackpro_teamserver_root }}/AdaptixC2"
+  environment:
+    PATH: "/usr/local/go/bin:{{ ansible_env.PATH }}"
+    GOPATH: /root/go
+    GOCACHE: /root/.cache/go-build
+  register: redstackpro_adaptix_build
+  changed_when: redstackpro_adaptix_build.rc == 0
+  retries: 3
+  delay: 15
+  until: redstackpro_adaptix_build.rc == 0
+
+# AdaptixC2's shipped profile carries the upstream sample credentials: password
+# "pass", plus operator1/pass1 and operator2/pass2, all of them published in a
+# public repository. Nothing an ops stack provisioned could reach the real
+# credential until the lab password was plumbed into this mode, so every range
+# stood its Adaptix teamserver up on a password anyone can read.
+#
+# Put the operator's own password in, the one terraform already calls the shared
+# password for the admin account, the Windows operator and the portal, so the
+# whole stack is one credential the operator can change after first login. The
+# three credential lines are edited in place rather than templating all fifty,
+# because the rest of the profile is upstream's and a version that moves things
+# around should not silently revert these to the sample values.
+- name: Put the operator's own password on the teamserver
+  ansible.builtin.replace:
+    path: "{{ redstackpro_teamserver_root }}/AdaptixC2/dist/profile.yaml"
+    regexp: '^(\s+{{ item }}: )".*"$'
+    replace: '\1"{{ redstackpro_lab_password }}"'
+  loop:
+    - password
+    - operator1
+    - operator2
+  no_log: true
+  when: redstackpro_lab_password | default("") | length > 0
+  notify: Restart adaptix
+
+- name: Generate the teamserver certificate
+  ansible.builtin.command:
+    cmd: >
+      openssl req -x509 -newkey rsa:2048 -nodes
+      -keyout server.rsa.key -out server.rsa.crt -days 3650 -subj "/CN=adaptix"
+    chdir: "{{ redstackpro_teamserver_root }}/AdaptixC2/dist"
+    creates: "{{ redstackpro_teamserver_root }}/AdaptixC2/dist/server.rsa.crt"
+
+# Everything above is built and written by root, but the unit runs as the
+# teamserver user, and that user then cannot do two things it must: create
+# dist/data, which the server makes at startup, and read server.rsa.key, which
+# openssl leaves 0600 root. Adaptix treats both as fatal and exits 0, so systemd
+# logs a clean start, Restart=on-failure never fires because nothing failed, the
+# service task reports ok, and the deploy ends RUN EXITED ok=1 with no C2
+# running anywhere. Hand the directory to the user that has to live in it.
+# This is the defect the Sliver listener had, in a different role.
+- name: Let the teamserver user own the directory it runs in
+  ansible.builtin.file:
+    path: "{{ redstackpro_teamserver_root }}/AdaptixC2/dist"
+    state: directory
+    owner: "{{ redstackpro_teamserver_user }}"
+    recurse: true
+
+# The server creates dist/data itself at startup, which is what the comment
+# above describes -- but it does NOT create dist/data/listener, and starting a
+# listener does a single mkdir of data/listener/<name> rather than a recursive
+# one. So the mkdir fails on the missing parent, with "no such file or
+# directory" naming the child, and every HTTP listener this role creates fails
+# to bind:
+#
+#   Started listener 'redstackpro-http': https://0.0.0.0:443
+#   [-] Listener redstackpro-http created but failed to start: failed to create
+#       .../dist/data/listener/redstackpro-http: no such file or directory
+#
+# The teamserver stays up and healthy on the operator port throughout, so
+# nothing looks wrong until a beacon tries to call home and the fronts edge
+# answers 502. Found on the first live deploy that checked the bound port
+# rather than the API's answer; the "Confirm the listener is really bound"
+# task below is what caught it, doing exactly the job its comment claims.
+- name: Make the directory a listener writes its state into
+  ansible.builtin.file:
+    path: "{{ redstackpro_teamserver_root }}/AdaptixC2/dist/data/listener"
+    state: directory
+    owner: "{{ redstackpro_teamserver_user }}"
+    group: "{{ redstackpro_teamserver_user }}"
+    mode: "0755"
+
+- name: Install the teamserver unit
+  ansible.builtin.template:
+    src: adaptix.service.j2
+    dest: /etc/systemd/system/adaptix.service
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Start the teamserver
+  ansible.builtin.service:
+    name: adaptix
+    state: started
+    enabled: true
+
+# A start that exits 0 is indistinguishable from a start that worked, so asking
+# systemd proves nothing here. The port is the only honest evidence, and without
+# this check a dead teamserver ships as a successful deploy, which is how this
+# was missed until someone went looking on the box.
+- name: Confirm the teamserver is really listening
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ redstackpro_adaptix_teamserver_port }}"
+    timeout: 60
+
+# Adaptix records who did what ONLY in its database. Its logger is fmt.Printf to
+# stdout, and that stream carries startup lines and errors: no operator, no agent
+# id, nothing the collector can attribute. Its internal event bus would be the
+# tidy way in, but the bus has no sink and the server-side scripting hooks are
+# no-ops, so reading the database is the only route that is not a Go patch.
+#
+# A timer rather than a service, because this is a poll of a file that is only
+# occasionally written and a crashed long-running reader is a silence nobody
+# notices.
+- name: Install the Adaptix task exporter
+  ansible.builtin.copy:
+    src: rsp-adaptix-export.py
+    dest: /usr/local/bin/rsp-adaptix-export
+    mode: "0755"
+  when: redstackpro_teamserver_adaptix_export | bool
+
+- name: Install the exporter unit and timer
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item.name }}"
+    mode: "0644"
+    content: "{{ item.body }}"
+  loop:
+    - name: rsp-adaptix-export.service
+      body: |
+        [Unit]
+        Description=Export AdaptixC2 task history for the log shipper
+        After=adaptix.service
+
+        [Service]
+        Type=oneshot
+        # root, because the database belongs to the teamserver user and is
+        # opened read only. See the tool's own note on why it never writes.
+        ExecStart=/usr/local/bin/rsp-adaptix-export \
+          --db {{ redstackpro_teamserver_root }}/AdaptixC2/dist/data/adaptixserver.db \
+          --out /var/log/redstackpro/adaptix-tasks.jsonl \
+          --state /var/lib/redstackpro/adaptix-export.state \
+          --node {{ redstackpro_node_id | default('') }}
+    - name: rsp-adaptix-export.timer
+      body: |
+        [Unit]
+        Description=Poll AdaptixC2 task history
+
+        [Timer]
+        OnBootSec=60
+        OnUnitActiveSec=30
+        AccuracySec=5
+
+        [Install]
+        WantedBy=timers.target
+  loop_control:
+    label: "{{ item.name }}"
+  notify: Reload systemd
+  when: redstackpro_teamserver_adaptix_export | bool
+
+- name: Make the exporter's directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0750"
+  loop:
+    - /var/log/redstackpro
+    - /var/lib/redstackpro
+  when: redstackpro_teamserver_adaptix_export | bool
+
+- name: Start the exporter timer
+  ansible.builtin.systemd:
+    name: rsp-adaptix-export.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: redstackpro_teamserver_adaptix_export | bool
+
+# Sliver and Mythic both bind a C2 listener at provision time. Adaptix does not:
+# 4321 is the OPERATOR port, and beacon listeners are made by hand in the GUI
+# client. So a fronts edge pointing here proxied to a port nothing was listening
+# on and returned 502, on a range that had just reported RUN EXITED ok=1. The
+# topology said there was a chain and there was not.
+#
+# Create the listener the way the client would. Only when the topology actually
+# fronts this teamserver: without an edge there is no prefix to serve and no
+# redirector name to call back to.
+- name: Create the C2 listener a fronts edge promises
+  when:
+    - uri_prefix | default("") | length > 0
+    - (redirector_callbacks | default([])) | length > 0
+  block:
+    # Built with a loop rather than a chain of filters: this role cannot be
+    # render tested offline, so a construct that reads plainly and works on any
+    # Jinja is worth more here than a clever one line expression.
+    - name: List every front door a beacon may call
+      ansible.builtin.set_fact:
+        _adx_callbacks: "{{ (_adx_callbacks | default([]))
+                            + [item.hostname ~ ':' ~ (item.port | default(443))] }}"
+      loop: "{{ redirector_callbacks }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Sign in to the teamserver API
+      # only_password is set in the profile, so the username is not checked; it
+      # is sent because the endpoint requires the field.
+      ansible.builtin.uri:
+        url: "{{ _adx_api }}/login"
+        method: POST
+        body_format: json
+        body:
+          username: operator1
+          password: "{{ redstackpro_lab_password }}"
+        validate_certs: false
+      register: redstackpro_adaptix_login
+      no_log: true
+
+    - name: Read the listeners it already has
+      ansible.builtin.uri:
+        url: "{{ _adx_api }}/listener/list"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ redstackpro_adaptix_login.json.access_token }}"
+        validate_certs: false
+      register: redstackpro_adaptix_listeners
+      no_log: true
+
+    - name: Start the HTTP beacon listener
+      # The field names are name/type/config, LOWERCASE, and that is not cosmetic.
+      # The teamserver binds this body with gin's ShouldBindJSON into
+      #
+      #   type ListenerConfig struct {
+      #       ListenerName string `json:"name"`
+      #       ConfigType   string `json:"type"`
+      #       Config       string `json:"config"`
+      #   }
+      #
+      # (AdaptixServer/core/connector/tc_listeners.go). Send the Go field names
+      # instead and gin binds NOTHING: every field stays empty, the very next
+      # line runs ValidListenerName("") against ^[a-zA-Z0-9-_]+$, the + fails on
+      # an empty string, and the API answers {"message":"Invalid listener name"}.
+      #
+      # That message is true and reads like a category error, which is how it
+      # cost an afternoon of probing the running server: every name spelling
+      # failed, every ConfigType failed, the config shape made no difference, and
+      # rebuilding the extenders and restarting the teamserver changed nothing --
+      # because none of it was ever arriving. Read the handler, not the error.
+      #
+      # Three more validators bite once the body does arrive, none documented: a
+      # callback address is host:port and NOT a url; the uri regex forbids a
+      # trailing slash; and page-payload must carry the literal
+      # <<<PAYLOAD_DATA>>> marker, which is where a staged payload is substituted.
+      ansible.builtin.uri:
+        url: "{{ _adx_api }}/listener/create"
+        method: POST
+        body_format: json
+        body:
+          name: "{{ redstackpro_adaptix_listener_name }}"
+          type: BeaconHTTP
+          # Config is a Go string, so the transport config travels as JSON TEXT
+          # rather than as a nested object.
+          config: "{{ _adx_listener_config | to_json }}"
+        headers:
+          Authorization: "Bearer {{ redstackpro_adaptix_login.json.access_token }}"
+        validate_certs: false
+      register: redstackpro_adaptix_created
+      changed_when: redstackpro_adaptix_created.json.ok | default(false)
+      failed_when:
+        - not (redstackpro_adaptix_created.json.ok | default(false))
+        - "'exist' not in (redstackpro_adaptix_created.json.message | default(''))"
+      when: redstackpro_adaptix_listener_name not in
+            (redstackpro_adaptix_listeners.content | default(""))
+
+    - name: Confirm the listener is really bound, not merely accepted
+      # The teamserver answers ok:true before the port is up, and a listener that
+      # failed to bind leaves the same 502 this task exists to prevent.
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ redstackpro_adaptix_listener_port }}"
+        timeout: 30
+  vars:
+    _adx_api: "https://127.0.0.1:{{ redstackpro_adaptix_teamserver_port }}/endpoint"
+    _adx_listener_config:
+      host_bind: "{{ redstackpro_teamserver_bind }}"
+      port_bind: "{{ redstackpro_adaptix_listener_port | int }}"
+      callback_addresses: "{{ _adx_callbacks }}"
+      encrypt_key: "{{ lookup('ansible.builtin.password',
+                              '/dev/null length=32 chars=hexdigits') | lower }}"
+      ssl: true
+      ssl_cert_path: ""
+      ssl_key_path: ""
+      http_method: POST
+      uri:
+        - "{{ uri_prefix | regex_replace('/$', '') }}"
+      hb_header: X-Beacon-Id
+      user_agent:
+        - "{{ redstackpro_adaptix_listener_user_agent }}"
+      host_header: []
+      request_headers: ""
+      response_headers:
+        Server: nginx
+      x-forwarded-for: true
+      page-error: ""
+      page-payload: "<<<PAYLOAD_DATA>>>"
+      server_headers: ""
+      protocol: http

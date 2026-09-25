@@ -1,0 +1,13 @@
+---
+redstackpro_mssql_edition: "express"   # express | developer (developer = full edition for a MECM site DB)
+redstackpro_mssql_instance: "SQLEXPRESS"
+# Administrator@<domain>: the install runs under a scheduled task as this account
+# so SQL setup has a loaded user profile (it fails over a bare WinRM logon).
+redstackpro_mssql_domain_admin: ""
+redstackpro_mssql_vulns: []           # mssql_impersonation / mssql_linked flags from the host
+redstackpro_mssql_linked_targets: []  # other SQL hosts to add as linked servers
+redstackpro_mssql_linked_logins: []   # {target,remote_user,remote_password?} outbound link login (not self)
+redstackpro_mssql_sysadmins: []      # extra domain accounts made sysadmin (SCCM site DB)
+redstackpro_mssql_execas_logins: []   # {login,target} login-level EXECUTE AS
+redstackpro_mssql_execas_users: []    # {user,db,impersonate} db-level EXECUTE AS
+redstackpro_mssql_domain_users_group: "Domain Users"  # caller scopes it to the domain

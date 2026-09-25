@@ -1,0 +1,54 @@
+---
+# IIS web-shell foothold: the upload folder of the web member's application is
+# writable by the worker identity AND allowed to execute scripts, so a file dropped
+# through the upload form runs as the application pool. That is GOAD's web-access
+# foothold and the start of mayfly's part 8, which ends on SeImpersonatePrivilege
+# and a potato to SYSTEM (a property of the pool identity, nothing to plant).
+#
+# IIS itself, the upload application, and a plain write grant come from the
+# redstackpro.iis role, which the srv role runs when the host declares the iis
+# service. This file adds only what turns that into an exploitable path, so a host
+# can serve uploads without being exploitable. See goad-fidelity-build (F-iis-webshell).
+#
+# Path scalars are SINGLE-quoted so the loader leaves backslashes for Jinja; see
+# files.yml for the fuller note on that trap.
+
+- name: Resolve the upload folder
+  ansible.builtin.set_fact:
+    redstackpro_webshell_dir: '{{ (redstackpro_host_vulns_vars.iis_webshell | default({})).path | default("C:\\inetpub\\wwwroot\\upload") }}'
+
+- name: Ensure the upload folder exists
+  ansible.windows.win_file:
+    path: "{{ redstackpro_webshell_dir }}"
+    state: directory
+
+# FullControl rather than the role's Write: the operator needs to overwrite and
+# delete a shell while iterating, which a plain write grant does not allow.
+- name: Grant the worker identity full control of the upload folder
+  ansible.windows.win_acl:
+    path: "{{ redstackpro_webshell_dir }}"
+    user: "{{ (redstackpro_host_vulns_vars.iis_webshell | default({})).user | default('IIS_IUSRS') }}"
+    rights: FullControl
+    type: allow
+    inherit: ContainerInherit, ObjectInherit
+    state: present
+
+# A write-only upload folder is not a foothold: the drop has to execute. IIS
+# inherits "Scripts" execution from the site by default, but a hardened baseline or
+# a folder added as its own application can end up None, so set it explicitly.
+- name: Allow script execution in the upload folder
+  ansible.windows.win_shell: |
+    Import-Module WebAdministration
+    $path = 'Default Web Site/{{ redstackpro_webshell_dir | basename }}'
+    $current = (Get-WebConfiguration -Filter '//handlers' -PSPath "IIS:\Sites\$path" `
+                -ErrorAction SilentlyContinue).accessPolicy
+    if ($current -ne 'Read, Script') {
+      Set-WebConfigurationProperty -PSPath "IIS:\Sites\$path" -Filter '//handlers' `
+        -Name 'accessPolicy' -Value 'Read, Script' -ErrorAction SilentlyContinue
+      Write-Output 'set'
+    } else {
+      Write-Output 'present'
+    }
+  register: redstackpro_webshell_exec
+  changed_when: "'set' in redstackpro_webshell_exec.stdout"
+  failed_when: false

@@ -1,0 +1,18 @@
+kind: domain
+abbrev: dom
+category: container
+description: An Active Directory domain. Hosts join it; domains trust each other.
+
+display:
+  label: Domain
+  blurb: AD domain
+  icon: tabler/outline/sitemap
+  group: domains
+  color: "#364fc7"
+
+modes:
+  - range
+
+derived: []
+
+requirements: []

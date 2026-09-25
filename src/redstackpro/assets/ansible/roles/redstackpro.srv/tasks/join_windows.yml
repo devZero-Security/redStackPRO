@@ -1,0 +1,91 @@
+---
+# A Windows member server: point DNS at its domain controller, then join over
+# WinRM. The join reboots and retries because the controller may still be
+# finishing its own provisioning under the free strategy.
+
+- name: Point DNS at the domain controller
+  ansible.windows.win_dns_client:
+    adapter_names: '*'
+    dns_servers:
+      - "{{ redstackpro_join_dc_address }}"
+
+- name: Join the domain
+  microsoft.ad.membership:
+    dns_domain_name: "{{ redstackpro_join_fqdn }}"
+    hostname: "{{ redstackpro_srv_hostname | default(omit) }}"
+    domain_admin_user: "Administrator@{{ redstackpro_join_fqdn }}"
+    domain_admin_password: "{{ redstackpro_lab_password }}"
+    state: domain
+    reboot: true
+  register: redstackpro_join
+  until: redstackpro_join is succeeded
+  retries: 20
+  delay: 30
+
+# The module's own reboot returns as soon as WinRM answers again, but a freshly
+# joined box drops it a second time while services and policy settle, so the very
+# next task dies on RemoteDisconnected. Seen live on dracarys' vhagar and on
+# minilab's workstation, where it burned a whole site.yml attempt each time. The dc
+# role already waits like this after its promotion reboot.
+- name: Wait for the connection to settle after the domain join
+  ansible.builtin.wait_for_connection:
+    delay: 20
+    sleep: 10
+    timeout: 600
+  # noqa: no-handler - a handler runs at the end of the play, which is exactly too
+  # late: the point is to settle the connection before the NEXT task runs.
+  when: redstackpro_join is changed
+
+# A domain member should answer SMB (peer enumeration, shares, relay surface).
+# Some base images ship with File and Printer Sharing disabled, so an Exchange-
+# or plain member that never runs the MSSQL role would silently drop 445 even
+# though the service is listening. Enable the inbound SMB rule on every Windows
+# member so reachability does not depend on which service role it happens to run.
+- name: Ensure SMB is reachable (File and Printer Sharing inbound)
+  ansible.windows.win_powershell:
+    script: Enable-NetFirewallRule -DisplayGroup 'File and Printer Sharing'
+  changed_when: true
+
+# Domain users the compiler flagged privilege: local_admin become members of this
+# member's local Administrators group (dracarys puts rhaegal in vhagar's admins so
+# the keepass_bot can log on and run there over CredSSP). Runs after the join, when
+# the domain principals resolve. Idempotent and tolerant of a not-yet-replicated
+# principal on the first pass; the free-strategy retry covers a transient miss.
+- name: Add flagged domain users to local Administrators
+  ansible.windows.win_powershell:
+    parameters:
+      Admins: "{{ redstackpro_srv_local_admins | default([]) }}"
+    script: |
+      param($Admins)
+      $ErrorActionPreference = 'Stop'
+      foreach ($a in $Admins) {
+        try { Add-LocalGroupMember -Group 'Administrators' -Member $a -ErrorAction Stop }
+        catch { if ($_ -notmatch 'already a member') { Write-Warning "$a : $_" } }
+      }
+  changed_when: true
+  when: (redstackpro_srv_local_admins | default([])) | length > 0
+
+# This host is patient zero's landing spot: the one Windows member in its domain
+# whose portal tile signs in AS the assumed-breach user, so a beacon launched
+# from the portal starts in the right context. A Domain Users member has no
+# interactive remote logon right anywhere by default, so the tile would fail the
+# logon without this. Remote Desktop Users only -- p0 stays low-priv here, which
+# is the whole premise of the solution. See range-access-model.
+- name: Let patient zero sign in over RDP
+  ansible.windows.win_powershell:
+    parameters:
+      Users: "{{ redstackpro_srv_rdp_users | default([]) }}"
+    script: |
+      param($Users)
+      $ErrorActionPreference = 'Stop'
+      foreach ($u in $Users) {
+        try { Add-LocalGroupMember -Group 'Remote Desktop Users' -Member $u -ErrorAction Stop }
+        catch { if ($_ -notmatch 'already a member') { Write-Warning "$u : $_" } }
+      }
+  changed_when: true
+  when: (redstackpro_srv_rdp_users | default([])) | length > 0
+
+# A member that runs Exchange (GOAD's the-eyrie) installs it after the join.
+- name: Install Exchange
+  ansible.builtin.include_tasks: exchange.yml
+  when: "'exchange' in (redstackpro_srv_services | default([]))"

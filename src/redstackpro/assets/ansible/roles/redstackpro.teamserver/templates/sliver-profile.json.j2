@@ -1,0 +1,38 @@
+{
+  "implant_config": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "chrome_base_version": 120,
+    "nonce_query_args": "abcdefghijklmnopqrstuvwxyz",
+    "url_parameters": null,
+    "headers": [
+      {
+        "name": "{{ gating_header_name }}",
+        "value": "{{ gating_header_value }}",
+        "probability": 100
+      }
+    ],
+    "nonce_query_length": 1,
+    "nonce_mode": "UrlParam",
+    "max_files": 4,
+    "min_files": 2,
+    "max_paths": 4,
+    "min_paths": 2,
+    "max_path_length": 4,
+    "min_path_length": 2,
+    "extensions": ["js", "", "php"],
+    "files": ["jquery.min", "bootstrap", "app", "main", "index", "script"],
+    "paths": ["js", "assets", "scripts", "static", "dist"]
+  },
+  "server_config": {
+    "random_version_headers": false,
+    "headers": [
+      {
+        "name": "Cache-Control",
+        "value": "no-store, no-cache, must-revalidate",
+        "probability": 100,
+        "method": "GET"
+      }
+    ],
+    "cookies": ["PHPSESSID"]
+  }
+}

@@ -1,0 +1,98 @@
+# {{ ansible_managed }}
+# Push over TCP with TLS. The collector accepts this port from exactly the hosts
+# with a logs_to edge, so nothing else on the segment can reach it.
+#
+# One input per LOG CLASS rather than one list of paths, because the collector
+# routes on the class and the three classes answer different questions:
+#
+#   redirtraffic  who touched the front door, and did they have the key
+#   auth          who logged in to the operator's own infrastructure
+#   c2            what the teamservers did
+#
+# Every input ships on every host and simply finds nothing where a class does not
+# apply -- a redirector has no teamserver log, a teamserver has no access log.
+# That is deliberate: a path list that had to be right per host kind is a thing
+# that goes wrong silently when a canvas puts a role somewhere new.
+#
+# c2 is the one class whose sources do NOT share a format: sliver writes logrus
+# JSON, mythic prints its own shape into a container, adaptix writes to the
+# journal, cobalt strike writes dated text files. The pipeline therefore cannot
+# route on the class alone, so each c2 input also stamps WHICH product it came
+# from and WHICH of that product's streams it is. That is recorded here, at the
+# one place that knows it for certain, rather than guessed at the collector from
+# the shape of a line.
+#
+# The input id is explicit for the same reason it matters operationally:
+# filebeat's filestream registry is keyed on it, so renaming an id makes filebeat
+# treat the files as new and re-ship them from the start. Add ids, do not rename
+# them.
+
+filebeat.inputs:
+{% for cls in redstackpro_shipper_classes %}
+  - type: filestream
+    id: redstackpro-{{ cls.id | default(cls.name) }}
+    enabled: true
+    paths:
+{% for path in cls.paths %}
+      - {{ path }}
+{% endfor %}
+{% if cls.multiline_pattern is defined %}
+    # A record here spans lines, so the default one-line-one-event would arrive
+    # as a first line plus orphan fragments with no timestamp and no type.
+    # Anything that does NOT start a new record is appended to the one before it.
+    parsers:
+      - multiline:
+          type: pattern
+          pattern: '{{ cls.multiline_pattern }}'
+          negate: true
+          match: after
+{% endif %}
+    fields:
+      redstackpro_log_type: {{ cls.name }}
+{% if cls.product is defined %}
+      redstackpro_c2_product: {{ cls.product }}
+{% endif %}
+{% if cls.stream is defined %}
+      redstackpro_c2_stream: {{ cls.stream }}
+{% endif %}
+    fields_under_root: false
+{% endfor %}
+
+# Not every source is a file. Checked on live teamservers and the jumpbox rather
+# than assumed: sliver writes files, adaptix logs only to the journal, and both
+# Mythic and Guacamole run in containers whose output docker forwards there. A
+# path list alone would collect one C2 of three, no portal logins at all, and
+# look complete.
+#
+# One input per class AND per match field, because journald semantics are not
+# obvious: matches on the SAME field are OR'd, matches on DIFFERENT fields are
+# AND'd. Mixing _SYSTEMD_UNIT and CONTAINER_NAME in one input would ask for
+# entries that are both, which is nothing at all.
+{% for j in redstackpro_shipper_journals %}
+  - type: journald
+    id: redstackpro-{{ j.id }}
+    enabled: true
+    include_matches.match:
+{% for m in j.matches %}
+      - "{{ m }}"
+{% endfor %}
+    fields:
+      redstackpro_log_type: {{ j.name }}
+{% if j.product is defined %}
+      redstackpro_c2_product: {{ j.product }}
+{% endif %}
+{% if j.stream is defined %}
+      redstackpro_c2_stream: {{ j.stream }}
+{% endif %}
+    fields_under_root: false
+{% endfor %}
+fields:
+  redstackpro_node_id: "{{ redstackpro_node_id }}"
+  redstackpro_kind: "{{ redstackpro_kind }}"
+
+output.logstash:
+  hosts: ["{{ redstackpro_shipper_sink }}:{{ redstackpro_shipper_port }}"]
+  ssl.enabled: {{ redstackpro_shipper_tls | bool | lower }}
+{% if redstackpro_shipper_tls | bool %}
+  ssl.certificate_authorities: ["{{ redstackpro_shipper_ca_path }}"]
+{% endif %}

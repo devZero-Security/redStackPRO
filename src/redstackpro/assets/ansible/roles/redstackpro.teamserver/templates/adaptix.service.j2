@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+[Unit]
+Description=AdaptixC2 Teamserver
+After=network.target
+
+[Service]
+Type=simple
+User={{ redstackpro_teamserver_user }}
+WorkingDirectory={{ redstackpro_teamserver_root }}/AdaptixC2/dist
+ExecStart={{ redstackpro_teamserver_root }}/AdaptixC2/dist/adaptixserver -profile profile.yaml
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

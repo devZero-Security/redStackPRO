@@ -1,0 +1,23 @@
+kind: appliance
+abbrev: appl
+category: host
+ansible_group: appliances
+description: Standalone Linux box on a range that is not a domain member, e.g. a Guacamole access host or an enrolled Linux computer.
+
+display:
+  label: Appliance
+  blurb: Standalone Linux box
+  icon: tabler/outline/box
+  group: hosts
+  color: "#868e96"
+
+modes:
+  - range
+
+derived:
+  - name: private_address
+    source: provider
+
+requirements:
+  - name: compute
+  - name: linux_image

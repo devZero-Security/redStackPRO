@@ -1,0 +1,100 @@
+---
+# The pinned offensive Python toolchain, installed with pipx so each tool keeps
+# its own impacket. Coercer pins impacket < 0.11 and Certipy pulls 0.13+, so a
+# single shared environment cannot satisfy both; pipx gives each its own. This is
+# the coherent, reproducible resolution of the version trap called out in PZ-2.
+# Runs for the operator account so the tools are on its PATH. See goad-fidelity-build.
+
+- name: Ensure pipx paths are set up for the operator
+  become: true
+  become_user: "{{ redstackpro_operator_user }}"
+  ansible.builtin.command: pipx ensurepath
+  environment:
+    PIPX_HOME: "/home/{{ redstackpro_operator_user }}/.local/pipx"
+    PIPX_BIN_DIR: "/home/{{ redstackpro_operator_user }}/.local/bin"
+  changed_when: false
+
+- name: Install each offensive tool in its own pipx environment
+  become: true
+  become_user: "{{ redstackpro_operator_user }}"
+  ansible.builtin.command:
+    cmd: "pipx install --force {{ item.name }}"
+  environment:
+    PIPX_HOME: "/home/{{ redstackpro_operator_user }}/.local/pipx"
+    PIPX_BIN_DIR: "/home/{{ redstackpro_operator_user }}/.local/bin"
+  loop: "{{ redstackpro_operator_pipx_tools }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: redstackpro_pipx_install
+  changed_when: "'installed package' in (redstackpro_pipx_install.stdout | default(''))"
+  # A fresh Kali may already ship some of these; --force makes the install
+  # idempotent and authoritative rather than failing on an existing entry.
+
+- name: Inject companion packages a tool needs into its environment
+  become: true
+  become_user: "{{ redstackpro_operator_user }}"
+  ansible.builtin.command:
+    cmd: "pipx inject {{ item.0.name }} {{ item.1 }}"
+  environment:
+    PIPX_HOME: "/home/{{ redstackpro_operator_user }}/.local/pipx"
+    PIPX_BIN_DIR: "/home/{{ redstackpro_operator_user }}/.local/bin"
+  loop: "{{ redstackpro_operator_pipx_tools | subelements('inject', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.name }} <- {{ item.1 }}"
+  changed_when: true
+
+- name: Clone the extra offensive repos into the operator root
+  become: true
+  become_user: "{{ redstackpro_operator_user }}"
+  ansible.builtin.git:
+    repo: "{{ item.repo }}"
+    dest: "{{ redstackpro_operator_root }}/{{ item.dest }}"
+    version: "{{ item.version | default('HEAD') }}"
+    depth: 1
+    update: false
+  loop: "{{ redstackpro_operator_git_tools }}"
+  loop_control:
+    label: "{{ item.dest }}"
+
+# RUN each tool, because installing one and being able to use one are different
+# facts and only the second is worth anything to an operator.
+#
+# This role had no verification at all, which is how a completely dead certipy
+# sat on the jumpbox for months: installed, on PATH, and raising
+# ModuleNotFoundError before it did anything (certipy 4.8.2 imports
+# pkg_resources; setuptools removed it in v81). The jumpbox at least stat'd the
+# binary. Here nothing asked any question.
+#
+# Every one of these is a python entry point in its own venv resolving its own
+# dependency tree, so an import error is both the likeliest breakage and the one
+# no install-time exit code reveals.
+- name: Verify each pipx tool actually runs
+  become: true
+  become_user: "{{ redstackpro_operator_user }}"
+  ansible.builtin.command:
+    cmd: "{{ item.binary | default(item.name) }} --help"
+  environment:
+    PATH: "/home/{{ redstackpro_operator_user }}/.local/bin:{{ ansible_env.PATH }}"
+  loop: "{{ redstackpro_operator_pipx_tools }}"
+  loop_control:
+    label: "{{ item.binary | default(item.name) }}"
+  register: redstackpro_operator_tool_runs
+  changed_when: false
+  # Every failure in one pass, rather than one per deploy.
+  failed_when: false
+
+- name: Fail loudly when an operator tool cannot run
+  ansible.builtin.assert:
+    that: >-
+      {{ redstackpro_operator_tool_runs.results
+         | selectattr('rc', 'ne', 0)
+         | selectattr('stderr', 'search', '(Traceback|ModuleNotFoundError|ImportError|command not found)')
+         | list | length == 0 }}
+    fail_msg: >-
+      The operator box cannot run {{ redstackpro_operator_tool_runs.results
+        | selectattr('rc', 'ne', 0)
+        | selectattr('stderr', 'search', '(Traceback|ModuleNotFoundError|ImportError|command not found)')
+        | map(attribute='item.name') | join(', ') }}.
+      Installed and on PATH is not the same as usable, and an engagement step
+      should not be what discovers the difference.
+    success_msg: every operator tool starts

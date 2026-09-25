@@ -1,0 +1,36 @@
+{{ ansible_managed | comment }}
+{#
+  Build the exemption list with plain operators only -- no filter that needs a
+  particular Jinja or Ansible version. This renders on the range's only entry
+  point, so a template that fails to parse costs access to everything.
+#}
+{% set _scoped = [] %}
+{% for _r in (redstackpro_operator_source_ranges | default('')).split(',') %}
+{#   An unfilled terraform placeholder is not an address. It would sail into
+     ignoreip as garbage and leave fail2ban unable to parse its own jail, on the
+     host that is the only way back in. Drop it and keep the jail valid.
+     Match on the opening angle brackets alone, and do not spell the full token
+     prefix anywhere in this file: deploy.sh greps the whole ansible tree for
+     that exact string to decide whether substitution finished, so naming it
+     here would abort every deploy. Found by a deploy doing exactly that. #}
+{%   if _r | trim and '<<' not in _r
+        and _r | trim not in redstackpro_jumpbox_fail2ban_world_ranges %}
+{%     set _ = _scoped.append(_r | trim) %}
+{%   endif %}
+{% endfor %}
+[sshd]
+enabled = true
+backend = systemd
+maxretry = {{ redstackpro_jumpbox_fail2ban_maxretry }}
+bantime = {{ redstackpro_jumpbox_fail2ban_bantime }}
+findtime = 600
+{% if _scoped %}
+# The operator's declared source ranges, so their own tooling cannot ban them
+# out of the only way into the range. World open ranges are filtered out on
+# purpose: exempting 0.0.0.0/0 would leave this jail enabled and doing nothing.
+ignoreip = 127.0.0.1/8 ::1 {{ _scoped | join(' ') }}
+{% else %}
+# No ignoreip: the operator's ranges are world open (or unset), and exempting
+# the whole internet would make this jail a silent no-op. Narrow
+# operator_source_ranges in terraform.tfvars to earn an exemption.
+{% endif %}

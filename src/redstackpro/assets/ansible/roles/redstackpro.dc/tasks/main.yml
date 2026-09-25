@@ -1,0 +1,231 @@
+---
+# redStackPRO domain controller. Clean-room MIT: this stands up a forest root
+# or a child domain from the range's own schema, then populates the directory
+# with the groups and users the canvas defined. It does not vendor or derive
+# from GOAD's roles. GOAD is the fidelity benchmark; redStackPRO is the engine,
+# and these labs are recreated natively on the canvas, not imported or wrapped.
+# See goad-native-recreation.
+
+- name: Load the domain definition
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/{{ redstackpro_domain_vars }}"
+    name: redstackpro_domain
+
+- name: Read the current domain role of this host
+  ansible.windows.win_powershell:
+    script: |
+      [Ordered]@{ role = (Get-CimInstance Win32_ComputerSystem).DomainRole }
+  register: redstackpro_dc_state
+  changed_when: false
+
+# DomainRole 4 (backup DC) or 5 (primary DC) means this host is already a
+# controller. Promotion is then skipped, so the play is safe to re-run.
+- name: Note whether this host is already a controller
+  ansible.builtin.set_fact:
+    redstackpro_dc_promoted: "{{ redstackpro_dc_state.output[0].role | int >= 4 }}"
+
+- name: Rename the host before promotion
+  ansible.windows.win_hostname:
+    name: "{{ redstackpro_dc_hostname }}"
+  register: redstackpro_dc_rename
+  when: not redstackpro_dc_promoted
+
+- name: Reboot after the rename
+  ansible.windows.win_reboot:
+  when:
+    - not redstackpro_dc_promoted
+    - redstackpro_dc_rename.reboot_required | default(false)
+
+# Promotion is provider-specific so a fix proven on one cloud cannot regress
+# another. The default path (microsoft.ad.domain for a forest root,
+# Install-ADDSDomain for a child) is what AWS proved. GCP tears its WinRM
+# runspace down mid-promote, so it hands the promotion to a SYSTEM scheduled task
+# instead. Both branch on redstackpro_platform; neither shares code with the
+# other. See goad-native-recreation and redstackpro_platform.
+- name: Promote this host with the default (AWS-proven) path
+  ansible.builtin.include_tasks: promote_default.yml
+  when:
+    - not redstackpro_dc_promoted
+    - redstackpro_platform != 'gcp'
+
+- name: Promote this host with the GCP scheduled-task path
+  ansible.builtin.include_tasks: promote_gcp.yml
+  when:
+    - not redstackpro_dc_promoted
+    - redstackpro_platform == 'gcp'
+
+# After promotion the local Administrator becomes the domain Administrator with
+# the same password, so the rest of the play authenticates as the domain account.
+- name: Authenticate as the domain administrator
+  ansible.builtin.set_fact:
+    ansible_user: "{{ redstackpro_domain.domain_netbios }}\\Administrator"
+
+# Get-ADDomain answering once is not enough: right after promotion the AD Web
+# Services the microsoft.ad modules bind to, and the SRV records that locate a
+# controller, lag behind the reboot. So the gate starts the directory services,
+# then requires a query the modules actually make (against the local server, not
+# SRV discovery) to succeed, and it waits a long time because a first DC can take
+# minutes to answer.
+- name: Wait for AD Web Services and the directory to answer
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = "Stop"
+      # Mid-promotion the directory services can be Disabled, not merely stopped,
+      # so enable before starting. Each is retried by the task until the query
+      # below answers, which is the real readiness signal the modules depend on.
+      foreach ($name in "NTDS", "Netlogon", "ADWS") {
+        $svc = Get-Service $name -ErrorAction SilentlyContinue
+        if ($null -eq $svc) { continue }
+        if ($svc.StartType -eq "Disabled") { Set-Service $name -StartupType Automatic }
+        if ($svc.Status -ne "Running") { Start-Service $name }
+      }
+      Get-ADDomain -Server localhost | Out-Null
+      Get-ADGroup -Server localhost -Filter * | Out-Null
+  register: redstackpro_ad_ready
+  until: redstackpro_ad_ready is succeeded
+  retries: 60
+  delay: 15
+  changed_when: false
+
+# Organizational units at the domain root, so users/groups land in the OU layout
+# the lab expects (and an OU-scoped ACL like renly's WriteDacl on Crownlands has a
+# real target).
+- name: Build the domain distinguished name
+  ansible.builtin.set_fact:
+    redstackpro_domain_dn: "DC={{ redstackpro_domain.domain_fqdn | replace('.', ',DC=') }}"
+
+- name: Create the organizational units
+  microsoft.ad.ou:
+    name: "{{ item }}"
+    path: "{{ redstackpro_domain_dn }}"
+    state: present
+    domain_server: localhost
+  loop: "{{ redstackpro_domain.ous | default([]) }}"
+  when: (redstackpro_domain.ous | default([])) | length > 0
+
+- name: Create the domain groups
+  microsoft.ad.group:
+    name: "{{ item }}"
+    scope: global
+    state: present
+    domain_server: localhost
+  loop: "{{ redstackpro_domain.groups | difference(redstackpro_dc_builtin_groups) }}"
+
+# Group-in-group nesting: add each member group to its parent (Dragons ->
+# QueenProtector -> Domain Admins), so membership in the innermost group escalates
+# through the chain. Add-ADGroupMember touches only membership, so it is safe on a
+# built-in parent like Domain Admins. Global-in-global nesting is allowed within a
+# domain.
+- name: Nest domain groups (group-in-group membership)
+  ansible.windows.win_powershell:
+    script: |
+      param($Parent, $MembersJson)
+      $ErrorActionPreference = "Stop"
+      Import-Module ActiveDirectory
+      foreach ($m in ($MembersJson | ConvertFrom-Json)) {
+        Add-ADGroupMember -Server localhost -Identity $Parent -Members $m -ErrorAction SilentlyContinue
+      }
+    parameters:
+      Parent: "{{ item.key }}"
+      MembersJson: "{{ item.value | to_json }}"
+  loop: "{{ redstackpro_domain.group_members | default({}) | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  changed_when: true
+  when: (redstackpro_domain.group_members | default({})) | length > 0
+
+# A lab that seeds specific weak credentials (GOAD's documented spray / AS-REP /
+# description passwords) needs a permissive password policy, or the directory
+# rejects short/non-complex passwords like "hodor" or "Needle". Relax the default
+# domain policy the way GOAD does, but only when this domain actually declares
+# per-user passwords -- a range that does not keeps the default strong policy.
+# The relax has to be durable and proven, not fire-and-forget: see the file for
+# what went wrong on AWS when it was not.
+- name: Relax the domain password policy for the lab's weak per-user passwords
+  ansible.builtin.include_tasks: password_policy.yml
+  when: (redstackpro_domain.users | default([]) | selectattr('password', 'defined') | list | length) > 0
+
+- name: Create the domain users
+  microsoft.ad.user:
+    name: "{{ item.username }}"
+    sam_account_name: "{{ item.username }}"
+    upn: "{{ item.email | default(item.username ~ '@' ~ redstackpro_domain.domain_fqdn) }}"
+    display_name: "{{ item.display_name | default(item.username) }}"
+    description: "{{ item.description | default(omit) }}"
+    # A user's own password when the lab defines one (GOAD's per-account
+    # credentials, so its documented spray / AS-REP / Kerberoast / description
+    # paths resolve), otherwise the shared lab password.
+    password: "{{ item.password | default(redstackpro_lab_password) }}"
+    # Enforce the declared password on every run: a lab's documented credentials
+    # must actually match, and a redeploy should correct any drift.
+    update_password: always
+    password_never_expires: true
+    enabled: true
+    state: present
+    domain_server: localhost
+    path: "{{ ('OU=' ~ item.ou ~ ',' ~ redstackpro_domain_dn) if item.ou is defined else omit }}"
+    groups:
+      add: "{{ item.groups | default([]) }}"
+      missing_behaviour: ignore
+  loop: "{{ redstackpro_domain.users }}"
+  loop_control:
+    label: "{{ item.username }}"
+
+# Phase 2: plant the recognizable attack paths from the range's own data.
+- name: Plant the attack paths
+  ansible.builtin.include_tasks: attack_paths.yml
+
+# LAPS schema + reader delegation, so a member that backs its local-admin password
+# up to AD has a reader who can read it (the laps_read path). Domain-level, driven
+# by the domain's laps_readers; runs before the members join so the schema is ready.
+- name: Configure LAPS and reader delegation
+  ansible.builtin.include_tasks: laps.yml
+  when: (redstackpro_domain.laps_readers | default([])) | length > 0
+
+# A controller flagged role: adcs (a lab where the DC is also the CA, like
+# goad-mini) stands up an Enterprise CA before its attack paths run.
+- name: Stand up an Enterprise CA on an ADCS controller
+  ansible.builtin.include_role:
+    name: redstackpro.adcs
+  vars:
+    redstackpro_adcs_ca_name: "{{ redstackpro_domain.domain_netbios }}-CA"
+    redstackpro_adcs_enterprise_admin: "Administrator@{{ redstackpro_domain.domain_fqdn }}"
+    redstackpro_adcs_templates: >-
+      {{ redstackpro_adcs_forest_escs
+         | default(redstackpro_dc_vulns | default([]) | select('match', '^esc') | list) }}
+    redstackpro_adcs_esc7_manager: >-
+      {{ (redstackpro_adcs_esc_vars | default({})).esc7_manager
+         | default((redstackpro_dc_vulns_vars | default({})).esc7_manager | default('')) }}
+    redstackpro_adcs_esc13_group: >-
+      {{ (redstackpro_adcs_esc_vars | default({})).esc13_group
+         | default((redstackpro_dc_vulns_vars | default({})).esc13_group | default('greatmaster')) }}
+    redstackpro_adcs_esc5_principal: >-
+      {{ (redstackpro_adcs_esc_vars | default({})).esc5_principal
+         | default((redstackpro_dc_vulns_vars | default({})).esc5_principal | default('Domain Users')) }}
+    redstackpro_adcs_esc14_target: >-
+      {{ (redstackpro_adcs_esc_vars | default({})).esc14_target
+         | default((redstackpro_dc_vulns_vars | default({})).esc14_target | default('')) }}
+    redstackpro_adcs_esc14_subject: >-
+      {{ (redstackpro_adcs_esc_vars | default({})).esc14_subject
+         | default((redstackpro_dc_vulns_vars | default({})).esc14_subject | default('CN=rsp-esc14')) }}
+  when: redstackpro_dc_role | default('') == 'adcs'
+
+# Host-level attack paths declared on the controller itself (e.g. NTLM downgrade,
+# LLMNR left on). Member-computer and domain-level paths run later via
+# redstackpro.domain_vulns, after the members join.
+- name: Plant host-level attack paths on the controller
+  ansible.builtin.include_role:
+    name: redstackpro.host_vulns
+  vars:
+    redstackpro_host_vulns: "{{ redstackpro_dc_vulns | default([]) }}"
+    redstackpro_host_vulns_vars: "{{ redstackpro_dc_vulns_vars | default({}) }}"
+
+# Domain-level attack paths that target member computers (unconstrained
+# delegation, shadow credentials) are NOT applied here: the members have not
+# joined yet during the controller play. They run in a final play via the
+# redstackpro.domain_vulns role, after the member plays. See site.yml.
+
+# Forest / external trusts between separate forests (a parent-child trust is
+# implicit in child creation, so this is a no-op for a single-forest range).
+- name: Establish cross-forest trusts
+  ansible.builtin.include_tasks: trusts.yml

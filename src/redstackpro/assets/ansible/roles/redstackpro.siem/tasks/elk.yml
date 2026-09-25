@@ -1,0 +1,87 @@
+---
+# ELK on a single box, run as a container so a lab does not have to pin the
+# Elasticsearch, Logstash, and Kibana versions by hand. The Windows hosts ship
+# to Logstash on 5044; Kibana is on 5601. sysctl vm.max_map_count is raised
+# because Elasticsearch refuses to start under the default.
+
+- name: Raise vm.max_map_count for Elasticsearch
+  become: true
+  ansible.posix.sysctl:
+    name: vm.max_map_count
+    value: "262144"
+    sysctl_set: true
+    state: present
+    reload: true
+
+- name: Install Docker
+  become: true
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - python3-docker
+    state: present
+    update_cache: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Create the logstash pipeline override directory
+  become: true
+  ansible.builtin.file:
+    path: /etc/redstackpro/logstash
+    state: directory
+    mode: "0755"
+
+# The sebp/elk image ships a beats input that requires TLS. Winlogbeat here
+# ships plaintext (an isolated lab), so logstash rejected every event with
+# "not an SSL/TLS record". Mount a beats input with ssl off so the events land.
+- name: Write a plaintext beats input for logstash
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/redstackpro/logstash/02-beats-input.conf
+    mode: "0644"
+    content: |
+      input {
+        beats {
+          port => 5044
+          ssl => false
+        }
+      }
+
+- name: Run the ELK container
+  become: true
+  community.docker.docker_container:
+    name: elk
+    image: sebp/elk:8.15.0
+    state: started
+    restart_policy: unless-stopped
+    published_ports:
+      - "5601:5601"
+      - "9200:9200"
+      - "5044:5044"
+    volumes:
+      - "/etc/redstackpro/logstash/02-beats-input.conf:/etc/logstash/conf.d/02-beats-input.conf:ro"
+
+# started is not the same as working, and a container says even less than a unit:
+# docker reports it running while the process inside is still booting or has
+# already given up. The three published ports are the three jobs -- Logstash
+# takes the agents' events, Elasticsearch stores them, Kibana is what a person
+# opens -- so all three are checked rather than the container's own opinion.
+#
+# This is a JVM stack in one container on a lab box, so it is slow to answer;
+# the wait is long on purpose rather than optimistic.
+- name: Confirm ELK is really serving, not merely started
+  become: true
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ item.port }}"
+    timeout: 600
+    msg: >-
+      the elk container is running but nothing is bound to {{ item.port }}
+      ({{ item.what }}). Check `docker logs elk`: the stack exits on a bad
+      pipeline or an unmet vm.max_map_count and the container still reports up.
+  loop:
+    - { port: 5044, what: "the beats input the agents ship to" }
+    - { port: 9200, what: "elasticsearch, where the events land" }
+    - { port: 5601, what: "kibana, what a person opens" }
+  loop_control:
+    label: "{{ item.port }} -- {{ item.what }}"

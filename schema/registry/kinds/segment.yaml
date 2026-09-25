@@ -1,0 +1,29 @@
+kind: segment
+abbrev: sub
+category: container
+description: A subnet inside exactly one network.
+
+display:
+  label: Subnet
+  blurb: Subnet inside one network
+  icon: tabler/outline/box
+  group: topology
+  color: "#868e96"
+
+modes:
+  - ops
+  - range
+
+derived:
+  - name: subnet_id
+    source: provider
+    description: Provider handle for the subnet, referenced by member hosts.
+
+requirements:
+  - name: subnet
+  - name: public_address
+    when: { exposure: internet }
+    description: Members may hold an address reachable from outside.
+  - name: outbound_routing
+    when: { egress: allowed }
+    description: Outbound path for members, whether NAT or an upstream route.

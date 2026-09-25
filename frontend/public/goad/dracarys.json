@@ -1,0 +1,259 @@
+{
+  "schema_version": "0.4.0",
+  "mode": "range",
+  "name": "DRACARYS",
+  "prefix": "cyb",
+  "auto_stop": {
+    "enabled": true,
+    "after_hours": 8,
+    "timezone": "UTC"
+  },
+  "nodes": [
+    {
+      "id": "net01",
+      "kind": "network",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "overlay": {
+        "cidr": "192.168.0.0/16"
+      }
+    },
+    {
+      "id": "sub01",
+      "kind": "segment",
+      "position": {
+        "x": 16,
+        "y": 44
+      },
+      "overlay": {
+        "cidr": "192.168.56.0/24",
+        "egress": "allowed",
+        "exposure": "local"
+      }
+    },
+    {
+      "id": "dracarys",
+      "kind": "domain",
+      "position": {
+        "x": 16,
+        "y": 48
+      },
+      "overlay": {
+        "fqdn": "dracarys.lab",
+        "netbios": "DRACARYS",
+        "users": [
+          {
+            "username": "drogon",
+            "display_name": "drogon -",
+            "email": "drogon@dracarys.lab",
+            "groups": [
+              "LinuxAdmins",
+              "Domain Admins"
+            ],
+            "privilege": "domain_admin",
+            "description": "Domain admin",
+            "password": "sUIjHxs1i0yxZsGBreh0"
+          },
+          {
+            "username": "rhaegal",
+            "display_name": "rhaegal -",
+            "email": "rhaegal@dracarys.lab",
+            "groups": [
+              "LinuxAdmins"
+            ],
+            "privilege": "local_admin",
+            "description": "Rhaegal, local admin on vhagar",
+            "password": "ufsmcvDaFz1uEqzAtaiL"
+          },
+          {
+            "username": "viserion",
+            "display_name": "viserion -",
+            "email": "viserion@dracarys.lab",
+            "groups": [
+              "LinuxUsers"
+            ],
+            "privilege": "user",
+            "description": "viserion",
+            "password": "aLHtz1WvIVmeV4Zh4CDE"
+          },
+          {
+            "username": "sunfyre",
+            "display_name": "sunfyre -",
+            "email": "sunfyre@dracarys.lab",
+            "groups": [
+              "LinuxUsers"
+            ],
+            "privilege": "user",
+            "description": "glpi service account",
+            "password": "BSno5DP4tjJ4jIu8is3B"
+          }
+        ],
+        "acls": [
+          {
+            "principal": "viserion",
+            "target": "vhagar$",
+            "right": "Ext-Write-SPN"
+          }
+        ]
+      }
+    },
+    {
+      "id": "balerion",
+      "kind": "dc",
+      "position": {
+        "x": 16,
+        "y": 48
+      },
+      "overlay": {
+        "os": "windows_server_2019",
+        "hostname": "balerion",
+        "vulns": [
+          "enable_credssp_client",
+          "schedule",
+          "ldaps"
+        ],
+        "vulns_vars": {
+          "schedule": {
+            "name": "keepass_bot",
+            "script_path": "C:\\keepass_bot.ps1",
+            "script_content": "# keepass_bot: a recurring domain session that opens a KeePass vault on\n# vhagar over a CredSSP double-hop. It runs as rhaegal (a local admin on\n# vhagar), and CredSSP delegates rhaegal's plaintext credential to vhagar --\n# so anyone holding vhagar can recover rhaegal's password from the delegated\n# logon, and the vault it opens holds the domain-admin credential. Mirrors\n# GOAD's dracarys keepass_bot.\n$ErrorActionPreference = 'SilentlyContinue'\n$pass  = ConvertTo-SecureString 'ufsmcvDaFz1uEqzAtaiL' -AsPlainText -Force\n$creds = New-Object System.Management.Automation.PSCredential('dracarys.lab\\rhaegal', $pass)\nInvoke-Command -ComputerName vhagar.dracarys.lab -Authentication Credssp -Credential $creds -ScriptBlock {\n    $kp = 'C:\\Program Files\\KeePass Password Safe 2\\KeePass.exe'\n    $db = 'C:\\vault.kdbx'\n    $master = 'lj-endlmkfQSLDKPDFNZLEK'\n    if (Test-Path $kp) { cmd /c \"echo $master | `\"$kp`\" `\"$db`\" -pw-stdin\" }\n    Start-Sleep -Seconds 20\n    Get-Process KeePass -ErrorAction SilentlyContinue | Stop-Process -Force\n}\n",
+            "command": "& C:\\keepass_bot.ps1",
+            "interval_minutes": 1,
+            "user": "dracarys\\rhaegal"
+          }
+        }
+      }
+    },
+    {
+      "id": "vhagar",
+      "kind": "srv",
+      "position": {
+        "x": 268,
+        "y": 48
+      },
+      "overlay": {
+        "os": "windows_server_2019",
+        "hostname": "vhagar",
+        "vulns": [
+          "enable_credssp_server",
+          "schedule",
+          "keepass_vault",
+          "constrained_delegation_kerberos"
+        ],
+        "vulns_vars": {
+          "delegate_to": [
+            "WSMAN/vhagar.dracarys.lab"
+          ],
+          "keepass_vault": {
+            "db_path": "C:\\vault.kdbx",
+            "master_password": "lj-endlmkfQSLDKPDFNZLEK",
+            "entry_title": "domain-admin",
+            "entry_user": "drogon",
+            "entry_password_user": "drogon"
+          },
+          "schedule": {
+            "name": "bot_ssh",
+            "script_path": "C:\\bot_ssh.ps1",
+            "script_content": "# bot_ssh: a recurring logon that reaches the Linux member syrax as\n# viserion. It authenticates viserion to syrax every minute, so an operator\n# who already holds a foothold on syrax (the challenge start point) can\n# observe or capture viserion's credential. Uses PuTTY's plink for scripted\n# password auth, downloading it on first run if absent. Mirrors GOAD's\n# dracarys bot_ssh.\n$ErrorActionPreference = 'SilentlyContinue'\n$plink = 'C:\\plink.exe'\nif (-not (Test-Path $plink)) {\n    try { Invoke-WebRequest -UseBasicParsing -Uri 'https://the.earth.li/~sgtatham/putty/latest/w64/plink.exe' -OutFile $plink } catch {}\n}\nif (Test-Path $plink) {\n    & $plink -ssh -batch -pw 'aLHtz1WvIVmeV4Zh4CDE' 'viserion@syrax.dracarys.lab' 'id; sleep 45'\n}\n",
+            "command": "& C:\\bot_ssh.ps1",
+            "interval_minutes": 1,
+            "user": "dracarys\\viserion"
+          }
+        }
+      }
+    },
+    {
+      "id": "syrax",
+      "kind": "srv",
+      "position": {
+        "x": 520,
+        "y": 48
+      },
+      "overlay": {
+        "os": "linux",
+        "hostname": "syrax",
+        "sudo_groups": [
+          "LinuxAdmins"
+        ],
+        "ssh_groups": [
+          "LinuxAdmins",
+          "LinuxUsers"
+        ]
+      }
+    },
+    {
+      "id": "jumpbox",
+      "kind": "jumpbox",
+      "position": {
+        "x": 16,
+        "y": 248
+      },
+      "overlay": {
+        "services": [
+          "ssh",
+          "guacamole",
+          "wireguard"
+        ],
+        "certificate_authority": true
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-sub01-net01",
+      "role": "attached",
+      "source": "sub01",
+      "target": "net01"
+    },
+    {
+      "id": "e-balerion-sub01",
+      "role": "attached",
+      "source": "balerion",
+      "target": "sub01"
+    },
+    {
+      "id": "e-balerion-joins",
+      "role": "joins",
+      "source": "balerion",
+      "target": "dracarys"
+    },
+    {
+      "id": "e-vhagar-sub01",
+      "role": "attached",
+      "source": "vhagar",
+      "target": "sub01"
+    },
+    {
+      "id": "e-vhagar-joins",
+      "role": "joins",
+      "source": "vhagar",
+      "target": "dracarys"
+    },
+    {
+      "id": "e-syrax-sub01",
+      "role": "attached",
+      "source": "syrax",
+      "target": "sub01"
+    },
+    {
+      "id": "e-syrax-joins",
+      "role": "joins",
+      "source": "syrax",
+      "target": "dracarys"
+    },
+    {
+      "id": "e-jumpbox-sub01",
+      "role": "attached",
+      "source": "jumpbox",
+      "target": "sub01"
+    },
+    {
+      "id": "e-jumpbox-net01-manages",
+      "role": "manages",
+      "source": "jumpbox",
+      "target": "net01"
+    }
+  ]
+}

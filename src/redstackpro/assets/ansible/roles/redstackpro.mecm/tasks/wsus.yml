@@ -1,0 +1,60 @@
+---
+# WSUS (a MECM software-update-point prerequisite). Installs the role against the
+# remote SQL instance, then runs the post-install to link WSUS to that SQL box.
+# See goad-fidelity-build.
+
+- name: Install the WSUS role (services + DB, remote SQL)
+  ansible.windows.win_feature:
+    name:
+      - UpdateServices-Services
+      - UpdateServices-DB
+    include_management_tools: true
+  register: redstackpro_mecm_wsus
+
+- name: Reboot if WSUS asked for it
+  ansible.windows.win_reboot:
+  when: redstackpro_mecm_wsus.reboot_required | default(false)
+
+- name: Create the WSUS content directory
+  ansible.windows.win_file:
+    path: C:\sources\WSUS
+    state: directory
+
+# wsusutil PostInstall connects to the REMOTE SQL box, so it must carry network
+# credentials -- run over the play's psrp session it authenticates as ANONYMOUS
+# LOGON (the double-hop) and SQL rejects it. Run it under a scheduled task logged
+# on as the domain admin (a batch logon has network creds, and that account is
+# sysadmin on the instance).
+- name: Run the WSUS post-install against the remote SQL instance
+  ansible.windows.win_powershell:
+    script: |
+      param($Ea, $Pass, $Sql)
+      $ErrorActionPreference = "Stop"
+      $inner = "& 'C:\Program Files\Update Services\Tools\wsusutil.exe' PostInstall " +
+               "SQL_INSTANCE_NAME=$Sql CONTENT_DIR=C:\sources\WSUS *> C:\Windows\Temp\rsp-wsus.txt; " +
+               "Set-Content C:\Windows\Temp\rsp-wsus-done.txt 'done'"
+      Set-Content C:\Windows\Temp\rsp-wsus.ps1 $inner
+      Remove-Item C:\Windows\Temp\rsp-wsus-done.txt -ErrorAction SilentlyContinue
+      $a = New-ScheduledTaskAction -Execute "powershell.exe" `
+        -Argument "-ExecutionPolicy Bypass -File C:\Windows\Temp\rsp-wsus.ps1"
+      Register-ScheduledTask -TaskName RSPWsus -Action $a -User $Ea `
+        -Password $Pass -RunLevel Highest -Force | Out-Null
+      Start-ScheduledTask -TaskName RSPWsus
+      $done = $false
+      for ($i = 0; $i -lt 50; $i++) {
+        Start-Sleep -Seconds 6
+        if (Test-Path C:\Windows\Temp\rsp-wsus-done.txt) { $done = $true; break }
+      }
+      Unregister-ScheduledTask -TaskName RSPWsus -Confirm:$false -ErrorAction SilentlyContinue
+      if (-not $done) { throw "WSUS post-install timed out" }
+      $out = (Get-Content C:\Windows\Temp\rsp-wsus.txt -Raw)
+      # A second run reports the DB already configured, which we tolerate.
+      if (($out -match "Fatal Error") -and ($out -notmatch "already")) {
+        throw "WSUS post-install failed: $out"
+      }
+      [Ordered]@{ result = $out }
+    parameters:
+      Ea: "{{ redstackpro_mecm_domain_admin }}"
+      Pass: "{{ redstackpro_lab_password }}"
+      Sql: "{{ redstackpro_mecm_sql_fqdn }}"
+  changed_when: true

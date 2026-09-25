@@ -1,0 +1,28 @@
+# redStackPRO Windows self-provision, run by the CustomScript extension on a
+# range's Windows host. The operator account and its password are set natively on
+# the VM; this adds what Azure cannot express: it enables the built-in
+# Administrator with the shared lab password and stands up an HTTPS WinRM
+# listener, so Ansible connects as Administrator (which becomes the domain
+# Administrator once the forest root is promoted, the same password surviving the
+# promotion). The subnet is isolated, so the listener is self signed. See
+# goad-native-recreation.
+$ErrorActionPreference = "Stop"
+$pass = ConvertTo-SecureString "${lab_password}" -AsPlainText -Force
+
+Set-LocalUser -Name "Administrator" -Password $pass
+Enable-LocalUser -Name "Administrator"
+
+Set-Service -Name WinRM -StartupType Automatic
+Start-Service -Name WinRM
+Get-ChildItem WSMan:\localhost\Listener |
+    Where-Object { $_.Keys -contains "Transport=HTTPS" } |
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+$cert = New-SelfSignedCertificate -DnsName $env:COMPUTERNAME `
+    -CertStoreLocation Cert:\LocalMachine\My
+New-Item -Path WSMan:\localhost\Listener -Transport HTTPS -Address * `
+    -Hostname $env:COMPUTERNAME -CertificateThumbPrint $cert.Thumbprint -Force
+Set-Item -Path WSMan:\localhost\Service\Auth\Negotiate -Value $true
+if (-not (Get-NetFirewallRule -Name "redstackpro-winrm-https" -ErrorAction SilentlyContinue)) {
+    New-NetFirewallRule -Name "redstackpro-winrm-https" -DisplayName "redStackPRO WinRM HTTPS" `
+        -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 5986
+}

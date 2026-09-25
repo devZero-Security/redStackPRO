@@ -1,0 +1,43 @@
+---
+# Map every host in the compile to its address by name, so hosts (and the
+# operator pivoting through them) reach each other by name/FQDN rather than by
+# IP. The entries come straight from the inventory: every host carries a
+# redstackpro_host_shortname (its canvas alias -- the name the user set and can
+# rename on the canvas), and an AD host also carries a redstackpro_host_fqdn.
+# The address is resolved into ansible_host at apply.
+#
+# This role runs only on hosts that do NOT join a domain (the site.yml recipient
+# filter). An offense stack has no domains, so every host names every other; a
+# defense range's standalone hosts (jumpbox, SIEM, operator boxes) name the AD
+# hosts they cannot otherwise resolve, while the AD members themselves resolve
+# through the DCs' DNS and never run this. See range-access-model.
+#
+# Marker-bounded and idempotent: a re-run rewrites only redStackPRO's block, and
+# the whole set is re-derived from the inventory each time so an added or
+# re-addressed host reconciles. Linux edits /etc/hosts; Windows edits its own
+# hosts file. Branched on the connection, not gathered facts, because a range's
+# Windows hosts are reached over psrp and never gather facts.
+
+- name: Map compile hosts by name (Linux)
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    marker: "# {mark} redStackPRO hosts"
+    block: |
+      {% for h in groups['all'] | sort if hostvars[h].redstackpro_host_shortname is defined -%}
+      {{ hostvars[h].redstackpro_host_address }} {% if hostvars[h].redstackpro_host_fqdn is defined %}{{ hostvars[h].redstackpro_host_fqdn }} {% endif %}{{ hostvars[h].redstackpro_host_shortname }}
+      {% endfor %}
+  when: (ansible_connection | default('ssh')) != 'psrp'
+
+- name: Map compile hosts by name (Windows)
+  community.windows.win_lineinfile:
+    path: C:\Windows\System32\drivers\etc\hosts
+    # Key the line on the canvas alias so re-runs update in place rather than
+    # duplicate. The alias is unique per compile; the FQDN is optional.
+    regex: '(?i)\s{{ hostvars[item].redstackpro_host_shortname | regex_escape }}\s*$'
+    line: "{{ hostvars[item].redstackpro_host_address }} {% if hostvars[item].redstackpro_host_fqdn is defined %}{{ hostvars[item].redstackpro_host_fqdn }} {% endif %}{{ hostvars[item].redstackpro_host_shortname }}"
+  loop: "{{ groups['all'] | sort }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - (ansible_connection | default('ssh')) == 'psrp'
+    - hostvars[item].redstackpro_host_shortname is defined

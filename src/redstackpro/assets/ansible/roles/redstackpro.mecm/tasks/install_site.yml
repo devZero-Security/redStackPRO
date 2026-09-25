@@ -1,0 +1,109 @@
+---
+# Install the MECM primary site. ConfigMgr's setup.exe /SCRIPT shells to SetupWpf.exe
+# (a WPF GUI bootstrapper) which cannot spawn in a non-interactive session-0 logon
+# (a scheduled-task batch logon fails with "Failed to create process of SetupWpf.exe.
+# return value 1"). Running it under an ansible runas become gives an interactive
+# window station where SetupWpf launches, so setup runs synchronously here as the
+# forest-root admin (the same account that prepped AD) for the ~1h install. The
+# prerequisite redist is staged first with setupdl so setup does not fetch it.
+# See goad-fidelity-build.
+
+- name: Work around the MSSQL cert-generation ACL bug before setup
+  ansible.windows.win_acl:
+    path: C:\ProgramData\Microsoft\Crypto\RSA
+    user: Administrators
+    rights: FullControl
+    type: allow
+    inherit: ContainerInherit, ObjectInherit
+    propagation: InheritOnly
+    state: present
+
+- name: Render the unattended site-install script
+  ansible.windows.win_template:
+    src: ConfigMgrAutoSave.ini.j2
+    dest: C:\setup\ConfigMgrAutoSave.ini
+
+- name: Stage the prerequisite redist with setupdl
+  ansible.windows.win_shell: .\setupdl.exe /NoUI C:\updates
+  args:
+    chdir: "{{ redstackpro_mecm_bin }}"
+  register: redstackpro_mecm_setupdl
+  changed_when: true
+
+# setup.exe blocks for ~1h. It shells to SetupWpf.exe (a WPF GUI bootstrapper) which
+# only spawns from an interactive window station -- a session-0 batch logon fails
+# with "Failed to create process of SetupWpf.exe. return value 1". Run under a runas
+# become (gives an interactive logon) AND launch via Start-Process (creates the
+# window station) with -Wait (keeps the runas session alive for the whole install;
+# without it the session tears down and SetupWpf is killed mid-install). Generous
+# psrp timeouts + host_vars reconnection retries ride the silent hour.
+- name: Install the MECM primary site (~1h)
+  ansible.windows.win_powershell:
+    script: |
+      param($Bin)
+      $ErrorActionPreference = 'Stop'
+      # setup.exe is only a bootstrapper: it spawns SetupWpf.exe (the real ~1h GUI
+      # installer) and exits immediately. Launch it (Start-Process gives SetupWpf an
+      # interactive window station), wait for SetupWpf to appear, then BLOCK on
+      # SetupWpf until it exits so this runas session (and the station) stays alive
+      # for the whole install -- otherwise the session tears down and kills SetupWpf.
+      Start-Process -FilePath "$Bin\setup.exe" `
+        -ArgumentList '/SCRIPT', 'C:\setup\ConfigMgrAutoSave.ini' `
+        -WorkingDirectory $Bin
+      $appeared = $false
+      for ($i = 0; $i -lt 30; $i++) {
+        if (Get-Process SetupWpf -ErrorAction SilentlyContinue) { $appeared = $true; break }
+        Start-Sleep -Seconds 6
+      }
+      $waited = 0
+      $cancelled = $false
+      while (Get-Process SetupWpf -ErrorAction SilentlyContinue) {
+        Start-Sleep -Seconds 30
+        $waited += 30
+        # A prereq failure cancels setup but leaves SetupWpf hung on an invisible
+        # error dialog (no interactive session to dismiss it), which would block
+        # until the task timeout. Detect the cancellation in the log, kill the
+        # hung process, and let the SMS_EXECUTIVE assert surface the failure fast.
+        $log = Get-Content C:\ConfigMgrSetup.log -Tail 40 -ErrorAction SilentlyContinue | Out-String
+        if ($log -match "Prereq check didn't pass|setup will be cancelled|Setup was cancelled|Setup failed|Fatal MSI Error") {
+          $cancelled = $true
+          Get-Process SetupWpf -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          break
+        }
+        if ($waited -gt 7200) { break }
+      }
+      [Ordered]@{ setupWpfAppeared = $appeared; waitedSec = $waited; cancelled = $cancelled }
+    parameters:
+      Bin: "{{ redstackpro_mecm_bin }}"
+  vars:
+    ansible_become: true
+    ansible_become_method: runas
+    ansible_become_user: "{{ redstackpro_mecm_domain_admin }}"
+    ansible_become_password: "{{ redstackpro_lab_password }}"
+    ansible_psrp_operation_timeout: 300
+    ansible_psrp_read_timeout: 600
+  register: redstackpro_mecm_setup
+  changed_when: true
+  failed_when: false
+  # The site install runs well over the global 1h task_timeout safety net in
+  # ansible.cfg; give this one task ~2h10m (the inner SetupWpf wait caps at 2h).
+  timeout: 7800
+
+- name: Wait for the site services to come up
+  ansible.windows.win_powershell:
+    script: |
+      $svc = Get-Service SMS_EXECUTIVE -ErrorAction SilentlyContinue
+      [Ordered]@{ ready = [bool]($svc -and $svc.Status -eq 'Running') }
+  register: redstackpro_mecm_ready
+  until: redstackpro_mecm_ready.output[0].ready
+  retries: 30
+  delay: 30
+  changed_when: false
+
+- name: Confirm the site installed
+  ansible.builtin.assert:
+    that: redstackpro_mecm_ready.output[0].ready
+    fail_msg: >-
+      MECM setup finished (SetupWpf appeared={{ redstackpro_mecm_setup.output[0].setupWpfAppeared | default('?') }},
+      waited={{ redstackpro_mecm_setup.output[0].waitedSec | default('?') }}s) but SMS_EXECUTIVE is not
+      running; check C:\ConfigMgrSetup.log on the site server.

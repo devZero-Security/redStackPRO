@@ -1,0 +1,26 @@
+kind: redirector
+abbrev: rd
+category: host
+ansible_group: redirectors
+description: Accepts inbound operational traffic and forwards it to a teamserver.
+
+display:
+  label: Redirector
+  blurb: Fronts a teamserver
+  icon: tabler/outline/route
+  group: redirector
+  color: "#f59f00"
+
+modes:
+  - ops
+
+derived:
+  - name: private_address
+    source: provider
+  - name: public_address
+    source: provider
+    description: Present only when the attached segment has exposure internet.
+
+requirements:
+  - name: compute
+  - name: linux_image

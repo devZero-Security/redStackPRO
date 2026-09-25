@@ -1,0 +1,17 @@
+---
+# Re-enable the SMBv1 protocol (a legacy, exploitable file-sharing stack). The
+# server-side registry flag turns the dialect back on; the optional feature is
+# enabled too where present so the client can speak it. Idempotent.
+- name: Turn SMBv1 back on (server dialect)
+  ansible.windows.win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters
+    name: SMB1
+    data: 1
+    type: dword
+
+- name: Enable the SMB1Protocol optional feature
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = "SilentlyContinue"
+      Enable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart | Out-Null
+  changed_when: true

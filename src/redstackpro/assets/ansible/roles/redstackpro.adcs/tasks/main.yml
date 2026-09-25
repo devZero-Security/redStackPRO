@@ -1,0 +1,106 @@
+---
+# redStackPRO AD CS: stand up an Enterprise Root CA on this host so the range's
+# certificate-services attack paths (ESCx) have a CA to enrol against. Registering
+# an Enterprise CA requires an Enterprise Admin token. On a member the play's WinRM
+# session is the LOCAL Administrator (no domain groups), and even a domain session
+# is a network logon that does not carry Enterprise Admins -- so the install is run
+# under a scheduled task logged on as the forest-root Administrator (a batch logon
+# carries the full token). The caller supplies that identity. Idempotent: skips if
+# a CA is already present. GOAD is the fidelity benchmark; this is our own role.
+# See goad-native-recreation and goad-fidelity-build.
+
+- name: Fail early if no Enterprise Admin identity was supplied
+  ansible.builtin.assert:
+    that: redstackpro_adcs_enterprise_admin | length > 0
+    fail_msg: "redstackpro_adcs_enterprise_admin must be set by the calling role (Administrator@<forest-root domain>)."
+
+- name: Install the AD CS Certification Authority feature
+  ansible.windows.win_feature:
+    name: ADCS-Cert-Authority
+    include_management_tools: true
+  register: redstackpro_adcs_feature
+
+# The ADCSDeployment module (Install-AdcsCertificationAuthority) is only laid down
+# after a reboot following the feature install; without it the configure step
+# fails with "term not recognized". Reboot once, right after the install.
+- name: Reboot so the ADCS deployment module materializes
+  ansible.windows.win_reboot:
+    reboot_timeout: 600
+  when: redstackpro_adcs_feature.changed or (redstackpro_adcs_feature.reboot_required | default(false))
+
+- name: Check whether a CA is already configured on this host
+  ansible.windows.win_powershell:
+    script: |
+      $svc = Get-Service CertSvc -ErrorAction SilentlyContinue
+      $cfg = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\*"
+      [Ordered]@{ configured = [bool]($svc -and $cfg) }
+  register: redstackpro_adcs_state
+  changed_when: false
+
+- name: Configure the Enterprise Root CA under an Enterprise-Admin scheduled task
+  ansible.windows.win_powershell:
+    script: |
+      param($Ca, $Ea, $Pass)
+      $ErrorActionPreference = "Stop"
+      # The install runs under a scheduled task as the forest-root Administrator so
+      # it carries an Enterprise Admin token; a network logon does not, and an
+      # Enterprise CA cannot register in AD without it (ERROR_DS_RANGE_CONSTRAINT).
+      $body = @"
+      `$ErrorActionPreference = 'Stop'
+      Import-Module ADCSDeployment
+      # A prior partial install (a retried deploy) can leave the CA private key and
+      # the CA's AD objects behind, which make the next install fail with "private
+      # key already exists" / "a CA with the same name was found in AD". This task
+      # only runs when no working CA is configured locally, so clearing both here,
+      # in this Enterprise-Admin context, is safe and makes a re-run idempotent.
+      certutil -delkey -csp 'Microsoft Software Key Storage Provider' '$Ca' *> `$null
+      certutil -f -dsdel '$Ca' *> `$null
+      try {
+        `$r = Install-AdcsCertificationAuthority -CAType EnterpriseRootCA -CACommonName '$Ca' ``
+          -KeyLength 2048 -HashAlgorithmName SHA256 -ValidityPeriod Years ``
+          -ValidityPeriodUnits 5 -Force -ErrorAction Stop
+        Set-Content C:\Windows\Temp\rsp-ca-out.txt ("OK ErrorId=" + `$r.ErrorId)
+      } catch {
+        Set-Content C:\Windows\Temp\rsp-ca-out.txt ("ERR " + `$_.Exception.Message)
+      }
+      "@
+      Set-Content -Path C:\Windows\Temp\rsp-ca-setup.ps1 -Value $body
+      Remove-Item C:\Windows\Temp\rsp-ca-out.txt -ErrorAction SilentlyContinue
+      $action = New-ScheduledTaskAction -Execute "powershell.exe" `
+        -Argument "-ExecutionPolicy Bypass -File C:\Windows\Temp\rsp-ca-setup.ps1"
+      Register-ScheduledTask -TaskName RSPAdcs -Action $action -User $Ea `
+        -Password $Pass -RunLevel Highest -Force | Out-Null
+      Start-ScheduledTask -TaskName RSPAdcs
+      $done = $false
+      for ($i = 0; $i -lt 80; $i++) {
+        Start-Sleep -Seconds 15
+        if (Test-Path C:\Windows\Temp\rsp-ca-out.txt) { $done = $true; break }
+      }
+      if (-not $done) { throw "CA configuration did not finish in time" }
+      $out = Get-Content C:\Windows\Temp\rsp-ca-out.txt
+      if ($out -notlike "OK*") { throw "CA install failed: $out" }
+      Start-Service CertSvc -ErrorAction SilentlyContinue
+      [Ordered]@{ result = $out; status = (Get-Service CertSvc).Status.ToString() }
+    parameters:
+      Ca: "{{ redstackpro_adcs_ca_name }}"
+      Ea: "{{ redstackpro_adcs_enterprise_admin }}"
+      Pass: "{{ redstackpro_lab_password }}"
+  register: redstackpro_adcs_configure
+  changed_when: true
+  when: not redstackpro_adcs_state.output[0].configured
+
+# With the CA up, apply the CA-wide misconfigurations this host declares (ESC6,
+# ESC11) and plant the certificate-template attack paths (ESC1, ESC13, ESC15,
+# ESC4, ...). Both are idempotent, so they are safe on a re-run whether or not the
+# CA install ran this time.
+- name: Apply CA-wide ADCS misconfigurations
+  ansible.builtin.include_tasks: ca_config.yml
+
+- name: Plant the certificate-template attack paths
+  ansible.builtin.include_tasks: plant_templates.yml
+
+# ESC8 is the odd one out: no template to plant, just the CA serving /certsrv.
+# Gated so a range that did not ask for it does not get an IIS endpoint on its CA.
+- name: Serve web enrollment when this CA declares ESC8
+  ansible.builtin.include_tasks: esc8_web_enrollment.yml
+  when: "'esc8' in (redstackpro_adcs_templates | default([]))"

@@ -1,0 +1,13 @@
+{{ ansible_managed | comment }}
+# Server side only. Peers are appended by hand until the peers relation exists.
+
+[Interface]
+Address = {{ redstackpro_wireguard_address }}
+ListenPort = {{ redstackpro_wireguard_port }}
+PrivateKey = {{ redstackpro_wg_key.content | b64decode | trim }}
+SaveConfig = false
+
+# Reaching the private segments is the point of the tunnel. The segment
+# boundary itself is enforced in the generated firewall rules, not here.
+PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o {{ ansible_default_ipv4.interface }} -j MASQUERADE
+PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o {{ ansible_default_ipv4.interface }} -j MASQUERADE

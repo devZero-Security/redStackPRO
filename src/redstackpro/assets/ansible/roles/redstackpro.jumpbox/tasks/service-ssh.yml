@@ -1,0 +1,18 @@
+---
+# sshd is configured in hardening.yml, which runs whether or not ssh is in the
+# service list, because this host is reached over ssh to be configured at all.
+# This file exists so the service loop has a file for every legal value and so
+# the platform account (redop/blueop) is present when ssh is the declared way in.
+
+- name: Ensure the platform account exists
+  ansible.builtin.user:
+    name: "{{ redstackpro_jumpbox_operator }}"
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+- name: Start sshd
+  ansible.builtin.service:
+    name: ssh
+    state: started
+    enabled: true

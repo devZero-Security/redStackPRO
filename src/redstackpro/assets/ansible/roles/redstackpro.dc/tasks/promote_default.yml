@@ -1,0 +1,135 @@
+---
+# The default promotion path, proven on AWS. A forest root is promoted with the
+# microsoft.ad.domain module (which installs the role, promotes, and reboots);
+# a child domain is created with Install-ADDSDomain and a reboot scheduled from
+# inside the same session. GCP does not use this file: its WinRM runspace is torn
+# down mid-promote, so it takes the scheduled-task path in promote_gcp.yml. This
+# file is included only when redstackpro_platform != 'gcp', so a GCP-specific fix
+# can never regress the provider that proved this path. See goad-native-recreation.
+
+- name: Promote the forest root domain
+  microsoft.ad.domain:
+    dns_domain_name: "{{ redstackpro_domain.domain_fqdn }}"
+    domain_netbios_name: "{{ redstackpro_domain.domain_netbios | default(omit) }}"
+    safe_mode_password: "{{ redstackpro_lab_password }}"
+    reboot: true
+  when:
+    - redstackpro_domain.forest_root | bool
+    - not redstackpro_dc_promoted
+
+# A child domain has no dedicated module, so it is created with the standard
+# Install-ADDSDomain cmdlet. DNS is pointed at the parent controller first so the
+# parent forest resolves, and the step retries because under the free strategy
+# the parent may still be promoting when this host reaches it.
+- name: Install AD Domain Services for a child domain
+  ansible.windows.win_feature:
+    name:
+      - AD-Domain-Services
+      - RSAT-AD-PowerShell
+    include_management_tools: true
+    state: present
+  when:
+    - not (redstackpro_domain.forest_root | bool)
+    - not redstackpro_dc_promoted
+
+- name: Point DNS at the parent controller
+  ansible.windows.win_dns_client:
+    adapter_names: '*'
+    dns_servers:
+      - "{{ redstackpro_domain.parent_dc_address }}"
+  when:
+    - not (redstackpro_domain.forest_root | bool)
+    - not redstackpro_dc_promoted
+
+# The parent forest must be a fully answering DC before a child can join it.
+# Under the free strategy the parent may still be promoting, so wait for it to
+# locate as a domain controller rather than letting the child attempt fail.
+- name: Wait for the parent forest to be reachable
+  ansible.windows.win_powershell:
+    script: |
+      param($Parent)
+      $r = nltest /dsgetdc:$Parent 2>&1
+      if ($LASTEXITCODE -ne 0) { throw "parent $Parent not located yet: $r" }
+    parameters:
+      Parent: "{{ redstackpro_domain.parent_fqdn }}"
+  register: redstackpro_parent_ready
+  until: redstackpro_parent_ready is succeeded
+  retries: 40
+  delay: 20
+  changed_when: false
+  when:
+    - not (redstackpro_domain.forest_root | bool)
+    - not redstackpro_dc_promoted
+
+- name: Create the child domain
+  ansible.windows.win_powershell:
+    script: |
+      param($Child, $Parent, $Netbios, $SafeMode, $User, $Pass)
+      $ErrorActionPreference = "Stop"
+      Import-Module ADDSDeployment
+      $safe = ConvertTo-SecureString $SafeMode -AsPlainText -Force
+      $cred = New-Object System.Management.Automation.PSCredential($User, `
+        (ConvertTo-SecureString $Pass -AsPlainText -Force))
+      Install-ADDSDomain -NewDomainName $Child -ParentDomainName $Parent `
+        -NewDomainNetbiosName $Netbios -DomainType ChildDomain `
+        -SafeModeAdministratorPassword $safe -Credential $cred `
+        -InstallDns -Force -NoRebootOnCompletion
+      # Schedule the finalizing reboot from inside this same session. The host
+      # wedges its WinRM right after Install-ADDSDomain, so a separate reboot
+      # task cannot connect to issue one; this runs before the session ends and
+      # only if the promotion above succeeded (ErrorActionPreference Stop). The
+      # short delay lets this task return its result before the host goes down.
+      shutdown /r /t 15 /f
+    parameters:
+      Child: "{{ redstackpro_domain.domain_fqdn.split('.')[0] }}"
+      Parent: "{{ redstackpro_domain.parent_fqdn }}"
+      Netbios: "{{ redstackpro_domain.domain_netbios }}"
+      SafeMode: "{{ redstackpro_lab_password }}"
+      User: "Administrator@{{ redstackpro_domain.parent_fqdn }}"
+      Pass: "{{ redstackpro_lab_password }}"
+  register: redstackpro_child
+  changed_when: true
+  until: redstackpro_child is succeeded
+  retries: 30
+  delay: 30
+  when:
+    - not (redstackpro_domain.forest_root | bool)
+    - not redstackpro_dc_promoted
+
+# The promotion reboot (scheduled in the task above) replaces the local SAM, so
+# the local Administrator is gone the moment the host comes back: it is a domain
+# controller now and only the domain Administrator (same password) can log in.
+# Switch the connection before waiting for the host, or the wait authenticates
+# as an account that no longer exists.
+- name: Authenticate to the child controller as the domain administrator
+  ansible.builtin.set_fact:
+    ansible_user: "{{ redstackpro_domain.domain_netbios }}\\Administrator"
+  when:
+    - not (redstackpro_domain.forest_root | bool)
+    - not redstackpro_dc_promoted
+
+- name: Wait for the child controller to finish rebooting
+  ansible.builtin.wait_for_connection:
+    delay: 30
+    timeout: 1200
+  when:
+    - not (redstackpro_domain.forest_root | bool)
+    - not redstackpro_dc_promoted
+
+# Now that the controller is up and stable, point DNS at itself with the parent
+# as fallback so it resolves its own domain; the parent delegated the child zone
+# during creation, so this is hygiene rather than a promotion prerequisite. A
+# couple of retries cover the box still settling right after the reboot.
+- name: Point DNS at itself after creating the child domain
+  ansible.windows.win_dns_client:
+    adapter_names: '*'
+    dns_servers:
+      - "{{ ansible_host }}"
+      - "{{ redstackpro_domain.parent_dc_address }}"
+  register: redstackpro_child_dns
+  until: redstackpro_child_dns is succeeded
+  retries: 10
+  delay: 15
+  when:
+    - not (redstackpro_domain.forest_root | bool)
+    - not redstackpro_dc_promoted

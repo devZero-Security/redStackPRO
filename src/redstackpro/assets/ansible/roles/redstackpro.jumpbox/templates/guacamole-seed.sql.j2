@@ -1,0 +1,150 @@
+-- {{ ansible_managed }}
+-- The portal's accounts and connections, seeded into the JDBC schema (ADR 0056).
+-- This replaces the rendered user-mapping.xml the file provider used to read.
+--
+-- Two halves with different idempotency, on purpose:
+--
+--   Users are created if absent and otherwise left alone. A re-run must not
+--   reset a password or wipe a TOTP enrollment -- that is exactly the writable
+--   state the database exists to keep. So the break-glass admin's password is
+--   set once, at creation, and a user who has since changed it or scanned a QR
+--   code keeps both.
+--
+--   Connections are rebuilt every run. They are derived entirely from the topology,
+--   so the topology is the truth and a converged re-run should reconcile to it:
+--   a host added, removed, or readdressed shows up correctly rather than leaving
+--   a stale tile that still looks real. Deleting a connection cascades to its
+--   parameters and its permission grants, so the rebuild re-grants too.
+--
+-- Guacamole hashes a password as SHA-256 over the UTF-8 bytes of the password
+-- concatenated with the UPPERCASE hex of a per-user 32-byte salt. pgcrypto's
+-- digest() and gen_random_bytes() compute exactly that; the extension is not on
+-- by default, so it is created here.
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+BEGIN;
+
+{% set breakglass = redstackpro_guac_operator %}
+{% set admins = [breakglass] %}
+-- The schema's initdb ships a default guacadmin/guacadmin administrator. It is a
+-- well-known credential on the one host with a public address, so it goes unless
+-- it happens to be our own account. Deleting the entity cascades to its user
+-- row, permissions, and TOTP secret.
+{% if 'guacadmin' not in admins %}
+DELETE FROM guacamole_entity WHERE name = 'guacadmin' AND type = 'USER';
+{% endif %}
+
+-- One account: the break-glass admin (the platform account, redop/blueop),
+-- whose password is in the terraform outputs. Named per-person accounts with
+-- their own passwords and access levels are an Enterprise concern (ADR 0056);
+-- the base tier is a single shared admin login.
+-- ---------------------------------------------------------------- accounts
+{% for admin in admins %}
+-- {{ admin }}{{ ' (break-glass)' if admin == breakglass else '' }}
+INSERT INTO guacamole_entity (name, type) VALUES ('{{ admin }}', 'USER')
+  ON CONFLICT (name, type) DO NOTHING;
+
+INSERT INTO guacamole_user (entity_id, password_salt, password_hash, password_date)
+SELECT e.entity_id, gen_random_bytes(32), '\x00', now()
+  FROM guacamole_entity e
+ WHERE e.name = '{{ admin }}' AND e.type = 'USER'
+   AND NOT EXISTS (SELECT 1 FROM guacamole_user u WHERE u.entity_id = e.entity_id);
+
+-- Set the hash from the salt just generated. Separate statement so it can read
+-- the row's own salt; runs only for a user whose hash is still the placeholder,
+-- so an existing account's real password survives.
+UPDATE guacamole_user u
+   SET password_hash = digest(
+         convert_to(:'labpw' || upper(encode(u.password_salt, 'hex')), 'UTF8'),
+         'sha256')
+  FROM guacamole_entity e
+ WHERE u.entity_id = e.entity_id
+   AND e.name = '{{ admin }}' AND e.type = 'USER'
+   AND u.password_hash = '\x00';
+
+-- Full admin. Every system permission so the account can manage users and
+-- connections from the portal UI (create the personal accounts ADR 0056
+-- describes, enable TOTP on them).
+INSERT INTO guacamole_system_permission (entity_id, permission)
+SELECT e.entity_id, p
+  FROM guacamole_entity e,
+       unnest(ARRAY['CREATE_CONNECTION','CREATE_CONNECTION_GROUP',
+                    'CREATE_SHARING_PROFILE','CREATE_USER','CREATE_USER_GROUP',
+                    'ADMINISTER']::guacamole_system_permission_type[]) AS p
+ WHERE e.name = '{{ admin }}' AND e.type = 'USER'
+ON CONFLICT DO NOTHING;
+{% endfor %}
+
+-- ------------------------------------------------------------- connections
+-- Rebuilt from scratch: drop every managed connection (cascades to parameters
+-- and permissions) and re-create from the inventory below.
+DELETE FROM guacamole_connection;
+
+{% macro conn(name, protocol) %}
+INSERT INTO guacamole_connection (connection_name, protocol)
+  VALUES ('{{ name }}', '{{ protocol }}');
+{% endmacro %}
+{% macro param(name, key, value) %}
+INSERT INTO guacamole_connection_parameter (connection_id, parameter_name, parameter_value)
+SELECT connection_id, '{{ key }}', '{{ value }}'
+  FROM guacamole_connection WHERE connection_name = '{{ name }}';
+{% endmacro %}
+
+{% for host in groups['all'] | sort if host != inventory_hostname %}
+{%   set vars = hostvars[host] %}
+{%   if (vars.ansible_connection is defined and vars.ansible_connection == 'psrp')
+        or (vars.redstackpro_operator_os is defined and vars.redstackpro_operator_os == 'windows') %}
+-- {{ host }} (rdp)
+{{ conn(host, 'rdp') }}
+{{ param(host, 'hostname', vars.ansible_host) }}
+{{ param(host, 'port', '3389') }}
+{{ param(host, 'username', redstackpro_guac_operator) }}
+{{ param(host, 'password', redstackpro_guac_password) }}
+{{ param(host, 'security', 'nla') }}
+{{ param(host, 'ignore-cert', 'true') }}
+{{ param(host, 'enable-drive', 'true') }}
+{{ param(host, 'create-drive-path', 'true') }}
+{{ param(host, 'drive-name', 'GuacShare') }}
+{{ param(host, 'drive-path', '/drop') }}
+{%   else %}
+-- {{ host }} (ssh)
+{{ conn(host, 'ssh') }}
+{{ param(host, 'hostname', vars.ansible_host) }}
+{{ param(host, 'port', '22') }}
+{{ param(host, 'username', redstackpro_jumpbox_user) }}
+{{ param(host, 'private-key', redstackpro_guac_ssh_key | replace("'", "''")) }}
+{%   endif %}
+{% endfor %}
+
+{# Patient-zero tiles: sign in AS the assumed-breach user on the chosen landing
+   host, so a beacon launched from the portal starts in the right context. Same
+   reasoning as the file provider carried; see range-access-model. #}
+{% for tile in redstackpro_jumpbox_foothold_tiles | default([]) %}
+{%   set tname = tile.host ~ ' as ' ~ tile.username ~ ' (patient zero)' %}
+-- {{ tname }}
+{{ conn(tname, 'rdp') }}
+{{ param(tname, 'hostname', hostvars[tile.host].ansible_host) }}
+{{ param(tname, 'port', '3389') }}
+{{ param(tname, 'username', tile.username) }}
+{{ param(tname, 'password', tile.password | default(redstackpro_guac_password)) }}
+{%   if tile.domain %}
+{{ param(tname, 'domain', tile.domain) }}
+{%   endif %}
+{{ param(tname, 'security', 'nla') }}
+{{ param(tname, 'ignore-cert', 'true') }}
+{{ param(tname, 'enable-drive', 'true') }}
+{{ param(tname, 'create-drive-path', 'true') }}
+{{ param(tname, 'drive-name', 'GuacShare') }}
+{{ param(tname, 'drive-path', '/drop') }}
+{% endfor %}
+
+-- Grant every account READ on every connection. The connection list is the same
+-- for all operators; per-user scoping is not something the topology expresses.
+INSERT INTO guacamole_connection_permission (entity_id, connection_id, permission)
+SELECT e.entity_id, c.connection_id, 'READ'
+  FROM guacamole_entity e
+ CROSS JOIN guacamole_connection c
+ WHERE e.type = 'USER';
+
+COMMIT;

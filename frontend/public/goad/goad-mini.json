@@ -1,0 +1,320 @@
+{
+  "schema_version": "0.4.0",
+  "mode": "range",
+  "name": "GOAD-Mini",
+  "prefix": "cyb",
+  "description": "GOAD-Mini: the smallest of the family. A single domain, sevenkingdoms.local, on one domain controller (kingslanding), with the full Lannister and Baratheon cast and the ACL escalation chain that reaches Domain Admin. Recreated natively on the Defense canvas and deployed by redStackPRO's own Terraform and Ansible, not imported or wrapped; a nod to the GOAD project. An editable baseline.",
+  "auto_stop": {
+    "enabled": true,
+    "after_hours": 8,
+    "timezone": "UTC"
+  },
+  "nodes": [
+    {
+      "id": "net01",
+      "kind": "network",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "overlay": {
+        "cidr": "192.168.0.0/16"
+      }
+    },
+    {
+      "id": "sub01",
+      "kind": "segment",
+      "position": {
+        "x": 16,
+        "y": 44
+      },
+      "overlay": {
+        "cidr": "192.168.56.0/24",
+        "egress": "allowed",
+        "exposure": "local"
+      }
+    },
+    {
+      "id": "sevenkingdoms",
+      "kind": "domain",
+      "position": {
+        "x": 16,
+        "y": 48
+      },
+      "width": 260,
+      "height": 150,
+      "overlay": {
+        "fqdn": "sevenkingdoms.local",
+        "netbios": "SEVENKINGDOMS",
+        "users": [
+          {
+            "username": "tywin.lannister",
+            "display_name": "Tywin Lanister",
+            "email": "tywin.lannister@sevenkingdoms.local",
+            "groups": [
+              "Lannister"
+            ],
+            "privilege": "user",
+            "description": "Tywin Lanister",
+            "password": "powerkingftw135"
+          },
+          {
+            "username": "jaime.lannister",
+            "display_name": "Jaime Lanister",
+            "email": "jaime.lannister@sevenkingdoms.local",
+            "groups": [
+              "Lannister"
+            ],
+            "privilege": "user",
+            "description": "Jaime Lanister",
+            "password": "cersei"
+          },
+          {
+            "username": "cersei.lannister",
+            "display_name": "Cersei Lanister",
+            "email": "cersei.lannister@sevenkingdoms.local",
+            "groups": [
+              "Lannister",
+              "Baratheon",
+              "Domain Admins",
+              "Small Council"
+            ],
+            "privilege": "domain_admin",
+            "description": "Cersei Lanister",
+            "password": "il0vejaime"
+          },
+          {
+            "username": "tyron.lannister",
+            "display_name": "Tyron Lanister",
+            "email": "tyron.lannister@sevenkingdoms.local",
+            "groups": [
+              "Lannister"
+            ],
+            "privilege": "user",
+            "description": "Tyron Lanister",
+            "password": "Alc00L&S3x"
+          },
+          {
+            "username": "robert.baratheon",
+            "display_name": "Robert Baratheon",
+            "email": "robert.baratheon@sevenkingdoms.local",
+            "groups": [
+              "Baratheon",
+              "Domain Admins",
+              "Small Council",
+              "Protected Users"
+            ],
+            "privilege": "domain_admin",
+            "description": "Robert Lanister",
+            "password": "iamthekingoftheworld"
+          },
+          {
+            "username": "joffrey.baratheon",
+            "display_name": "Joffrey Baratheon",
+            "email": "joffrey.baratheon@sevenkingdoms.local",
+            "groups": [
+              "Baratheon",
+              "Lannister"
+            ],
+            "privilege": "user",
+            "description": "Joffrey Baratheon",
+            "password": "1killerlion"
+          },
+          {
+            "username": "renly.baratheon",
+            "display_name": "Renly Baratheon",
+            "email": "renly.baratheon@sevenkingdoms.local",
+            "groups": [
+              "Baratheon",
+              "Small Council"
+            ],
+            "privilege": "user",
+            "description": "Renly Baratheon",
+            "flaws": [
+              "account_is_sensitive"
+            ],
+            "password": "lorastyrell"
+          },
+          {
+            "username": "stannis.baratheon",
+            "display_name": "Stannis Baratheon",
+            "email": "stannis.baratheon@sevenkingdoms.local",
+            "groups": [
+              "Baratheon",
+              "Small Council"
+            ],
+            "privilege": "user",
+            "description": "Stannis Baratheon",
+            "password": "Drag0nst0ne"
+          },
+          {
+            "username": "petyer.baelish",
+            "display_name": "Petyer Baelish",
+            "email": "petyer.baelish@sevenkingdoms.local",
+            "groups": [
+              "Small Council"
+            ],
+            "privilege": "user",
+            "description": "Petyer Baelish",
+            "password": "@littlefinger@"
+          },
+          {
+            "username": "lord.varys",
+            "display_name": "Lord Varys",
+            "email": "lord.varys@sevenkingdoms.local",
+            "groups": [
+              "Small Council"
+            ],
+            "privilege": "user",
+            "description": "Lord Varys",
+            "password": "_W1sper_$"
+          },
+          {
+            "username": "maester.pycelle",
+            "display_name": "Maester Pycelle",
+            "email": "maester.pycelle@sevenkingdoms.local",
+            "groups": [
+              "Small Council"
+            ],
+            "privilege": "user",
+            "description": "Maester Pycelle",
+            "password": "MaesterOfMaesters"
+          }
+        ],
+        "acls": [
+          {
+            "principal": "tywin.lannister",
+            "target": "jaime.lannister",
+            "right": "Ext-User-Force-Change-Password"
+          },
+          {
+            "principal": "jaime.lannister",
+            "target": "joffrey.baratheon",
+            "right": "GenericWrite"
+          },
+          {
+            "principal": "joffrey.baratheon",
+            "target": "tyron.lannister",
+            "right": "WriteDacl"
+          },
+          {
+            "principal": "tyron.lannister",
+            "target": "Small Council",
+            "right": "Ext-Self-Self-Membership"
+          },
+          {
+            "principal": "Small Council",
+            "target": "DragonStone",
+            "right": "Ext-Write-Self-Membership"
+          },
+          {
+            "principal": "DragonStone",
+            "target": "KingsGuard",
+            "right": "WriteOwner"
+          },
+          {
+            "principal": "KingsGuard",
+            "target": "stannis.baratheon",
+            "right": "GenericAll"
+          },
+          {
+            "principal": "stannis.baratheon",
+            "target": "kingslanding$",
+            "right": "GenericAll"
+          },
+          {
+            "principal": "AcrossTheNarrowSea",
+            "target": "kingslanding$",
+            "right": "GenericAll"
+          },
+          {
+            "principal": "lord.varys",
+            "target": "Domain Admins",
+            "right": "GenericAll"
+          },
+          {
+            "principal": "lord.varys",
+            "target": "CN=AdminSDHolder,CN=System,DC=sevenkingdoms,DC=local",
+            "right": "GenericAll"
+          },
+          {
+            "principal": "renly.baratheon",
+            "target": "OU=Crownlands,DC=sevenkingdoms,DC=local",
+            "right": "WriteDacl"
+          }
+        ]
+      }
+    },
+    {
+      "id": "kingslanding",
+      "kind": "dc",
+      "position": {
+        "x": 16,
+        "y": 48
+      },
+      "overlay": {
+        "os": "windows_server_2019",
+        "hostname": "kingslanding",
+        "internal_ip": "192.168.56.10",
+        "edr": "defender",
+        "vulns": [
+          "esc1"
+        ],
+        "notes": "GOAD vulns: disable_firewall, directory, files.",
+        "role": "adcs",
+        "services": [
+          "adcs"
+        ]
+      }
+    },
+    {
+      "id": "jumpbox",
+      "kind": "jumpbox",
+      "position": {
+        "x": 16,
+        "y": 220
+      },
+      "overlay": {
+        "services": [
+          "ssh",
+          "guacamole",
+          "wireguard"
+        ],
+        "certificate_authority": true,
+        "internal_ip": "192.168.56.4"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-sub01-net01",
+      "role": "attached",
+      "source": "sub01",
+      "target": "net01"
+    },
+    {
+      "id": "e-kingslanding-sub01",
+      "role": "attached",
+      "source": "kingslanding",
+      "target": "sub01"
+    },
+    {
+      "id": "e-jumpbox-sub01",
+      "role": "attached",
+      "source": "jumpbox",
+      "target": "sub01"
+    },
+    {
+      "id": "e-jumpbox-net01-manages",
+      "role": "manages",
+      "source": "jumpbox",
+      "target": "net01"
+    },
+    {
+      "id": "e-kingslanding-joins",
+      "role": "joins",
+      "source": "kingslanding",
+      "target": "sevenkingdoms"
+    }
+  ]
+}

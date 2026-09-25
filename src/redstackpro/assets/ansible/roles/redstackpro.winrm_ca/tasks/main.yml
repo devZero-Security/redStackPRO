@@ -1,0 +1,154 @@
+---
+# Replace the Windows host's self signed WinRM listener certificate with one the
+# jumpbox authority signed, so the control node can validate it instead of
+# ignoring it.
+#
+# winrm.ps1 stands up a self signed listener at boot so the host is reachable at
+# all. This role runs in the one play that reaches the host before its
+# certificate is trusted, which is why that play turns validation off for itself
+# and nothing else. After this runs the listener presents a signed certificate
+# and every later play validates against the authority. See 0022.
+#
+# The private key is generated on the Windows host and never leaves it. Only a
+# request and a signed certificate cross to the jumpbox, the same shape as the
+# collector's receiver certificate, and the authority key stays on the jumpbox.
+# See 0001 and 0011.
+
+- name: Find the signing authority
+  ansible.builtin.set_fact:
+    # One jumpbox per management domain, so the first is the only. The collector
+    # signs against the same one.
+    redstackpro_winrm_ca_host: "{{ groups['jumpboxes'] | default([]) | first | default('') }}"
+
+- name: Fail early if a Windows host has no authority to sign its listener
+  ansible.builtin.assert:
+    that: redstackpro_winrm_ca_host | length > 0
+    fail_msg: >
+      This host has os windows and its WinRM listener needs a jumpbox to sign
+      the certificate, and the inventory has none. Every host needs a management
+      path, which the validator checks as MGT001, so this topology should not have
+      compiled.
+
+- name: See whether this host was already signed
+  ansible.builtin.stat:
+    path: "{{ redstackpro_ca_dir }}/{{ inventory_hostname }}-winrm.crt"
+  delegate_to: "{{ redstackpro_winrm_ca_host }}"
+  register: redstackpro_winrm_signed
+
+# Everything below reaches the Windows host. Guarding the whole block on the
+# jumpbox side means a re run that finds the certificate already signed never
+# opens the unvalidated bootstrap connection at all. See 0022.
+- name: Sign and install the listener certificate
+  when: not redstackpro_winrm_signed.stat.exists
+  block:
+    - name: Create the request directory
+      ansible.windows.win_file:
+        path: C:\redstackpro\winrm
+        state: directory
+
+    - name: Write the certificate request definition
+      ansible.windows.win_template:
+        src: request.inf.j2
+        dest: C:\redstackpro\winrm\request.inf
+
+    # certreq creates the private key in the machine store and writes only the
+    # request. The key is not exportable and does not travel.
+    - name: Generate the key and the request
+      ansible.windows.win_shell: certreq -new -q -f request.inf request.csr
+      args:
+        chdir: C:\redstackpro\winrm
+        creates: C:\redstackpro\winrm\request.csr
+
+    - name: Read the request
+      ansible.builtin.slurp:
+        src: C:\redstackpro\winrm\request.csr
+      register: redstackpro_winrm_csr
+
+    - name: Hand the request to the authority
+      ansible.builtin.copy:
+        content: "{{ redstackpro_winrm_csr.content | b64decode }}"
+        dest: "{{ redstackpro_ca_dir }}/{{ inventory_hostname }}-winrm.csr"
+        mode: "0600"
+      delegate_to: "{{ redstackpro_winrm_ca_host }}"
+
+    # copyall carries the subjectAltName from the request, which is where the
+    # host's address is, and the control node connects by address.
+    - name: Sign it
+      ansible.builtin.command:
+        cmd: >
+          openssl x509 -req
+          -in {{ redstackpro_ca_dir }}/{{ inventory_hostname }}-winrm.csr
+          -CA {{ redstackpro_ca_dir }}/ca.crt
+          -CAkey {{ redstackpro_ca_dir }}/ca.key
+          -CAserial {{ redstackpro_ca_dir }}/ca.srl
+          -days {{ redstackpro_ca_days | default(1825) }} -sha256
+          -copy_extensions copyall
+          -out {{ redstackpro_ca_dir }}/{{ inventory_hostname }}-winrm.crt
+        creates: "{{ redstackpro_ca_dir }}/{{ inventory_hostname }}-winrm.crt"
+      delegate_to: "{{ redstackpro_winrm_ca_host }}"
+
+    - name: Read the signed certificate
+      ansible.builtin.slurp:
+        src: "{{ redstackpro_ca_dir }}/{{ inventory_hostname }}-winrm.crt"
+      register: redstackpro_winrm_cert
+      delegate_to: "{{ redstackpro_winrm_ca_host }}"
+
+    - name: Place the signed certificate on the host
+      ansible.windows.win_copy:
+        content: "{{ redstackpro_winrm_cert.content | b64decode }}"
+        dest: C:\redstackpro\winrm\listener.crt
+
+    # The authority public certificate was fetched to the control node by the
+    # jumpbox play. Trusting it here lets the chain build locally when the
+    # certificate is accepted.
+    - name: Place the authority certificate on the host
+      ansible.windows.win_copy:
+        content: "{{ lookup('file', redstackpro_ca_local_path) }}"
+        dest: C:\redstackpro\winrm\redstackpro-ca.crt
+
+    - name: Trust the authority in the machine root store
+      ansible.windows.win_certificate_store:
+        path: C:\redstackpro\winrm\redstackpro-ca.crt
+        store_location: LocalMachine
+        store_name: Root
+        state: present
+
+    - name: Import the signed certificate and bind it to the pending key
+      ansible.windows.win_shell: certreq -accept -q listener.crt
+      args:
+        chdir: C:\redstackpro\winrm
+
+    # The subject is passed as a parameter rather than templated into the script
+    # body, because a script that opens with a Jinja expression trips Ansible's
+    # argument splitter before the template is ever rendered.
+    - name: Find the thumbprint of the signed certificate
+      ansible.windows.win_powershell:
+        parameters:
+          Subject: "CN={{ inventory_hostname }}"
+        script: |
+          param($Subject)
+          $Ansible.Changed = $false
+          (Get-ChildItem Cert:\LocalMachine\My |
+            Where-Object { $_.Subject -eq $Subject -and $_.Issuer -ne $_.Subject } |
+            Sort-Object NotBefore -Descending |
+            Select-Object -First 1).Thumbprint
+      register: redstackpro_winrm_thumbprint
+
+    # Set the thumbprint on the existing listener rather than recreate it. A new
+    # connection presents the signed certificate on its next handshake; the
+    # session running this play keeps the one it already negotiated, so there is
+    # no restart that would kill the connection mid task. See 0022.
+    - name: Rebind the HTTPS listener to the signed certificate
+      ansible.windows.win_powershell:
+        parameters:
+          Thumbprint: "{{ redstackpro_winrm_thumbprint.output[0] }}"
+        script: |
+          param($Thumbprint)
+          $listener = Get-ChildItem WSMan:\localhost\Listener |
+            Where-Object { $_.Keys -contains "Transport=HTTPS" } |
+            Select-Object -First 1
+          if ($listener) {
+              Set-Item -Path ("WSMan:\localhost\Listener\" + $listener.Name + "\CertificateThumbprint") -Value $Thumbprint
+          } else {
+              New-Item -Path WSMan:\localhost\Listener -Transport HTTPS -Address * -CertificateThumbPrint $Thumbprint -Force
+          }

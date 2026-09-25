@@ -1,0 +1,32 @@
+---
+# Windows ADK 2004 + the WinPE add-on (the pairing MECM 2303 requires). The
+# offline installers are downloaded, then run quiet with the feature sets MECM
+# needs. See goad-fidelity-build.
+
+- name: Download the ADK installer
+  ansible.windows.win_get_url:
+    url: "{{ redstackpro_mecm_adk_url }}"
+    dest: C:\setup\adksetup.exe
+    force: false
+
+- name: Download the WinPE add-on installer
+  ansible.windows.win_get_url:
+    url: "{{ redstackpro_mecm_winpe_url }}"
+    dest: C:\setup\adkwinpesetup.exe
+    force: false
+
+- name: Install the ADK (Deployment Tools + USMT)
+  ansible.windows.win_shell: >-
+    C:\setup\adksetup.exe /quiet /norestart /features
+    OptionId.DeploymentTools OptionId.UserStateMigrationTool
+  register: redstackpro_mecm_adk
+  changed_when: redstackpro_mecm_adk.rc in [0, 3010]
+  failed_when: redstackpro_mecm_adk.rc not in [0, 3010]
+
+- name: Install the WinPE add-on
+  ansible.windows.win_shell: >-
+    C:\setup\adkwinpesetup.exe /quiet /norestart /features
+    OptionId.WindowsPreinstallationEnvironment
+  register: redstackpro_mecm_winpe
+  changed_when: redstackpro_mecm_winpe.rc in [0, 3010]
+  failed_when: redstackpro_mecm_winpe.rc not in [0, 3010]

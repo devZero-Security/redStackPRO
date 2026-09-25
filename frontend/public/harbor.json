@@ -1,0 +1,270 @@
+{
+  "schema_version": "0.4.0",
+  "mode": "range",
+  "name": "Harbor two domain forest",
+  "prefix": "cyb",
+  "description": "A small corporate forest rather than a transcription of someone else's lab: a root domain that holds the enterprise admins and a child domain that holds the people who actually work there, joined by the parent child trust every real forest has. The attack path is the ordinary one, which is why it is worth defending: a phished workstation user finds a kerberoastable service account, that account can write to a group it should not, the group owns a delegation-trusted application server, and the child domain admin it yields walks the trust into the root. Four Windows hosts and a jumpbox, one flat subnet, on a private range that is nothing like 192.168.56 so nothing in the pipeline can be quietly assuming it.",
+  "auto_stop": {
+    "enabled": true,
+    "after_hours": 8,
+    "timezone": "UTC"
+  },
+  "nodes": [
+    {
+      "id": "net01",
+      "kind": "network",
+      "overlay": {
+        "cidr": "172.20.0.0/16"
+      }
+    },
+    {
+      "id": "sub01",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "172.20.10.0/24",
+        "egress": "allowed",
+        "exposure": "local"
+      }
+    },
+    {
+      "id": "harbor",
+      "kind": "domain",
+      "overlay": {
+        "fqdn": "harbor.corp",
+        "netbios": "HARBOR",
+        "users": [
+          {
+            "username": "roland.hale",
+            "display_name": "Roland Hale",
+            "email": "roland.hale@harbor.corp",
+            "privilege": "enterprise_admin",
+            "description": "Forest owner. The account the whole path is aimed at."
+          },
+          {
+            "username": "svc.backup",
+            "display_name": "Backup Service",
+            "privilege": "user",
+            "spns": [
+              "MSSQLSvc/backup.harbor.corp:1433"
+            ],
+            "flaws": [
+              "kerberoastable",
+              "password_never_expires"
+            ],
+            "description": "Roastable in the root domain, so the trust is not the only way up."
+          }
+        ]
+      }
+    },
+    {
+      "id": "freight",
+      "kind": "domain",
+      "overlay": {
+        "fqdn": "freight.harbor.corp",
+        "netbios": "FREIGHT",
+        "users": [
+          {
+            "username": "dana.brooks",
+            "display_name": "Dana Brooks",
+            "email": "dana.brooks@freight.harbor.corp",
+            "privilege": "user",
+            "password": "Harbour!2026",
+            "assumed_breach": true,
+            "description": "Patient zero. An ordinary user with no rights worth having, which is the point."
+          },
+          {
+            "username": "svc.reports",
+            "display_name": "Reporting Service",
+            "privilege": "user",
+            "spns": [
+              "HTTP/reports.freight.harbor.corp"
+            ],
+            "flaws": [
+              "kerberoastable",
+              "weak_password"
+            ],
+            "password": "Summer2024",
+            "description": "Step one. Roastable, and the password is guessable once you have the ticket."
+          },
+          {
+            "username": "mia.chen",
+            "display_name": "Mia Chen",
+            "email": "mia.chen@freight.harbor.corp",
+            "privilege": "user",
+            "groups": [
+              "App Maintainers"
+            ],
+            "description": "Ordinary member of the group svc.reports can write to."
+          },
+          {
+            "username": "eric.vance",
+            "display_name": "Eric Vance",
+            "email": "eric.vance@freight.harbor.corp",
+            "privilege": "domain_admin",
+            "description": "Child domain admin. The rung below the forest."
+          }
+        ],
+        "acls": [
+          {
+            "principal": "svc.reports",
+            "target": "App Maintainers",
+            "right": "GenericWrite"
+          },
+          {
+            "principal": "App Maintainers",
+            "target": "eric.vance",
+            "right": "Ext-User-Force-Change-Password"
+          }
+        ]
+      }
+    },
+    {
+      "id": "hq-dc01",
+      "kind": "dc",
+      "overlay": {
+        "os": "windows_server_2019",
+        "hostname": "hq-dc01",
+        "internal_ip": "172.20.10.10",
+        "edr": "defender",
+        "vulns": [
+          "ldap_signing_off"
+        ]
+      }
+    },
+    {
+      "id": "fr-dc01",
+      "kind": "dc",
+      "overlay": {
+        "os": "windows_server_2019",
+        "hostname": "fr-dc01",
+        "internal_ip": "172.20.10.11",
+        "edr": "defender",
+        "vulns": [
+          "llmnr_poisoning",
+          "nbtns_poisoning"
+        ]
+      }
+    },
+    {
+      "id": "fr-app01",
+      "kind": "srv",
+      "overlay": {
+        "os": "windows_server_2019",
+        "hostname": "fr-app01",
+        "internal_ip": "172.20.10.20",
+        "role": "sql",
+        "services": [
+          "mssql",
+          "iis"
+        ],
+        "edr": "none",
+        "vulns": [
+          "unconstrained_delegation",
+          "openshares"
+        ]
+      }
+    },
+    {
+      "id": "fr-wks01",
+      "kind": "wks",
+      "overlay": {
+        "os": "windows_10",
+        "hostname": "fr-wks01",
+        "internal_ip": "172.20.10.30",
+        "edr": "defender",
+        "vulns": [
+          "stored_credential"
+        ]
+      }
+    },
+    {
+      "id": "jumpbox",
+      "kind": "jumpbox",
+      "overlay": {
+        "services": [
+          "ssh",
+          "guacamole"
+        ],
+        "certificate_authority": true,
+        "internal_ip": "172.20.10.4"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-sub01-net01-attached",
+      "role": "attached",
+      "source": "sub01",
+      "target": "net01"
+    },
+    {
+      "id": "e-hq-dc01-sub01-attached",
+      "role": "attached",
+      "source": "hq-dc01",
+      "target": "sub01"
+    },
+    {
+      "id": "e-fr-dc01-sub01-attached",
+      "role": "attached",
+      "source": "fr-dc01",
+      "target": "sub01"
+    },
+    {
+      "id": "e-fr-app01-sub01-attached",
+      "role": "attached",
+      "source": "fr-app01",
+      "target": "sub01"
+    },
+    {
+      "id": "e-fr-wks01-sub01-attached",
+      "role": "attached",
+      "source": "fr-wks01",
+      "target": "sub01"
+    },
+    {
+      "id": "e-jumpbox-sub01-attached",
+      "role": "attached",
+      "source": "jumpbox",
+      "target": "sub01"
+    },
+    {
+      "id": "e-hq-dc01-harbor-joins",
+      "role": "joins",
+      "source": "hq-dc01",
+      "target": "harbor"
+    },
+    {
+      "id": "e-fr-dc01-freight-joins",
+      "role": "joins",
+      "source": "fr-dc01",
+      "target": "freight"
+    },
+    {
+      "id": "e-fr-app01-freight-joins",
+      "role": "joins",
+      "source": "fr-app01",
+      "target": "freight"
+    },
+    {
+      "id": "e-fr-wks01-freight-joins",
+      "role": "joins",
+      "source": "fr-wks01",
+      "target": "freight"
+    },
+    {
+      "id": "e-harbor-freight-trusts",
+      "role": "trusts",
+      "source": "harbor",
+      "target": "freight",
+      "trust_type": "parent_child",
+      "direction": "bidirectional",
+      "transitive": true
+    },
+    {
+      "id": "e-jumpbox-net01-manages",
+      "role": "manages",
+      "source": "jumpbox",
+      "target": "net01"
+    }
+  ]
+}

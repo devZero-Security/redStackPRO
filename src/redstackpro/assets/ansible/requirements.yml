@@ -1,0 +1,22 @@
+---
+# Collections the redStackPRO roles use. Install before running the playbook:
+#     ansible-galaxy collection install -r ansible/requirements.yml
+#
+# Ansible itself is not bundled and its source is not vendored or linked. These
+# are ordinary dependencies the operator installs on their own machine, and the
+# generated playbooks are redStackPRO's own work. See 0002.
+collections:
+  - name: community.general
+  - name: ansible.posix
+  # The jumpbox portal runs in containers.
+  - name: community.docker
+  # A Windows operator box. Reached over psrp rather than ssh, so every module
+  # that touches it comes from here. See 0019.
+  - name: ansible.windows
+  - name: community.windows
+  - name: chocolatey.chocolatey
+  # Active Directory for the defensive ranges: a range's controllers, domains,
+  # trusts, groups, and users are built with these modules. redStackPRO's own
+  # roles orchestrate them; the collection is an ordinary dependency the operator
+  # installs, not vendored GOAD content. See goad-native-recreation.
+  - name: microsoft.ad

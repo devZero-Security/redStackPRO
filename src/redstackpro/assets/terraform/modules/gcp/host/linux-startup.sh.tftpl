@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# redStackPRO Linux low-touch setup, run by the GCP guest agent as the
+# startup-script on every boot. The guest agent creates ${admin_username} (the
+# single platform account, redop/blueop) from the ssh-keys metadata, with the
+# Guacamole key authorized alongside it; this script sets the shared lab password
+# so a direct login works, and on the jumpbox drops the credential files the
+# portal reads. operator_username carries the same platform account now, so the
+# operator-username file holds redop/blueop. The password is generated at apply,
+# never in the export. See 0001, P1.7, goad-native-recreation.
+set -eu
+
+# The guest agent may create ${admin_username} slightly after this runs; wait briefly.
+for _ in $(seq 1 30); do
+  id ${admin_username} >/dev/null 2>&1 && break
+  sleep 2
+done
+id ${admin_username} >/dev/null 2>&1 || useradd -m -s /bin/bash ${admin_username}
+
+echo "${admin_username}:${lab_password}" | chpasswd
+# Passwordless sudo, the analogue of the AWS cloud-init sudoers drop-in.
+echo "${admin_username} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-redstackpro-${admin_username}
+chmod 440 /etc/sudoers.d/90-redstackpro-${admin_username}
+# Allow the direct password login Guacamole's ssh tile can use.
+sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config || true
+systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+
+%{ if guac_private_key != "" ~}
+# The jumpbox alone gets the private half of the key and the portal credentials.
+install -d -m 0700 /etc/redstackpro
+umask 077
+cat > /etc/redstackpro/guacamole-ssh-key <<'REDSTACKPRO_GUAC_KEY'
+${guac_private_key}
+REDSTACKPRO_GUAC_KEY
+printf '%s' "${operator_username}" > /etc/redstackpro/operator-username
+printf '%s' "${lab_password}" > /etc/redstackpro/lab-password
+chmod 600 /etc/redstackpro/guacamole-ssh-key /etc/redstackpro/operator-username /etc/redstackpro/lab-password
+%{ endif ~}

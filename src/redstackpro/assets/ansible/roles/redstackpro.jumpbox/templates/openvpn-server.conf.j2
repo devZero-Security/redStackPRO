@@ -1,0 +1,28 @@
+{{ ansible_managed | comment }}
+# Server side only. Client certificates are issued from the same CA once the
+# peers relation exists.
+
+port {{ redstackpro_openvpn_port }}
+proto udp
+dev tun
+
+ca {{ redstackpro_ca_dir }}/ca.crt
+cert /etc/openvpn/server/pki/server.crt
+key /etc/openvpn/server/pki/server.key
+dh /etc/openvpn/server/pki/dh.pem
+
+server {{ redstackpro_openvpn_subnet }} {{ redstackpro_openvpn_netmask }}
+topology subnet
+keepalive 10 120
+
+cipher AES-256-GCM
+auth SHA256
+tls-version-min 1.2
+
+user nobody
+group nogroup
+persist-key
+persist-tun
+
+status /var/log/openvpn-status.log
+verb 3

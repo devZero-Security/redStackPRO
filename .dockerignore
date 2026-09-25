@@ -1,0 +1,35 @@
+# Keep the build context small and free of anything that should never enter an
+# image. The Dockerfile copies only what it names; this is belt and braces plus
+# a much smaller, faster context.
+
+# heavy, rebuilt inside the image, or never needed at runtime
+.git
+frontend/node_modules
+frontend/dist
+.venv-win
+.venv
+venv
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+
+# databases, state, secrets: never baked into a public image
+*.db
+*.tfstate
+*.tfstate.*
+*.tfvars
+!example.tfvars
+*.pem
+*.key
+.env
+.env.*
+.redstackpro
+
+# not part of the running app
+tests
+docs
+.github
+exports
+working-dirs
+build-pc

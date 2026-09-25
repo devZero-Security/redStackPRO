@@ -1,0 +1,34 @@
+---
+# Sliver and Adaptix compile Go implants on demand, which spikes to 1 to 2 GB.
+# Without swap a small instance OOMs mid build and sshd stops forking.
+- name: Create the swap file
+  ansible.builtin.command:
+    cmd: fallocate -l 2G /swapfile
+    creates: /swapfile
+
+- name: Restrict the swap file
+  ansible.builtin.file:
+    path: /swapfile
+    mode: "0600"
+
+- name: Format the swap file
+  ansible.builtin.command:
+    cmd: mkswap /swapfile
+  register: redstackpro_mkswap
+  changed_when: "'no valid swap' not in redstackpro_mkswap.stderr"
+  failed_when: false
+
+- name: Enable swap at boot
+  ansible.posix.mount:
+    path: none
+    src: /swapfile
+    fstype: swap
+    opts: sw
+    state: present
+
+- name: Enable swap now
+  ansible.builtin.command:
+    cmd: swapon /swapfile
+  register: redstackpro_swapon
+  changed_when: redstackpro_swapon.rc == 0
+  failed_when: false

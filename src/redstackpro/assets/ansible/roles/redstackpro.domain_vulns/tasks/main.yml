@@ -1,0 +1,171 @@
+---
+# redStackPRO domain-level attack paths that target member computers, so they
+# must run after the members have joined, not during the controller play. This
+# runs in a final play on the controllers; it reloads the domain definition
+# because it is its own play, and connects as the domain admin the controller
+# play already set. Recognizable-first: unconstrained delegation and shadow
+# credentials. See goad-native-recreation.
+
+- name: Load the domain definition
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/{{ redstackpro_domain_vars }}"
+    name: redstackpro_domain
+
+- name: Flag computers for unconstrained delegation
+  ansible.windows.win_powershell:
+    script: |
+      param($Computer)
+      $ErrorActionPreference = "Stop"
+      Set-ADComputer -Server localhost -Identity $Computer -TrustedForDelegation $true
+    parameters:
+      Computer: "{{ item.hostname }}"
+  changed_when: true
+  when: "'unconstrained_delegation' in (item.vulns | default([]))"
+  loop: "{{ redstackpro_domain.members | default([]) }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+
+- name: Configure Kerberos-only constrained delegation on flagged computers
+  ansible.windows.win_powershell:
+    script: |
+      param($Computer, $DelegateTo)
+      $ErrorActionPreference = "Stop"
+      $targets = $DelegateTo | ConvertFrom-Json
+      if ($targets.Count -gt 0) {
+        Set-ADComputer -Server localhost -Identity $Computer -Add @{'msDS-AllowedToDelegateTo' = $targets}
+      }
+    parameters:
+      Computer: "{{ item.hostname }}"
+      DelegateTo: "{{ (item.vulns_vars | default({})).delegate_to | default([]) | to_json }}"
+  changed_when: true
+  when: "'constrained_delegation_kerberos' in (item.vulns | default([]))"
+  loop: "{{ redstackpro_domain.members | default([]) }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+
+- name: Grant shadow-credential write on flagged computers
+  ansible.windows.win_powershell:
+    script: |
+      param($Computer)
+      $ErrorActionPreference = "Stop"
+      Import-Module ActiveDirectory
+      $PSDefaultParameterValues = @{ '*-AD*:Server' = 'localhost' }
+      New-PSDrive -Name ADL -PSProvider ActiveDirectory -Server localhost -Root "//RootDSE/" -Scope Script -ErrorAction SilentlyContinue | Out-Null
+      $c = Get-ADComputer -Server localhost -Identity $Computer
+      $authed = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-11")
+      $attr = [GUID]"5b47d60f-6090-40b2-9f37-2a4de88f3063"
+      $acl = Get-Acl -Path "ADL:\$($c.DistinguishedName)"
+      $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($authed, "WriteProperty", "Allow", $attr)
+      $acl.AddAccessRule($rule)
+      Set-Acl -Path "ADL:\$($c.DistinguishedName)" -AclObject $acl
+    parameters:
+      Computer: "{{ item.hostname }}"
+  changed_when: true
+  when: "'shadow_credentials' in (item.vulns | default([]))"
+  loop: "{{ redstackpro_domain.members | default([]) }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+
+# Some ACL edges cannot be applied in the controller play because their target
+# does not exist yet at that point: a member computer's account (target ends in $)
+# only exists after the member joins, and a certificate-template object (a config-
+# NC DN under "Certificate Templates") only exists after the ADCS member plants it.
+# Both are applied here, after the member plays, from the same acls list. Edges the
+# controller play already applied (existing users, groups, OUs) are not revisited.
+# See attack_paths.yml and apply_acls.ps1.
+- name: Apply deferred ACL edges (member computers, certificate templates)
+  ansible.windows.win_powershell:
+    script: |
+      param($AclsJson)
+      $ErrorActionPreference = "Stop"
+      Import-Module ActiveDirectory
+      $PSDefaultParameterValues = @{ '*-AD*:Server' = 'localhost' }
+      New-PSDrive -Name ADL -PSProvider ActiveDirectory -Server localhost -Root "//RootDSE/" -Scope Script -ErrorAction SilentlyContinue | Out-Null
+      $rights = @{
+          "GenericAll"    = [System.DirectoryServices.ActiveDirectoryRights]"GenericAll"
+          "GenericWrite"  = [System.DirectoryServices.ActiveDirectoryRights]"GenericWrite"
+          "WriteDacl"     = [System.DirectoryServices.ActiveDirectoryRights]"WriteDacl"
+          "WriteOwner"    = [System.DirectoryServices.ActiveDirectoryRights]"WriteOwner"
+          "WriteProperty" = [System.DirectoryServices.ActiveDirectoryRights]"WriteProperty"
+      }
+      # Property-writes scoped to one attribute (WriteProperty + schemaIDGUID).
+      $propWrite = @{
+          "Ext-Write-SPN" = [GUID]"f3a64788-5306-11d1-a9c5-0000f80367c1"
+      }
+      foreach ($a in ($AclsJson | ConvertFrom-Json)) {
+          # A full DN target (a certificate template, or any CN/OU/DC path) is used
+          # verbatim; a bare name ending in $ is a member computer to look up.
+          if ($a.target -match "^(CN|OU|DC)=") {
+              $targetDn = $a.target
+              if (-not (Get-ADObject -Server localhost -Filter "distinguishedName -eq '$targetDn'" -ErrorAction SilentlyContinue)) { continue }
+          } else {
+              $name = $a.target.TrimEnd('$')
+              $c = Get-ADComputer -Server localhost -Filter "name -eq '$name'" -ErrorAction SilentlyContinue | Select-Object -First 1
+              if (-not $c) { continue }
+              $targetDn = $c.DistinguishedName
+          }
+          if (-not ($rights.ContainsKey($a.right) -or $propWrite.ContainsKey($a.right))) { continue }
+          # The principal is an existing object, or a group the chain names that
+          # is created here just as the controller-play applier would.
+          $pf = "sAMAccountName -eq '$($a.principal)' -or name -eq '$($a.principal)'"
+          $p = Get-ADObject -Server localhost -Filter $pf -Properties objectSid -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $p) {
+              $g = New-ADGroup -Server localhost -Name $a.principal -GroupScope Global -PassThru
+              $p = Get-ADObject -Server localhost -Identity $g.DistinguishedName -Properties objectSid
+          }
+          $sid = New-Object System.Security.Principal.SecurityIdentifier($p.objectSid)
+          $acl = Get-Acl -Path "ADL:\$targetDn"
+          if ($propWrite.ContainsKey($a.right)) {
+              $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, "WriteProperty", "Allow", $propWrite[$a.right])
+          } else {
+              $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, $rights[$a.right], "Allow")
+          }
+          $acl.AddAccessRule($rule)
+          Set-Acl -Path "ADL:\$targetDn" -AclObject $acl
+      }
+    parameters:
+      AclsJson: "{{ redstackpro_domain.acls | default([]) | selectattr('target', 'search', '[$]|Certificate Templates') | list | to_json }}"
+  changed_when: true
+  when: (redstackpro_domain.acls | default([]) | selectattr('target', 'search', '[$]|Certificate Templates') | list | length) > 0
+
+# Group-managed service accounts whose password a non-privileged principal can
+# retrieve (a readable gMSA). The retrieving principal is a member computer, so
+# this runs after the joins. GOAD's gmsaDragon lets the braavos computer read its
+# password; a separate acls edge then gives gmsaDragon$ rights over a user.
+- name: Create group-managed service accounts
+  ansible.windows.win_powershell:
+    script: |
+      param($Name, $Dns, $SpnsJson, $HostsJson)
+      $ErrorActionPreference = "Stop"
+      Import-Module ActiveDirectory
+      if (-not (Get-KdsRootKey -ErrorAction SilentlyContinue)) {
+        Add-KdsRootKey -EffectiveTime ((Get-Date).AddHours(-10)) | Out-Null
+      }
+      $spns = $SpnsJson | ConvertFrom-Json
+      $hosts = $HostsJson | ConvertFrom-Json
+      $principals = @()
+      foreach ($h in $hosts) {
+        $c = Get-ADComputer -Server localhost -Identity $h -ErrorAction SilentlyContinue
+        if ($c) { $principals += $c }
+      }
+      if ($principals.Count -eq 0) { return }
+      if (-not (Get-ADServiceAccount -Server localhost -Filter "Name -eq '$Name'" -ErrorAction SilentlyContinue)) {
+        New-ADServiceAccount -Server localhost -Name $Name -DNSHostName $Dns `
+          -PrincipalsAllowedToRetrieveManagedPassword $principals `
+          -ServicePrincipalNames $spns
+      }
+    parameters:
+      Name: "{{ item.name }}"
+      Dns: "{{ item.dns | default(item.name ~ '.' ~ redstackpro_domain.domain_fqdn) }}"
+      SpnsJson: "{{ item.spns | default([]) | to_json }}"
+      HostsJson: "{{ item.hosts | default([]) | to_json }}"
+  changed_when: true
+  loop: "{{ redstackpro_domain.gmsa | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# A GPP cpassword left decryptable in SYSVOL. Domain-level (SYSVOL is on the
+# controller), gated by any member declaring gpp_password so it stays toggleable.
+- name: Plant a GPP cpassword if any member declares it
+  ansible.builtin.include_tasks: gpp_password.yml
+  when: "'gpp_password' in (redstackpro_domain.members | default([]) | map(attribute='vulns') | map('default', []) | flatten | list)"

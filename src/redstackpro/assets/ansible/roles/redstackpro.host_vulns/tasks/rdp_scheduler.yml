@@ -1,0 +1,34 @@
+---
+# RDP scheduled logon: a recurring task that performs an interactive-style logon
+# as a domain user, so an attacker on the box can capture a live session or its
+# credentials (GOAD's connect_bot). Runs as a domain user with the shared lab
+# password. See goad-fidelity-build.
+
+- name: Ensure the setup directory exists
+  ansible.windows.win_file:
+    path: C:\setup
+    state: directory
+
+- name: Stage the RDP bot script
+  ansible.windows.win_copy:
+    dest: C:\setup\bot_rdp.ps1
+    content: |
+      # Recurring interactive logon bot. Maps a drive as the bot user so a live
+      # session/credential is present on the host for capture.
+      New-PSDrive -Name Home -PSProvider FileSystem -Root \\localhost\C$ -ErrorAction SilentlyContinue | Out-Null
+      Start-Sleep -Seconds 5
+
+- name: Create the RDP logon bot
+  ansible.windows.win_powershell:
+    script: |
+      param($User, $Pass)
+      $ErrorActionPreference = "Stop"
+      $a = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -File C:\setup\bot_rdp.ps1"
+      $t = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1)
+      Register-ScheduledTask -TaskName connect_bot -Action $a -Trigger $t `
+        -User $User -Password $Pass -RunLevel Limited -Force | Out-Null
+    parameters:
+      User: "{{ redstackpro_host_vulns_vars.bot_user | default('') }}"
+      Pass: "{{ (redstackpro_user_passwords | default({})).get(redstackpro_host_vulns_vars.bot_user | default(''), redstackpro_lab_password) }}"
+  changed_when: true
+  when: redstackpro_host_vulns_vars.bot_user | default('') | length > 0

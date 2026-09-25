@@ -1,0 +1,23 @@
+kind: collector
+abbrev: log
+category: host
+ansible_group: collectors
+description: Receives shipped logs. Sits in its own tier.
+
+display:
+  label: Collector
+  blurb: Receives shipped logs
+  icon: tabler/outline/database
+  group: management
+  color: "#9c36b5"
+
+modes:
+  - ops
+
+derived:
+  - name: private_address
+    source: provider
+
+requirements:
+  - name: compute
+  - name: linux_image

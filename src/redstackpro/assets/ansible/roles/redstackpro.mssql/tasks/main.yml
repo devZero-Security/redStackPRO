@@ -1,0 +1,169 @@
+---
+# redStackPRO MSSQL: install SQL Server Express (via chocolatey, which fetches
+# correct media and runs setup in a working context - the standalone installers
+# fail to launch unattended) and set up the recognizable MSSQL attack surface:
+# a Domain Users login that can EXECUTE AS sa (impersonation -> sysadmin) and
+# linked servers for lateral movement. GOAD is the fidelity benchmark; this is
+# our own role. See goad-fidelity-build.
+
+# Edition drives the chocolatey package, the instance, and the service name. The
+# default Express is fine for a plain SQL member; a MECM site database requires a
+# full edition (Developer), which installs to the default instance.
+- name: Resolve the SQL edition (package + instance)
+  ansible.builtin.set_fact:
+    redstackpro_mssql_choco_pkg: "{{ 'sql-server-2019' if redstackpro_mssql_edition == 'developer' else 'sql-server-express' }}"
+    redstackpro_mssql_instance: "{{ 'MSSQLSERVER' if redstackpro_mssql_edition == 'developer' else redstackpro_mssql_instance }}"
+
+# The default instance (MSSQLSERVER) service is literally MSSQLSERVER; a named
+# instance's service is MSSQL$<name>. Derive it in a second step so the settled
+# instance is used, not the one being assigned above.
+- name: Resolve the SQL service name from the instance
+  ansible.builtin.set_fact:
+    redstackpro_mssql_service_name: "{{ 'MSSQLSERVER' if redstackpro_mssql_instance == 'MSSQLSERVER' else 'MSSQL$' ~ redstackpro_mssql_instance }}"
+
+- name: Is the SQL instance already installed?
+  ansible.windows.win_service:
+    name: "{{ redstackpro_mssql_service_name }}"
+  register: redstackpro_mssql_service
+  failed_when: false
+
+- name: Install SQL Server
+  when: not (redstackpro_mssql_service.exists | default(false))
+  block:
+    - name: Create the setup directory
+      ansible.windows.win_file:
+        path: C:\setup\mssql
+        state: directory
+
+    - name: Render the unattended configuration (sysadmins, sa, mixed mode)
+      ansible.windows.win_template:
+        src: sql_conf.ini.j2
+        dest: C:\setup\mssql\sql_conf.ini
+
+    - name: Bootstrap chocolatey
+      ansible.windows.win_powershell:
+        script: |
+          $ErrorActionPreference = "Stop"
+          if (-not (Get-Command choco.exe -ErrorAction SilentlyContinue)) {
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+            Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+          }
+      changed_when: true
+
+    # SQL setup fails with "error generating the XML document" when run over the
+    # WinRM session, whose logon has no loaded user profile. Run it under a
+    # scheduled task (a batch logon loads a profile and a valid TEMP), the same
+    # pattern the CA install uses.
+    - name: Install SQL Server under a scheduled task
+      ansible.windows.win_powershell:
+        script: |
+          param($Ea, $Pass, $Instance, $Pkg, $Svc)
+          $ErrorActionPreference = "Stop"
+          $body = @"
+          `$ErrorActionPreference = 'Continue'
+          & C:\ProgramData\chocolatey\bin\choco.exe install $Pkg -y --force --no-progress ``
+            --params "'/ConfigurationFile:C:\setup\mssql\sql_conf.ini'" *> C:\Windows\Temp\choco-sql.log
+          Set-Content C:\Windows\Temp\choco-done.txt `$LASTEXITCODE
+          "@
+          Set-Content -Path C:\Windows\Temp\choco-sql.ps1 -Value $body
+          Remove-Item C:\Windows\Temp\choco-done.txt -ErrorAction SilentlyContinue
+          $action = New-ScheduledTaskAction -Execute "powershell.exe" `
+            -Argument "-ExecutionPolicy Bypass -File C:\Windows\Temp\choco-sql.ps1"
+          Register-ScheduledTask -TaskName RSPMssql -Action $action -User $Ea `
+            -Password $Pass -RunLevel Highest -Force | Out-Null
+          Start-ScheduledTask -TaskName RSPMssql
+          $done = $false
+          for ($i = 0; $i -lt 120; $i++) {
+            Start-Sleep -Seconds 20
+            if (Test-Path C:\Windows\Temp\choco-done.txt) { $done = $true; break }
+          }
+          if (-not $done) { throw "SQL install did not finish in time" }
+          $code = (Get-Content C:\Windows\Temp\choco-done.txt) -as [int]
+          # The OUTCOME decides this, not choco's exit code. The
+          # sql-server-express package installs the engine and THEN deletes its
+          # extracted files, and that cleanup races a handle Setup still holds on
+          # SCENARIOENGINE.EXE: "Access to the path is denied", choco exits -1,
+          # and reports the package failed -- with SQL Server fully installed and
+          # the service running. Trusting the exit code failed a deploy over a
+          # database that was actually there. So: if the service exists, the
+          # install worked, whatever choco says; only a MISSING service on a bad
+          # exit code is a real failure. Found on a live range 2026-09-18.
+          $svc = Get-Service -Name $Svc -ErrorAction SilentlyContinue
+          if (-not $svc -and $code -notin 0, 3010, 1641) {
+            throw "choco install exit $code and no '$Svc' service; see C:\Windows\Temp\choco-sql.log"
+          }
+          [Ordered]@{ code = $code; service_present = [bool]$svc }
+        parameters:
+          Ea: "{{ redstackpro_mssql_domain_admin }}"
+          Pass: "{{ redstackpro_lab_password }}"
+          Instance: "{{ redstackpro_mssql_instance }}"
+          Pkg: "{{ redstackpro_mssql_choco_pkg }}"
+          Svc: "{{ redstackpro_mssql_service_name }}"
+      register: redstackpro_mssql_install
+      changed_when: true
+      async: 3600
+      poll: 30
+
+- name: Enable TCP and force the instance onto port 1433
+  ansible.windows.win_powershell:
+    script: |
+      param($Instance)
+      $ErrorActionPreference = "Stop"
+      # The instance's registry key is version-stamped (MSSQL15/MSSQL16/...); look
+      # it up rather than hard-coding a SQL version.
+      $reg = (Get-ItemProperty "HKLM:\Software\Microsoft\Microsoft SQL Server\Instance Names\SQL").$Instance
+      $tcp = "HKLM:\Software\Microsoft\Microsoft SQL Server\$reg\MSSQLServer\SuperSocketNetLib\Tcp"
+      Set-ItemProperty -Path $tcp -Name Enabled -Value 1
+      Set-ItemProperty -Path "$tcp\IPAll" -Name TcpPort -Value "1433"
+      Set-ItemProperty -Path "$tcp\IPAll" -Name TcpDynamicPorts -Value ""
+    parameters:
+      Instance: "{{ redstackpro_mssql_instance }}"
+  changed_when: true
+
+- name: Open the SQL ports on the domain firewall
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = "SilentlyContinue"
+      New-NetFirewallRule -DisplayName "redStackPro MSSQL 1433" -Direction Inbound `
+        -Action Allow -Protocol TCP -LocalPort 1433 -Profile Any | Out-Null
+      New-NetFirewallRule -DisplayName "redStackPro MSSQL 1434" -Direction Inbound `
+        -Action Allow -Protocol UDP -LocalPort 1434 -Profile Any | Out-Null
+  changed_when: true
+
+# MECM's site-server prereq check rejects the SQL service running as the default
+# NT Service virtual account: it must be a domain account, NETWORK SERVICE, or
+# LOCAL SYSTEM. LocalSystem authenticates on the network as the computer account
+# and needs no password or file-permission grants. Only the MECM site DB
+# (developer edition) needs this; a plain Express member keeps its default.
+- name: Run SQL under LocalSystem for a MECM site DB (MECM rejects NT Service)
+  ansible.windows.win_service:
+    name: "{{ redstackpro_mssql_service_name }}"
+    username: LocalSystem
+  when: redstackpro_mssql_edition == 'developer'
+
+# MECM setup requires the site-server computer account to be a local administrator
+# on the SQL box (not just a SQL sysadmin). The sysadmins list already names it
+# (e.g. SCCMLAB\MECM$), so reuse it. Harmless on a plain SQL host, which has none.
+- name: Make the site-server accounts local admins on the SQL box (MECM prereq)
+  ansible.windows.win_group_membership:
+    name: Administrators
+    members: "{{ redstackpro_mssql_sysadmins }}"
+    state: present
+  when:
+    - redstackpro_mssql_edition == 'developer'
+    - redstackpro_mssql_sysadmins | length > 0
+
+- name: Start the SQL service
+  ansible.windows.win_service:
+    name: "{{ redstackpro_mssql_service_name }}"
+    state: restarted
+
+- name: Wait for the SQL listener on 1433
+  ansible.windows.win_wait_for:
+    port: 1433
+    delay: 5
+    timeout: 120
+
+- name: Apply the MSSQL attack-path configuration
+  ansible.builtin.include_tasks: configure.yml

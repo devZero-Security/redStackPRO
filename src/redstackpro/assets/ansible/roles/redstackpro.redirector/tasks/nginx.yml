@@ -1,0 +1,20 @@
+---
+- name: Write the server blocks
+  ansible.builtin.template:
+    src: nginx-redirector.conf.j2
+    dest: /etc/nginx/sites-available/redstackpro-redirector
+    mode: "0644"
+  notify: Restart nginx
+
+- name: Disable the default site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Restart nginx
+
+- name: Enable the redirector site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/redstackpro-redirector
+    dest: /etc/nginx/sites-enabled/redstackpro-redirector
+    state: link
+  notify: Restart nginx

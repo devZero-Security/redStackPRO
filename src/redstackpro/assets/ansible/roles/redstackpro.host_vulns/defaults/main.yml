@@ -1,0 +1,62 @@
+---
+# The vuln ids this host declares (mapped in by the calling role from its
+# kind-namespaced list) and the ids the engine can actually plant. Ids are the
+# canvas catalog ids (frontend/src/vulns.js), passed through untranslated.
+redstackpro_host_vulns: []
+# Per-path parameters (e.g. a writable_share's path/user/rights) carried on the
+# host overlay's vulns_vars and mapped in by the calling role.
+redstackpro_host_vulns_vars: {}
+# Windows Defender posture. Off by default to match GOAD (mayfly ships it disabled);
+# set true (a per-host or per-range canvas toggle) to leave Defender enabled. See
+# disable_defender.yml and productize-temp-fixes (PZ-5).
+redstackpro_defender_enabled: false
+redstackpro_endpoint_telemetry: false
+# The esc ids the redstackpro.adcs role plants. They are not host_vulns tasks, so
+# they belong in neither list above, but the "declared but not planted" notice
+# has to know them: it used to reject every id matching ^esc on the assumption
+# that adcs covered all of them, and esc8 is the one it does not. A declared esc8
+# was then planted by nobody AND filtered out of the only line that would have
+# said so. Named explicitly, because the assumption is the part that was wrong.
+redstackpro_adcs_planted:
+  - esc1
+  - esc2
+  - esc3
+  - esc4
+  - esc5
+  - esc6
+  - esc7
+  - esc8
+  - esc9
+  - esc11
+  - esc13
+  - esc14
+  - esc15
+  - esc16
+redstackpro_host_vulns_implemented:
+  - smbv1
+  - llmnr_poisoning
+  - nbtns_poisoning
+  - ntlm_downgrade
+  - autologon
+  - esc10
+  - run_as_ppl
+  - openshares
+  - writable_share
+  - stored_credential
+  - sysvol_secret
+  - responder
+  - ntlm_relay
+  - rdp_scheduler
+  - laps_read
+  - enable_credssp_server
+  - enable_credssp_client
+  - schedule
+  - keepass_vault
+  - ldaps
+  - administrator_folder
+  - disable_firewall
+  - directory
+  - files
+  - printnightmare
+  - ldap_signing_off
+  - iis_webshell

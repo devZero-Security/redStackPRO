@@ -1,0 +1,43 @@
+{{ ansible_managed | comment }}
+# The only host in this export with a public address. Every other host is
+# reached by ProxyJump through it, which is why AllowTcpForwarding stays on.
+
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+PermitEmptyPasswords no
+PubkeyAuthentication yes
+
+MaxAuthTries {{ redstackpro_jumpbox_max_auth_tries }}
+MaxSessions 10
+LoginGraceTime 30
+ClientAliveInterval 300
+ClientAliveCountMax 2
+
+# ProxyJump depends on this. Turning it off breaks management of every host
+# behind this one.
+AllowTcpForwarding yes
+GatewayPorts no
+X11Forwarding no
+PermitTunnel no
+AllowAgentForwarding no
+
+AllowUsers {{ (redstackpro_jumpbox_allow_users + (redstackpro_jumpbox_foothold_users | default([]))) | join(' ') }}
+
+LogLevel VERBOSE
+
+# Key-only, with no exception for patient zero. Until 2026-09-10 a Match block
+# here re-enabled PasswordAuthentication for the foothold accounts, because the
+# briefing told the operator to SSH in as patient zero with the lab password.
+# The entry model has since changed: the Guacamole portal is the way in for both
+# offense and defense, and the assumed-breach identity is reached through a
+# patient-zero RDP tile on a range host, not by SSH to this box. That leaves a
+# password-authenticating account on the internet with nothing depending on it,
+# so it is gone. See range-access-model.
+#
+# Consequence to remember: the foothold accounts still exist here as local
+# admins with the lab password (foothold.yml), but that password no longer opens
+# an SSH session, and a Guacamole SSH tile would not help -- Guacamole types the
+# password at sshd, which refuses it. Restoring p0 SSH means giving those
+# accounts an authorized_key, not putting this block back.

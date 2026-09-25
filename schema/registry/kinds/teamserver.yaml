@@ -1,0 +1,23 @@
+kind: teamserver
+abbrev: ts
+category: host
+ansible_group: teamservers
+description: Runs the C2. Never publicly exposed.
+
+display:
+  label: Generic
+  blurb: A teamserver with no preset C2, for loading your own
+  icon: tabler/outline/server-2
+  group: teamservers
+  color: "#e03131"
+
+modes:
+  - ops
+
+derived:
+  - name: private_address
+    source: provider
+
+requirements:
+  - name: compute
+  - name: linux_image

@@ -1,0 +1,20 @@
+---
+# CredSSP client: let this host delegate fresh credentials to any server (the
+# initiating end of a double-hop). Turns on the AllowFreshCredentials policy with
+# a wildcard delegate list, so a logon here can be forwarded anywhere -- the
+# permissive posture the double-hop attack relies on. See goad-fidelity-build.
+
+- name: Enable CredSSP client delegation
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = "Stop"
+      Enable-WSManCredSSP -Role Client -DelegateComputer '*' -Force | Out-Null
+      $k = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CredentialsDelegation"
+      New-Item $k -Force | Out-Null
+      New-ItemProperty $k -Name AllowFreshCredentials -Value 1 -PropertyType DWord -Force | Out-Null
+      New-ItemProperty $k -Name ConcatenateDefaults_AllowFresh -Value 1 -PropertyType DWord -Force | Out-Null
+      $ak = "$k\AllowFreshCredentials"
+      New-Item $ak -Force | Out-Null
+      New-ItemProperty $ak -Name '1' -Value 'WSMAN/*' -PropertyType String -Force | Out-Null
+      [Ordered]@{ credssp_client = $true }
+  changed_when: true

@@ -1,0 +1,51 @@
+# {{ ansible_managed }}
+# Fronts the Guacamole web application with TLS. The operator reaches the portal
+# on 443; the container's plain http stays on loopback. The certificate is self
+# signed, a lab portal rather than a public site.
+
+server {
+    listen 80;
+    server_name _;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name _;
+
+    ssl_certificate     /etc/redstackpro/tls/guacamole.crt;
+    ssl_certificate_key /etc/redstackpro/tls/guacamole.key;
+
+{% if redstackpro_collector_address | default('') | length > 0 %}
+    # The collector's dashboard, reached through the portal rather than a second
+    # public door. The collector holds no public address and in ops mode the
+    # plan's networks are internally open, so this hop is jumpbox to collector on
+    # a private address and the internet never sees 5601. Dashboards is
+    # configured with the matching server.basePath, without which every asset
+    # 404s one click in.
+    location /dashboards/ {
+        proxy_pass http://{{ redstackpro_collector_address }}:{{ redstackpro_dashboards_port | default(5601) }}/dashboards/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $http_connection;
+        # A first load pulls several megabytes of bundle, and a long query can
+        # sit while opensearch aggregates.
+        proxy_read_timeout 300s;
+        proxy_buffering off;
+    }
+
+{% endif %}
+    location / {
+        proxy_pass http://127.0.0.1:{{ redstackpro_guacamole_http_port }}/;
+        proxy_buffering off;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        # Guacamole tunnels over a websocket, so the upgrade headers pass through.
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $http_connection;
+        access_log off;
+    }
+}

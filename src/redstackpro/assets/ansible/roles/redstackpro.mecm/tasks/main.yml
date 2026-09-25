@@ -1,0 +1,71 @@
+---
+# Stand up a MECM primary site on this host and plant its attack surface. The
+# install (features, ADK, WSUS, the ~1h site setup) is heavy and reboot-sensitive;
+# the attack config is quick CM-module scripting. Idempotent: the site install is
+# skipped once the site is present, and the config is safe to re-run. Runs the
+# AD-writing and setup steps under a batch logon as the forest-root admin (Schema/
+# Enterprise Admin), the same token trick the ADCS role uses. See goad-fidelity-build.
+
+- name: Fail early without a domain admin identity or a SQL server
+  ansible.builtin.assert:
+    that:
+      - redstackpro_mecm_domain_admin | length > 0
+      - redstackpro_mecm_sql_fqdn | length > 0
+
+- name: Check whether a MECM site is already installed
+  ansible.windows.win_powershell:
+    script: |
+      $svc = Get-Service SMS_EXECUTIVE -ErrorAction SilentlyContinue
+      $reg = Test-Path "HKLM:\SOFTWARE\Microsoft\SMS\Identification"
+      [Ordered]@{ installed = [bool]($svc -and $reg) }
+  register: redstackpro_mecm_state
+  changed_when: false
+
+- name: Install the server prerequisites (IIS, features, VC++, ODBC)
+  ansible.builtin.include_tasks: prereqs.yml
+  when: not redstackpro_mecm_state.output[0].installed
+
+- name: Install the Windows ADK and WinPE add-on
+  ansible.builtin.include_tasks: adk.yml
+  when: not redstackpro_mecm_state.output[0].installed
+
+# On a fresh range the remote SQL box may still be installing when we get here.
+# WSUS post-install and the site setup both connect to it, so gate on the instance
+# actually accepting TCP 1433 first (else they fail with "server not found",
+# error 40). No-op on an already-running SQL box (passes on the first try).
+- name: Wait for the remote SQL instance to accept connections
+  ansible.windows.win_powershell:
+    script: |
+      param($Sql)
+      $server = ($Sql -split '\\')[0]
+      $ok = $false
+      try {
+        $c = New-Object System.Net.Sockets.TcpClient
+        $c.Connect($server, 1433)
+        $ok = $c.Connected
+        $c.Close()
+      } catch { $ok = $false }
+      [Ordered]@{ ready = [bool]$ok }
+    parameters:
+      Sql: "{{ redstackpro_mecm_sql_fqdn }}"
+  register: redstackpro_mecm_sqlwait
+  until: redstackpro_mecm_sqlwait.output[0].ready
+  retries: 60
+  delay: 30
+  changed_when: false
+  when: not redstackpro_mecm_state.output[0].installed
+
+- name: Install and configure WSUS
+  ansible.builtin.include_tasks: wsus.yml
+  when: not redstackpro_mecm_state.output[0].installed
+
+- name: Prepare Active Directory (System Management container + schema)
+  ansible.builtin.include_tasks: ad_prep.yml
+  when: not redstackpro_mecm_state.output[0].installed
+
+- name: Install the MECM primary site
+  ansible.builtin.include_tasks: install_site.yml
+  when: not redstackpro_mecm_state.output[0].installed
+
+- name: Configure the SCCM attack surface (NAA, client push, PXE, RBAC)
+  ansible.builtin.include_tasks: configure.yml

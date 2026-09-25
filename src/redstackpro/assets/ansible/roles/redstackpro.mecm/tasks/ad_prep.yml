@@ -1,0 +1,115 @@
+---
+# Prepare AD for the site: download + extract the MECM media, create the System
+# Management container, grant the site-server computer GenericAll on it, and extend
+# the schema (extadsch.exe). The container/ACL/schema writes need Schema + Domain
+# Admin, so they run under a scheduled task logged on as the forest-root admin (a
+# batch logon carries that token; a network logon does not). The extracted media is
+# reused by the site install. See goad-fidelity-build.
+
+- name: Download the MECM baseline media
+  ansible.windows.win_get_url:
+    url: "{{ redstackpro_mecm_media_url }}"
+    dest: C:\setup\MCM_Configmgr_2303.exe
+    force: false
+
+# Find the media bin (SMSSETUP\BIN\X64, holding setup.exe/setupdl.exe/extadsch.exe)
+# if it is already extracted, so a re-run does NOT re-launch the extractor -- the
+# self-extract only runs silently on a FRESH extract; re-run over an existing
+# cd.retail.LN it prompts to overwrite and hangs.
+- name: Check for already-extracted MECM media
+  ansible.windows.win_powershell:
+    script: |
+      $f = Get-ChildItem -Path C:\setup -Recurse -Filter setup.exe -ErrorAction SilentlyContinue |
+           Where-Object { $_.FullName -match 'SMSSETUP\\BIN\\X64' } | Select-Object -First 1
+      [Ordered]@{ bin = if ($f) { $f.DirectoryName } else { "" } }
+  register: redstackpro_mecm_prebin
+  changed_when: false
+
+- name: Self-extract the MECM media (only when not already extracted)
+  ansible.windows.win_shell: C:\setup\MCM_Configmgr_2303.exe -s
+  args:
+    chdir: C:\setup
+  register: redstackpro_mecm_extract
+  changed_when: redstackpro_mecm_extract.rc == 0
+  failed_when: false
+  when: redstackpro_mecm_prebin.output[0].bin | length == 0
+  async: 900
+  poll: 15
+
+# Locate setup.exe under C:\setup and derive the media bin directory. Retried
+# because the self-extract lands the files a moment after the exe returns.
+- name: Locate the extracted MECM media binaries
+  ansible.windows.win_powershell:
+    script: |
+      $f = Get-ChildItem -Path C:\setup -Recurse -Filter setup.exe -ErrorAction SilentlyContinue |
+           Where-Object { $_.FullName -match 'SMSSETUP\\BIN\\X64' } | Select-Object -First 1
+      [Ordered]@{ bin = if ($f) { $f.DirectoryName } else { "" } }
+  register: redstackpro_mecm_binfind
+  until: redstackpro_mecm_binfind.output[0].bin | length > 0
+  retries: 20
+  delay: 15
+  changed_when: false
+
+- name: Record the media bin directory
+  ansible.builtin.set_fact:
+    redstackpro_mecm_bin: "{{ redstackpro_mecm_binfind.output[0].bin }}"
+
+- name: Prepare AD (container + GenericAll + schema) as the forest-root admin
+  ansible.windows.win_powershell:
+    script: |
+      param($Ea, $Pass, $Mecm, $Bin)
+      $ErrorActionPreference = "Stop"
+      $body = @"
+      try {
+      `$ErrorActionPreference = 'Stop'
+      Import-Module ActiveDirectory
+      `$dn = (Get-ADDomain).DistinguishedName
+      `$sysDn = "CN=System,`$dn"
+      `$smDn = "CN=System Management,`$sysDn"
+      if (-not (Test-Path "AD:\`$smDn")) {
+        New-ADObject -Type container -Name 'System Management' -Path `$sysDn
+      }
+      # Grant the site-server computer GenericAll on the container.
+      `$comp = Get-ADComputer '$Mecm'
+      `$sid = New-Object System.Security.Principal.SecurityIdentifier(`$comp.SID)
+      `$acl = Get-Acl "AD:\`$smDn"
+      # Pass strongly-typed enums so the 4-arg constructor is unambiguous: a bare
+      # 'All' string matches both the inheritance and the objectType(Guid) overload.
+      `$rights = [System.DirectoryServices.ActiveDirectoryRights]::GenericAll
+      `$allow = [System.Security.AccessControl.AccessControlType]::Allow
+      `$inh = [System.DirectoryServices.ActiveDirectorySecurityInheritance]::All
+      `$rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(`$sid, `$rights, `$allow, `$inh)
+      `$acl.AddAccessRule(`$rule)
+      Set-Acl "AD:\`$smDn" `$acl
+      # Extend the schema for ConfigMgr.
+      `$ext = Join-Path '$Bin' 'extadsch.exe'
+      & `$ext | Out-Null
+      Set-Content C:\Windows\Temp\rsp-mecm-adprep.txt 'ok'
+      } catch {
+        Set-Content C:\Windows\Temp\rsp-mecm-adprep.txt ("ERR " + `$_.Exception.Message)
+      }
+      "@
+      Set-Content C:\Windows\Temp\rsp-mecm-adprep.ps1 $body
+      Remove-Item C:\Windows\Temp\rsp-mecm-adprep.txt -ErrorAction SilentlyContinue
+      $a = New-ScheduledTaskAction -Execute "powershell.exe" `
+        -Argument "-ExecutionPolicy Bypass -File C:\Windows\Temp\rsp-mecm-adprep.ps1"
+      Register-ScheduledTask -TaskName RSPMecmAdPrep -Action $a -User $Ea `
+        -Password $Pass -RunLevel Highest -Force | Out-Null
+      Start-ScheduledTask -TaskName RSPMecmAdPrep
+      $done = $false
+      for ($i = 0; $i -lt 90; $i++) {
+        Start-Sleep -Seconds 10
+        if (Test-Path C:\Windows\Temp\rsp-mecm-adprep.txt) { $done = $true; break }
+      }
+      Unregister-ScheduledTask -TaskName RSPMecmAdPrep -Confirm:$false -ErrorAction SilentlyContinue
+      if (-not $done) { throw "AD prep did not finish in time" }
+      $res = (Get-Content C:\Windows\Temp\rsp-mecm-adprep.txt -Raw).Trim()
+      if ($res -notmatch '^ok') { throw "AD prep failed: $res" }
+      [Ordered]@{ result = $res }
+    parameters:
+      Ea: "{{ redstackpro_mecm_domain_admin }}"
+      Pass: "{{ redstackpro_lab_password }}"
+      Mecm: "{{ redstackpro_mecm_hostname | default(inventory_hostname | regex_replace('^cyb-', '')) }}"
+      Bin: "{{ redstackpro_mecm_bin }}"
+  register: redstackpro_mecm_adprep
+  changed_when: true

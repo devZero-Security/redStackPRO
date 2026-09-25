@@ -1,0 +1,25 @@
+---
+- name: Reload sshd
+  ansible.builtin.service:
+    name: ssh
+    state: reloaded
+
+- name: Restart fail2ban
+  ansible.builtin.service:
+    name: fail2ban
+    state: restarted
+
+- name: Update ca certificates
+  ansible.builtin.command:
+    cmd: update-ca-certificates
+  changed_when: true
+
+- name: Restart wireguard
+  ansible.builtin.service:
+    name: "wg-quick@wg0"
+    state: restarted
+
+- name: Restart openvpn
+  ansible.builtin.service:
+    name: "openvpn-server@redstackpro"
+    state: restarted

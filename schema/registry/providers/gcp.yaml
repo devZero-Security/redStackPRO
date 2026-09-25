@@ -1,0 +1,34 @@
+provider: gcp
+# maturity: which backends are deployment-proven, and which exist but have not
+# been put through a real range end to end. The canvas greys the preview ones in
+# the deploy-target chooser rather than hiding them: the compiler genuinely does
+# build them, so hiding would understate the product, while listing them as
+# equals invites a question the answer disappoints. Michael 2026-09-13: "I only
+# plan to demo on gcp and aws, the other providers are just placeholders for now."
+maturity: proven
+description: Google Cloud. First target and the one the initial customer runs.
+
+# GCP reserves the network address and the gateway at the bottom of a subnet,
+# and the second-to-last plus broadcast at the top. It leaves .2 and .3 usable,
+# which is why a jumpbox pinned to .2 deployed here for months while the same
+# topology was refused by AWS.
+reserved_addresses:
+  head: 2
+  tail: 2
+
+capabilities:
+  - routing_domain
+  - subnet
+  - compute
+  - linux_image
+  - windows_image
+  - public_address
+  - outbound_routing
+  - private_dns
+  # Cloud NAT covers the instances in a subnet that hold no external address
+  # while the ones that do use theirs, so a jumpbox and the operator boxes
+  # behind it can share a segment. AWS cannot do this. See 0021.
+  - mixed_exposure_segment
+  # VPC network peering, so two networks can be joined and a jumpbox or collector
+  # can serve across the boundary. Rendered by the gcp backend. See 0030.
+  - network_peering

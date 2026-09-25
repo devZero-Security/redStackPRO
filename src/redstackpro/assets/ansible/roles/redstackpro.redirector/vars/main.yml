@@ -1,0 +1,717 @@
+---
+# The decoy site catalog. Each entry is a believable but entirely fictional
+# small site the redirector serves to any request that misses the gate: a home
+# page, a couple of navigable subpages, and a 404. No entry names a real
+# organisation, brand, or domain. The gating.decoy value picks the entry; the
+# redstackpro.decoy-site template renders every page from it. Adding a vertical is a
+# block here plus a line in the schema enum. See 0041.
+#
+# Shape per theme: brand, tagline, a colour palette (bg, card, accent, text,
+# muted), a pages list whose first entry becomes index.html, and a notfound page
+# for the 404. Each page body is a list of paragraphs.
+
+redstackpro_decoy_sites:
+  cdn:
+    brand: CloudEdge
+    tagline: Global content delivery
+    bg: "#f4f6f8"
+    card: "#ffffff"
+    accent: "#2c6fb5"
+    text: "#22303f"
+    muted: "#5b6b7b"
+    pages:
+      - slug: index
+        label: Home
+        heading: Fast, reliable content delivery
+        body:
+          - "CloudEdge caches your assets at the network edge so pages load quickly for visitors everywhere."
+          - "Our global points of presence keep static content close to your users."
+      - slug: status
+        label: Status
+        heading: Service status
+        body:
+          - "All edge regions are operating normally. Scheduled maintenance windows are posted here in advance."
+      - slug: docs
+        label: Docs
+        heading: Getting started
+        body:
+          - "Point your origin at CloudEdge, set a cache policy, and your assets are distributed automatically."
+    notfound:
+      heading: Page not found
+      body:
+        - "The page you requested could not be found. It may have moved, or the link may be out of date."
+
+  maintenance:
+    brand: Service Portal
+    tagline: Systems and updates
+    bg: "#f2f3f5"
+    card: "#ffffff"
+    accent: "#d97706"
+    text: "#2b2f36"
+    muted: "#6b7280"
+    pages:
+      - slug: index
+        label: Home
+        heading: Scheduled maintenance in progress
+        body:
+          - "Our services are briefly offline for planned maintenance and will be restored shortly."
+          - "Thank you for your patience while we complete these updates."
+      - slug: status
+        label: Status
+        heading: Current status
+        body:
+          - "Maintenance is underway. This page will update as services come back online."
+      - slug: contact
+        label: Contact
+        heading: Need help?
+        body:
+          - "If your request is urgent, please reach out to our support team during business hours."
+    notfound:
+      heading: Page not found
+      body:
+        - "That page is not available. Please return to the home page and try again."
+
+  webserver:
+    brand: Apache Server
+    tagline: Default web server
+    bg: "#ffffff"
+    card: "#ffffff"
+    accent: "#34495e"
+    text: "#2c3e50"
+    muted: "#556677"
+    pages:
+      - slug: index
+        label: Home
+        heading: It works
+        body:
+          - "This is the default landing page for this server. The web server software is running but no site content has been configured yet."
+          - "If you are the administrator, replace the default document root with your own content."
+      - slug: about
+        label: About
+        heading: About this server
+        body:
+          - "This server is running a standard web server distribution with its default configuration."
+      - slug: contact
+        label: Contact
+        heading: Administrator
+        body:
+          - "This page is served by the default configuration. Contact the site administrator to report an issue."
+    notfound:
+      heading: 404 Not Found
+      body:
+        - "The requested URL was not found on this server."
+
+  healthcare:
+    brand: Meridian Health Portal
+    tagline: Connected patient care
+    bg: "#eef4f8"
+    card: "#ffffff"
+    accent: "#1b7f9e"
+    text: "#204a5c"
+    muted: "#5f7d8b"
+    pages:
+      - slug: index
+        label: Home
+        heading: Your health, connected
+        body:
+          - "The Meridian patient portal helps you manage appointments, view records, and message your care team securely."
+          - "Sign in to your account to get started."
+      - slug: login
+        label: Patient Login
+        heading: Patient sign in
+        body:
+          - "Access to the patient portal is available to registered patients. If you need an account, ask at your next visit."
+      - slug: contact
+        label: Contact
+        heading: Get in touch
+        body:
+          - "For urgent medical concerns, contact your care team by phone. For portal help, use the support line during office hours."
+    notfound:
+      heading: Page not found
+      body:
+        - "We could not find that page. Please return to the portal home page."
+
+  finance:
+    brand: Anchor Financial
+    tagline: Secure banking
+    bg: "#0f1b2d"
+    card: "#16263f"
+    accent: "#c8a24b"
+    text: "#ffffff"
+    muted: "#9fb0c4"
+    pages:
+      - slug: index
+        label: Home
+        heading: Banking you can rely on
+        body:
+          - "Anchor Financial provides secure online and mobile banking for personal and business accounts."
+          - "Your funds and account information are protected around the clock."
+      - slug: banking
+        label: Online Banking
+        heading: Online banking
+        body:
+          - "Sign in to view balances, transfer funds, and pay bills. Access requires a registered account."
+      - slug: security
+        label: Security
+        heading: How we protect you
+        body:
+          - "We use layered safeguards to keep your accounts secure. We will never ask for your password by email."
+    notfound:
+      heading: Page not found
+      body:
+        - "That page is unavailable. Please return to the home page."
+
+  education:
+    brand: Lakeside University
+    tagline: Student services
+    bg: "#f3f6f4"
+    card: "#ffffff"
+    accent: "#3b6b35"
+    text: "#2c3e2a"
+    muted: "#6b7d68"
+    pages:
+      - slug: index
+        label: Home
+        heading: Welcome to Lakeside University
+        body:
+          - "The student portal is your home for course registration, grades, and campus services."
+          - "Sign in with your student credentials to continue."
+      - slug: admissions
+        label: Admissions
+        heading: Admissions
+        body:
+          - "Learn about programs, deadlines, and how to apply. Prospective students can request more information here."
+      - slug: login
+        label: Student Login
+        heading: Student sign in
+        body:
+          - "Enrolled students can access the portal with their university account."
+    notfound:
+      heading: Page not found
+      body:
+        - "We could not find that page. Please return to the portal home page."
+
+  news:
+    brand: The Daily Ledger
+    tagline: Independent reporting
+    font: "Georgia, 'Times New Roman', serif"
+    bg: "#faf8f4"
+    card: "#ffffff"
+    accent: "#1a1a1a"
+    text: "#1a1a1a"
+    muted: "#444444"
+    pages:
+      - slug: index
+        label: Home
+        heading: Today's headlines
+        body:
+          - "The Daily Ledger brings you independent local and national reporting, updated throughout the day."
+          - "Read the latest stories, or browse our sections."
+      - slug: latest
+        label: Latest
+        heading: Latest stories
+        body:
+          - "Our newest reporting appears here first. Check back often for updates."
+      - slug: about
+        label: About
+        heading: About the Ledger
+        body:
+          - "The Daily Ledger has covered its community since 1987 with a commitment to fair, independent journalism."
+    notfound:
+      heading: Page not found
+      body:
+        - "That story could not be found. It may have been moved or removed."
+
+  ecommerce:
+    brand: Cartwave
+    tagline: Shop online
+    bg: "#fbfbfd"
+    card: "#ffffff"
+    accent: "#ff6a3d"
+    text: "#2a2a35"
+    muted: "#7a7a88"
+    pages:
+      - slug: index
+        label: Home
+        heading: Everything you need, delivered
+        body:
+          - "Cartwave brings you a wide selection at everyday prices, with fast shipping and easy returns."
+          - "Browse the shop to see what's new."
+      - slug: shop
+        label: Shop
+        heading: Shop all
+        body:
+          - "Explore our categories to find deals across the store. New arrivals are added weekly."
+      - slug: account
+        label: Account
+        heading: Your account
+        body:
+          - "Sign in to track orders, manage your details, and check out faster."
+    notfound:
+      heading: Page not found
+      body:
+        - "We could not find that page. It may be out of stock or no longer available."
+
+  food:
+    brand: Simmer & Spice
+    tagline: Recipes worth sharing
+    bg: "#fff9f0"
+    card: "#ffffff"
+    accent: "#c0562b"
+    text: "#4a3f35"
+    muted: "#8a7b6c"
+    pages:
+      - slug: index
+        label: Home
+        heading: Cook something good tonight
+        body:
+          - "Simmer & Spice is a collection of tested recipes for weeknight dinners, weekend baking, and everything in between."
+          - "Browse the recipes to find your next favourite dish."
+      - slug: recipes
+        label: Recipes
+        heading: Recipe collection
+        body:
+          - "From quick meals to slow weekend projects, our recipes come with clear steps and simple ingredients."
+      - slug: about
+        label: About
+        heading: About the kitchen
+        body:
+          - "We share the dishes we cook at home, written so anyone can follow along."
+    notfound:
+      heading: Page not found
+      body:
+        - "That recipe could not be found. Try the recipe collection instead."
+
+  it:
+    brand: Nimbus Cloud Services
+    tagline: Cloud platform
+    bg: "#0d1117"
+    card: "#161b22"
+    accent: "#58a6ff"
+    text: "#f0f6fc"
+    muted: "#8b949e"
+    pages:
+      - slug: index
+        label: Home
+        heading: Build and ship on Nimbus
+        body:
+          - "Nimbus provides managed compute, storage, and networking so your team can ship without managing infrastructure."
+          - "Sign in to the dashboard to manage your services."
+      - slug: status
+        label: Status
+        heading: Platform status
+        body:
+          - "All systems operational. Planned maintenance windows are announced here ahead of time."
+      - slug: docs
+        label: Docs
+        heading: Documentation
+        body:
+          - "Guides and API references to help you get started and integrate with the platform."
+    notfound:
+      heading: Page not found
+      body:
+        - "The page you requested could not be found. Check the docs or the dashboard."
+
+  sports:
+    brand: Sideline Sports
+    tagline: Scores and highlights
+    bg: "#0f1e14"
+    card: "#16281c"
+    accent: "#f4b400"
+    text: "#ffffff"
+    muted: "#a9c2b2"
+    pages:
+      - slug: index
+        label: Home
+        heading: Never miss a moment
+        body:
+          - "Sideline Sports brings you live scores, standings, and highlights across every league you follow."
+          - "Check the scoreboard for today's games."
+      - slug: scores
+        label: Scores
+        heading: Live scores
+        body:
+          - "Follow games as they happen, with real-time scores and updates from around the league."
+      - slug: about
+        label: About
+        heading: About Sideline
+        body:
+          - "We cover the games fans care about, from the big leagues to the local field."
+    notfound:
+      heading: Page not found
+      body:
+        - "That page could not be found. Head back to the scoreboard."
+
+  travel:
+    brand: Wander & Co
+    tagline: Plan your next trip
+    bg: "#eef7fb"
+    card: "#ffffff"
+    accent: "#1594b5"
+    text: "#1c3a45"
+    muted: "#5b7581"
+    pages:
+      - slug: index
+        label: Home
+        heading: Your next journey starts here
+        body:
+          - "Wander & Co helps you discover destinations, compare stays, and plan trips that fit your budget."
+          - "Browse destinations to start planning."
+      - slug: destinations
+        label: Destinations
+        heading: Where to next?
+        body:
+          - "From weekend getaways to far-flung adventures, explore guides to destinations around the world."
+      - slug: bookings
+        label: Bookings
+        heading: Manage your trip
+        body:
+          - "Sign in to view your itinerary, manage reservations, and get travel updates."
+    notfound:
+      heading: Page not found
+      body:
+        - "We could not find that page. Return home to keep planning."
+
+# The landing-page sections, keyed by the same decoy id as the catalog above.
+#
+# Kept as a second mapping rather than folded into each site so the catalog
+# stays readable as a catalog: palette and pages in one place, marketing copy
+# in another. The role passes both to the template.
+#
+# Shape per theme: phone, address lines, hours, three services, three
+# testimonials, a mission block, three statistics, and a closing call to
+# action. Everything is invented. No entry names a real organisation, person,
+# brand, address or telephone number, and the streets are made up.
+#
+# NO NUMBER HERE CAN RING ANYONE, and the area code matches the city in the
+# address above it -- a local number reads as a business somebody could walk
+# into, which a toll-free line does not.
+#
+#   US: the city's real area code, then an exchange ENDING IN 11 (211, 311,
+#       611, 711, 811). Those are service codes in the North American plan and
+#       are never assigned as a central office code, so the number is
+#       structurally unreachable while reading as an ordinary one. This is done
+#       instead of the 555-01XX fiction block, which is the conventional choice
+#       but announces itself to anyone who has watched a film.
+#   UK: Ofcom's drama ranges, which are per-city and guaranteed unallocated:
+#       0113/0114/0117/0118/0151 496 0XXX for Leeds, Sheffield, Bristol,
+#       Reading and Liverpool.
+#
+# This is why the travel site is in Liverpool rather than Brighton: Brighton
+# has no reserved range, and an invented 01273 number is somebody's real line.
+# Inventing a toll-free number is the same trap and worse, because toll-free
+# means the subscriber pays for every call a visitor makes.
+#
+# Why this much: a cover page that is a heading and two paragraphs reads as a
+# placeholder, and a placeholder is exactly what a visitor should not conclude.
+# A small business site has services, a quote or two, an address and a way to
+# call it. See 0041.
+
+redstackpro_decoy_sections:
+  cdn:
+    phone: "+1 (503) 311-0148"
+    address: ["1180 Foundry Street, Suite 400", "Portland, OR 97209"]
+    hours: "Support desk staffed 24 hours"
+    cta: {heading: "Talk to an edge engineer", body: "Capacity planning, custom cache rules and migration help."}
+    services:
+      - {title: "Edge caching", body: "Static assets held at points of presence close to your visitors, with origin shielding to keep your servers quiet."}
+      - {title: "Image optimisation", body: "Format negotiation and resizing at request time, so one upload serves every device."}
+      - {title: "Traffic analytics", body: "Per-region hit rates and bandwidth, retained for thirteen months and exportable."}
+    testimonials:
+      - {quote: "Cutover took an afternoon and our origin load dropped by two thirds.", name: "Dana Whitlock", role: "Platform lead"}
+      - {quote: "The regional breakdown finally told us where our slow pages actually were.", name: "Priya Raman", role: "Head of engineering"}
+      - {quote: "Support answered at two in the morning and stayed until it was fixed.", name: "Tom Beaufort", role: "Site reliability engineer"}
+    mission:
+      heading: "Close to your users, wherever they are"
+      body: "We run points of presence so you do not have to think about geography. Content is cached where it is asked for, invalidated in seconds, and served over connections we keep warm."
+    stats:
+      - {value: "38", label: "Edge regions"}
+      - {value: "99.98%", label: "Delivery uptime"}
+      - {value: "13 mo", label: "Analytics retention"}
+
+  maintenance:
+    phone: "+1 (518) 211-0172"
+    address: ["Service Operations", "PO Box 2291, Albany, NY 12201"]
+    hours: "Status updates posted continuously"
+    cta: {heading: "Subscribe to status updates", body: "Email and webhook notifications for incidents and planned work."}
+    services:
+      - {title: "Incident updates", body: "Every incident gets a public timeline, updated as work progresses rather than after it finishes."}
+      - {title: "Planned maintenance", body: "Windows announced at least five working days ahead, with the expected impact per service."}
+      - {title: "Historical uptime", body: "Ninety days of per-component availability, published whether or not it flatters us."}
+    testimonials:
+      - {quote: "The timeline is updated often enough that we stopped opening tickets to ask.", name: "Alice Fenner", role: "Operations manager"}
+      - {quote: "Maintenance notices arrive early enough to actually plan around.", name: "Hugo Sandoval", role: "IT coordinator"}
+      - {quote: "Clear language, no euphemisms. Rare and appreciated.", name: "Nina Osei", role: "Service owner"}
+    mission:
+      heading: "Say what is happening, while it is happening"
+      body: "A status page is only useful if it is honest and current. Ours is updated by the engineers doing the work, not by a communications team writing afterwards."
+    stats:
+      - {value: "90 d", label: "Published history"}
+      - {value: "5 d", label: "Maintenance notice"}
+      - {value: "24/7", label: "Monitored"}
+
+  webserver:
+    phone: "+44 118 496 0113"
+    address: ["44 Kestrel Lane", "Reading RG1 4QX"]
+    hours: "Monday to Friday, 9:00 to 18:00"
+    cta: {heading: "Request a configuration review", body: "We will look at your virtual hosts, TLS settings and caching."}
+    services:
+      - {title: "Managed hosting", body: "Provisioned, patched and monitored servers with weekly configuration snapshots."}
+      - {title: "TLS management", body: "Certificates issued and renewed automatically, with the chain checked on every deployment."}
+      - {title: "Performance tuning", body: "Compression, keep-alive and cache headers set from measurement rather than from defaults."}
+    testimonials:
+      - {quote: "They found three virtual hosts we had forgotten were still serving.", name: "Greg Mallory", role: "Technical director"}
+      - {quote: "Renewals stopped being a thing we worried about in January.", name: "Sara Lindqvist", role: "Web manager"}
+      - {quote: "Page weight halved without touching the application.", name: "Owen Drury", role: "Developer"}
+    mission:
+      heading: "Boring infrastructure, on purpose"
+      body: "The best web server is one nobody has to think about. We keep configurations small, documented and reproducible, so a rebuild is an afternoon rather than an archaeology project."
+    stats:
+      - {value: "12 yr", label: "Operating"}
+      - {value: "1,400+", label: "Sites hosted"}
+      - {value: "4 h", label: "Response target"}
+
+  healthcare:
+    phone: "+1 (503) 611-0164"
+    address: ["2300 Alder Grove Drive", "Beaverton, OR 97005"]
+    hours: "Monday to Friday, 8:00 to 18:00. Nurse line 24 hours"
+    cta: {heading: "Speak to the care team", body: "Appointments, prescriptions and record access."}
+    services:
+      - {title: "Appointments", body: "Book, move or cancel visits with any clinician in the practice, and see what to bring."}
+      - {title: "Test results", body: "Results released with a plain-language note from the clinician who ordered them."}
+      - {title: "Secure messaging", body: "Non-urgent questions answered by your care team, usually within one working day."}
+    testimonials:
+      - {quote: "I booked, rescheduled and got my results without a single phone call.", name: "Marie Delacroix", role: "Patient"}
+      - {quote: "The notes with the results meant I did not spend a weekend guessing.", name: "Alan Whitfield", role: "Patient"}
+      - {quote: "My mother manages her own appointments now, which she could not before.", name: "Rosa Iglesias", role: "Carer"}
+    mission:
+      heading: "Your health, in your hands"
+      body: "People manage their own care better when they can see it. The portal gives you your records, your results and a direct line to the people treating you, without a queue."
+    stats:
+      - {value: "24 h", label: "Message reply"}
+      - {value: "18,000", label: "Patients served"}
+      - {value: "96%", label: "Would recommend"}
+
+  finance:
+    phone: "+1 (704) 811-0127"
+    address: ["500 Harbour Row", "Charlotte, NC 28202"]
+    hours: "Monday to Friday, 8:00 to 20:00. Card support 24 hours"
+    cta: {heading: "Open an account", body: "Personal and business banking, opened online in about ten minutes."}
+    services:
+      - {title: "Everyday banking", body: "Current accounts with no monthly fee, instant notifications and a card you can freeze from the app."}
+      - {title: "Business accounts", body: "Multi-user access with per-user limits, and exports your accountant will accept."}
+      - {title: "Fraud protection", body: "Transactions scored in real time, with anything unusual held until you confirm it."}
+    testimonials:
+      - {quote: "A duplicate charge was flagged before I noticed it myself.", name: "Colin Marsh", role: "Customer"}
+      - {quote: "Setting spending limits per employee took about five minutes.", name: "Adaeze Nwosu", role: "Business owner"}
+      - {quote: "The statements export cleanly, which sounds small and is not.", name: "Henrik Lund", role: "Bookkeeper"}
+    mission:
+      heading: "Banking you can rely on"
+      body: "Money should be predictable. We publish our fees in full, notify you the moment anything moves, and hold anything that looks wrong until a person has looked at it."
+    stats:
+      - {value: "0", label: "Monthly fees"}
+      - {value: "60 s", label: "Fraud hold"}
+      - {value: "24/7", label: "Card support"}
+
+  education:
+    phone: "+1 (608) 711-0186"
+    address: ["One Lakeside Green", "Madison, WI 53703"]
+    hours: "Admissions office, Monday to Friday, 9:00 to 17:00"
+    cta: {heading: "Book a campus visit", body: "Tours run twice daily during term, and by arrangement outside it."}
+    services:
+      - {title: "Undergraduate study", body: "Four-year degrees across sciences, humanities and engineering, with a common first-year core."}
+      - {title: "Graduate research", body: "Funded places with a named supervisor agreed before you accept an offer."}
+      - {title: "Continuing education", body: "Evening and online courses for people already working, credit-bearing where you want it."}
+    testimonials:
+      - {quote: "My supervisor was agreed before I accepted, which made the decision easy.", name: "Jonah Pike", role: "Doctoral candidate"}
+      - {quote: "The evening programme let me finish a degree I started eleven years ago.", name: "Lucia Ferraro", role: "Alumna"}
+      - {quote: "The common first year meant I could change direction without losing time.", name: "Ben Achterberg", role: "Undergraduate"}
+    mission:
+      heading: "Teaching that stays with you"
+      body: "Small groups, named supervisors and assessment that asks you to think rather than to recall. We would rather teach fewer students properly than more at a distance."
+    stats:
+      - {value: "11:1", label: "Student to staff"}
+      - {value: "1897", label: "Founded"}
+      - {value: "62", label: "Programmes"}
+
+  news:
+    phone: "+44 113 496 0139"
+    address: ["18 Printworks Yard", "Leeds LS1 6AB"]
+    hours: "Newsroom staffed 6:00 to 23:00"
+    cta: {heading: "Subscribe", body: "Full access, and no third-party advertising trackers."}
+    services:
+      - {title: "Daily reporting", body: "Local government, courts and business, covered by reporters who attend in person."}
+      - {title: "Investigations", body: "Longer pieces that take months, funded by subscriptions rather than by page views."}
+      - {title: "Corrections", body: "Every correction published in full, with what was wrong and how it happened."}
+    testimonials:
+      - {quote: "The council reporting is the only reason I know what is being decided.", name: "Frank Odell", role: "Subscriber"}
+      - {quote: "They corrected a story about us properly and prominently.", name: "Mira Haddad", role: "Charity director"}
+      - {quote: "No autoplay and no pop-ups. I had forgotten news sites could read like this.", name: "Peter Vance", role: "Subscriber"}
+    mission:
+      heading: "Reporting that shows its working"
+      body: "We name our sources where we can, publish the documents where we may, and correct ourselves loudly when we are wrong. Subscriptions pay for the reporting, so the reporting answers to readers."
+    stats:
+      - {value: "1921", label: "First published"}
+      - {value: "27", label: "Reporters"}
+      - {value: "0", label: "Ad trackers"}
+
+  ecommerce:
+    phone: "+44 117 496 0155"
+    address: ["7 Tannery Walk", "Bristol BS1 5TF"]
+    hours: "Customer service, Monday to Saturday, 8:00 to 20:00"
+    cta: {heading: "Start shopping", body: "Free delivery over the order threshold, and returns for thirty days."}
+    services:
+      - {title: "Wide selection", body: "Home, garden and everyday goods from suppliers we buy from directly."}
+      - {title: "Fast delivery", body: "Next working day on stocked items ordered before four in the afternoon."}
+      - {title: "Easy returns", body: "Thirty days, a prepaid label in the box, refunded when it is scanned rather than when it arrives."}
+    testimonials:
+      - {quote: "Returned something on a Tuesday and was refunded on the Wednesday.", name: "Ellie Ransome", role: "Customer"}
+      - {quote: "Stock levels are accurate, which is rarer than it should be.", name: "Marcus Thorne", role: "Customer"}
+      - {quote: "Packaging is plain cardboard. No plastic pillows.", name: "Yusuf Kaya", role: "Customer"}
+    mission:
+      heading: "Everything you need, delivered"
+      body: "We hold what we sell, so the stock figure on the page is the number on the shelf. If it is going to be late we tell you before you have to ask."
+    stats:
+      - {value: "30 d", label: "Returns window"}
+      - {value: "9,000+", label: "Items stocked"}
+      - {value: "Next day", label: "Standard delivery"}
+
+  food:
+    phone: "+1 (828) 311-0191"
+    address: ["62 Marlow Street", "Asheville, NC 28801"]
+    hours: "Kitchen notes updated weekly"
+    cta: {heading: "Get the weekly recipe", body: "One tested recipe a week, with the failures noted."}
+    services:
+      - {title: "Tested recipes", body: "Every recipe cooked at least three times, with weights as well as cup measures."}
+      - {title: "Seasonal menus", body: "What is actually good this month, rather than what photographs well."}
+      - {title: "Technique guides", body: "The handful of methods most recipes are built from, explained once and properly."}
+    testimonials:
+      - {quote: "The weights made the difference. My bread finally works.", name: "Carol Benning", role: "Reader"}
+      - {quote: "They tell you what goes wrong and why, which nobody else does.", name: "Dev Patel", role: "Reader"}
+      - {quote: "Seasonal actually means seasonal here.", name: "Astrid Solberg", role: "Reader"}
+    mission:
+      heading: "Cook it once, properly"
+      body: "Most recipes fail on things nobody wrote down: pan size, resting time, how wet the dough should feel. We cook everything until we know where it goes wrong, then say so."
+    stats:
+      - {value: "3x", label: "Tested minimum"}
+      - {value: "480", label: "Recipes"}
+      - {value: "Weekly", label: "New issue"}
+
+  it:
+    phone: "+1 (303) 211-0108"
+    address: ["900 Cirrus Park", "Denver, CO 80202"]
+    hours: "Monday to Friday, 8:00 to 19:00. On call 24 hours"
+    cta: {heading: "Book an architecture review", body: "Two hours with an engineer, and a written summary afterwards."}
+    services:
+      - {title: "Managed cloud", body: "Accounts, networking and identity set up to a documented standard you keep if you leave."}
+      - {title: "Migration", body: "Staged moves with a rollback at every step, run out of hours where it matters."}
+      - {title: "Monitoring", body: "Alerts tuned so that the ones that fire are the ones worth waking up for."}
+    testimonials:
+      - {quote: "The rollback plan was real. We used it once and it worked.", name: "Nadia Kroll", role: "Head of IT"}
+      - {quote: "Alert volume dropped by ninety percent and we stopped missing the real ones.", name: "Ray Considine", role: "Operations lead"}
+      - {quote: "They handed over documentation we could actually follow.", name: "Sophie Marchetti", role: "Engineering manager"}
+    mission:
+      heading: "Infrastructure you could take over tomorrow"
+      body: "We build so that you are not locked to us. Everything is in code, everything is documented, and the handover pack is written at the start rather than at the end."
+    stats:
+      - {value: "15 m", label: "On-call response"}
+      - {value: "300+", label: "Migrations run"}
+      - {value: "100%", label: "In version control"}
+
+  sports:
+    phone: "+44 114 496 0176"
+    address: ["44 Touchline Road", "Sheffield S2 4SU"]
+    hours: "Live desk from first kick-off to last whistle"
+    cta: {heading: "Follow your team", body: "Scores, tables and fixtures, with notifications you choose."}
+    services:
+      - {title: "Live scores", body: "Updated from the ground, with the clock and the incidents that changed the game."}
+      - {title: "League tables", body: "Every division, recalculated as results come in, including the tiebreakers."}
+      - {title: "Fixtures", body: "Kick-off times, venues and broadcast details, corrected when they move."}
+    testimonials:
+      - {quote: "The tiebreakers are worked out properly, which most sites get wrong.", name: "Danny Ferris", role: "Reader"}
+      - {quote: "Notifications for one team only. Exactly what I wanted.", name: "Imani Clarke", role: "Reader"}
+      - {quote: "Fixture changes show up here before they do anywhere else.", name: "Karl Ostrowski", role: "Reader"}
+    mission:
+      heading: "Every result, as it happens"
+      body: "We take our scores from the ground rather than from a feed of a feed, so what you read is what happened, a few seconds after it did."
+    stats:
+      - {value: "140", label: "Competitions"}
+      - {value: "5 s", label: "Score latency"}
+      - {value: "Free", label: "No account needed"}
+
+  travel:
+    phone: "+44 151 496 0132"
+    address: ["21 Compass Quay", "Liverpool L3 4BQ"]
+    hours: "Monday to Saturday, 9:00 to 19:00"
+    cta: {heading: "Plan a trip", body: "Tell us roughly what you want and we will come back with three options."}
+    services:
+      - {title: "Destinations", body: "Places we have been, described honestly, including when not to go."}
+      - {title: "Bookings", body: "Flights, rail and accommodation arranged together, under one reference number."}
+      - {title: "Support in transit", body: "A number that a person answers when something goes wrong at an airport."}
+    testimonials:
+      - {quote: "A cancelled flight was rebooked before we reached the desk.", name: "Helen Brightwell", role: "Traveller"}
+      - {quote: "They talked us out of a month that would have been miserable.", name: "Sam Egerton", role: "Traveller"}
+      - {quote: "One reference number for the whole trip. Small thing, big difference.", name: "Wei Tan", role: "Traveller"}
+    mission:
+      heading: "Go at the right time"
+      body: "The best trip is usually not the one in the brochure photograph. We say when a place is at its worst as readily as when it is at its best, because a bad trip costs more than a lost booking."
+    stats:
+      - {value: "70+", label: "Countries"}
+      - {value: "1 ref", label: "Per trip"}
+      - {value: "18 yr", label: "Arranging travel"}
+
+# What each vertical's photographs are of.
+#
+# These are search terms, not filenames. The redirector runs them against a
+# free-licence image source at deploy time and serves whatever it gets from its
+# own docroot, so no two redirectors carry the same picture and no visitor's
+# browser ever reaches a third party. A term that finds nothing costs nothing:
+# that slot falls back to the drawn SVG. See redstackpro/decoyassets.py.
+#
+# Two pools per vertical, because a page uses photographs two different ways.
+# `scene` is the wide establishing shot behind the headline. `detail` is the
+# closer, quieter image that sits beside body copy or on a service card. Using
+# one pool for both puts a panorama on a 600px card and a close-up behind the
+# hero text, and both read as filler.
+#
+# Terms are deliberately generic and describe no real place or organisation,
+# which keeps the cover fictional (0041) and keeps the search from landing on a
+# recognisable landmark that would date or locate the site.
+
+redstackpro_decoy_imagery:
+  cdn:
+    scene: ["computer server room", "data centre server room", "fibre optic cables", "network operations centre"]
+    detail: ["server rack", "network switch ports", "patch panel cabling", "data centre corridor"]
+  maintenance:
+    scene: ["empty office corridor", "industrial control room", "engineering workshop"]
+    detail: ["control panel switches", "mechanical workshop", "maintenance schedule board"]
+  webserver:
+    scene: ["open plan office workspace", "server room", "desktop computer office"]
+    detail: ["computer keyboard close up", "whiteboard diagram", "monitor with dashboard"]
+  healthcare:
+    scene: ["hospital corridor interior", "medical clinic waiting room", "hospital reception"]
+    detail: ["stethoscope on desk", "medical consultation room", "laboratory glassware", "microscope laboratory"]
+  finance:
+    scene: ["glass office atrium", "modern office building interior", "office building lobby"]
+    detail: ["modern office desk", "calculator and documents", "computer keyboard close up"]
+  education:
+    scene: ["university lecture theatre", "campus quadrangle", "school library interior"]
+    detail: ["books on shelf", "school classroom interior", "classroom whiteboard", "student study area"]
+  news:
+    scene: ["television newsroom", "television studio", "newsroom desks"]
+    detail: ["microphone studio", "notebook and pen writing", "typewriter desk"]
+  ecommerce:
+    scene: ["storage facility interior", "storage warehouse", "warehouse racking interior"]
+    detail: ["cardboard boxes stacked", "storage racks boxes", "packing station", "barcode scanner"]
+  food:
+    scene: ["cafe interior", "restaurant dining room", "commercial kitchen"]
+    detail: ["restaurant table setting", "plated meal", "fresh vegetables market", "bread bakery"]
+  it:
+    scene: ["computer laboratory", "open plan office", "server room"]
+    detail: ["computer keyboard close up", "network cabling", "ethernet cables", "circuit board"]
+  sports:
+    scene: ["sports hall interior", "indoor swimming pool", "running track"]
+    detail: ["gym equipment", "running shoes", "swimming pool lane"]
+  travel:
+    scene: ["railway station concourse", "coastal landscape", "mountain valley"]
+    detail: ["map and compass", "travel luggage", "passport documents", "suitcase packing"]

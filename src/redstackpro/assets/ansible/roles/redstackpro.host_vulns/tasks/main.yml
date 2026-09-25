@@ -1,0 +1,47 @@
+---
+# redStackPRO host-level vuln dispatch (clean-room MIT). A host's overlay.vulns
+# ids arrive as redstackpro_host_vulns (the calling role maps its own kind's list
+# into that). Every implemented id has a task file of the same name; an id without
+# one is recorded and skipped, so a template may declare more than the engine
+# plants yet without failing the run. This is the socket every host attack-path
+# role plugs into. GOAD is the fidelity benchmark; these are our own tasks, not
+# vendored. See goad-native-recreation.
+
+# Windows Defender is OFF by default to match GOAD (mayfly ships it disabled so lab
+# tooling and payloads run unhindered). This is legitimate default range config,
+# not an attack step: it runs on every Windows host regardless of declared vulns.
+# The opt-in toggle redstackpro_defender_enabled (default false) leaves Defender on.
+# See productize-temp-fixes (PZ-5).
+- name: Disable Windows Defender unless explicitly enabled
+  ansible.builtin.include_tasks: disable_defender.yml
+  when: not (redstackpro_defender_enabled | default(false))
+
+# A defended, SIEM-monitored host opts into real telemetry (Sysmon + command-line
+# and DS-access auditing). Off by default so a plain lab stays quiet; independent
+# of the declared vulns, like the Defender toggle above. See endpoint_telemetry.yml.
+- name: Enable endpoint telemetry when this host opts in
+  ansible.builtin.include_tasks: endpoint_telemetry.yml
+  when: redstackpro_endpoint_telemetry | default(false)
+
+- name: Plant host-level attack paths declared on this host
+  ansible.builtin.include_tasks: "{{ item }}.yml"
+  loop: "{{ redstackpro_host_vulns | intersect(redstackpro_host_vulns_implemented) }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Note host vulns the engine does not plant yet
+  ansible.builtin.debug:
+    msg: >-
+      declared but not planted (notes-only for now): {{ _unplanted }}
+  vars:
+    # Subtracting the adcs role's OWN list rather than rejecting ^esc. Those
+    # templates are planted there and so are not unplanted, but the regex said
+    # that about every esc id, and esc8 is not one of them: it had no planter
+    # anywhere and was filtered out of this very notice, so a range declaring it
+    # came back quietly without it. An assumption in a filter suppressing the
+    # warning for the one case it does not cover.
+    _unplanted: >-
+      {{ redstackpro_host_vulns
+         | difference(redstackpro_host_vulns_implemented)
+         | difference(redstackpro_adcs_planted) | list }}
+  when: _unplanted | length > 0

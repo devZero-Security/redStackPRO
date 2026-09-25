@@ -1,0 +1,633 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://redstackpro.dev/schema/topology/0.3.0.json",
+  "title": "redStackPRO topology",
+  "description": "Provider-agnostic topology document. No provider vocabulary appears at this layer. Derived overlay fields and per-kind requirements live in the node kind registry, not in this document. Version 0.1.0 covers ops mode only.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "mode",
+    "name",
+    "prefix",
+    "nodes",
+    "edges"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "0.3.0",
+      "description": "Pinned. One schema file per version. Migrations move documents between versions."
+    },
+    "mode": {
+      "const": "ops",
+      "description": "Gates the canvas palette and chrome, not the compiler. The range value and its node kinds land in the next pass, which widens this to an enum."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "prefix": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]{0,7}$",
+      "description": "Instance prefix, composed with every node id to form the rendered name. rt-ts-01 is prefix rt and id ts-01. Per graph rather than per node, because rendering the same template for several operators is a change to one field. Kept short: prefix plus id must fit the 15 character NetBIOS limit."
+    },
+    "description": {
+      "type": "string"
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/node"
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/edge"
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "maxLength": 64
+    },
+    "cidr": {
+      "type": "string",
+      "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "public_address": {
+      "type": "boolean",
+      "x-redstackpro-source": "user",
+      "description": "Whether this host holds a public address. The segment's exposure is the ceiling: a host can only take an address in a segment with exposure internet, and EXP005 rejects the contradiction. Defaults per kind, true for a jumpbox and a redirector and false for everything else, because those two are what something outside is meant to reach."
+    },
+    "position": {
+      "type": "object",
+      "description": "Canvas layout only. The compiler ignores this.",
+      "required": [
+        "x",
+        "y"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      }
+    },
+    "node": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/node_base"
+        }
+      ],
+      "oneOf": [
+        {
+          "$ref": "#/$defs/node_network"
+        },
+        {
+          "$ref": "#/$defs/node_segment"
+        },
+        {
+          "$ref": "#/$defs/node_redirector"
+        },
+        {
+          "$ref": "#/$defs/node_teamserver"
+        },
+        {
+          "$ref": "#/$defs/node_collector"
+        },
+        {
+          "$ref": "#/$defs/node_jumpbox"
+        },
+        {
+          "$ref": "#/$defs/node_operator"
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "node_base": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier",
+          "description": "Canonical identifier and the only name a node has. Lowercase kebab, abbreviation then discriminator: ts-01, rdir-02, subnet-c2. The rendered name is prefix plus id. Terraform module labels replace hyphens with underscores. Rule NAM001 checks the abbreviation against the node kind.",
+          "maxLength": 24
+        },
+        "kind": {
+          "enum": [
+            "network",
+            "segment",
+            "redirector",
+            "teamserver",
+            "collector",
+            "jumpbox",
+            "operator"
+          ]
+        },
+        "position": {
+          "$ref": "#/$defs/position"
+        },
+        "width": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Canvas size for a container. Layout only; the compiler ignores it."
+        },
+        "height": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Canvas size for a container. Layout only; the compiler ignores it."
+        }
+      }
+    },
+    "node_network": {
+      "properties": {
+        "kind": {
+          "const": "network"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_network"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_segment": {
+      "properties": {
+        "kind": {
+          "const": "segment"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_segment"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_redirector": {
+      "properties": {
+        "kind": {
+          "const": "redirector"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_redirector"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_teamserver": {
+      "properties": {
+        "kind": {
+          "const": "teamserver"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_teamserver"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_collector": {
+      "properties": {
+        "kind": {
+          "const": "collector"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_collector"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_jumpbox": {
+      "properties": {
+        "kind": {
+          "const": "jumpbox"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_jumpbox"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_operator": {
+      "properties": {
+        "kind": {
+          "const": "operator"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_operator"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "overlay_network": {
+      "type": "object",
+      "description": "A routing domain. Members reach each other privately. Compiles to a VPC, a VNet, or a Proxmox bridge domain.",
+      "additionalProperties": false,
+      "properties": {
+        "cidr": {
+          "$ref": "#/$defs/cidr",
+          "x-redstackpro-source": "user",
+          "description": "Optional because not every provider assigns a range at the network level."
+        },
+        "provider": {
+          "enum": [
+            "gcp",
+            "aws",
+            "proxmox"
+          ],
+          "x-redstackpro-source": "user",
+          "description": "Optional. Absent means this network compiles to whatever target the compile call names, which is the only supported behaviour today. Present pins the network, which is the placement mixed-provider graphs will need. Nothing reads it yet."
+        }
+      }
+    },
+    "overlay_segment": {
+      "type": "object",
+      "description": "A subnet inside exactly one network.",
+      "required": [
+        "cidr",
+        "egress",
+        "exposure"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "cidr": {
+          "$ref": "#/$defs/cidr",
+          "x-redstackpro-source": "user"
+        },
+        "egress": {
+          "enum": [
+            "allowed",
+            "none"
+          ],
+          "x-redstackpro-source": "user",
+          "description": "Outbound reachability for members. Independent of exposure. A teamserver segment is egress allowed and exposure local, meaning apt and docker work but nothing outside can reach it. The proxied value is reserved."
+        },
+        "exposure": {
+          "enum": [
+            "internet",
+            "local",
+            "none"
+          ],
+          "x-redstackpro-source": "user",
+          "description": "Inbound reachability, and the ceiling for the hosts in it. internet means members may hold a public address, local means reachable only from within the deployment network, none means isolated. Providers render this differently: a route to the gateway on GCP and AWS, a bridge with an upstream route on Proxmox. A segment with exposure internet does not mean every member is exposed; each host says whether it takes an address, so a jumpbox and the operator boxes it fronts can share one segment."
+        },
+        "tier": {
+          "enum": [
+            "edge",
+            "redirector",
+            "c2",
+            "collector",
+            "management"
+          ],
+          "x-redstackpro-source": "user",
+          "description": "Advisory label. Drives canvas layout and warnings. The compiler ignores it."
+        }
+      }
+    },
+    "overlay_redirector": {
+      "type": "object",
+      "required": [
+        "server"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "server": {
+          "enum": [
+            "apache",
+            "nginx"
+          ],
+          "x-redstackpro-source": "user"
+        },
+        "hostname": {
+          "type": "string",
+          "x-redstackpro-source": "user",
+          "description": "Public name this redirector answers on."
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cert_source": {
+              "enum": [
+                "letsencrypt",
+                "provided",
+                "self_signed"
+              ],
+              "x-redstackpro-source": "user"
+            }
+          }
+        },
+        "gating": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "What separates a beacon from a scanner. A request missing the header or the prefix gets the decoy page, never the teamserver.",
+          "properties": {
+            "header_name": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9-]*$",
+              "x-redstackpro-source": "user",
+              "description": "Validation header the beacon sends."
+            },
+            "header_value": {
+              "type": "string",
+              "x-redstackpro-source": "user",
+              "description": "Expected value. Reaches the teamserver through the fronts edge, so the C2 profile and the redirector cannot disagree. Not a credential, but do not commit a real engagement value."
+            },
+            "redirect_rules": {
+              "type": "boolean",
+              "default": true,
+              "x-redstackpro-source": "user",
+              "description": "Block known scanners, AV vendors, and TOR exit nodes. Off for lab and CTF work where the noise is the point."
+            },
+            "decoy": {
+              "enum": [
+                "cdn",
+                "maintenance",
+                "none"
+              ],
+              "default": "cdn",
+              "x-redstackpro-source": "user",
+              "description": "What an unqualified request gets instead."
+            }
+          }
+        },
+        "public_address": {
+          "$ref": "#/$defs/public_address",
+          "default": true
+        }
+      }
+    },
+    "overlay_teamserver": {
+      "type": "object",
+      "required": [
+        "c2"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "c2": {
+          "enum": [
+            "mythic",
+            "sliver",
+            "adaptix",
+            "cobalt_strike",
+            "none"
+          ],
+          "x-redstackpro-source": "user",
+          "description": "none is the plain Debian catchall for custom C2 such as OC2."
+        },
+        "version": {
+          "type": "string",
+          "x-redstackpro-source": "user"
+        },
+        "public_address": {
+          "$ref": "#/$defs/public_address",
+          "default": false
+        }
+      }
+    },
+    "overlay_collector": {
+      "type": "object",
+      "required": [
+        "sink"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "sink": {
+          "enum": [
+            "opensearch",
+            "elasticsearch",
+            "splunk"
+          ],
+          "x-redstackpro-source": "user"
+        },
+        "shipper": {
+          "enum": [
+            "filebeat"
+          ],
+          "default": "filebeat",
+          "x-redstackpro-source": "user",
+          "description": "Declared on the collector because it defines the wire protocol senders must use."
+        },
+        "ingest_port": {
+          "$ref": "#/$defs/port",
+          "default": 5044,
+          "x-redstackpro-source": "user"
+        },
+        "tls": {
+          "type": "boolean",
+          "default": true,
+          "x-redstackpro-source": "user",
+          "description": "False is legal and produces a validator warning."
+        },
+        "public_address": {
+          "$ref": "#/$defs/public_address",
+          "default": false
+        }
+      }
+    },
+    "overlay_jumpbox": {
+      "type": "object",
+      "required": [
+        "services"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "services": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "ssh",
+              "guacamole",
+              "wireguard",
+              "openvpn"
+            ]
+          },
+          "x-redstackpro-source": "user"
+        },
+        "certificate_authority": {
+          "type": "boolean",
+          "default": true,
+          "x-redstackpro-source": "user",
+          "description": "Generates the CA covering VPN and log shipping."
+        },
+        "transport": {
+          "enum": [
+            "ssh",
+            "wireguard"
+          ],
+          "default": "ssh",
+          "x-redstackpro-source": "user",
+          "description": "How this jumpbox reaches the hosts it manages. When wireguard, the compiler expands peers from the set of hosts reached by manages edges rather than from drawn edges. Bootstrap is direct or ProxyJump on private addresses, because Ansible cannot configure WireGuard over WireGuard."
+        },
+        "public_address": {
+          "$ref": "#/$defs/public_address",
+          "default": true
+        }
+      }
+    },
+    "overlay_operator": {
+      "type": "object",
+      "required": [
+        "os"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "os": {
+          "enum": [
+            "windows",
+            "kali",
+            "debian"
+          ],
+          "x-redstackpro-source": "user",
+          "description": "windows raises a windows_image requirement against the target provider."
+        },
+        "public_address": {
+          "$ref": "#/$defs/public_address",
+          "default": false
+        }
+      }
+    },
+    "edge": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/edge_base"
+        }
+      ],
+      "oneOf": [
+        {
+          "$ref": "#/$defs/edge_attached"
+        },
+        {
+          "$ref": "#/$defs/edge_fronts"
+        },
+        {
+          "$ref": "#/$defs/edge_logs_to"
+        },
+        {
+          "$ref": "#/$defs/edge_manages"
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "edge_base": {
+      "type": "object",
+      "required": [
+        "id",
+        "role",
+        "source",
+        "target"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "role": {
+          "enum": [
+            "attached",
+            "fronts",
+            "logs_to",
+            "manages"
+          ]
+        },
+        "source": {
+          "$ref": "#/$defs/identifier"
+        },
+        "target": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "edge_attached": {
+      "description": "Membership. Host to segment, or segment to network. A segment attaches to exactly one network.",
+      "properties": {
+        "role": {
+          "const": "attached"
+        },
+        "primary": {
+          "type": "boolean",
+          "default": true,
+          "x-redstackpro-source": "user",
+          "description": "For multihomed hosts. Exactly one attachment per host is primary."
+        }
+      }
+    },
+    "edge_fronts": {
+      "description": "Redirector to teamserver. The source receives the target address. Many sources to one target is the rollover pool, which the compiler emits as a Terraform output for the operator to work into a C2 profile.",
+      "properties": {
+        "role": {
+          "const": "fronts"
+        },
+        "protocol": {
+          "enum": [
+            "http",
+            "https",
+            "dns",
+            "tcp"
+          ],
+          "x-redstackpro-source": "user"
+        },
+        "listen_port": {
+          "$ref": "#/$defs/port",
+          "x-redstackpro-source": "user"
+        },
+        "upstream_port": {
+          "$ref": "#/$defs/port",
+          "x-redstackpro-source": "user"
+        },
+        "uri_prefix": {
+          "type": "string",
+          "pattern": "^/[a-z0-9][a-z0-9/_-]*$",
+          "x-redstackpro-source": "user",
+          "description": "Path prefix the redirector routes to this teamserver. Two fronts edges from one redirector must not collide. Ignored for the dns protocol."
+        }
+      },
+      "required": [
+        "protocol",
+        "listen_port"
+      ]
+    },
+    "edge_logs_to": {
+      "description": "Sender to collector. The source receives the target address. Port and TLS come from the collector overlay so they cannot diverge per sender. The collector ingress rule is derived from the set of these edges, not from a segment range.",
+      "properties": {
+        "role": {
+          "const": "logs_to"
+        }
+      }
+    },
+    "edge_manages": {
+      "description": "Jumpbox to network or segment. Members of the target receive the source address as a ProxyJump in the generated inventory. A host is excluded from its own proxy path.",
+      "properties": {
+        "role": {
+          "const": "manages"
+        }
+      }
+    }
+  }
+}

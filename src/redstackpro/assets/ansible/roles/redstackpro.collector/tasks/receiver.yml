@@ -1,0 +1,186 @@
+---
+# What actually listens on ingest_port. The shipper pushes the beats protocol,
+# so the receiver is logstash whichever sink sits behind it, and the sink
+# specific part is one output block rather than a second receiver.
+
+- name: Add the elastic signing key
+  ansible.builtin.get_url:
+    url: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+    dest: /etc/apt/keyrings/elastic.asc
+    mode: "0644"
+
+- name: Add the elastic repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/elastic.asc]
+      https://artifacts.elastic.co/packages/8.x/apt stable main
+    filename: elastic-8x
+    state: present
+
+- name: Install logstash
+  ansible.builtin.apt:
+    name: logstash
+    state: present
+    update_cache: true
+
+- name: Ensure the logstash jvm options drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/logstash/jvm.options.d
+    state: directory
+    owner: root
+    group: logstash
+    mode: "0755"
+
+- name: Size the receiver heap
+  ansible.builtin.copy:
+    content: |
+      -Xms{{ redstackpro_collector_receiver_heap }}
+      -Xmx{{ redstackpro_collector_receiver_heap }}
+    dest: /etc/logstash/jvm.options.d/redstackpro.options
+    mode: "0644"
+  notify: Restart logstash
+
+- name: Let logstash read the receiver key
+  ansible.builtin.file:
+    path: "{{ item }}"
+    owner: root
+    group: logstash
+    mode: "0440"
+  loop:
+    - "{{ redstackpro_collector_tls_dir }}/collector.pkcs8.key"
+  when: redstackpro_collector_tls | bool
+
+# The opensearch output is a separate plugin, not one of the bundled ones, and
+# without it the pipeline config does not even parse. Offline installs fail here
+# rather than silently falling back, which is the right way round.
+- name: Install the opensearch output plugin
+  ansible.builtin.command:
+    cmd: /usr/share/logstash/bin/logstash-plugin install logstash-output-opensearch
+  register: redstackpro_collector_plugin
+  changed_when: "'Installation successful' in redstackpro_collector_plugin.stdout"
+  failed_when:
+    - redstackpro_collector_plugin.rc != 0
+    - "'already installed' not in redstackpro_collector_plugin.stdout"
+  when: redstackpro_collector_sink == 'opensearch'
+  notify: Restart logstash
+
+# No sink credential to hand over: opensearch.yml disables the security plugin,
+# so the loopback sink takes plain http and no auth. An environment file was
+# written here until a deploy proved the assumption wrong.
+- name: Remove any sink credential left by an earlier revision
+  ansible.builtin.file:
+    path: /etc/default/logstash
+    state: absent
+  notify: Restart logstash
+
+# Types, before a single document arrives.
+#
+# Without this, dynamic mapping makes every string a `text` field, and a text
+# field cannot be aggregated: "Text fields are not optimised for operations that
+# require per-document field data". Every panel on the dashboard aggregates --
+# traffic by front door, callbacks by backend, sources by country -- so all five
+# would have shown an error rather than data. Proven on a live index: node_id,
+# backend, country_name, user_agent.name, source.ip and url.original ALL failed.
+#
+# Mapping them as keyword also keeps the dashboard's queries honest: it can name
+# the field the pipeline writes, rather than a .keyword subfield that exists only
+# because of a default nobody chose. source.ip becomes a real `ip` type, so a
+# CIDR query works; the geo point becomes a real geo_point.
+#
+# It has to be in place BEFORE the first document, because a field's mapping is
+# fixed when the index is created -- hence before the pipeline is written.
+- name: Type the indices before any document creates them
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:9200/_index_template/redstackpro"
+    method: PUT
+    body_format: json
+    body: "{{ lookup('ansible.builtin.template', 'index-template.json.j2') | from_json }}"
+    status_code: [200, 201]
+  when: redstackpro_collector_sink == 'opensearch'
+
+# A template is not an index. The dashboards role reads each pattern's field list
+# from _fields_for_wildcard, which resolves fields from CONCRETE indices only --
+# so on a fresh deploy that has not yet received a single redirector hit, the
+# redstackpro-* indices do not exist, the wildcard resolves nothing, and the
+# field refresh dies with KeyError 'fields', failing the whole run. It only ever
+# passed before because a live redirector had already been scanned off the
+# internet and the indices existed by luck. Create one empty index per class now,
+# so it inherits the template mapping and the dashboard has real fields to bind
+# to at zero documents. The pipeline's dated indices (redstackpro-<class>-DATE)
+# coexist with these under the same wildcard; -000001 is an inert bootstrap.
+#
+# An index that already exists answers PUT with 400, so accepting only 200 and
+# 201 made this task succeed exactly once and fail on every converge after.
+# That is worse than untidy here, because the play order is wrapped in a retry
+# loop whose whole premise is that site.yml is idempotent -- it exists to ride
+# a WinRM or boot flap. So the first time any OTHER host failed after the
+# collector had succeeded, the retry failed on this task, and the deploy could
+# never converge again. It deadlocked a live run exactly that way: the
+# collector passed on attempt 5, the redirector failed, and attempts 6 and 7
+# died here on the indices attempt 5 had created.
+#
+# 400 is therefore accepted, but only for this one reason. Any other 400 -- a
+# malformed name, a rejected mapping -- still fails, because a bootstrap index
+# that silently never appears takes the dashboard's fields down with it.
+- name: Create the bootstrap index for each class so the patterns resolve fields
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:9200/redstackpro-{{ item }}-000001"
+    method: PUT
+    status_code: [200, 201, 400]
+  register: redstackpro_bootstrap_index
+  failed_when: >-
+    redstackpro_bootstrap_index.status not in [200, 201]
+    and 'resource_already_exists_exception' not in
+        (redstackpro_bootstrap_index.json.error.type | default(''))
+  changed_when: redstackpro_bootstrap_index.status in [200, 201]
+  loop:
+    - redirtraffic
+    - callbacks
+    - auth
+    - c2
+  when: redstackpro_collector_sink == 'opensearch'
+
+- name: Write the pipeline
+  ansible.builtin.template:
+    src: logstash-redstackpro.conf.j2
+    dest: /etc/logstash/conf.d/redstackpro.conf
+    owner: root
+    group: logstash
+    mode: "0640"
+  notify: Restart logstash
+
+- name: Remove the packaged sample pipeline
+  ansible.builtin.file:
+    path: /etc/logstash/conf.d/logstash-sample.conf
+    state: absent
+
+- name: Start logstash
+  ansible.builtin.service:
+    name: logstash
+    state: started
+    enabled: true
+
+# Flush the restart before checking, or the check passes against the process the
+# new pipeline was meant to replace.
+- name: Apply any pending restart before proving the receiver
+  ansible.builtin.meta: flush_handlers
+
+# The one fact worth asserting about a collector: the port a shipper pushes to
+# actually accepts a connection.
+#
+# This is the check whose absence let logstash exit FATAL on every start while
+# `systemctl is-active` answered `active` -- the pipeline never started, nothing
+# was bound, the sink held zero indices, and the deploy reported success. A
+# receiver that is not listening is not a receiver, and systemd cannot tell the
+# difference. Logstash takes a while to boot a JVM and compile a pipeline, hence
+# the generous wait rather than a single probe.
+- name: Confirm the receiver is really listening, not merely started
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ redstackpro_collector_ingest_port }}"
+    timeout: 180
+    msg: >-
+      logstash is running but nothing is bound to
+      {{ redstackpro_collector_ingest_port }}. Check
+      /var/log/logstash/logstash-plain.log: a pipeline that fails to start takes
+      the whole process down, and the unit still reports active.

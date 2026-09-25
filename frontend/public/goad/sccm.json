@@ -1,0 +1,329 @@
+{
+  "schema_version": "0.4.0",
+  "mode": "range",
+  "name": "SCCM",
+  "prefix": "cyb",
+  "auto_stop": {
+    "enabled": true,
+    "after_hours": 8,
+    "timezone": "UTC"
+  },
+  "nodes": [
+    {
+      "id": "net01",
+      "kind": "network",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "overlay": {
+        "cidr": "192.168.0.0/16"
+      }
+    },
+    {
+      "id": "sub01",
+      "kind": "segment",
+      "position": {
+        "x": 16,
+        "y": 44
+      },
+      "overlay": {
+        "cidr": "192.168.56.0/24",
+        "egress": "allowed",
+        "exposure": "local"
+      }
+    },
+    {
+      "id": "sccmlab",
+      "kind": "domain",
+      "position": {
+        "x": 16,
+        "y": 48
+      },
+      "overlay": {
+        "fqdn": "sccm.lab",
+        "netbios": "SCCMLAB",
+        "users": [
+          {
+            "username": "alice",
+            "display_name": "alice -",
+            "email": "alice@sccm.lab",
+            "groups": [
+              "LocalAdmins",
+              "Domain Admins"
+            ],
+            "privilege": "domain_admin",
+            "description": "alice",
+            "password": "whiteRabbit"
+          },
+          {
+            "username": "bob",
+            "display_name": "bob -",
+            "email": "bob@sccm.lab",
+            "groups": [
+              "LocalAdmins"
+            ],
+            "privilege": "user",
+            "description": "bob - local admin",
+            "password": "marley"
+          },
+          {
+            "username": "carol",
+            "display_name": "carol -",
+            "email": "carol@sccm.lab",
+            "groups": [
+              "RDPUsers"
+            ],
+            "privilege": "user",
+            "description": "carol - low user",
+            "password": "SCCMftw"
+          },
+          {
+            "username": "dave",
+            "display_name": "dave -",
+            "email": "dave@sccm.lab",
+            "groups": [
+              "SCCM-Admins",
+              "RDPUsers"
+            ],
+            "privilege": "user",
+            "description": "dave",
+            "password": "dragon"
+          },
+          {
+            "username": "eve",
+            "display_name": "eve -",
+            "email": "eve@sccm.lab",
+            "groups": [
+              "RDPUsers"
+            ],
+            "privilege": "user",
+            "description": "eve - admin on client",
+            "password": "iloveyou"
+          },
+          {
+            "username": "franck",
+            "display_name": "franck -",
+            "email": "franck@sccm.lab",
+            "groups": [
+              "RDPUsers"
+            ],
+            "privilege": "user",
+            "description": "franck - low user",
+            "password": "rockme"
+          },
+          {
+            "username": "sccm-client-push",
+            "display_name": "sccm client-push",
+            "email": "sccm-client-push@sccm.lab",
+            "groups": [
+              "LocalAdmins"
+            ],
+            "privilege": "user",
+            "description": "client push account",
+            "password": "superman"
+          },
+          {
+            "username": "sccm-account-da",
+            "display_name": "sccm sccm da account",
+            "email": "sccm-account-da@sccm.lab",
+            "groups": [
+              "Domain Admins"
+            ],
+            "privilege": "domain_admin",
+            "description": "sccm account",
+            "password": "SCCM_D@-ftw_"
+          },
+          {
+            "username": "sccm-naa",
+            "display_name": "sccm naa",
+            "email": "sccm-naa@sccm.lab",
+            "groups": [],
+            "privilege": "user",
+            "description": "SCCM Network Access Account",
+            "flaws": [
+              "password_in_description"
+            ],
+            "password": "123456789"
+          },
+          {
+            "username": "sccm-sql",
+            "display_name": "sccm sql",
+            "email": "sccm-sql@sccm.lab",
+            "groups": [],
+            "privilege": "user",
+            "description": "sql service",
+            "password": "SCCM_SQL_SERVICEACCOUNT"
+          }
+        ]
+      }
+    },
+    {
+      "id": "dc",
+      "kind": "dc",
+      "position": {
+        "x": 16,
+        "y": 48
+      },
+      "overlay": {
+        "os": "windows_server_2019",
+        "hostname": "DC",
+        "notes": "Unmapped GOAD vulns: disable_firewall."
+      }
+    },
+    {
+      "id": "mecm",
+      "kind": "srv",
+      "position": {
+        "x": 268,
+        "y": 48
+      },
+      "overlay": {
+        "os": "windows_server_2019",
+        "hostname": "MECM",
+        "notes": "Unmapped GOAD vulns: disable_firewall.",
+        "role": "mecm",
+        "services": [
+          "mecm"
+        ],
+        "vulns_vars": {
+          "mecm": {
+            "sql_fqdn": "MSSQL.sccm.lab",
+            "site_code": "P01",
+            "site_name": "sccm.lab Site",
+            "naa_account": "SCCMLAB\\sccm-naa",
+            "client_push_account": "SCCMLAB\\sccm-client-push",
+            "da_account": "SCCMLAB\\sccm-account-da",
+            "admin_group": "SCCMLAB\\SCCM-Admins"
+          }
+        }
+      }
+    },
+    {
+      "id": "mssql",
+      "kind": "srv",
+      "position": {
+        "x": 520,
+        "y": 48
+      },
+      "overlay": {
+        "os": "windows_server_2019",
+        "hostname": "MSSQL",
+        "notes": "Unmapped GOAD vulns: disable_firewall.",
+        "role": "sql",
+        "services": [
+          "mssql"
+        ],
+        "vulns": [
+          "mssql_impersonation"
+        ],
+        "vulns_vars": {
+          "mssql_edition": "developer",
+          "mssql_sysadmins": [
+            "SCCMLAB\\MECM$",
+            "SCCMLAB\\sccm-sql",
+            "SCCMLAB\\LocalAdmins",
+            "SCCMLAB\\administrator"
+          ]
+        }
+      }
+    },
+    {
+      "id": "client",
+      "kind": "wks",
+      "position": {
+        "x": 772,
+        "y": 48
+      },
+      "overlay": {
+        "os": "windows_10",
+        "hostname": "CLIENT",
+        "notes": "Unmapped GOAD vulns: disable_firewall."
+      }
+    },
+    {
+      "id": "jumpbox",
+      "kind": "jumpbox",
+      "position": {
+        "x": 16,
+        "y": 248
+      },
+      "overlay": {
+        "services": [
+          "ssh",
+          "guacamole",
+          "wireguard"
+        ],
+        "certificate_authority": true
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-sub01-net01",
+      "role": "attached",
+      "source": "sub01",
+      "target": "net01"
+    },
+    {
+      "id": "e-dc-sub01",
+      "role": "attached",
+      "source": "dc",
+      "target": "sub01"
+    },
+    {
+      "id": "e-dc-joins",
+      "role": "joins",
+      "source": "dc",
+      "target": "sccmlab"
+    },
+    {
+      "id": "e-mecm-sub01",
+      "role": "attached",
+      "source": "mecm",
+      "target": "sub01"
+    },
+    {
+      "id": "e-mecm-joins",
+      "role": "joins",
+      "source": "mecm",
+      "target": "sccmlab"
+    },
+    {
+      "id": "e-mssql-sub01",
+      "role": "attached",
+      "source": "mssql",
+      "target": "sub01"
+    },
+    {
+      "id": "e-mssql-joins",
+      "role": "joins",
+      "source": "mssql",
+      "target": "sccmlab"
+    },
+    {
+      "id": "e-client-sub01",
+      "role": "attached",
+      "source": "client",
+      "target": "sub01"
+    },
+    {
+      "id": "e-client-joins",
+      "role": "joins",
+      "source": "client",
+      "target": "sccmlab"
+    },
+    {
+      "id": "e-jumpbox-sub01",
+      "role": "attached",
+      "source": "jumpbox",
+      "target": "sub01"
+    },
+    {
+      "id": "e-jumpbox-net01-manages",
+      "role": "manages",
+      "source": "jumpbox",
+      "target": "net01"
+    }
+  ]
+}

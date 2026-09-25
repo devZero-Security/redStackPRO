@@ -1,0 +1,28 @@
+kind: operator
+abbrev: op
+category: host
+ansible_group: operators
+description: Operator workstation, reached through the jumpbox.
+
+display:
+  label: Operator box
+  blurb: Operator workstation
+  icon: tabler/outline/device-desktop
+  group: operator
+  color: "#1c7ed6"
+
+modes:
+  - ops
+
+derived:
+  - name: private_address
+    source: provider
+
+requirements:
+  - name: compute
+  - name: linux_image
+    when: { os: debian }
+  - name: linux_image
+    when: { os: kali }
+  - name: windows_image
+    when: { os: windows }

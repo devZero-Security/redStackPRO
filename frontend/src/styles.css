@@ -1,0 +1,1429 @@
+/* Dark by default, matching the diagram conventions the project already uses.
+   Accent colors come from the registry, not from here. */
+
+:root {
+  --bg: #1a1b1e;
+  --panel: #212327;
+  --panel-2: #25272b;
+  --line: #33363c;
+  --text: #e6e8ea;
+  --muted: #9aa0a6;
+  --error: #e03131;
+  --warning: #f59f00;
+  --ok: #2f9e44;
+  --accent: #1c7ed6;
+  /* Chrome tints, overridden per mode below. Host node colors come from the
+     registry and are never themed; the background, panels, grid, and the
+     shared network/subnet containers carry the red/blue identity. The
+     container accent themes their icon and outline, since those kinds are
+     shared across modes and cannot take a fixed registry colour. See 0047. */
+  --grid: #3a3d42;
+  /* A neutral card outline, the same in both modes, so a card reads as a card
+     on either the red or the blue ground regardless of its accent hue. */
+  --node-line: #474c55;
+  --container-accent: #868e96;
+  --container-bg: rgba(255, 255, 255, 0.025);
+  --container-bg-net: rgba(255, 255, 255, 0.012);
+  --container-head: #202226;
+  --container-head-net: #1d1f23;
+}
+
+/* redStackPRO: dark, shades of red. The container accent is a muted red so the
+   nested boxes read as red structure rather than competing with the host
+   card colours; the host icons stay the only bright accents. */
+.rg-mode-ops {
+  --bg: #1a1416;
+  --panel: #21191c;
+  --panel-2: #271e21;
+  --line: #3c2c31;
+  --grid: #45343a;
+  --container-accent: #9e5a5a;
+  --container-bg: rgba(224, 49, 49, 0.035);
+  --container-bg-net: rgba(224, 49, 49, 0.02);
+  --container-head: #241a1e;
+  --container-head-net: #1f1619;
+}
+
+/* Cyber Ranges: dark and cool, shades of blue. */
+.rg-mode-range {
+  --bg: #12161b;
+  --panel: #171d24;
+  --panel-2: #1b222b;
+  --line: #29323d;
+  --grid: #313d49;
+  --container-accent: #4dabf7;
+  --container-bg: rgba(28, 126, 214, 0.07);
+  --container-bg-net: rgba(28, 126, 214, 0.035);
+  --container-head: #17202b;
+  --container-head-net: #141c26;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+}
+
+.rg-app { display: flex; flex-direction: column; height: 100%; }
+
+/* header */
+
+.rg-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.rg-brand { font-size: 15px; letter-spacing: -0.2px; }
+.rg-brand b { font-weight: 700; }
+
+.rg-spacer { flex: 1; }
+
+.rg-name {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 5px 8px;
+  min-width: 220px;
+}
+
+.rg-prefix { color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.rg-prefix input {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 5px 6px;
+  width: 70px;
+}
+
+.rg-picker { display: flex; align-items: center; gap: 6px; }
+.rg-picker select { max-width: 220px; }
+
+/* The deploy target chooser. A popover rather than a select, because an <option>
+   cannot carry the vendor mark, and the mark is what makes five similar-length
+   names tell themselves apart at a glance. See ProviderPicker.jsx. */
+.rg-provider { position: relative; }
+.rg-provider-current,
+.rg-provider-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 5px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rg-provider-current { min-width: 104px; }
+.rg-provider-label { flex: 1; text-align: left; }
+.rg-provider-caret { color: var(--muted); font-size: 10px; }
+
+.rg-provider-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: 100%;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+}
+.rg-provider-item {
+  width: 100%;
+  background: transparent;
+  border-color: transparent;
+}
+.rg-provider-item:hover { background: var(--panel-2); }
+.rg-provider-item.is-active { color: var(--container-accent); }
+
+/* A pending backend: shown, because the compiler really does build it, but not
+   choosable, because none has been through a real range end to end.
+
+   The class is `is-pending` to match the badge the operator reads. The API
+   still sends `maturity: "preview"` for these, and that stays: it is the wire
+   contract, and renaming a value to match a label is how a schema drifts. */
+.rg-provider-item.is-pending {
+  color: var(--muted);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.rg-provider-item.is-pending:hover { background: transparent; }
+.rg-provider-tag {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+/* Unsaved is the loud state, because losing a topology on refresh is what this
+   indicator exists to prevent. */
+.rg-saved { color: var(--muted); white-space: nowrap; }
+.rg-saved.is-dirty { color: var(--warning); }
+.rg-saved.is-dirty::before { content: "\2022 "; }
+
+.rg-count { font-variant-numeric: tabular-nums; color: var(--muted); }
+.rg-count.is-error { color: var(--error); }
+.rg-count.is-ok { color: var(--ok); }
+.rg-count.is-warning { color: var(--warning); }
+
+button, select {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+
+button:hover { border-color: #4a4e56; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+.rg-primary { background: var(--accent); border-color: var(--accent); }
+.rg-danger { color: var(--error); width: 100%; margin-top: 14px; }
+
+/* layout */
+
+.rg-body { display: flex; flex: 1; min-height: 0; }
+
+.rg-panel {
+  width: 250px;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.rg-inspector { border-right: none; border-left: 1px solid var(--line); width: 320px; }
+
+.rg-panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted); margin: 0 0 10px; }
+.rg-panel h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted); margin: 14px 0 6px; }
+
+.rg-canvas { flex: 1; min-width: 0; position: relative; background: var(--bg); }
+
+/* palette */
+
+.rg-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 4px;
+  text-align: left;
+  background: var(--panel-2);
+}
+
+.rg-palette-label { flex: 1; }
+.rg-palette-abbrev { color: var(--muted); font-family: ui-monospace, monospace; font-size: 11px; }
+
+/* GOAD labs sit at the top of the palette, above the topology kinds: pick a lab
+   to load it onto the canvas, then build on it. */
+.rg-palette-labs { margin-bottom: 8px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.rg-palette-lab { justify-content: flex-start; font-weight: 600; }
+.rg-unlock { margin-top: 10px; width: 100%; }
+
+/* Drop-to-delete bin: shown only while a node is being dragged, and turns red
+   when the pointer is over it. Pointer-events off so the drag hit-test is purely
+   by pointer position, not the element swallowing the drop. */
+.rg-bin {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 18px; margin-bottom: 8px;
+  border: 2px dashed var(--muted); border-radius: 10px;
+  background: var(--panel); color: var(--muted);
+  font-size: 13px; font-weight: 600;
+  pointer-events: none; user-select: none;
+  transition: border-color 0.1s, color 0.1s, background 0.1s;
+}
+.rg-bin.is-hot {
+  border-color: #ff6b6b; color: #ff8787;
+  background: rgba(255, 107, 107, 0.12);
+}
+
+/* Shown on an empty canvas so a first-time person knows where to begin. */
+.rg-empty-hint {
+  position: absolute;
+  top: 46%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  max-width: 340px;
+  pointer-events: none;
+  z-index: 4;
+}
+.rg-empty-hint p { margin: 0 0 6px; font-size: 13px; color: var(--text); }
+.rg-empty-title { font-size: 15px !important; font-weight: 600; }
+.rg-empty-hint .rg-muted { font-size: 12px; }
+
+.rg-hint { color: var(--muted); font-size: 12px; margin-top: 14px; }
+
+.rg-readonly-note { width: 260px; padding: 16px 18px; }
+.rg-readonly-note h2 { color: var(--container-accent); }
+.rg-readonly-note p { font-size: 12.5px; line-height: 1.5; margin: 8px 0 0; }
+
+/* nodes */
+
+/* Fixed size, because the layout math sizes containers to fit their members and
+   a node that grows with its text would break that. */
+.rg-node {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  height: 100%;
+  padding: 7px 9px;
+  background: #26282d;
+  border: 1px solid var(--node-line);
+  border-left-width: 3px;
+  border-radius: 6px;
+  cursor: grab;
+  overflow: hidden;
+}
+.rg-node-row { display: flex; align-items: center; gap: 8px; width: 100%; }
+
+.rg-node:active { cursor: grabbing; }
+.rg-node:hover { border-color: #565b64; }
+
+.rg-node.is-selected { box-shadow: 0 0 0 1px var(--accent); }
+.rg-node.has-error { border-color: var(--error); }
+.rg-node-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.rg-node-name {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Badges sit on their own row under the name, so a long hostname keeps the full
+   width of the card. One row only (the card reserves a single badge row); extra
+   badges collapse into the +N chip. */
+.rg-node-badges { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; overflow: hidden; }
+.rg-badge.is-more {
+  color: var(--muted);
+  border-color: var(--line);
+  background: var(--panel-2);
+  flex: 0 0 auto;
+}
+.rg-node-sub {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rg-node-icon { display: flex; flex: 0 0 auto; }
+
+/* A host reachable from the internet, so the fact that it takes a public
+   address is visible on the node rather than only in the inspector. */
+.rg-badge {
+  flex: 0 0 auto;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+.rg-badge.is-public {
+  color: var(--warning);
+  border-color: var(--warning);
+  background: rgba(245, 159, 0, 0.1);
+}
+/* Domain membership: which AD domain a range host is joined to. */
+.rg-badge.is-domain {
+  color: #74c0fc;
+  border-color: rgba(77, 171, 247, 0.5);
+  background: rgba(77, 171, 247, 0.12);
+}
+/* EDR reads as the defensive side (teal), planted vulns as the offensive (red). */
+.rg-badge.is-edr {
+  color: #38d9a9;
+  border-color: rgba(56, 217, 169, 0.5);
+  background: rgba(56, 217, 169, 0.12);
+}
+.rg-badge.is-vuln {
+  color: #ff8787;
+  border-color: rgba(255, 135, 135, 0.5);
+  background: rgba(255, 135, 135, 0.12);
+  text-transform: none;
+}
+.rg-badge.is-hardened {
+  color: #74c0fc;
+  border-color: rgba(116, 192, 252, 0.5);
+  background: rgba(116, 192, 252, 0.12);
+  text-transform: none;
+}
+
+.rg-dot { width: 7px; height: 7px; border-radius: 50%; margin-left: auto; }
+.rg-badge + .rg-dot { margin-left: 6px; }
+.rg-dot.is-error { background: var(--error); }
+.rg-dot.is-warning { background: var(--warning); }
+
+/* A container is a backdrop. Its body ignores the pointer so a click lands on
+   the host inside it, and only the header is draggable. */
+.rg-container {
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--container-accent);
+  border-radius: 8px;
+  background: var(--container-bg);
+  pointer-events: none;
+}
+
+/* The container icon takes the themed accent (red/orange in ops, blue in
+   range), the way a host icon takes its registry colour. */
+.rg-container-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--container-accent);
+}
+
+.rg-container.is-selected { border-color: var(--accent); }
+.rg-container.has-error { border-color: var(--error); }
+
+.rg-container-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  background: var(--container-head);
+  border-bottom: 1px solid var(--line);
+  border-radius: 7px 7px 0 0;
+  pointer-events: all;
+  cursor: grab;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.rg-container-head:active { cursor: grabbing; }
+.rg-container-head:hover { background: #24262b; }
+
+/* The name is the container's identity, so it never shrinks; the fqdn/meta
+   takes the slack and ellipses, with the full text on hover. */
+.rg-container-name { font-family: ui-monospace, monospace; font-size: 12px; flex: 0 0 auto; }
+.rg-container-type {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 5px;
+  flex: 0 0 auto;
+}
+.rg-container-meta {
+  color: var(--muted);
+  font-size: 11px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A network reads as the outer frame; a segment as a panel inside it. */
+.rg-container.is-network { border-style: dashed; background: var(--container-bg-net); }
+.rg-container.is-network > .rg-container-head { background: var(--container-head-net); }
+
+/* A lone network is drawn quiet: a faint frame and a recessed header, so the
+   subnets and hosts read first. It returns to full prominence when selected, or
+   once a second network makes the boundary meaningful. */
+.rg-container.is-network.is-solo { border-color: rgba(255,255,255,0.09); background: var(--container-bg-net); }
+.rg-container.is-network.is-solo > .rg-container-head {
+  background: transparent;
+  border-bottom-color: rgba(255,255,255,0.05);
+  opacity: 0.55;
+}
+
+/* A container's body lets a click reach the line drawn across it. Without this
+   the big subnet and network boxes sit over the edges and swallow every click
+   meant for a line, so nothing selects. The header stays the part you grab to
+   move, select, or rename the container, and the resize handles stay live. The
+   doubled class outweighs React Flow's own `.react-flow__node { pointer-events:
+   all }`, which otherwise wins and puts the boxes back over the lines. */
+.react-flow__node-container { pointer-events: none !important; }
+.react-flow__node-container .rg-container-head,
+.react-flow__node-container .react-flow__resize-control { pointer-events: all; }
+
+/* inspector */
+
+/* A node's relationships, as clickable rows. This is the reliable way to reach
+   an edge: click the node, then the row, rather than aiming at a thin line. */
+.rg-connections { margin: 14px 0; }
+.rg-connections h3 { margin: 0 0 6px; }
+.rg-connection {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.rg-connection:hover { border-color: var(--accent); }
+.rg-connection-dot { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.rg-connection-role { font-weight: 600; }
+.rg-connection-dir { color: var(--muted); }
+.rg-connection-other { color: var(--text); }
+.rg-connection-detail { color: var(--muted); margin-left: auto; font-family: var(--mono, monospace); }
+.rg-connection-add { display: flex; gap: 5px; margin-top: 6px; }
+.rg-connection-add select { flex: 1; min-width: 0; }
+.rg-connection-add button { flex: none; padding: 4px 12px; }
+
+/* A redirector's cover profile control. */
+.rg-cover { margin: 14px 0; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.rg-cover h3 { margin: 0 0 4px; }
+.rg-cover-row { display: flex; gap: 6px; margin-top: 8px; }
+.rg-cover-row select { flex: 1; min-width: 0; }
+.rg-cover-row button { flex: none; padding: 4px 14px; }
+.rg-inline-btn { margin: 2px 0 8px; padding: 3px 10px; font-size: 11px; }
+
+/* Range placement: pick a host's domain and subnet from menus instead of
+   drawing a line. Mirrors the cover panel so the two read as the same kind of
+   purpose-built control. */
+.rg-placement { margin: 14px 0; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.rg-placement h3 { margin: 0 0 6px; }
+
+/* Range starters in the palette: labelled by role rather than a kind abbrev. */
+.rg-palette-presets { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 6px; }
+
+/* Domain users: a list of accounts on a domain, each with a privilege the person
+   can change and a flaw count, plus Populate and an add row. */
+.rg-users { margin: 14px 0; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.rg-users h3 { margin: 0 0 4px; }
+.rg-users-actions { display: flex; gap: 6px; margin: 8px 0; }
+.rg-users-actions button { flex: none; padding: 4px 12px; }
+.rg-users-list { display: flex; flex-direction: column; gap: 3px; max-height: 320px; overflow-y: auto; margin-bottom: 8px; }
+.rg-user-row { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 5px; }
+.rg-user-row:hover { background: rgba(255, 255, 255, 0.04); }
+.rg-user.is-open { background: rgba(255, 255, 255, 0.03); border-radius: 6px; }
+.rg-user-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; text-align: left; background: none; border: none; color: inherit; cursor: pointer; padding: 0; }
+.rg-user-name:hover { text-decoration: underline; }
+.rg-user-detail { padding: 4px 6px 8px; display: flex; flex-direction: column; gap: 6px; }
+.rg-user-flaw-picks { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+.rg-user-flaw-picks .rg-check { font-size: 11px; }
+.rg-user-priv { flex: none; font-size: 10px; border-radius: 4px; padding: 1px 3px; }
+.rg-user-priv.is-user { color: var(--muted); }
+.rg-user-priv.is-local_admin { color: #ffc078; border-color: rgba(255, 192, 120, 0.5); }
+.rg-user-priv.is-domain_admin { color: #ff8787; border-color: rgba(255, 135, 135, 0.6); }
+.rg-user-priv.is-enterprise_admin { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.7); }
+.rg-user-flaws { flex: none; font-size: 10px; color: #ff8787; }
+.rg-user-breach { flex: none; font-size: 10px; font-weight: 600; color: #ffd43b; text-transform: uppercase; letter-spacing: 0.05em; }
+.rg-users-archetypes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 8px; }
+.rg-users-archetypes button { flex: none; padding: 3px 10px; font-size: 12px; }
+.rg-user-del { flex: none; border: none; background: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 3px; }
+.rg-user-del:hover { color: #ff8787; }
+.rg-users-add { display: flex; gap: 6px; }
+.rg-users-add input { flex: 1; min-width: 0; }
+.rg-users-add button { flex: none; padding: 4px 12px; }
+
+/* Domain access rights (ACLs): the attack-graph edges between principals. */
+.rg-acls { margin: 14px 0; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.rg-acls h3 { margin: 0 0 4px; }
+.rg-acls-list { display: flex; flex-direction: column; gap: 3px; max-height: 300px; overflow-y: auto; margin: 8px 0; }
+/* Two lines per row: the pair on top, the right underneath.
+
+   One line did not fit. Principal, right and target competed for about 330px,
+   and because the right was `flex: none` the two NAMES absorbed every pixel of
+   the shortfall: "tywin.lannister" became "tywin.la...", and an OU target
+   became "OU=Crownlands...". The one thing an access-rights list has to show
+   is who acts on whom, and that was the part being thrown away.
+
+   Given its own line the pair has the full width, so names stop truncating,
+   and the right reads as a label rather than as a third column. */
+.rg-acl-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "pair del" "right del";
+  align-items: center;
+  column-gap: 6px;
+  padding: 4px 5px;
+  border-radius: 5px;
+  font-size: 11px;
+}
+.rg-acl-row:hover { background: rgba(255, 255, 255, 0.04); }
+.rg-acl-pair { grid-area: pair; display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+.rg-acl-p, .rg-acl-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rg-acl-arrow { flex: none; color: var(--muted); }
+.rg-acl-right {
+  grid-area: right;
+  color: #ff8787;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.rg-acl-row .rg-user-del { grid-area: del; align-self: center; }
+
+/* Two by two, not one row of four. The select's intrinsic width is set by its
+   longest option ("ForceChangePassword") and it was `flex: none`, so in a
+   370px rail it took roughly half the room and the two inputs collapsed to
+   about 40px each -- which is why their "principal" and "target" placeholders
+   rendered as "pri" and "tar" and read as mystery buttons. */
+.rg-acls-add { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.rg-acls-add input, .rg-acls-add select { min-width: 0; }
+.rg-acls-add button { padding: 4px 10px; }
+
+/* What a node manages, and what manages it. Not a drawn line, so it is listed
+   here in the manages blue and each row selects the other end. */
+.rg-manages-section { margin: 14px 0; }
+.rg-manages-section h3 { margin: 0 0 6px; }
+.rg-manages-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.rg-manages-row:hover { border-color: #1c7ed6; }
+.rg-manages-row-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+  background: #1c7ed6;
+}
+
+
+.rg-field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; }
+.rg-field-inline { flex-direction: row; align-items: center; gap: 7px; }
+/* A checkbox and its name on one line. The field itself stays a column, so the
+   help text lands underneath at full width instead of in a narrow column
+   beside the box. See the boolean branch in Inspector.jsx. */
+.rg-check-row { display: flex; align-items: center; gap: 7px; }
+.rg-check-row input[type="checkbox"] { flex: none; margin: 0; }
+.rg-field-label { color: var(--muted); font-size: 11px; text-transform: lowercase; }
+.rg-required { color: var(--warning); margin-left: 6px; font-size: 10px; }
+.rg-field-help { color: #71767c; font-size: 11px; }
+
+.rg-field input, .rg-field select {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 5px 7px;
+  font: inherit;
+}
+
+.rg-fieldset { border: 1px solid var(--line); border-radius: 6px; padding: 9px; margin: 0 0 12px; }
+.rg-fieldset legend { color: var(--muted); font-size: 11px; padding: 0 5px; }
+
+.rg-checks { display: flex; flex-wrap: wrap; gap: 8px; }
+.rg-check { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+
+.rg-vulns {
+  max-height: 380px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-top: 4px;
+}
+.rg-vuln-group { margin-bottom: 10px; }
+.rg-vuln-group:last-child { margin-bottom: 0; }
+.rg-vuln-group-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #ff8787;
+  margin: 2px 0 5px;
+}
+/* The one-line summary under a hardening group heading. This is the text that
+   replaced the schema description's run-on glossary, so it has to read as
+   explanation rather than as another option. */
+.rg-vuln-group-summary {
+  font-size: 10px;
+  color: var(--muted);
+  margin: -3px 0 6px;
+}
+/* Hardening groups are small (one to three controls), so they stack rather
+   than wrap: a wrapped row put `asr` and `runasppl` on the same line as
+   `lsa_protection` and lost the grouping the headings exist to create. */
+.rg-hardening .rg-vuln-group-label { color: var(--accent, #3b9eff); }
+.rg-vulns .rg-check { padding: 1px 0; }
+.rg-check.is-provider-unsupported { color: var(--muted); }
+.rg-vuln-provider-note { color: var(--muted); font-style: italic; }
+
+.rg-kv { display: flex; justify-content: space-between; margin: 0 0 5px; }
+.rg-kv span:first-child { color: var(--muted); }
+
+/* findings */
+
+.rg-footer {
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 8px 12px;
+}
+
+.rg-findings { display: flex; flex-direction: column; gap: 3px; }
+
+.rg-finding {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-left: 2px solid var(--line);
+  border-radius: 0;
+  padding: 3px 9px;
+  font-size: 12px;
+}
+
+.rg-finding.is-error { border-left-color: var(--error); }
+.rg-finding.is-warning { border-left-color: var(--warning); }
+.rg-finding code { color: var(--muted); margin-right: 7px; font-size: 11px; }
+
+/* The family word that leads a finding, in place of the raw code. A native
+   title tooltip has no affordance of its own, so the dotted underline and the
+   help cursor are what tell a person the code and the rule's meaning are one
+   hover away. Tinted by severity, because at footer size the border stripe is
+   the only other colour and it is easy to miss. */
+.rg-finding-family {
+  margin-right: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px dotted var(--line);
+  cursor: help;
+}
+.rg-finding.is-error .rg-finding-family { color: var(--error); }
+.rg-finding.is-warning .rg-finding-family { color: var(--warning); }
+/* A code this build has no word for. Shown verbatim and in the code voice, so
+   it is obviously a literal rather than a label that reads oddly. */
+.rg-finding-family.is-unknown {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.rg-remedy { display: block; color: var(--muted); font-size: 11px; }
+
+/* The range template family, folded into one row. Closed by default: eight of
+   the nine range templates are the GOAD family, and a flat list of nine made
+   the product read as a GOAD launcher and buried the one range that is ours. */
+.rg-lab-group { margin-bottom: 6px; }
+.rg-lab-group > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  list-style: none;
+}
+.rg-lab-group > summary::-webkit-details-marker { display: none; }
+.rg-lab-group > summary:hover { border-color: var(--accent); }
+/* The disclosure caret, drawn rather than relying on the platform marker, which
+   differs per browser and does not take the panel's colours. */
+.rg-lab-group > summary .rg-lab-group-name::before {
+  content: "\25B8";
+  display: inline-block;
+  margin-right: 7px;
+  color: var(--muted);
+  transition: transform 120ms ease;
+}
+.rg-lab-group[open] > summary .rg-lab-group-name::before {
+  transform: rotate(90deg);
+}
+.rg-lab-group-count {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 11px;
+}
+/* Nested, so a lab reads as belonging to the family rather than sitting beside
+   it. Harbor is ungrouped and keeps the outer indent, which is the point. */
+.rg-lab-group > .rg-palette-lab { margin-left: 10px; }
+.rg-lab-group > .rg-labs-note { margin: 7px 0 7px 10px; }
+
+/* What a range is for, over the canvas, once. The topology shows its shape; only
+   this says why you would pick it. Dismissed by hand, and it never returns for
+   that load, so it cannot become something to click past every time. */
+.rg-summary {
+  max-width: 320px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.rg-summary-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.rg-summary-head h3 { margin: 0; font-size: 14px; color: var(--text); }
+.rg-summary-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+.rg-summary-close:hover { color: var(--text); }
+.rg-summary-shape {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text);
+}
+.rg-summary-teaches {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.rg-inline-findings { margin: 12px 0; }
+.rg-status { display: block; color: var(--muted); margin-top: 7px; font-size: 12px; }
+
+/* react flow overrides */
+
+/* Handles are the grab points for drawing an edge. They are hidden at rest so
+   the canvas is not peppered with grey dots that a person can do nothing with,
+   and appear only when a node is hovered or a connection is being dragged. To
+   draw a line, hover a node and its two grab points fade in. */
+.react-flow__handle {
+  background: var(--accent);
+  border: 2px solid var(--panel);
+  width: 12px;
+  height: 12px;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.react-flow__node:hover .react-flow__handle,
+.react-flow__handle.connectionindicator:hover,
+.react-flow__handle.connectingfrom,
+.react-flow__handle.connectingto {
+  opacity: 1;
+}
+
+/* The role legend. At rest a line's colour is its role, so the legend is how
+   that colour is read; the tag itself shows only when a line is hovered or
+   selected. */
+.rg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 7px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 11px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+}
+.rg-legend-item { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.rg-legend-swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+
+/* The resize affordance on a selected container: an accent boundary, corner
+   squares, and eight border zones that carry window-style resize cursors. Drag
+   any edge or corner to expand or shrink the box, the way a shape resizes in
+   Visio. The frame ignores the pointer except on its zones, so clicking inside
+   the box still selects and drags as before. */
+.rg-resize-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+}
+.rg-rz { position: absolute; pointer-events: all; }
+/* Edges: thin strips just outside the border. */
+.rg-rz-t { top: -5px; left: 10px; right: 10px; height: 10px; cursor: ns-resize; }
+.rg-rz-b { bottom: -5px; left: 10px; right: 10px; height: 10px; cursor: ns-resize; }
+.rg-rz-l { left: -5px; top: 10px; bottom: 10px; width: 10px; cursor: ew-resize; }
+.rg-rz-r { right: -5px; top: 10px; bottom: 10px; width: 10px; cursor: ew-resize; }
+/* Corners: small squares that resize on both axes. */
+.rg-rz-tl,
+.rg-rz-tr,
+.rg-rz-bl,
+.rg-rz-br {
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  border: 1px solid var(--panel);
+  border-radius: 3px;
+}
+.rg-rz-tl { top: -7px; left: -7px; cursor: nwse-resize; }
+.rg-rz-tr { top: -7px; right: -7px; cursor: nesw-resize; }
+.rg-rz-bl { bottom: -7px; left: -7px; cursor: nesw-resize; }
+.rg-rz-br { bottom: -7px; right: -7px; cursor: nwse-resize; }
+
+/* Alignment guides shown while a node is dragged. Pink so they read against the
+   role colours (orange, purple, blue, teal) and the dark canvas alike. They
+   span the whole pane and ignore the pointer so they never eat a drag. */
+.rg-guide {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  background: #ff2e88;
+  box-shadow: 0 0 2px rgba(255, 46, 136, 0.7);
+}
+.rg-guide-v { top: 0; height: 100%; width: 1px; }
+.rg-guide-h { left: 0; width: 100%; height: 1px; }
+
+/* Telemetry: a banner when the document breaks an invariant, offering the
+   diagnostics and a way to bring the view back. Rides above the canvas so it
+   shows even when the pane has gone blank. */
+.rg-diag-banner {
+  position: absolute;
+  z-index: 20;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 24px);
+  padding: 7px 12px;
+  background: #3a2416;
+  border: 1px solid var(--warning, #f08c00);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+}
+.rg-diag-text {
+  color: #ffd8a8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rg-diag-banner button {
+  flex: none;
+  padding: 3px 10px;
+  font-size: 11px;
+}
+
+/* The error boundary's recovery panel, shown in place of the canvas when a
+   render throws. */
+.rg-crash {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  height: 100%;
+  padding: 40px;
+  background: var(--bg, #16171a);
+}
+.rg-crash h2 { margin: 0; }
+.rg-crash-actions { display: flex; gap: 8px; margin-top: 6px; }
+
+/* What a jumpbox manages, shown as a chip inside the card instead of a line
+   into the box it governs. Blue to match the old manages line, so the meaning
+   carries over. Sits on its own row under the sub line and truncates with the
+   full list in the title; the host grows a row (MANAGES_ROW) to hold it. */
+.rg-node-manages {
+  display: block;
+  width: 100%;
+  padding: 1px 7px;
+  line-height: 1.5;
+  font-size: 10px;
+  color: #9dc7f0;
+  background: rgba(28, 126, 214, 0.16);
+  border: 1px solid rgba(28, 126, 214, 0.45);
+  border-radius: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rg-manages-label {
+  margin-right: 5px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #4a9eea;
+}
+
+/* Bend handles on a selected line. A solid dot is a real waypoint you drag; a
+   faint dot sits on each segment midpoint and drops a new bend when dragged. */
+.rg-wp {
+  fill: #fff;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  cursor: grab;
+  pointer-events: all;
+}
+.rg-wp:hover { fill: var(--accent); }
+.rg-wp:active { cursor: grabbing; }
+.rg-wp-ghost {
+  fill: rgba(255, 255, 255, 0.25);
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 1;
+  cursor: copy;
+  pointer-events: all;
+}
+.rg-wp-ghost:hover { fill: var(--accent); stroke: var(--accent); }
+
+/* A node's actions ride above it when it is selected. */
+.rg-node-toolbar { display: flex; gap: 4px; }
+.rg-node-toolbar button {
+  padding: 3px 9px;
+  font-size: 11px;
+  background: var(--panel);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
+}
+
+/* The floating edge draws its own label rather than the default renderer's. A
+   solid chip with a border so it stays readable where a line crosses a node. */
+.rg-edge-label {
+  position: absolute;
+  z-index: 6;
+  font-size: 11px;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  white-space: nowrap;
+  pointer-events: all;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  letter-spacing: 0.02em;
+}
+.react-flow__controls button {
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+  fill: var(--text);
+}
+.react-flow__minimap { background: var(--panel); }
+
+/* export panel
+   The generated code sits beside the topology, because the working directory is
+   the deliverable and the canvas is a view onto what produces it. */
+
+.rg-right { display: flex; flex-direction: column; width: 320px; flex: 0 0 auto; }
+.rg-right.is-wide { width: 620px; }
+
+.rg-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px 0;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+}
+
+.rg-tabs button {
+  border: none;
+  border-radius: 5px 5px 0 0;
+  background: none;
+  color: var(--muted);
+  padding: 6px 12px;
+}
+
+.rg-tabs button.is-active { background: var(--panel-2); color: var(--text); }
+
+.rg-right .rg-panel { width: auto; flex: 1; min-height: 0; }
+
+.rg-export { display: flex; flex-direction: column; overflow: hidden; }
+
+.rg-export-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.rg-export-head h2 { margin: 0; }
+.rg-export-meta { color: var(--muted); font-size: 11px; flex: 1; }
+
+.rg-export-note {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 0 0 10px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--ok);
+  background: rgba(47, 158, 68, 0.06);
+}
+
+/* Which machine the operator deploys FROM. Sits beside Download because it is
+   what the file will be named after, and what the steps below it describe. */
+.rg-export-platform {
+  color: var(--muted);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.rg-export-platform select { font-size: 11px; padding: 2px 4px; }
+
+/* The three things to do after extracting. Short enough to read standing up;
+   README.md in the download carries the long version. */
+.rg-export-steps {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+/* A command to run, on its own line. Inline <code> stays inline, for the file
+   and field names the steps mention in passing. */
+.rg-export-steps .rg-cmd {
+  display: block;
+  margin: 3px 0 5px;
+  padding: 4px 6px;
+  background: var(--code-bg, rgba(127, 127, 127, 0.12));
+  border-radius: 3px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.rg-export-blocked { color: var(--error); font-size: 12px; }
+
+.rg-export-split { display: flex; flex: 1; gap: 8px; min-height: 0; }
+
+.rg-tree {
+  width: 190px;
+  flex: 0 0 auto;
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+  padding-right: 6px;
+}
+
+.rg-tree-dir, .rg-tree-file {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rg-tree-dir { color: var(--muted); margin-top: 5px; }
+.rg-tree-file { color: var(--text); padding-left: 16px; }
+.rg-tree-file:hover { background: var(--panel-2); }
+.rg-tree-file.is-open { background: #2c3038; color: #fff; }
+
+.rg-code { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+.rg-code-head {
+  color: var(--muted);
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  padding: 0 0 5px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rg-code-body {
+  flex: 1;
+  margin: 0;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  color: #d4d7db;
+  padding: 8px 0 0;
+  tab-size: 2;
+}
+
+.rg-code-body .c { color: #6f757d; }
+.rg-code-body .s { color: #8ec07c; }
+.rg-code-body .k { color: #7aa2f7; }
+.rg-code-body .p { color: var(--warning); }
+
+/* conflict */
+
+.rg-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 13, 15, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.rg-modal {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px 20px;
+  max-width: 480px;
+}
+
+.rg-modal h2 { font-size: 14px; margin: 0 0 10px; }
+.rg-modal p { margin: 0 0 10px; }
+.rg-modal .rg-muted { color: var(--muted); }
+
+.rg-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+/* library
+   Wider than a confirm, and it scrolls: a large account's topologies page in a row
+   at a time rather than growing the modal past the viewport. */
+
+.rg-modal.is-library {
+  max-width: 640px;
+  width: 640px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* The current-canvas badge in the header, themed to the current mode, and the
+   start chooser it opens. Each chooser card carries its own mode class so it
+   previews that canvas's colour. See ModeChooser.jsx, 0047. */
+/* The always-visible canvas switcher: two segments, each themed to its own
+   canvas (Red Infra red, Cyber Ranges blue), the active one highlighted. */
+.rg-mode-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.rg-mode-seg {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 3px 11px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rg-mode-seg:not(.is-active):hover { color: var(--text); }
+.rg-mode-seg.is-active {
+  color: var(--container-accent);
+  border-color: var(--container-accent);
+  background: var(--container-bg);
+}
+
+.rg-modal.is-chooser { width: 580px; max-width: 92vw; }
+.rg-modal.is-chooser.rg-mode-range { width: 720px; }
+.rg-goad-grid { grid-template-columns: 1fr 1fr 1fr; }
+.rg-template-group { margin-top: 10px; }
+.rg-template-group-name { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.rg-chooser-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 12px;
+}
+.rg-chooser-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  text-align: left;
+  padding: 18px 18px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--container-accent);
+  background: var(--container-bg);
+  cursor: pointer;
+}
+.rg-chooser-card:hover { background: var(--container-head); }
+.rg-chooser-name {
+  font-family: ui-monospace, monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--container-accent);
+}
+.rg-chooser-prefix { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+.rg-chooser-blurb { font-size: 12.5px; color: var(--text); opacity: 0.82; line-height: 1.45; }
+
+/* Ludus import modal */
+.rg-modal.rg-import { width: 640px; max-width: 92vw; }
+.rg-import p code {
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--container-bg);
+}
+.rg-import-name {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.rg-import-name input {
+  font-size: 13px;
+  padding: 6px 8px;
+}
+.rg-import-yaml {
+  width: 100%;
+  min-height: 240px;
+  resize: vertical;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--container-accent);
+  background: var(--container-bg);
+  color: var(--text);
+  box-sizing: border-box;
+}
+.rg-import-error {
+  color: var(--danger, #ff6b6b);
+  font-size: 12.5px;
+  margin: 8px 0 0;
+}
+.rg-import-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* GOAD extensions toggle list */
+.rg-modal.rg-extensions { width: 560px; max-width: 92vw; }
+.rg-ext-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rg-ext {
+  border-radius: 10px;
+  border: 1px solid var(--container-accent);
+  background: var(--container-bg);
+}
+.rg-ext.is-on { border-color: var(--accent); }
+.rg-ext.is-disabled { opacity: 0.5; }
+.rg-ext label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.rg-ext.is-disabled label { cursor: not-allowed; }
+.rg-ext input { margin-top: 3px; }
+.rg-ext-body { display: flex; flex-direction: column; gap: 3px; }
+.rg-ext-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--container-accent);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rg-ext-hint {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.rg-ext-blurb { font-size: 12.5px; color: var(--text); opacity: 0.82; line-height: 1.4; }
+
+.rg-library-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.rg-library-head h2 { margin: 0; }
+
+.rg-library-error {
+  color: var(--error);
+  font-size: 12px;
+  margin: 0 0 10px;
+}
+
+.rg-library-section { margin-top: 14px; }
+.rg-library-section h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.rg-library-sub { font-size: 11px; margin: -4px 0 8px; }
+
+.rg-library-list { list-style: none; margin: 0; padding: 0; }
+
+.rg-library-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.rg-library-row.is-current { background: rgba(28, 126, 214, 0.08); }
+
+.rg-library-name {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  padding: 5px 8px;
+  min-width: 0;
+}
+
+.rg-library-name:hover { background: var(--panel-2); }
+.rg-library-name.is-static { cursor: default; }
+.rg-library-name.is-static:hover { background: none; }
+.rg-library-name > span:first-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.rg-library-meta { color: var(--muted); font-size: 11px; }
+
+.rg-library-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.rg-library-actions button { padding: 4px 9px; font-size: 12px; }
+
+.rg-danger-text { color: var(--error); }
+
+.rg-library-more { margin-top: 10px; width: 100%; }

@@ -1,0 +1,163 @@
+---
+# Plant the vulnerable certificate templates this ADCS host declares. Each esc id
+# in redstackpro_adcs_templates maps to a clean-room planter script; the template
+# writes go to the configuration partition, so every planter runs under the
+# Enterprise-Admin scheduled task in run_ea.yml. Planters are idempotent (they
+# return "template exists" if already present). CA-wide flags (esc6/esc11/esc7)
+# are handled in ca_config.yml, not here. See goad-fidelity-build.
+
+- name: Stage the certificate-template planters
+  ansible.windows.win_copy:
+    src: "{{ item }}"
+    dest: "C:\\Windows\\Temp\\{{ item }}"
+  loop:
+    # A planter that is not in this list is never copied to the host, and the
+    # task that runs it then fails on a missing file rather than on anything to
+    # do with the technique. Add here first.
+    - plant_esc1.ps1
+    - plant_esc2.ps1
+    - plant_esc3.ps1
+    - plant_esc4.ps1
+    - plant_esc5.ps1
+    - plant_esc9.ps1
+    - plant_esc13.ps1
+    - plant_esc14.ps1
+    - plant_esc15.ps1
+  when: >-
+    (redstackpro_adcs_templates | default([]) | select('match', '^esc') | list) | length > 0
+    or (redstackpro_adcs_acl_templates | default([])) | length > 0
+
+# ESC1: an enrollee-supplies-subject client-auth template (goad-light).
+- name: Plant ESC1
+  ansible.builtin.include_tasks: run_ea.yml
+  vars:
+    redstackpro_ea_taskname: RSPEsc1
+    redstackpro_ea_outfile: C:\Windows\Temp\rsp-esc1-out.txt
+    redstackpro_ea_command: >-
+      & C:\Windows\Temp\plant_esc1.ps1 -TemplateCn 'RSPESC1'
+      -TemplateDisplay 'redStackPro ESC1'
+      -EnrollGroup '{{ redstackpro_adcs_enroll_group }}'
+      -CaName '{{ redstackpro_adcs_ca_name }}'
+      *> C:\Windows\Temp\rsp-esc1-out.txt
+  when: "'esc1' in (redstackpro_adcs_templates | default([]))"
+
+# ESC2: an Any-Purpose-EKU client-auth-capable template, enrollee supplies subject.
+- name: Plant ESC2
+  ansible.builtin.include_tasks: run_ea.yml
+  vars:
+    redstackpro_ea_taskname: RSPEsc2
+    redstackpro_ea_outfile: C:\Windows\Temp\rsp-esc2-out.txt
+    redstackpro_ea_command: >-
+      & C:\Windows\Temp\plant_esc2.ps1 -TemplateCn 'RSPESC2'
+      -TemplateDisplay 'redStackPro ESC2'
+      -EnrollGroup '{{ redstackpro_adcs_enroll_group }}'
+      -CaName '{{ redstackpro_adcs_ca_name }}'
+      *> C:\Windows\Temp\rsp-esc2-out.txt
+  when: "'esc2' in (redstackpro_adcs_templates | default([]))"
+
+# ESC3: an enrollment-agent template (Certificate Request Agent EKU).
+- name: Plant ESC3
+  ansible.builtin.include_tasks: run_ea.yml
+  vars:
+    redstackpro_ea_taskname: RSPEsc3
+    redstackpro_ea_outfile: C:\Windows\Temp\rsp-esc3-out.txt
+    redstackpro_ea_command: >-
+      & C:\Windows\Temp\plant_esc3.ps1 -TemplateCn 'RSPESC3'
+      -TemplateDisplay 'redStackPro ESC3'
+      -EnrollGroup '{{ redstackpro_adcs_enroll_group }}'
+      -CaName '{{ redstackpro_adcs_ca_name }}'
+      *> C:\Windows\Temp\rsp-esc3-out.txt
+  when: "'esc3' in (redstackpro_adcs_templates | default([]))"
+
+# ACL-target templates (ESC4, or a lab's own named template like NHA's
+# SignatureValidation): plant a generic enrollable template of that exact name so
+# the over-permissive ACL from the domain acls list resolves onto it.
+- name: Plant ACL-referenced certificate templates
+  ansible.builtin.include_tasks: run_ea.yml
+  vars:
+    redstackpro_ea_taskname: "RSPTmpl{{ item | regex_replace('[^A-Za-z0-9]', '') }}"
+    redstackpro_ea_outfile: "C:\\Windows\\Temp\\rsp-tmpl-{{ item | regex_replace('[^A-Za-z0-9]', '') }}.txt"
+    redstackpro_ea_command: >-
+      & C:\Windows\Temp\plant_esc4.ps1
+      -CaName '{{ redstackpro_adcs_ca_name }}'
+      -EnrollGroup '{{ redstackpro_adcs_enroll_group }}'
+      -TemplateName '{{ item }}'
+      *> C:\Windows\Temp\rsp-tmpl-{{ item | regex_replace('[^A-Za-z0-9]', '') }}.txt
+  loop: "{{ redstackpro_adcs_acl_templates | default([]) }}"
+
+# ESC13: a template whose issuance policy is linked to a privileged group.
+- name: Plant ESC13 template
+  ansible.builtin.include_tasks: run_ea.yml
+  vars:
+    redstackpro_ea_taskname: RSPEsc13
+    redstackpro_ea_outfile: C:\Windows\Temp\rsp-esc13-out.txt
+    redstackpro_ea_command: >-
+      & C:\Windows\Temp\plant_esc13.ps1
+      -CaName '{{ redstackpro_adcs_ca_name }}'
+      -GroupCn '{{ redstackpro_adcs_esc13_group }}'
+      -EnrollGroup '{{ redstackpro_adcs_enroll_group }}'
+      *> C:\Windows\Temp\rsp-esc13-out.txt
+  when: "'esc13' in (redstackpro_adcs_templates | default([]))"
+
+# ESC9: a client-auth template issued WITHOUT the SID security extension, so a
+# certificate names its holder and nothing contradicts the name.
+- name: Plant ESC9
+  ansible.builtin.include_tasks: run_ea.yml
+  vars:
+    redstackpro_ea_taskname: RSPEsc9
+    redstackpro_ea_outfile: C:\Windows\Temp\rsp-esc9-out.txt
+    redstackpro_ea_command: >-
+      & C:\Windows\Temp\plant_esc9.ps1 -TemplateCn 'RSPESC9'
+      -TemplateDisplay 'redStackPro ESC9'
+      -EnrollGroup '{{ redstackpro_adcs_enroll_group }}'
+      -CaName '{{ redstackpro_adcs_ca_name }}'
+      *> C:\Windows\Temp\rsp-esc9-out.txt
+  when: "'esc9' in (redstackpro_adcs_templates | default([]))"
+
+# ESC5: write control over the PKI's own objects, which is a route to the forest
+# that never touches a template. Not a template, so it takes a principal rather
+# than an enrolment group.
+- name: Plant ESC5
+  ansible.builtin.include_tasks: run_ea.yml
+  vars:
+    redstackpro_ea_taskname: RSPEsc5
+    redstackpro_ea_outfile: C:\Windows\Temp\rsp-esc5-out.txt
+    redstackpro_ea_command: >-
+      & C:\Windows\Temp\plant_esc5.ps1
+      -CaName '{{ redstackpro_adcs_ca_name }}'
+      -Principal '{{ redstackpro_adcs_esc5_principal }}'
+      -CaHost '{{ ansible_hostname }}'
+      *> C:\Windows\Temp\rsp-esc5-out.txt
+  when: "'esc5' in (redstackpro_adcs_templates | default([]))"
+
+# ESC14: a weak explicit mapping on an account, which pairs with ESC1 (where the
+# requester supplies the subject) to authenticate as the mapped user.
+- name: Plant ESC14
+  ansible.builtin.include_tasks: run_ea.yml
+  vars:
+    redstackpro_ea_taskname: RSPEsc14
+    redstackpro_ea_outfile: C:\Windows\Temp\rsp-esc14-out.txt
+    redstackpro_ea_command: >-
+      & C:\Windows\Temp\plant_esc14.ps1
+      -TargetUser '{{ redstackpro_adcs_esc14_target }}'
+      -MappingSubject '{{ redstackpro_adcs_esc14_subject }}'
+      *> C:\Windows\Temp\rsp-esc14-out.txt
+  when:
+    - "'esc14' in (redstackpro_adcs_templates | default([]))"
+    # No target, no mapping: planting one onto a guessed account would put a
+    # standing authentication bypass on whoever happened to be named.
+    - redstackpro_adcs_esc14_target | default('') | length > 0
+
+# ESC15 (EKUwu): grant Domain Users enrol on the built-in schema-v1 WebServer
+# template so an application policy can be injected into the CSR.
+- name: Enable ESC15 on the WebServer template
+  ansible.builtin.include_tasks: run_ea.yml
+  vars:
+    redstackpro_ea_taskname: RSPEsc15
+    redstackpro_ea_outfile: C:\Windows\Temp\rsp-esc15-out.txt
+    redstackpro_ea_command: >-
+      & C:\Windows\Temp\plant_esc15.ps1
+      -CaName '{{ redstackpro_adcs_ca_name }}'
+      -EnrollGroup '{{ redstackpro_adcs_enroll_group }}'
+      *> C:\Windows\Temp\rsp-esc15-out.txt
+  when: "'esc15' in (redstackpro_adcs_templates | default([]))"

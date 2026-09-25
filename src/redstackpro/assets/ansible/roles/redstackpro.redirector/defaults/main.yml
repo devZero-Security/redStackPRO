@@ -1,0 +1,57 @@
+---
+# Defaults only. Real values come from host_vars, generated from the topology.
+# See 0011 and 0015.
+
+redstackpro_redirector_server: apache
+redstackpro_redirector_hostname: ""
+# letsencrypt is the default, because a real engagement uses a real certificate
+# and a default nobody changes should be the one that is right. self_signed used
+# to be the default for a good reason -- issuance validates over HTTP, so it
+# needed an A record that could not exist until terraform had reserved the
+# address -- and that reason is gone: the deploy now prints the exact record to
+# create and waits for it.
+#
+# Missing the window no longer costs the range. Issuance waits
+# redstackpro_redirector_dns_retries times, and if the record still is not there
+# the redirector keeps the bootstrap self signed certificate, the run carries on,
+# and the operator is told how to finish issuance later (rsp-issue-cert). There
+# is no expectation of a working callback the moment a deploy ends -- the
+# operator still has their own configuration to do -- so a missing record is a
+# reminder, never a failed range.
+#
+# Set self_signed to skip issuance entirely, or provided to supply your own.
+# RDR001 still refuses to compile a redirector with no hostname at all.
+redstackpro_redirector_tls:
+  cert_source: letsencrypt
+
+# How long issuance waits for the operator's A record before continuing without
+# it. Thirty tries at thirty seconds is fifteen minutes, which is room enough for
+# a low-TTL record created when the deploy asks for it. It used to be a hundred
+# tries -- fifty minutes of a deploy that looked hung -- and since missing the
+# window is now survivable, waiting that long buys nothing.
+redstackpro_redirector_dns_retries: 30
+redstackpro_redirector_dns_delay: 30
+
+redstackpro_redirector_gating:
+  header_name: X-Request-Id
+  header_value: ""
+  redirect_rules: true
+  decoy: cdn
+
+# Injected by the fronts edges, one entry each: name, address, uri_prefix,
+# protocol, port. A redirector fronts as many teamservers as it has edges.
+upstreams: []
+
+# Injected by the logs_to edge, if there is one.
+log_sink_address: ""
+
+# Empty uses the bundled blocklist (files/redirect.rules). Set a URL to fetch your
+# own; if that fetch fails, the bundled rules remain.
+redstackpro_redirect_rules_url: ""
+redstackpro_apache_modules:
+  - rewrite
+  - ssl
+  - proxy
+  - proxy_http
+  - headers
+  - deflate

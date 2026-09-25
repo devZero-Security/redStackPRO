@@ -1,0 +1,51 @@
+---
+# Open shares: an everyone-readable SMB share (and an anonymous, guest-accessible
+# one) exposing files a low-privileged or unauthenticated attacker can enumerate.
+# Mirrors GOAD's openshares role: a public share (Users can change, Admins full)
+# and an "all" share reachable by the guest/anonymous account. See
+# goad-fidelity-build.
+
+- name: Create the share directories
+  ansible.windows.win_file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - C:\shares
+    - C:\shares\public
+    - C:\shares\all
+
+- name: Loosen NTFS on the anonymous share so Everyone can read/write
+  ansible.windows.win_acl:
+    path: C:\shares\all
+    user: Everyone
+    rights: FullControl
+    type: allow
+    inherit: ContainerInherit, ObjectInherit
+    state: present
+
+- name: Publish the public share (Domain Users can change)
+  ansible.windows.win_share:
+    name: public
+    path: C:\shares\public
+    change: Users
+    full: Administrators
+
+- name: Publish the anonymous share (Everyone)
+  ansible.windows.win_share:
+    name: all
+    path: C:\shares\all
+    full: Everyone
+
+# Let unauthenticated SMB clients reach the anonymous share (guest auth is off by
+# default on modern Windows).
+- name: Allow insecure guest SMB auth
+  ansible.windows.win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters
+    name: AllowInsecureGuestAuth
+    data: 1
+    type: dword
+
+- name: Activate the guest account
+  ansible.windows.win_user:
+    name: Guest
+    account_disabled: false

@@ -1,0 +1,73 @@
+---
+# redStackPRO SIEM agents on a Windows host. A host reports to every SIEM box
+# the range has, not just one: if there is an ELK box it ships Windows event logs
+# to it with Winlogbeat, and if there is a Wazuh box it enrols the Wazuh agent
+# with it, so both agents run side by side when both boxes exist. Which agents
+# install is driven by the SIEM boxes present (redstackpro_siem_addresses), not
+# by any single host edr. Runs after the SIEM boxes are up. See
+# goad-native-recreation.
+
+- name: Install the Wazuh agent
+  when: "'wazuh' in (redstackpro_siem_addresses | default({}))"
+  block:
+    - name: Download the Wazuh agent
+      ansible.windows.win_get_url:
+        url: https://packages.wazuh.com/4.x/windows/wazuh-agent-4.9.0-1.msi
+        dest: C:\Windows\Temp\wazuh-agent.msi
+
+    - name: Install and enrol the Wazuh agent
+      ansible.windows.win_package:
+        path: C:\Windows\Temp\wazuh-agent.msi
+        state: present
+        # No quotes around the values: msiexec copies them verbatim into
+        # ossec.conf, so WAZUH_MANAGER='1.2.3.4' becomes <address>'1.2.3.4'</address>
+        # and the agent then fails to resolve the quoted string. An address has no
+        # spaces, so bare is correct.
+        arguments: WAZUH_MANAGER={{ redstackpro_siem_addresses.wazuh }} WAZUH_REGISTRATION_SERVER={{ redstackpro_siem_addresses.wazuh }}
+
+    - name: Start the Wazuh agent
+      ansible.windows.win_service:
+        name: WazuhSvc
+        state: started
+        start_mode: auto
+
+- name: Install Winlogbeat for ELK
+  when: "'elastic' in (redstackpro_siem_addresses | default({}))"
+  block:
+    - name: Download Winlogbeat
+      ansible.windows.win_get_url:
+        url: https://artifacts.elastic.co/downloads/beats/winlogbeat/winlogbeat-8.15.0-windows-x86_64.zip
+        dest: C:\Windows\Temp\winlogbeat.zip
+
+    - name: Unzip Winlogbeat
+      community.windows.win_unzip:
+        src: C:\Windows\Temp\winlogbeat.zip
+        dest: C:\Program Files\winlogbeat
+        creates: C:\Program Files\winlogbeat\winlogbeat-8.15.0-windows-x86_64
+
+    - name: Write the Winlogbeat config
+      ansible.windows.win_template:
+        src: winlogbeat.yml.j2
+        dest: C:\Program Files\winlogbeat\winlogbeat-8.15.0-windows-x86_64\winlogbeat.yml
+
+    - name: Install and (re)start the Winlogbeat service
+      ansible.windows.win_powershell:
+        script: |
+          $ErrorActionPreference = "Stop"
+          Set-Location "C:\Program Files\winlogbeat\winlogbeat-8.15.0-windows-x86_64"
+          if (-not (Get-Service winlogbeat -ErrorAction SilentlyContinue)) {
+            .\install-service-winlogbeat.ps1 | Out-Null
+          }
+          # Restart so the current config applies, but survive a hung stop: on a
+          # busy host (a DC reading the large Security log) winlogbeat can fail to
+          # answer a stop and wedge the service in StopPending, which then breaks
+          # a plain Start-Service. So stop, and if it does not settle, kill the
+          # process, before starting.
+          Stop-Service winlogbeat -Force -ErrorAction SilentlyContinue
+          $svc = Get-Service winlogbeat
+          try { $svc.WaitForStatus('Stopped', '00:00:20') } catch {
+            Stop-Process -Name winlogbeat -Force -ErrorAction SilentlyContinue
+            try { $svc.WaitForStatus('Stopped', '00:00:20') } catch {}
+          }
+          Start-Service winlogbeat
+      changed_when: true

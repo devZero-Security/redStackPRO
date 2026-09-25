@@ -1,0 +1,46 @@
+<%@ Page Language="C#" %>
+<%--
+  Rendered by redStackPRO. Do not edit on the host; change the role template.
+
+  The web member's upload application. Deliberately plain: one form, one file, no
+  extension filter and no content check, saved under the upload folder. That is the
+  shape a training range needs, and it matches what GOAD's web member exposes.
+
+  This page is not what makes the host exploitable. Whether a dropped file can
+  actually run is decided by the ACL on the upload folder and by which handlers IIS
+  has, which the iis_webshell host vuln controls. A host running this application
+  without that vuln declared serves uploads it cannot execute.
+--%>
+<script runat="server">
+    protected void Upload_Click(object sender, EventArgs e)
+    {
+        if (!Picked.HasFile)
+        {
+            Result.Text = "Choose a file first.";
+            return;
+        }
+        string dir = @"{{ redstackpro_iis_upload_dir }}";
+        string name = System.IO.Path.GetFileName(Picked.FileName);
+        try
+        {
+            Picked.SaveAs(System.IO.Path.Combine(dir, name));
+            Result.Text = "Uploaded " + name + " to /upload/" + name;
+        }
+        catch (Exception ex)
+        {
+            Result.Text = "Upload failed: " + ex.Message;
+        }
+    }
+</script>
+<html>
+<head><title>File share</title></head>
+<body>
+    <h2>Departmental file share</h2>
+    <p>Upload a document. Files are published under /upload/.</p>
+    <form id="form1" runat="server">
+        <asp:FileUpload ID="Picked" runat="server" />
+        <asp:Button ID="Go" runat="server" Text="Upload" OnClick="Upload_Click" />
+        <p><asp:Label ID="Result" runat="server" /></p>
+    </form>
+</body>
+</html>

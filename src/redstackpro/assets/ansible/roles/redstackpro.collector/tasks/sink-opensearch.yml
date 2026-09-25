@@ -1,0 +1,99 @@
+---
+# OpenSearch signs its apt repository with a key whose own binding signature is
+# SHA-1, and Debian 13 verifies repository signatures with Sequoia's sqv, whose
+# policy stopped accepting SHA-1 on 2026-02-01. The repository is therefore
+# treated as unsigned, apt refuses it, and the collector cannot install at all
+# on the default image.
+#
+# Found on the first live deploy after Debian 13 became that default. Nothing
+# offline could have caught it: the task is well-formed, the key downloads, the
+# URL is right, and every syntax and unit check passes. Only apt on a trixie
+# host disagrees.
+#
+# This eases one hash rule rather than disabling verification -- the InRelease
+# signature is still checked against OpenSearch's key. Marking the repository
+# `trusted=yes` is the obvious-looking alternative and is worse: it skips the
+# check entirely, on the host that holds the range's logs.
+#
+# The honest caveat is scope. This file is host-wide rather than
+# per-repository, because Sequoia has no per-repository policy. The narrower
+# option verifies nothing, so the wider one that still verifies wins.
+#
+# The forward fix is OpenSearch 3.x, whose repository is signed by a 2025 key
+# that needs no relaxation at all (verified live on the same host). That is a
+# major version bump with its own configuration consequences, so it is a
+# deliberate decision rather than a fix smuggled in beside this one.
+- name: Let apt verify a repository whose key is bound with SHA-1
+  ansible.builtin.copy:
+    dest: /etc/crypto-policies/back-ends/sequoia.config
+    mode: "0644"
+    content: |
+      [hash_algorithms]
+      sha1.collision_resistance = "always"
+      sha1.second_preimage_resistance = "always"
+
+- name: Add the opensearch signing key
+  ansible.builtin.get_url:
+    url: https://artifacts.opensearch.org/publickeys/opensearch.pgp
+    dest: /etc/apt/keyrings/opensearch.pgp
+    mode: "0644"
+
+- name: Add the opensearch repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/opensearch.pgp]
+      https://artifacts.opensearch.org/releases/bundle/opensearch/2.x/apt stable main
+    filename: opensearch-2x
+    state: present
+
+- name: Install opensearch
+  ansible.builtin.apt:
+    name: opensearch
+    state: present
+    update_cache: true
+  environment:
+    # Required since opensearch 2.12: the post-install security setup aborts
+    # without a strong admin password in the environment, which fails the whole
+    # package install.
+    OPENSEARCH_INITIAL_ADMIN_PASSWORD: "{{ redstackpro_opensearch_admin_password }}"
+
+# Single node, bound to loopback. The receiver is on this host and nothing else
+# reaches the sink directly: shippers talk to the beats port, which is the only
+# thing the generated firewall rules open.
+- name: Configure opensearch
+  ansible.builtin.template:
+    src: opensearch.yml.j2
+    dest: /etc/opensearch/opensearch.yml
+    owner: root
+    group: opensearch
+    mode: "0640"
+  notify: Restart opensearch
+
+- name: Size the opensearch heap
+  ansible.builtin.copy:
+    content: |
+      -Xms{{ redstackpro_opensearch_heap }}
+      -Xmx{{ redstackpro_opensearch_heap }}
+    dest: /etc/opensearch/jvm.options.d/redstackpro.options
+    mode: "0644"
+  notify: Restart opensearch
+
+- name: Start opensearch
+  ansible.builtin.service:
+    name: opensearch
+    state: started
+    enabled: true
+
+# The sink is where events come to rest, so it answering is the one fact worth
+# asserting about it. The receiver's own check would catch a dead sink eventually
+# -- logstash cannot start a pipeline it cannot connect to -- but it would report
+# it as a receiver problem, which is a worse place to start looking. A JVM on a
+# lab box is slow to open a port, hence the patience.
+- name: Confirm the sink is really listening, not merely started
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: 9200
+    timeout: 300
+    msg: >-
+      opensearch is running but nothing is bound to 9200. Check its journal: it exits on
+      a bad configuration or too little memory and the unit still reports active.

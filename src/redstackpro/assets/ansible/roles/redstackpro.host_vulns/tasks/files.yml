@@ -1,0 +1,29 @@
+---
+# files: drop file(s) with given content on the host -- a planted document, a
+# script, a note left behind. Each entry in vulns_vars.files is {name, content};
+# they land in vulns_vars.files_dir (default C:\redstackpro). A generic file
+# plant. administrator_folder is the specialized admin-desktop-flag form and
+# sysvol_secret is the SYSVOL-logon-script form; this is the plain host drop.
+# Mirrors GOAD's files. See goad-fidelity-build.
+
+# The scalars below are SINGLE-quoted on purpose. In a double-quoted YAML scalar
+# the loader eats one level of backslash before Jinja ever sees it, which leaves
+# a Windows path broken in two different ways: '\\' collapses to '\' and escapes
+# Jinja's own closing quote (a hard TemplateSyntaxError), and 'C:\\redstackpro'
+# collapses to 'C:\redstackpro' whose \r Jinja then decodes to a CARRIAGE RETURN,
+# silently yielding C:<CR>edstackpro. Single quotes keep backslashes literal, so
+# the doubled ones here reach Jinja and unescape to exactly one.
+- name: Ensure the drop directory exists
+  ansible.windows.win_file:
+    path: '{{ redstackpro_host_vulns_vars.files_dir | default("C:\\redstackpro") }}'
+    state: directory
+  when: (redstackpro_host_vulns_vars.files | default([])) | length > 0
+
+- name: Drop the declared files
+  ansible.windows.win_copy:
+    dest: '{{ (redstackpro_host_vulns_vars.files_dir | default("C:\\redstackpro")) ~ "\\" ~ drop_file.name }}'
+    content: "{{ drop_file.content | default('') }}"
+  loop: "{{ redstackpro_host_vulns_vars.files | default([]) }}"
+  loop_control:
+    loop_var: drop_file
+    label: "{{ drop_file.name }}"

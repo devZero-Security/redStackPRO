@@ -1,0 +1,217 @@
+---
+- name: Install build dependencies for implant generation
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - mingw-w64
+    state: present
+
+- name: Fetch the Sliver installer
+  ansible.builtin.get_url:
+    url: https://sliver.sh/install
+    dest: /tmp/sliver-install.sh
+    mode: "0700"
+
+- name: Run the Sliver installer
+  ansible.builtin.command:
+    cmd: /tmp/sliver-install.sh
+    creates: /root/sliver-server
+
+- name: Put the server on PATH
+  ansible.builtin.file:
+    src: /root/sliver-server
+    dest: /usr/local/bin/sliver-server
+    state: link
+
+- name: Create the sliver service drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/sliver.service.d
+    state: directory
+    mode: "0755"
+
+- name: Make generated implants world readable
+  ansible.builtin.copy:
+    content: |
+      [Service]
+      UMask=0022
+    dest: /etc/systemd/system/sliver.service.d/umask.conf
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Start Sliver
+  ansible.builtin.service:
+    name: sliver
+    state: started
+    enabled: true
+
+- name: Write the C2 profile carrying the redirector validation header
+  ansible.builtin.template:
+    src: sliver-profile.json.j2
+    dest: "{{ redstackpro_teamserver_root }}/sliver-profile.json"
+    owner: "{{ redstackpro_teamserver_user }}"
+    mode: "0644"
+  when: gating_header_value | length > 0
+
+# Rendering that file is not enough. Sliver 1.7 keeps the HTTP C2 profile in its
+# database rather than in configs/http-c2.json, so the file above was inert: nothing
+# read it, the live profile's client headers stayed empty, and every generated implant
+# beaconed WITHOUT the gating header. The redirector then did its job and handed it the
+# decoy page, so the implant never came back -- from a deploy that reported success and
+# a teamserver you could log into. See F-sliver-c2-profile.
+- name: Install the C2 profile applier
+  ansible.builtin.template:
+    src: sliver-c2profile.sh.j2
+    dest: /usr/local/bin/rsp-sliver-c2profile
+    mode: "0755"
+  when: gating_header_value | length > 0
+
+- name: Put the gating header into the live C2 profile
+  ansible.builtin.command:
+    cmd: /usr/local/bin/rsp-sliver-c2profile
+  register: redstackpro_sliver_profile_applied
+  changed_when: "'PROFILE APPLIED' in redstackpro_sliver_profile_applied.stdout"
+  when: gating_header_value | length > 0
+
+- name: Generate an operator config
+  ansible.builtin.command:
+    cmd: >
+      sliver-server operator --name {{ redstackpro_teamserver_user }}
+      --lhost localhost --permissions all
+      --save {{ redstackpro_teamserver_root }}/{{ redstackpro_teamserver_user }}.cfg
+    creates: "{{ redstackpro_teamserver_root }}/{{ redstackpro_teamserver_user }}.cfg"
+
+# sliver-server writes the config as root, so the operator it was generated FOR
+# cannot read their own credential -- neither the human, nor the listener runner
+# that has to import it. Hand it to them.
+- name: Let the operator read their own config
+  ansible.builtin.file:
+    path: "{{ redstackpro_teamserver_root }}/{{ redstackpro_teamserver_user }}.cfg"
+    owner: "{{ redstackpro_teamserver_user }}"
+    mode: "0600"
+
+# The daemon started above listens on 31337 for OPERATORS. That is not a C2
+# listener, and nothing else here ever started one, so an implant had nothing to
+# call back to: the redirector would forward /cdn/assets to a port with no
+# listener and return 502. The deploy still reported success, which is the worst
+# version of this bug -- you get a teamserver you can log into, generate implants
+# from, and which never receives a callback. The Mythic role learned the same
+# lesson; this mirrors its shape, including verifying the bind rather than
+# trusting the command. See F-sliver-listener.
+- name: Write the listener rc script
+  ansible.builtin.template:
+    src: sliver-listener.rc.j2
+    dest: "{{ redstackpro_teamserver_root }}/sliver-listener.rc"
+    owner: "{{ redstackpro_teamserver_user }}"
+    mode: "0640"
+
+# Current Sliver has no --persistent flag on the https command, and the JobConfig
+# that used to restore jobs on load is no longer wired to ServerConfig. So the
+# listener dies with the daemon and has to be re-applied on every start, or a
+# reboot silently leaves the range with no C2.
+# The client picks its config from the INVOKING USER's client directory and has no
+# --config flag. That makes the number of configs there load-bearing: with more than
+# one the console prompts for which to use, stdin is closed, it reads EOF and exits
+# SILENTLY having started nothing. No output, no listener, indistinguishable from
+# success unless you check the port.
+#
+# The install already leaves the teamserver user exactly one config, so nothing is
+# imported here: adding a second is what breaks it. The unit runs as that user so
+# it reads that directory, and the guard below refuses to continue if anything has
+# put a second config there. (import ignores HOME and resolves the real user's
+# home, so a private config dir cannot be arranged with an env var either.)
+- name: Confirm the listener can pick a config unambiguously
+  ansible.builtin.find:
+    paths: "/home/{{ redstackpro_teamserver_user }}/.sliver-client/configs"
+    patterns: "*.cfg"
+  register: redstackpro_sliver_configs
+
+- name: Fail if more than one config would make the client prompt
+  ansible.builtin.assert:
+    that: redstackpro_sliver_configs.files | length == 1
+    fail_msg: >-
+      {{ redstackpro_teamserver_user }} has
+      {{ redstackpro_sliver_configs.files | length }} sliver client configs, so the
+      rc script would prompt for which to use, read EOF from the closed stdin and
+      exit silently without starting a listener. Leave exactly one in
+      /home/{{ redstackpro_teamserver_user }}/.sliver-client/configs.
+    success_msg: one client config, so the rc script can run unattended
+
+- name: Install the listener runner
+  ansible.builtin.copy:
+    dest: /usr/local/bin/rsp-sliver-listener
+    # World executable on purpose: the unit runs as the teamserver user, not root,
+    # and 0750 on a root owned file makes systemd fail at EXEC with a permission
+    # denial that reads like a missing binary. There is nothing secret in here.
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      # Rendered by redStackPRO. Applies the C2 listener rc script.
+      #
+      # After running an rc script the client drops into its interactive console
+      # (IsCLI is false for the console command) and does NOT exit on EOF, so the
+      # timeout is the normal exit path rather than a safety net. Keep it short:
+      # connecting and issuing the listener command takes a couple of seconds, and
+      # every second past that is dead time in the deploy.
+      #
+      # No --config here: the client has no such flag. It uses the single config
+      # the installer left in the invoking user's client directory, which the guard
+      # above asserts is unambiguous.
+      RC={{ redstackpro_teamserver_root }}/sliver-listener.rc
+      timeout 45 sliver-client --rc "$RC" < /dev/null
+      rc=$?
+      # 124 is the expected outcome: the console was still sitting there when the
+      # timeout fired, long after the rc script had been applied. Whether the port
+      # is really bound is checked by the caller, not by this exit code.
+      [ "$rc" -eq 124 ] && exit 0
+      exit "$rc"
+
+- name: Install the unit that re-applies the listener when the daemon starts
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/sliver-listener.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Start the Sliver C2 listener
+      After=sliver.service
+      Requires=sliver.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=true
+      User={{ redstackpro_teamserver_user }}
+      ExecStart=/usr/local/bin/rsp-sliver-listener
+
+      [Install]
+      WantedBy=multi-user.target
+  notify: Reload systemd
+
+- name: Apply the listener now
+  ansible.builtin.systemd:
+    name: sliver-listener
+    state: restarted
+    enabled: true
+    daemon_reload: true
+
+# Confirm the port is actually bound rather than trusting the command's exit code.
+# A listener that failed to start looks like success from the console, and the
+# symptom then surfaces as a dead C2 much later.
+- name: Wait for the C2 listener to bind
+  ansible.builtin.wait_for:
+    port: "{{ redstackpro_teamserver_c2_port }}"
+    host: 127.0.0.1
+    timeout: 90
+  register: redstackpro_sliver_bound
+  retries: 3
+  delay: 10
+  until: redstackpro_sliver_bound is succeeded
+
+- name: Fail loudly if the C2 never came up
+  ansible.builtin.assert:
+    that: redstackpro_sliver_bound is succeeded
+    fail_msg: >-
+      Sliver is running but nothing is listening on
+      {{ redstackpro_teamserver_c2_port }}, so the redirector would forward
+      implant traffic to a closed port. Shipping a teamserver that cannot receive
+      a callback is worse than failing here. Check
+      `journalctl -u sliver-listener` and the rc script.
+    success_msg: "the Sliver C2 listener is bound on {{ redstackpro_teamserver_c2_port }}"

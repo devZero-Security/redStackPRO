@@ -1,0 +1,29 @@
+provider: azure
+# Azure reserves the first four addresses of every subnet (network, gateway, and
+# two that map to Azure DNS) plus the last. A static pin into that range fails at
+# apply, so net006 catches it at compile.
+reserved_addresses:
+  head: 4
+  tail: 1
+maturity: preview
+description: >
+  Azure via the hashicorp/azurerm provider. A cloud like AWS and GCP: allocated
+  public addresses, Marketplace images per build (including Windows client
+  images), and a native admin password on a Windows VM. Segmentation is by
+  subnet with a Network Security Group.
+
+capabilities:
+  - routing_domain
+  - subnet
+  - compute
+  - linux_image
+  - windows_image
+  - public_address
+  - outbound_routing
+
+unsupported:
+  - name: network_peering
+    reason: >
+      Azure supports virtual network peering, but the peering module is not
+      built yet, so a peers edge has nothing to compile to. GOAD ranges do not
+      peer; this follows.

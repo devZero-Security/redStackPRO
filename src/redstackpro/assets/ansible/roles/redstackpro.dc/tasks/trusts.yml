@@ -1,0 +1,92 @@
+---
+# redStackPRO cross-forest / external trusts (clean-room MIT). A parent-child
+# trust is established implicitly when the child domain is created, so this only
+# handles the trusts that must be built explicitly: a forest trust between two
+# separate forest roots (GOAD's sevenkingdoms <-> essos). The source domain runs
+# it with credentials for both sides, so one run wires up both directions. See
+# goad-native-recreation.
+
+- name: Establish the forest trust
+  ansible.windows.win_powershell:
+    script: |
+      param($SourceForest, $TargetForest, $TargetDc, $Pass, $Direction)
+      $ErrorActionPreference = "Stop"
+      # A conditional forwarder so this forest can resolve the other, then wait
+      # for the other forest to answer since under the free strategy it may still
+      # be promoting when this runs.
+      if (-not (Get-DnsServerZone -Name $TargetForest -ErrorAction SilentlyContinue)) {
+        Add-DnsServerConditionalForwarderZone -Name $TargetForest -MasterServers $TargetDc
+      }
+      # Wait for the other forest to resolve and answer. Resolve-DnsName and the
+      # GetForest probe are both non-throwing here (SilentlyContinue / try), so a
+      # not-ready forest loops rather than aborting the task, which nltest under
+      # ErrorActionPreference Stop would do.
+      $ok = $false
+      for ($i = 0; $i -lt 60; $i++) {
+        $soa = Resolve-DnsName -Name $TargetForest -Type SOA -ErrorAction SilentlyContinue
+        if ($soa) {
+          try {
+            $probe = New-Object System.DirectoryServices.ActiveDirectory.DirectoryContext(
+              "Forest", $TargetForest, "Administrator@$TargetForest", $Pass)
+            [System.DirectoryServices.ActiveDirectory.Forest]::GetForest($probe) | Out-Null
+            $ok = $true; break
+          } catch {}
+        }
+        Start-Sleep -Seconds 15
+      }
+      if (-not $ok) { throw "target forest $TargetForest not reachable" }
+      # Bind the source forest with explicit credentials rather than
+      # GetCurrentForest, whose ambient security context is not domain-associated
+      # over a WinRM negotiate logon (the double-hop problem).
+      $srcCtx = New-Object System.DirectoryServices.ActiveDirectory.DirectoryContext(
+        "Forest", $SourceForest, "Administrator@$SourceForest", $Pass)
+      $src = [System.DirectoryServices.ActiveDirectory.Forest]::GetForest($srcCtx)
+      $have = $null
+      try { $have = $src.GetTrustRelationship($TargetForest) } catch {}
+      if ($null -eq $have) {
+        $ctx = New-Object System.DirectoryServices.ActiveDirectory.DirectoryContext(
+          "Forest", $TargetForest, "Administrator@$TargetForest", $Pass)
+        $tgt = [System.DirectoryServices.ActiveDirectory.Forest]::GetForest($ctx)
+        $dir = if ($Direction -eq "bidirectional") { "Bidirectional" } else { "Outbound" }
+        $src.CreateTrustRelationship($tgt, $dir)
+      }
+    parameters:
+      SourceForest: "{{ redstackpro_domain.domain_fqdn }}"
+      TargetForest: "{{ item.target_fqdn }}"
+      TargetDc: "{{ item.target_dc_address }}"
+      Pass: "{{ redstackpro_lab_password }}"
+      Direction: "{{ item.direction | default('bidirectional') }}"
+  register: redstackpro_trust
+  changed_when: true
+  # Retry: a freshly promoted forest root does not advertise its global catalog
+  # for a few minutes, and GetForest needs one, so the source/target binding can
+  # fail transiently right after promotion.
+  until: redstackpro_trust is succeeded
+  retries: 20
+  delay: 30
+  when: item.type == 'forest'
+  loop: "{{ redstackpro_domain.trusts | default([]) }}"
+  loop_control:
+    label: "{{ item.target_fqdn }} ({{ item.type }})"
+
+# SID history across the trust: with it enabled, SIDs from the target forest are
+# honoured in this one, so an injected sIDHistory (e.g. a privileged target-forest
+# SID) is accepted here -- the cross-forest escalation GOAD builds. Gated on the
+# controller declaring sid_history so it stays a toggleable catalog path.
+- name: Enable SID history on the forest trust
+  ansible.windows.win_powershell:
+    script: |
+      param($Source, $Target)
+      $ErrorActionPreference = "Stop"
+      $r = netdom trust $Source /d:$Target /enablesidhistory:yes 2>&1
+      if ($LASTEXITCODE -ne 0) { throw "netdom enablesidhistory failed: $r" }
+    parameters:
+      Source: "{{ redstackpro_domain.domain_fqdn }}"
+      Target: "{{ item.target_fqdn }}"
+  changed_when: true
+  when:
+    - item.type == 'forest'
+    - "'sid_history' in (redstackpro_dc_vulns | default([]))"
+  loop: "{{ redstackpro_domain.trusts | default([]) }}"
+  loop_control:
+    label: "{{ item.target_fqdn }}"

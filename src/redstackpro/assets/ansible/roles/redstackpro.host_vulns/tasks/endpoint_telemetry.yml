@@ -1,0 +1,59 @@
+---
+# endpoint_telemetry: make a SIEM-monitored host actually emit the events modern
+# detections need. A default range ships none of this (quieter, GOAD parity), so
+# a Wazuh/ELK agent sees only the native Security log and is blind to
+# process/command-line and object-change activity. Opting in here installs Sysmon
+# and turns on command-line (4688) and directory-service (5136) auditing. See the
+# goad-wazuh detection page and PAI F-wazuh-telemetry.
+
+- name: Enable command-line auditing (4688 with the process command line)
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = 'Stop'
+      auditpol /set /subcategory:"Process Creation" /success:enable /failure:enable | Out-Null
+      # Directory Service Changes -> 5136, the event ACL abuse (writedacl,
+      # genericwrite) shows up under. Harmless on a member; meaningful on a DC.
+      auditpol /set /subcategory:"Directory Service Changes" /success:enable | Out-Null
+      $k = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Audit'
+      New-Item $k -Force | Out-Null
+      New-ItemProperty $k -Name ProcessCreationIncludeCmdLine_Enabled -Value 1 -PropertyType DWord -Force | Out-Null
+      [Ordered]@{ cmdline_audit = $true }
+  changed_when: true
+
+- name: Install Sysmon with its default config
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = 'Stop'
+      if (Get-Service Sysmon* -ErrorAction SilentlyContinue) {
+        return [Ordered]@{ sysmon = 'already installed' }
+      }
+      $tmp = 'C:\Windows\Temp\sysmon'
+      New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+      Invoke-WebRequest -UseBasicParsing -Uri 'https://download.sysinternals.com/files/Sysmon.zip' -OutFile "$tmp\Sysmon.zip"
+      Expand-Archive -Path "$tmp\Sysmon.zip" -DestinationPath $tmp -Force
+      # -i with no config file installs the built-in default: process creation,
+      # driver/image loads and network connections are logged, which is enough
+      # for the process/command-line detections the SIEM lab exercises. A tuned
+      # config (SwiftOnSecurity-style) is a later refinement.
+      #
+      # Run it through Start-Process rather than the call operator. Sysmon writes
+      # its banner to STDERR, and under ErrorActionPreference Stop PowerShell turns
+      # any native stderr output into a terminating NativeCommandError -- so the
+      # task failed on a successful install. Found live on goad-wazuh, where it
+      # failed three site.yml attempts in a row on both DCs. An exit code is the
+      # honest signal, and 1242 (ERROR_ALREADY_REGISTERED) means it is already there.
+      $p = Start-Process -FilePath "$tmp\Sysmon64.exe" `
+             -ArgumentList '-accepteula', '-i' -Wait -PassThru -NoNewWindow
+      if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 1242) {
+        throw "Sysmon install failed with exit code $($p.ExitCode)"
+      }
+      # Do not report success on the installer's word alone: the whole point of
+      # this role is that the host actually emits telemetry.
+      $svc = Get-Service Sysmon* -ErrorAction SilentlyContinue
+      if (-not $svc) { throw "Sysmon installer returned $($p.ExitCode) but no Sysmon service is present" }
+      [Ordered]@{ sysmon = ($svc | Select-Object -First 1).Name; exit_code = $p.ExitCode }
+  changed_when: true
+  register: redstackpro_sysmon
+  until: redstackpro_sysmon is succeeded
+  retries: 3
+  delay: 15

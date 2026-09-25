@@ -1,0 +1,34 @@
+---
+# redStackPRO MECM (Microsoft Endpoint Configuration Manager) site. Clean-room
+# MIT. Stands up a primary site and plants the recognizable SCCM attack surface:
+# the Network Access Account (harvestable from client policy), client push with
+# NTLM fallback (coercible/relayable to site takeover), password-less PXE, and a
+# Full-Administrator RBAC grant. GOAD's SCCM lab is the fidelity benchmark; this
+# is our own role. Version-locked: MECM 2303 pairs with ADK 2004.
+# See goad-fidelity-build.
+
+redstackpro_mecm_site_code: "P01"
+redstackpro_mecm_site_name: "redStackPRO Site"
+# The site server (this host) and the SQL server, as FQDNs. The caller derives
+# them; defaults are placeholders.
+redstackpro_mecm_fqdn: "{{ ansible_host }}"
+redstackpro_mecm_sql_fqdn: ""
+
+# The SCCM service / attack accounts (domain-qualified), from the lab.
+redstackpro_mecm_naa_account: ""            # Network Access Account (harvestable)
+redstackpro_mecm_client_push_account: ""    # client push account (coercible)
+redstackpro_mecm_da_account: ""             # a Domain Admin cred in the CM store
+redstackpro_mecm_admin_group: ""            # granted Full Administrator RBAC
+redstackpro_mecm_managed_group: "SCCM-Managed-Device"  # AD group discovery scope
+redstackpro_mecm_client_hosts: []           # hostnames to push the client to
+
+# Version-locked download URLs (all over https/443).
+redstackpro_mecm_media_url: "https://go.microsoft.com/fwlink/p/?LinkID=2195628"
+redstackpro_mecm_adk_url: "https://go.microsoft.com/fwlink/?linkid=2120254"
+redstackpro_mecm_winpe_url: "https://go.microsoft.com/fwlink/?linkid=2120253"
+redstackpro_mecm_vcredist_url: "https://aka.ms/vs/15/release/vc_redist.x64.exe"
+redstackpro_mecm_odbc_url: "https://go.microsoft.com/fwlink/?linkid=2266640"
+
+# The forest-root domain admin the AD-writing + install steps run as (a batch
+# logon carries Schema/Enterprise Admin, which a network logon does not).
+redstackpro_mecm_domain_admin: ""

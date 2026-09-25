@@ -1,0 +1,20 @@
+---
+# Cobalt Strike is licensed and its distribution is not ours to automate.
+# The role prepares the host and stops; the operator supplies the archive.
+- name: Install the Java runtime Cobalt Strike needs
+  ansible.builtin.apt:
+    name: openjdk-17-jre-headless
+    state: present
+
+- name: Explain what is left to do
+  ansible.builtin.copy:
+    content: |
+      Cobalt Strike is licensed software. redStackPRO prepares the host and does
+      not fetch, install, or configure it.
+
+      Upload your archive to {{ redstackpro_teamserver_root }} and run the
+      teamserver yourself. Bind to {{ redstackpro_teamserver_bind }} and serve
+      under {{ uri_prefix }}. Your malleable profile must require:
+        {{ gating_header_name }}: {{ gating_header_value }}
+    dest: "{{ redstackpro_teamserver_root }}/README"
+    mode: "0644"

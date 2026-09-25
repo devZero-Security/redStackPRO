@@ -1,0 +1,22 @@
+---
+# Kali, Debian, or Windows per the os overlay.
+#
+# The interesting part is not the package lists, it is that a Windows operator
+# box is not reached the way the other two are. The connection plugin, the port,
+# and the fact that become is off are in this host's generated host_vars,
+# because a role cannot choose its own connection: it is decided before the
+# first task runs. See 0019.
+#
+# Nothing in this file branches on the connection. Dispatching on the os value
+# is enough, because each file only contains modules that work over the
+# connection that os implies.
+
+- name: Fail early if the topology named no operating system
+  ansible.builtin.assert:
+    that: redstackpro_operator_os in ['kali', 'debian', 'windows']
+    fail_msg: >
+      The os value comes from the operator overlay and the schema limits it to
+      kali, debian, or windows. Got {{ redstackpro_operator_os | default('nothing') }}.
+
+- name: Configure the operator box
+  ansible.builtin.include_tasks: "os-{{ redstackpro_operator_os }}.yml"

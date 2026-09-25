@@ -1,0 +1,162 @@
+---
+# Configure the MSSQL attack paths. Runs SqlCmd as the local administrator, who
+# the chocolatey install makes a sysadmin (-E = trusted connection). First turns
+# on mixed-mode auth and the sa login (the impersonation target), then plants the
+# declared paths. Idempotent-ish. See goad-fidelity-build.
+
+- name: Enable mixed-mode auth and the sa login
+  ansible.windows.win_powershell:
+    script: |
+      param($Pass)
+      $ErrorActionPreference = "Stop"
+      $s = "localhost,1433"
+      SqlCmd -S $s -E -b -Q "EXEC xp_instance_regwrite N'HKEY_LOCAL_MACHINE', N'Software\Microsoft\MSSQLServer\MSSQLServer', N'LoginMode', REG_DWORD, 2"
+      SqlCmd -S $s -E -b -Q "ALTER LOGIN sa ENABLE; ALTER LOGIN sa WITH PASSWORD = '$Pass', CHECK_POLICY = OFF;"
+    parameters:
+      Pass: "{{ redstackpro_lab_password }}"
+  changed_when: true
+
+- name: Restart SQL so mixed-mode takes effect
+  ansible.windows.win_service:
+    name: "{{ redstackpro_mssql_service_name }}"
+    state: restarted
+
+# An MECM primary-site install runs remote prerequisite checks against its SQL box
+# (drive/NTFS check, registry reads) over WMI + remote registry. The default host
+# firewall blocks these, so setup fails with "there is not an NTFS drive on the
+# remote SQL Server". Open the WMI/remote-admin firewall groups and start the
+# Remote Registry service. Harmless on a standalone lab SQL host.
+- name: Allow remote WMI and registry (MECM site-server prerequisite checks)
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = 'Continue'
+      foreach ($g in 'Windows Management Instrumentation (WMI)',
+                     'File and Printer Sharing',
+                     'Remote Event Log Management') {
+        Enable-NetFirewallRule -DisplayGroup $g -ErrorAction SilentlyContinue
+      }
+      Set-Service RemoteRegistry -StartupType Automatic -ErrorAction SilentlyContinue
+      Start-Service RemoteRegistry -ErrorAction SilentlyContinue
+  changed_when: true
+
+- name: Let domain users authenticate to SQL (a login for Domain Users)
+  ansible.windows.win_powershell:
+    script: |
+      param($Grp)
+      $q = "IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = '$Grp') " +
+           "CREATE LOGIN [$Grp] FROM WINDOWS;"
+      SqlCmd -S localhost,1433 -E -b -Q $q
+    parameters:
+      Grp: "{{ redstackpro_mssql_domain_users_group }}"
+  changed_when: true
+
+# Extra sysadmin logins the lab declares (SCCM's site DB grants the MECM computer
+# and the site-admin accounts sysadmin -- the SQL-based SCCM site-takeover path).
+- name: Grant additional sysadmin logins
+  ansible.windows.win_powershell:
+    script: |
+      param($Acct)
+      $q = "IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = '$Acct') " +
+           "CREATE LOGIN [$Acct] FROM WINDOWS; " +
+           "ALTER SERVER ROLE sysadmin ADD MEMBER [$Acct];"
+      SqlCmd -S localhost,1433 -E -b -Q $q
+    parameters:
+      Acct: "{{ item }}"
+  loop: "{{ redstackpro_mssql_sysadmins | default([]) }}"
+  changed_when: true
+
+# mssql_impersonation: a low-privileged domain login may EXECUTE AS sa, i.e. become
+# sysadmin. Classic MSSQL privilege escalation.
+- name: Grant IMPERSONATE on sa to domain users
+  ansible.windows.win_powershell:
+    script: |
+      param($Grp)
+      SqlCmd -S localhost,1433 -E -b -Q "GRANT IMPERSONATE ON LOGIN::[sa] TO [$Grp];"
+    parameters:
+      Grp: "{{ redstackpro_mssql_domain_users_group }}"
+  changed_when: true
+  when: "'mssql_impersonation' in (redstackpro_mssql_vulns | default([]))"
+
+# Login-level EXECUTE AS: a specific login may impersonate a higher-privileged
+# login (samwell -> sa, brandon -> jon.snow). GRANT IMPERSONATE ON LOGIN chains an
+# ordinary domain login up to sysadmin.
+- name: Grant login-level EXECUTE AS mappings
+  ansible.windows.win_powershell:
+    script: |
+      param($Login, $Target)
+      $ErrorActionPreference = "Stop"
+      $q = "IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = '$Login') " +
+           "CREATE LOGIN [$Login] FROM WINDOWS; " +
+           "GRANT IMPERSONATE ON LOGIN::[$Target] TO [$Login];"
+      SqlCmd -S localhost,1433 -E -b -Q $q
+    parameters:
+      Login: "{{ item.login }}"
+      Target: "{{ item.target }}"
+  loop: "{{ redstackpro_mssql_execas_logins | default([]) }}"
+  loop_control:
+    label: "{{ item.login }} -> {{ item.target }}"
+  changed_when: true
+
+# Database-level EXECUTE AS USER: a login mapped into a database may impersonate a
+# database principal (arya -> dbo in master/msdb), a foothold to db-owner.
+- name: Grant database-level EXECUTE AS USER mappings
+  ansible.windows.win_powershell:
+    script: |
+      param($User, $Db, $Impersonate)
+      $ErrorActionPreference = "Stop"
+      $q = "IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = '$User') " +
+           "CREATE LOGIN [$User] FROM WINDOWS; " +
+           "USE [$Db]; " +
+           "IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = '$User') " +
+           "CREATE USER [$User] FOR LOGIN [$User]; " +
+           "GRANT IMPERSONATE ON USER::[$Impersonate] TO [$User];"
+      SqlCmd -S localhost,1433 -E -b -Q $q
+    parameters:
+      User: "{{ item.user }}"
+      Db: "{{ item.db }}"
+      Impersonate: "{{ item.impersonate | default('dbo') }}"
+  loop: "{{ redstackpro_mssql_execas_users | default([]) }}"
+  loop_control:
+    label: "{{ item.user }} -> {{ item.impersonate | default('dbo') }} in {{ item.db }}"
+  changed_when: true
+
+# mssql_linked: a linked server to another SQL instance with RPC out on, so a
+# foothold on one SQL host reaches the other (lateral movement, often cross-domain).
+- name: Add linked servers
+  ansible.windows.win_powershell:
+    script: |
+      param($Target)
+      $q = "IF NOT EXISTS (SELECT 1 FROM sys.servers WHERE name = '$Target') " +
+           "EXEC sp_addlinkedserver @server='$Target', @srvproduct='', @provider='SQLNCLI', @datasrc='$Target'; " +
+           "EXEC sp_serveroption @server='$Target', @optname='rpc out', @optvalue='true';"
+      SqlCmd -S localhost,1433 -E -b -Q $q
+    parameters:
+      Target: "{{ item }}"
+  loop: "{{ redstackpro_mssql_linked_targets | default([]) }}"
+  changed_when: true
+  when: "'mssql_linked' in (redstackpro_mssql_vulns | default([]))"
+
+# Map the linked-server outbound login to a fixed remote SQL login instead of the
+# default self-mapping. Without this, a domain-authenticated caller crossing the
+# link double-hops to ANONYMOUS on the remote (the Part 7 finding), so the trusted-
+# link RCE chain does not land. useself=false + @locallogin=NULL applies the remote
+# credential to every local login. The remote password is not carried in the
+# template: an entry names the remote login (GOAD uses sa) and the lab password is
+# substituted at deploy time. Idempotent (drop-then-add). See goad-fidelity-build.
+- name: Map linked-server logins to a remote credential (not self)
+  ansible.windows.win_powershell:
+    script: |
+      param($Target, $RemoteUser, $RemotePass)
+      $ErrorActionPreference = "Stop"
+      $q = "BEGIN TRY EXEC sp_droplinkedsrvlogin @rmtsrvname=N'$Target', @locallogin=NULL; END TRY BEGIN CATCH END CATCH; " +
+           "EXEC sp_addlinkedsrvlogin @rmtsrvname=N'$Target', @useself=N'false', @locallogin=NULL, @rmtuser=N'$RemoteUser', @rmtpassword=N'$RemotePass';"
+      SqlCmd -S localhost,1433 -E -b -Q $q
+    parameters:
+      Target: "{{ item.target }}"
+      RemoteUser: "{{ item.remote_user | default('sa') }}"
+      RemotePass: "{{ item.remote_password | default(redstackpro_lab_password) }}"
+  loop: "{{ redstackpro_mssql_linked_logins | default([]) }}"
+  loop_control:
+    label: "{{ item.target }} as {{ item.remote_user | default('sa') }}"
+  changed_when: true
+  when: "'mssql_linked' in (redstackpro_mssql_vulns | default([]))"

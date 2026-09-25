@@ -1,0 +1,81 @@
+---
+# redStackPRO IIS web member. Clean-room MIT: installs IIS and publishes a small
+# file-upload application at the site root, which is the shape GOAD's web member
+# has (mayfly's part 8 opens on "a simple asp.net application ... this application
+# only give us a simple file upload functionality"). The application is deliberately
+# ordinary: it is the loose ACL on the upload folder that makes it a foothold, and
+# that is planted separately by the iis_webshell host vuln, so a host can run IIS
+# without being exploitable. See goad-native-recreation and goad-fidelity-build.
+#
+# Path scalars are SINGLE-quoted throughout. Double-quoted, the YAML loader eats a
+# backslash level before Jinja sees it, which is how 'C:\inetpub\wwwroot\upload'
+# once died on \u as a truncated \uXXXX escape. See host_vulns/tasks/files.yml.
+
+- name: Install IIS with the ASP.NET and classic ASP handlers
+  ansible.windows.win_feature:
+    name: "{{ redstackpro_iis_features }}"
+    include_management_tools: true
+    state: present
+  vars:
+    # Web-Asp is classic ASP, needed for a dropped .asp shell to execute at all;
+    # the ASP.NET set carries the .aspx upload application.
+    redstackpro_iis_features: >-
+      {{ ['Web-Server', 'Web-Asp-Net45', 'Web-Net-Ext45', 'Web-ISAPI-Ext',
+          'Web-ISAPI-Filter', 'Web-Mgmt-Console']
+         + (['Web-Asp'] if redstackpro_iis_enable_classic_asp | bool else []) }}
+  notify: Restart IIS
+
+- name: Ensure the web root and the upload folder exist
+  ansible.windows.win_file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ redstackpro_iis_web_root }}"
+    - "{{ redstackpro_iis_upload_dir }}"
+
+- name: Publish the upload application at the site root
+  ansible.windows.win_template:
+    src: default.aspx.j2
+    dest: '{{ redstackpro_iis_web_root }}\default.aspx'
+
+# IIS ships a splash page that wins the default-document race: the inherited list
+# has iisstart.htm ahead of anything appended, so adding default.aspx to the list
+# is not enough on its own and the site root answered with the stock IIS page.
+# Upstream serves the application at http://<host>/ , and a real deployment would
+# not leave the placeholder there either, so it goes.
+- name: Remove the stock IIS splash page so the application owns the site root
+  ansible.windows.win_file:
+    path: '{{ redstackpro_iis_web_root }}\{{ item }}'
+    state: absent
+  loop:
+    - iisstart.htm
+    - iisstart.png
+
+- name: Serve the upload application as the site's default document
+  ansible.windows.win_shell: |
+    Import-Module WebAdministration
+    $site = 'Default Web Site'
+    $existing = (Get-WebConfiguration -Filter '//defaultDocument/files/add' -PSPath "IIS:\Sites\$site").value
+    if ($existing -notcontains 'default.aspx') {
+      Add-WebConfigurationProperty -PSPath "IIS:\Sites\$site" `
+        -Filter '//defaultDocument/files' -Name '.' `
+        -Value @{value = 'default.aspx'} -AtIndex 0
+      Write-Output 'added'
+    } else {
+      Write-Output 'present'
+    }
+  register: redstackpro_iis_default_doc
+  changed_when: "'added' in redstackpro_iis_default_doc.stdout"
+
+# The upload application writes into the upload folder as the worker identity, so
+# the pool account needs to be able to create files there even on a host that does
+# NOT declare iis_webshell. This is the application working as intended; the vuln
+# is the far looser grant iis_webshell adds on top.
+- name: Let the application pool write uploads
+  ansible.windows.win_acl:
+    path: "{{ redstackpro_iis_upload_dir }}"
+    user: IIS_IUSRS
+    rights: Write, ReadAndExecute
+    type: allow
+    inherit: ContainerInherit, ObjectInherit
+    state: present

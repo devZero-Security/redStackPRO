@@ -1,0 +1,75 @@
+---
+# A Windows operator box.
+#
+# Every module here is a Windows module, and none of them would run over the
+# connection the other two files assume. The connection itself is not chosen
+# here: it is in this host's generated host_vars, because Ansible picks a
+# connection plugin before the first task and a role cannot change that. See
+# 0019.
+#
+# The play that includes this role sets become at the group level. This host has
+# ansible_become false in host_vars, because the psrp connection already runs as
+# the user it authenticated as and a become plugin on top of it fails.
+
+- name: Confirm the connection is not ssh
+  ansible.builtin.assert:
+    that: ansible_connection | default('ssh') != 'ssh'
+    fail_msg: >
+      This host has os windows in the topology but is being reached over ssh. The
+      generated host_vars set ansible_connection to psrp; something has
+      overridden them, and every task below will fail.
+
+- name: Install chocolatey
+  chocolatey.chocolatey.win_chocolatey:
+    name: chocolatey
+    state: present
+
+- name: Install operator tooling
+  chocolatey.chocolatey.win_chocolatey:
+    name: "{{ redstackpro_operator_windows_packages }}"
+    state: present
+
+- name: Create the operator working directory
+  ansible.windows.win_file:
+    path: "C:\\redstackpro"
+    state: directory
+
+# The portal connects to this host over rdp, which is the split the jumpbox
+# connection list makes too.
+- name: Allow remote desktop
+  ansible.windows.win_regedit:
+    path: HKLM:\System\CurrentControlSet\Control\Terminal Server
+    name: fDenyTSConnections
+    data: 0
+    type: dword
+
+- name: Require network level authentication
+  ansible.windows.win_regedit:
+    path: HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp
+    name: UserAuthentication
+    data: 1
+    type: dword
+
+- name: Open remote desktop to the estate
+  community.windows.win_firewall_rule:
+    name: redStackPRO remote desktop
+    localport: 3389
+    action: allow
+    direction: in
+    protocol: tcp
+    state: present
+    enabled: true
+
+- name: Start the remote desktop service
+  ansible.windows.win_service:
+    name: TermService
+    state: started
+    start_mode: auto
+
+- name: Say how this host is reached
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }} is configured over {{ ansible_connection }} on
+      port {{ ansible_port }}. It has no ProxyJump, so the control node reaches
+      it over the jumpbox VPN or through a SOCKS proxy in ansible_psrp_proxy.
+      See 0019.

@@ -1,0 +1,20 @@
+kind: network
+abbrev: net
+category: container
+description: A routing domain. Members reach each other privately.
+
+display:
+  label: Network
+  blurb: Routing domain
+  icon: tabler/outline/network
+  group: topology
+  color: "#868e96"
+
+modes:
+  - ops
+  - range
+
+derived: []
+
+requirements:
+  - name: routing_domain

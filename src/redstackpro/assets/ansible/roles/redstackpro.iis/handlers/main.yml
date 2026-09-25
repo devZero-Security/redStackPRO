@@ -1,0 +1,7 @@
+---
+# Installing the IIS features leaves the handler mappings and the site config to be
+# picked up; a restart at the end of the play is enough, since nothing earlier in it
+# serves traffic.
+- name: Restart IIS
+  ansible.windows.win_shell: iisreset /restart
+  changed_when: true

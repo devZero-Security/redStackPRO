@@ -1,0 +1,28 @@
+{
+  "name": "redstackpro-canvas",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "npm run test:pure && npm run test:render",
+    "test:pure": "node src/topology.test.mjs && node src/idscheme.test.mjs && node src/cidr.test.mjs && node src/route.test.mjs && node src/export.test.mjs && node src/session.test.mjs && node src/align.test.mjs && node src/waypoints.test.mjs && node src/profiles.test.mjs && node src/diagnostics.test.mjs && node src/extensions.test.mjs && node src/presets.test.mjs && node src/rangeUsers.test.mjs && node src/vulns.test.mjs && node src/hardening.test.mjs && node src/providers.test.mjs && node src/deployTarget.test.mjs && node src/findingFamilies.test.mjs && node src/templates.test.mjs",
+    "test:render": "vitest run"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "reactflow": "^11.11.4"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^29.1.1",
+    "vite": "^5.4.11",
+    "vitest": "^4.1.10"
+  }
+}

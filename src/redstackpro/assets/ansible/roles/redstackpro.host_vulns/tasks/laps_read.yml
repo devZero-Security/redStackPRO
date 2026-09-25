@@ -1,0 +1,24 @@
+---
+# laps_read (host side): configure Windows LAPS on this computer to back its
+# managed local-admin password up to AD and process the policy now, so there is a
+# stored password for the delegated readers to read. The reader delegation itself
+# is applied domain-side from laps_readers. Best-effort: no-ops if the LAPS module
+# is not on this image. See goad-fidelity-build.
+
+- name: Back this host's local-admin password up to AD via Windows LAPS
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = "Stop"
+      if (-not (Get-Command Invoke-LapsPolicyProcessing -ErrorAction SilentlyContinue)) {
+        [Ordered]@{ status = "laps unavailable" }; return
+      }
+      $key = "HKLM:\Software\Microsoft\Windows\LAPS"
+      New-Item -Path $key -Force | Out-Null
+      Set-ItemProperty -Path $key -Name BackupDirectory -Value 2 -Type DWord      # 2 = Active Directory
+      Set-ItemProperty -Path $key -Name PasswordAgeDays -Value 30 -Type DWord
+      Set-ItemProperty -Path $key -Name PasswordLength -Value 14 -Type DWord
+      Import-Module LAPS
+      Invoke-LapsPolicyProcessing
+      [Ordered]@{ status = "processed" }
+  register: redstackpro_laps_host
+  changed_when: true

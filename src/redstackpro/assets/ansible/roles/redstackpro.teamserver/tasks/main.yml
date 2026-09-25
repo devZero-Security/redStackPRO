@@ -1,0 +1,40 @@
+---
+- name: Create the redstackpro root
+  ansible.builtin.file:
+    path: "{{ redstackpro_teamserver_root }}"
+    state: directory
+    owner: "{{ redstackpro_teamserver_user }}"
+    mode: "0750"
+
+- name: Install common build and runtime dependencies
+  ansible.builtin.apt:
+    name:
+      - curl
+      - git
+      - jq
+      - ca-certificates
+      - openssl
+      # Building a payload without the web UI is the documented path -- the
+      # scripting library runs on the teamserver, against the local API -- and
+      # it needs a virtualenv because the system Python is externally managed
+      # and refuses a pip install. The base image ships python3 WITHOUT
+      # ensurepip, so `python3 -m venv` fails with "ensurepip is not available"
+      # and the whole headless build is blocked until someone installs this by
+      # hand. Found doing exactly that on an AWS teamserver.
+      - python3-venv
+    state: present
+    update_cache: true
+
+- name: Add swap so implant generation does not exhaust memory
+  ansible.builtin.include_tasks: swap.yml
+
+- name: Record what the redirector will demand of a beacon
+  ansible.builtin.template:
+    src: gating.json.j2
+    dest: "{{ redstackpro_teamserver_root }}/gating.json"
+    owner: "{{ redstackpro_teamserver_user }}"
+    mode: "0640"
+  when: gating_header_value | length > 0
+
+- name: Install the C2
+  ansible.builtin.include_tasks: "c2-{{ redstackpro_teamserver_c2 }}.yml"

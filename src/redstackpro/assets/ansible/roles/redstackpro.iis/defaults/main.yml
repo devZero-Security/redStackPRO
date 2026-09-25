@@ -1,0 +1,10 @@
+---
+# The web root IIS serves and the folder the upload app writes into. GOAD's web
+# member serves a small upload application at the site root and the shell lands
+# in an "upload" subfolder, so those are the defaults. See goad-native-recreation.
+redstackpro_iis_web_root: 'C:\inetpub\wwwroot'
+redstackpro_iis_upload_dir: 'C:\inetpub\wwwroot\upload'
+# Classic ASP alongside ASP.NET. The upload application is .aspx, but the shell an
+# operator drops through it is .asp (that is what upstream's solution uploads),
+# and IIS will not execute .asp unless the ASP feature is installed.
+redstackpro_iis_enable_classic_asp: true

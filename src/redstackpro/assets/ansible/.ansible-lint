@@ -1,0 +1,6 @@
+# The roles are deliberately namespaced redstackpro.<role> (redstackpro.jumpbox,
+# redstackpro.teamserver, and so on). ansible-lint's role-name rule rejects the
+# dot, but the naming is intentional and the generated site.yml references every
+# role by that exact name, so the rule is disabled rather than the roles renamed.
+skip_list:
+  - role-name

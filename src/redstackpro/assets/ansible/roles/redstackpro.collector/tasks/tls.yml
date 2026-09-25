@@ -1,0 +1,108 @@
+---
+# The certificate the shippers validate against. The key is generated here, the
+# signing happens on the jumpbox, and the CA key never moves. Only a request and
+# a certificate cross between hosts, which is the point of putting the authority
+# on the jumpbox rather than handing every host its own self signed cert.
+
+- name: Find the signing authority
+  ansible.builtin.set_fact:
+    # One jumpbox per management domain, so the first is the only. A topology with
+    # two jumpboxes reaching one collector needs the topology to say which signs,
+    # and no relation carries that today.
+    redstackpro_collector_ca_host: "{{ groups['jumpboxes'] | default([]) | first | default('') }}"
+
+- name: Fail early if TLS was asked for with no authority to sign it
+  ansible.builtin.assert:
+    that: redstackpro_collector_ca_host | length > 0
+    fail_msg: >
+      TLS is on for this collector and the inventory has no jumpbox to sign the
+      certificate. Every host needs a management path, which the validator
+      checks as MGT001, so this topology should not have compiled.
+
+- name: Generate the receiver key
+  ansible.builtin.command:
+    cmd: openssl genrsa -out {{ redstackpro_collector_tls_dir }}/collector.key 2048
+    creates: "{{ redstackpro_collector_tls_dir }}/collector.key"
+
+- name: Lock down the receiver key
+  ansible.builtin.file:
+    path: "{{ redstackpro_collector_tls_dir }}/collector.key"
+    owner: root
+    group: root
+    mode: "0400"
+
+# The shippers connect by address, not by name, so the address has to be in the
+# certificate or every filebeat fails verification.
+- name: Request a certificate naming this host and its address
+  ansible.builtin.command:
+    cmd: >
+      openssl req -new
+      -key {{ redstackpro_collector_tls_dir }}/collector.key
+      -subj "/CN={{ inventory_hostname }}"
+      -addext "subjectAltName=DNS:{{ inventory_hostname }},IP:{{ ansible_host }}"
+      -out {{ redstackpro_collector_tls_dir }}/collector.csr
+    creates: "{{ redstackpro_collector_tls_dir }}/collector.csr"
+
+- name: Read the request
+  ansible.builtin.slurp:
+    src: "{{ redstackpro_collector_tls_dir }}/collector.csr"
+  register: redstackpro_collector_csr
+
+- name: Hand the request to the authority
+  ansible.builtin.copy:
+    content: "{{ redstackpro_collector_csr.content | b64decode }}"
+    dest: "{{ redstackpro_ca_dir }}/{{ inventory_hostname }}.csr"
+    mode: "0600"
+  delegate_to: "{{ redstackpro_collector_ca_host }}"
+
+- name: Sign it
+  ansible.builtin.command:
+    cmd: >
+      openssl x509 -req
+      -in {{ redstackpro_ca_dir }}/{{ inventory_hostname }}.csr
+      -CA {{ redstackpro_ca_dir }}/ca.crt
+      -CAkey {{ redstackpro_ca_dir }}/ca.key
+      -CAserial {{ redstackpro_ca_dir }}/ca.srl
+      -days {{ redstackpro_ca_days | default(1825) }} -sha256
+      -copy_extensions copyall
+      -out {{ redstackpro_ca_dir }}/{{ inventory_hostname }}.crt
+    creates: "{{ redstackpro_ca_dir }}/{{ inventory_hostname }}.crt"
+  delegate_to: "{{ redstackpro_collector_ca_host }}"
+
+- name: Read the signed certificate
+  ansible.builtin.slurp:
+    src: "{{ redstackpro_ca_dir }}/{{ inventory_hostname }}.crt"
+  register: redstackpro_collector_signed
+  delegate_to: "{{ redstackpro_collector_ca_host }}"
+
+- name: Install the signed certificate
+  ansible.builtin.copy:
+    content: "{{ redstackpro_collector_signed.content | b64decode }}"
+    dest: "{{ redstackpro_collector_tls_dir }}/collector.crt"
+    mode: "0644"
+  notify: Restart logstash
+
+- name: Trust the authority that signed it
+  ansible.builtin.copy:
+    src: "{{ redstackpro_ca_local_path }}"
+    dest: "{{ redstackpro_collector_tls_dir }}/redstackpro-ca.crt"
+    mode: "0644"
+  notify: Restart logstash
+
+# Logstash reads a PKCS8 key and openssl genrsa writes PKCS1, which fails at
+# startup with an error that says nothing about the format.
+- name: Convert the key to the format the receiver reads
+  ansible.builtin.command:
+    cmd: >
+      openssl pkcs8 -topk8 -nocrypt
+      -in {{ redstackpro_collector_tls_dir }}/collector.key
+      -out {{ redstackpro_collector_tls_dir }}/collector.pkcs8.key
+    creates: "{{ redstackpro_collector_tls_dir }}/collector.pkcs8.key"
+  notify: Restart logstash
+
+- name: Lock down the converted key
+  ansible.builtin.file:
+    path: "{{ redstackpro_collector_tls_dir }}/collector.pkcs8.key"
+    owner: root
+    group: root
+    mode: "0400"

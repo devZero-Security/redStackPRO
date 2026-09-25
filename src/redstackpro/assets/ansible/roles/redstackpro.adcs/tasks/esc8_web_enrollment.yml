@@ -1,0 +1,61 @@
+---
+# ESC8: AD CS web enrollment accepts relayed authentication.
+#
+# Unlike every other esc here, ESC8 plants no certificate template. It needs the
+# CA to serve /certsrv, and it uses the built-in DomainController template that
+# every AD already has. So the whole attack path is one Windows feature, and we
+# were installing ADCS-Cert-Authority alone.
+#
+# This is upstream GOAD's own shape, not an invention: mayfly's part 6 coerces
+# meereen (the essos DC) and relays to braavos (the essos CA) at
+# http://<ca>/certsrv/certfnsh.asp with --template DomainController. Both hosts
+# are inside essos, which is why the CA living in essos was never the obstacle
+# it was once recorded as. The obstacle was that /certsrv was not there.
+#
+# Two things the operator should know, both from mayfly:
+#   - UNAUTHENTICATED PetitPotam no longer works against a patched DC. An
+#     authenticated coerce does, which is what the solutions run anyway.
+#   - Relaying NTLM to a CA on the host you just coerced returns 401. The essos
+#     path works because meereen and braavos are two different hosts; a
+#     single-DC-with-CA domain needs a Kerberos relay instead.
+
+- name: Install the AD CS Web Enrollment feature
+  ansible.windows.win_feature:
+    name: ADCS-Web-Enrollment
+    include_management_tools: true
+  register: redstackpro_adcs_web_feature
+
+- name: Reboot if the web enrollment feature asked for it
+  ansible.windows.win_reboot:
+    reboot_timeout: 900
+  when: redstackpro_adcs_web_feature.reboot_required | default(false)
+
+# Configured under the same Enterprise-Admin scheduled task the CA install uses.
+# Install-AdcsWebEnrollment itself only needs local admin, but it is run this way
+# so the whole role has one privilege story rather than two, and so a network
+# logon's missing token can never be the thing that fails at 2am.
+- name: Configure web enrollment (/certsrv) on the CA
+  ansible.builtin.include_tasks: run_ea.yml
+  vars:
+    redstackpro_ea_taskname: RSPAdcsWeb
+    redstackpro_ea_outfile: C:\Windows\Temp\rsp-esc8-out.txt
+    redstackpro_ea_command: |
+      $ErrorActionPreference = 'Stop'
+      Import-Module ADCSDeployment
+      $out = 'C:\Windows\Temp\rsp-esc8-out.txt'
+      try {
+        $r = Install-AdcsWebEnrollment -Force -ErrorAction Stop
+        if ($r.ErrorId -eq 0) {
+          Set-Content $out 'planted: web enrollment configured'
+        } else {
+          Set-Content $out ("ERR ErrorId=" + $r.ErrorId + " " + $r.ErrorString)
+        }
+      } catch {
+        # Re-running a finished deploy must not fail it. The cmdlet reports an
+        # existing configuration as an error rather than a no-op.
+        if ($_.Exception.Message -match 'already|installed') {
+          Set-Content $out 'exists: web enrollment already configured'
+        } else {
+          Set-Content $out ("ERR " + $_.Exception.Message)
+        }
+      }

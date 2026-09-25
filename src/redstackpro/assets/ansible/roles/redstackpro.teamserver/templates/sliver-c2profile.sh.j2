@@ -1,0 +1,134 @@
+#!/bin/sh
+# Rendered by redStackPRO. Puts the redirector's gating header into Sliver's HTTP C2
+# profile, so a generated implant presents it and the redirector forwards the beacon
+# instead of handing it the decoy page.
+#
+# Sliver 1.7 keeps this profile in its DATABASE, not in configs/http-c2.json, so a
+# rendered file on disk is inert. It has to be imported.
+#
+# The stock default is exported and OUR header merged into it, rather than a thin
+# hand-written profile being imported wholesale: that keeps Sliver's own path, file and
+# cookie lists, which are what make the traffic look ordinary, and it survives the
+# shape of the profile changing between versions.
+#
+# It goes in over "default" rather than as a named profile so that an operator who
+# types "generate --http https://<redirector>/<prefix>" by hand gets an implant that
+# passes the gate, instead of one that silently receives the decoy because they forgot
+# -C. Every generate picks it up, including one typed in the console months later.
+set -e
+OWNER={{ redstackpro_teamserver_user }}
+OURS={{ redstackpro_teamserver_root }}/sliver-profile.json
+
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+# mktemp gives root a 0700 directory. The client runs as the teamserver user and has to
+# read the rc scripts here AND write its export into this directory, so hand the
+# directory over rather than widening the mode: a 0755 root owned directory looks
+# traversable and then fails the export with no error of its own, which reads exactly
+# like a broken profile.
+chown "$OWNER" "$WORK"
+chmod 755 "$WORK"
+EXPORT="$WORK/default.json"
+MERGED="$WORK/merged.json"
+
+# The console does not exit on EOF after running an rc script, so the timeout is the
+# normal exit path and every call costs it. Keep it tight: an export or an import is
+# a couple of seconds of work.
+as_owner() {
+  su -s /bin/sh "$OWNER" -c "timeout 45 sliver-client --rc $1 < /dev/null" 2>&1 || {
+    status=$?
+    # 124 is the timeout firing, which is how this client always exits, so it is not a
+    # failure. Anything else is. Whether the work landed is checked by reading the
+    # profile back, never by this exit code.
+    [ "$status" -eq 124 ] || return "$status"
+  }
+}
+
+printf 'c2profiles export --name default --file %s\n' "$EXPORT" > "$WORK/export.rc"
+chmod 644 "$WORK/export.rc"
+as_owner "$WORK/export.rc" >/dev/null || true
+if [ ! -s "$EXPORT" ]; then
+  echo "could not export the default C2 profile, so there is nothing to merge into"
+  exit 1
+fi
+
+# Exits 3 when the live profile already carries exactly what we want, so a re-run is
+# not reported as a change.
+set +e
+python3 - "$EXPORT" "$OURS" "$MERGED" <<'PY'
+import json
+import sys
+
+live = json.load(open(sys.argv[1]))
+ours = json.load(open(sys.argv[2]))["implant_config"]
+config = live.setdefault("implant_config", {})
+wanted = ours["headers"]
+
+
+def pairs(headers):
+    """Name and value only. Sliver's export decorates each header with fields of its
+    own, so comparing whole dicts reports a difference that is not one and re-imports
+    on every run."""
+    return {(h.get("name", "").lower(), h.get("value")) for h in headers or []}
+
+
+names = {h["name"].lower() for h in wanted}
+current = config.get("headers") or []
+if (pairs(wanted) <= pairs(current)
+        and config.get("user_agent") == ours["user_agent"]
+        and config.get("chrome_base_version") == ours["chrome_base_version"]):
+    sys.exit(3)
+
+# Our headers replace any of the same name and are appended, so nothing Sliver put
+# there for its own reasons is dropped.
+config["headers"] = [h for h in current
+                     if h.get("name", "").lower() not in names] + wanted
+config["user_agent"] = ours["user_agent"]
+config["chrome_base_version"] = ours["chrome_base_version"]
+json.dump(live, open(sys.argv[3], "w"), indent=1)
+PY
+merged=$?
+set -e
+if [ "$merged" -eq 3 ]; then
+  echo "PROFILE ALREADY CURRENT"
+  exit 0
+fi
+[ "$merged" -eq 0 ] || exit "$merged"
+
+chmod 644 "$MERGED"
+printf 'c2profiles import --file %s --name default --overwrite\n' "$MERGED" \
+  > "$WORK/import.rc"
+printf 'c2profiles export --name default --file %s\n' "$WORK/after.json" \
+  >> "$WORK/import.rc"
+chmod 644 "$WORK/import.rc"
+out=$(as_owner "$WORK/import.rc")
+
+# Read the profile back and check the header is really in it. An import that fails
+# still exits 0, and a profile that looks applied but is not gives you implants that
+# get the decoy -- the exact failure this task exists to prevent.
+if ! python3 - "$WORK/after.json" "$OURS" <<'PY'
+import json
+import sys
+
+try:
+    live = json.load(open(sys.argv[1]))
+except Exception as exc:                                  # noqa: BLE001
+    print("could not read the profile back: %s" % exc)
+    sys.exit(1)
+wanted = json.load(open(sys.argv[2]))["implant_config"]["headers"]
+have = {(h.get("name", "").lower(), h.get("value"))
+        for h in (live.get("implant_config", {}).get("headers") or [])}
+# Name and value only: the export decorates each header with fields of its own, so
+# whole dict equality would fail on a profile that is in fact correct.
+missing = [h for h in wanted
+           if (h["name"].lower(), h.get("value")) not in have]
+if missing:
+    print("the profile does not carry %s"
+          % ", ".join(h["name"] for h in missing))
+    sys.exit(1)
+PY
+then
+  echo "$out" | tail -20
+  exit 1
+fi
+echo "PROFILE APPLIED"

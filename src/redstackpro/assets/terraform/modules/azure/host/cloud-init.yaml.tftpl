@@ -1,0 +1,32 @@
+#cloud-config
+# ${admin_username} is created by Azure from admin_ssh_key. This authorizes the jumpbox
+# Guacamole key alongside it, sets the shared lab password so a direct login
+# works, and on the jumpbox drops the credential files the portal reads. The
+# password is generated at apply, never in the export. See 0001.
+%{ if guac_public_key != "" ~}
+ssh_authorized_keys:
+  - ${guac_public_key}
+%{ endif ~}
+%{ if lab_password != "" ~}
+ssh_pwauth: true
+chpasswd:
+  expire: false
+  list: |
+    ${admin_username}:${lab_password}
+%{ endif ~}
+%{ if guac_private_key != "" ~}
+write_files:
+  - path: /etc/redstackpro/guacamole-ssh-key
+    permissions: "0600"
+    owner: root:root
+    content: |
+      ${indent(6, guac_private_key)}
+  - path: /etc/redstackpro/operator-username
+    permissions: "0600"
+    owner: root:root
+    content: "${operator_username}"
+  - path: /etc/redstackpro/lab-password
+    permissions: "0600"
+    owner: root:root
+    content: "${lab_password}"
+%{ endif ~}

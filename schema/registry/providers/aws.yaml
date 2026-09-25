@@ -1,0 +1,31 @@
+provider: aws
+maturity: proven
+description: Second cloud target.
+
+# AWS reserves the first four addresses of every subnet (network, VPC router,
+# DNS, and one held for future use) plus the last (broadcast). An instance
+# pinned into that range is refused at apply with "Address x.x.x.x is in
+# subnet's reserved address range", so net006 rejects such a pin at compile.
+reserved_addresses:
+  head: 4
+  tail: 1
+
+capabilities:
+  - routing_domain
+  - subnet
+  - compute
+  - linux_image
+  - windows_image
+  - public_address
+  - outbound_routing
+  - private_dns
+  # VPC peering plus the routes that carry it, since AWS does not exchange routes
+  # across a peering on its own. Rendered by the aws backend. See 0031.
+  - network_peering
+  # A segment holding both addressed and unaddressed hosts. AWS routes per subnet,
+  # so this used to be impossible here: one route table cannot point at both the
+  # internet gateway and a NAT. The backend now places an addressed host in the
+  # network's own public subnet, leaving the segment's subnet free to route at the
+  # NAT for everyone else, so the shape renders correctly. This retired CAP003.
+  # See 0054.
+  - mixed_exposure_segment

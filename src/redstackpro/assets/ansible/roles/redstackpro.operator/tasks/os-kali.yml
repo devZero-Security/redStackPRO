@@ -1,0 +1,158 @@
+---
+# Kali is Debian with the Kali archive and a metapackage on top.
+#
+# Both supported providers hand this role a real Kali image, so the normal path
+# is a metapackage install and nothing else. The conversion below is the
+# fallback for an image that is not already Kali, which is reachable because the
+# provider requirement is linux_image rather than a kali image and someone can
+# point the module at a Debian AMI.
+#
+# The conversion works and is what redStack did, but it repoints the archive of
+# a running system, which is a bigger change than a package install. Use a Kali
+# image where you can.
+
+- name: See whether this is already Kali
+  ansible.builtin.set_fact:
+    redstackpro_is_kali: "{{ ansible_facts['distribution'] | lower == 'kali' }}"
+
+- name: Ensure the apt keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+  when: not redstackpro_is_kali
+
+- name: Add the Kali archive keyring
+  ansible.builtin.get_url:
+    url: "{{ redstackpro_operator_kali_keyring_url }}"
+    dest: /etc/apt/keyrings/kali-archive-keyring.gpg
+    mode: "0644"
+    timeout: 30
+  register: redstackpro_kali_keyring
+  retries: 5
+  delay: 15
+  until: redstackpro_kali_keyring is succeeded
+  when: not redstackpro_is_kali
+
+- name: Add the Kali rolling archive
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/kali-archive-keyring.gpg]
+      http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware
+    filename: kali
+    state: present
+  when: not redstackpro_is_kali
+
+# Unconditional, and that is the point. Every task above is gated on converting
+# a Debian base, and this one used to be too -- which meant a host that is
+# ALREADY Kali never refreshed its package index at all, and the metapackage
+# install below then failed with "Unable to locate package kali-linux-headless".
+# A cloud Kali image is built once and boots much later with a stale or pruned
+# /var/lib/apt/lists, so it needs the update just as much as a converted base
+# does; it simply does not need the archive added first. Found on an AWS deploy,
+# where the Marketplace Kali AMI is the image rather than a converted Debian.
+- name: Refresh the package index before installing from it
+  ansible.builtin.apt:
+    update_cache: true
+  register: redstackpro_kali_update
+  retries: 5
+  delay: 15
+  until: redstackpro_kali_update is succeeded
+
+# Align the running base with kali-rolling before pulling the metapackage. The
+# metapackage depends on kali-rolling versions of core packages that conflict
+# with the debian base still installed, so installing it straight fails with
+# "Unmet dependencies". A dist-upgrade resolves the base first -- this is the
+# step a real debian->kali conversion needs, not just a package add.
+- name: Bring the base up to the Kali rolling archive  # noqa: command-instead-of-module
+  # The apt module's dist-upgrade leaves a package broken when a new dependency
+  # (a newer libcurl for python3-pycurl, say) is not pulled in the same pass, and
+  # then aborts. Drive it as a command so --fix-broken is on: apt corrects the
+  # dependency instead of failing, which is what a debian->kali base upgrade
+  # needs. Retried for transient mirror errors.
+  ansible.builtin.command:
+    cmd: >-
+      apt-get -y --fix-broken
+      -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold
+      dist-upgrade
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  register: redstackpro_kali_distupgrade
+  changed_when: "'0 upgraded, 0 newly installed, 0 to remove' not in redstackpro_kali_distupgrade.stdout"
+  retries: 3
+  delay: 30
+  until: redstackpro_kali_distupgrade.rc == 0
+  when: not redstackpro_is_kali
+
+- name: Correct any dependencies the upgrade still left broken  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: >-
+      apt-get -y --fix-broken
+      -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold
+      install
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  register: redstackpro_kali_fixbroken
+  changed_when: "'0 upgraded, 0 newly installed, 0 to remove' not in redstackpro_kali_fixbroken.stdout"
+  when: not redstackpro_is_kali
+
+- name: Install the Kali metapackage  # noqa: command-instead-of-module
+  # Driven as a command with --fix-broken: on a converted base apt otherwise
+  # refuses the metapackage's dependency tree ("... not going to be installed")
+  # rather than pulling the versions it needs. --fix-broken lets it resolve and
+  # install them. force-confdef/confold takes maintainer conffile defaults so a
+  # changed conffile cannot hang the run on an unanswered dialog.
+  ansible.builtin.command:
+    cmd: >-
+      apt-get -y --fix-broken
+      -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold
+      install {{ redstackpro_operator_kali_metapackage }}
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  register: redstackpro_kali_metapackage_install
+  changed_when: "'0 upgraded, 0 newly installed, 0 to remove' not in redstackpro_kali_metapackage_install.stdout"
+  retries: 3
+  delay: 30
+  until: redstackpro_kali_metapackage_install.rc == 0
+
+- name: Install the tooling the metapackage does not carry
+  ansible.builtin.apt:
+    name: "{{ redstackpro_operator_debian_packages }}"
+    state: present
+    dpkg_options: force-confdef,force-confold
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Create the operator account
+  ansible.builtin.user:
+    name: "{{ redstackpro_operator_user }}"
+    shell: /bin/bash
+    create_home: true
+    groups: sudo
+    append: true
+    state: present
+
+- name: Create the operator working directory
+  ansible.builtin.file:
+    path: "{{ redstackpro_operator_root }}"
+    state: directory
+    owner: "{{ redstackpro_operator_user }}"
+    mode: "0750"
+
+- name: Create the operator ssh directory
+  ansible.builtin.file:
+    path: "/home/{{ redstackpro_operator_user }}/.ssh"
+    state: directory
+    owner: "{{ redstackpro_operator_user }}"
+    mode: "0700"
+
+- name: Point ssh at the jumpbox for everything else in the estate
+  ansible.builtin.template:
+    src: ssh-config.j2
+    dest: "/home/{{ redstackpro_operator_user }}/.ssh/config"
+    owner: "{{ redstackpro_operator_user }}"
+    mode: "0600"
+  when: groups['jumpboxes'] | default([]) | length > 0
+
+- name: Install the pinned offensive toolchain
+  ansible.builtin.include_tasks: toolchain.yml

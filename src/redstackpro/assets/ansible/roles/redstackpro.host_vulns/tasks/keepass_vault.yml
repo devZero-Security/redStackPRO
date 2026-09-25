@@ -1,0 +1,73 @@
+---
+# keepass_vault: generate a KeePass database on the host holding a privileged
+# credential. Paired with the scheduled login bot (schedule) that opens it over a
+# CredSSP double-hop, this is GOAD dracarys's vault: the credential that ends the
+# chain sits in a .kdbx an operator loots once they hold the host. The vault entry
+# password is taken from a named lab user's ACTUAL deployed password at run time
+# (redstackpro_user_passwords), so nothing secret is baked into the template and
+# the vault stays consistent with whatever password the domain user really got.
+#
+# The database is built on-host with KeePassLib (shipped inside KeePass.exe), not
+# KPScript, so no extra plugin download is needed. See goad-fidelity-build and
+# dracarys-fidelity-gap.
+
+- name: Resolve the keepass_vault parameters
+  ansible.builtin.set_fact:
+    _kv: "{{ redstackpro_host_vulns_vars.keepass_vault | default({}) }}"
+
+- name: Install Chocolatey if it is missing
+  ansible.windows.win_shell: |
+    if (-not (Get-Command choco.exe -ErrorAction SilentlyContinue)) {
+      Set-ExecutionPolicy Bypass -Scope Process -Force
+      [System.Net.ServicePointManager]::SecurityProtocol = 3072
+      iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+    }
+  args:
+    creates: C:\ProgramData\chocolatey\bin\choco.exe
+
+- name: Install KeePass (provides KeePass.exe and KeePassLib)
+  chocolatey.chocolatey.win_chocolatey:
+    name: keepass
+    state: present
+  register: _kv_install
+  until: _kv_install is succeeded
+  retries: 3
+  delay: 20
+
+- name: Generate the vault with the privileged credential
+  ansible.windows.win_powershell:
+    parameters:
+      DbPath: "{{ _kv.db_path | default('C:\\vault.kdbx') }}"
+      Master: "{{ _kv.master_password }}"
+      Title: "{{ _kv.entry_title | default('domain-admin') }}"
+      EntryUser: "{{ _kv.entry_user | default('administrator') }}"
+      EntryPass: "{{ redstackpro_user_passwords[_kv.entry_password_user] | default(redstackpro_lab_password) }}"
+    script: |
+      param($DbPath, $Master, $Title, $EntryUser, $EntryPass)
+      $ErrorActionPreference = 'Stop'
+      $paths = @(
+        'C:\Program Files\KeePass Password Safe 2\KeePass.exe',
+        'C:\Program Files (x86)\KeePass Password Safe 2\KeePass.exe'
+      )
+      $kp = Get-ChildItem $paths -ErrorAction SilentlyContinue | Select-Object -First 1
+      if (-not $kp) { throw 'KeePass.exe not found after install' }
+      [Reflection.Assembly]::LoadFile($kp.FullName) | Out-Null
+
+      $db  = New-Object KeePassLib.PwDatabase
+      $key = New-Object KeePassLib.Keys.CompositeKey
+      $key.AddUserKey((New-Object KeePassLib.Keys.KcpPassword($Master)))
+      $ioc = New-Object KeePassLib.Serialization.IOConnectionInfo
+      $ioc.Path = $DbPath
+      $db.New($ioc, $key) | Out-Null
+
+      $entry = New-Object KeePassLib.PwEntry($true, $true)
+      $entry.Strings.Set('Title',    (New-Object KeePassLib.Security.ProtectedString($true,  $Title)))
+      $entry.Strings.Set('UserName', (New-Object KeePassLib.Security.ProtectedString($false, $EntryUser)))
+      $entry.Strings.Set('Password', (New-Object KeePassLib.Security.ProtectedString($true,  $EntryPass)))
+      $db.RootGroup.AddEntry($entry, $true)
+
+      $logger = New-Object KeePassLib.Interfaces.NullStatusLogger
+      $db.Save($logger)
+      $db.Close()
+      [Ordered]@{ vault = $DbPath; present = (Test-Path $DbPath) }
+  changed_when: true

@@ -1,0 +1,76 @@
+---
+# The alternative to wireguard, chosen in the services overlay. Both are server
+# side only for the same reason: client peers come from the topology once the peers
+# relation exists.
+#
+# The server certificate is issued by the jumpbox CA, so a topology that turns the
+# certificate authority off and asks for openvpn is a topology that has to supply
+# its own material.
+
+- name: Fail early if openvpn was asked for without a certificate authority
+  ansible.builtin.assert:
+    that: redstackpro_jumpbox_certificate_authority | bool
+    fail_msg: >
+      openvpn needs a certificate authority to issue the server certificate,
+      and certificate_authority is false in the overlay. Turn it on, or supply
+      /etc/openvpn/server before running this play.
+
+- name: Install openvpn
+  ansible.builtin.apt:
+    name:
+      - openvpn
+      - easy-rsa
+    state: present
+
+- name: Create the openvpn directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - /etc/openvpn/server
+    - /etc/openvpn/server/pki
+
+- name: Generate the server key
+  ansible.builtin.command:
+    cmd: openssl genrsa -out /etc/openvpn/server/pki/server.key 2048
+    creates: /etc/openvpn/server/pki/server.key
+
+- name: Request a server certificate
+  ansible.builtin.command:
+    cmd: >
+      openssl req -new
+      -key /etc/openvpn/server/pki/server.key
+      -subj "/CN={{ inventory_hostname }}"
+      -out /etc/openvpn/server/pki/server.csr
+    creates: /etc/openvpn/server/pki/server.csr
+
+- name: Sign it with the jumpbox certificate authority
+  ansible.builtin.command:
+    cmd: >
+      openssl x509 -req
+      -in /etc/openvpn/server/pki/server.csr
+      -CA {{ redstackpro_ca_dir }}/ca.crt
+      -CAkey {{ redstackpro_ca_dir }}/ca.key
+      -CAserial {{ redstackpro_ca_dir }}/ca.srl
+      -days {{ redstackpro_ca_days }} -sha256
+      -out /etc/openvpn/server/pki/server.crt
+    creates: /etc/openvpn/server/pki/server.crt
+
+- name: Generate Diffie Hellman parameters
+  ansible.builtin.command:
+    cmd: openssl dhparam -out /etc/openvpn/server/pki/dh.pem 2048
+    creates: /etc/openvpn/server/pki/dh.pem
+
+- name: Write the server configuration
+  ansible.builtin.template:
+    src: openvpn-server.conf.j2
+    dest: /etc/openvpn/server/redstackpro.conf
+    mode: "0600"
+  notify: Restart openvpn
+
+- name: Start openvpn
+  ansible.builtin.service:
+    name: "openvpn-server@redstackpro"
+    state: started
+    enabled: true

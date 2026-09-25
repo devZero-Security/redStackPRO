@@ -1,0 +1,394 @@
+{
+  "schema_version": "0.3.0",
+  "mode": "ops",
+  "name": "Parallel chains, separate networks",
+  "description": "Two independent C2 chains in separate routing domains so burning one does not burn the other. Each chain carries its own jumpbox and collector, because a shared management network would be a shared blast radius and because 0.1.0 has no transport between routing domains. Substituted for the GOAD example in schema.md because range node kinds are not defined in 0.1.0.",
+  "nodes": [
+    {
+      "id": "network-mgmt",
+      "kind": "network",
+      "overlay": {
+        "cidr": "10.40.0.0/16"
+      }
+    },
+    {
+      "id": "network-chain-a",
+      "kind": "network",
+      "overlay": {
+        "cidr": "10.41.0.0/16"
+      }
+    },
+    {
+      "id": "network-chain-b",
+      "kind": "network",
+      "overlay": {
+        "cidr": "10.42.0.0/16"
+      }
+    },
+    {
+      "id": "subnet-mgmt",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.40.0.0/24",
+        "egress": "allowed",
+        "exposure": "internet",
+        "tier": "management"
+      }
+    },
+    {
+      "id": "subnet-rdir-a",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.41.10.0/24",
+        "egress": "allowed",
+        "exposure": "internet",
+        "tier": "redirector"
+      }
+    },
+    {
+      "id": "subnet-c2-a",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.41.20.0/24",
+        "egress": "allowed",
+        "exposure": "local",
+        "tier": "c2"
+      }
+    },
+    {
+      "id": "subnet-rdir-b",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.42.10.0/24",
+        "egress": "allowed",
+        "exposure": "internet",
+        "tier": "redirector"
+      }
+    },
+    {
+      "id": "subnet-c2-b",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.42.20.0/24",
+        "egress": "allowed",
+        "exposure": "local",
+        "tier": "c2"
+      }
+    },
+    {
+      "id": "jump-01",
+      "kind": "jumpbox",
+      "overlay": {
+        "services": [
+          "ssh",
+          "guacamole",
+          "wireguard"
+        ],
+        "certificate_authority": true
+      }
+    },
+    {
+      "id": "rdir-01",
+      "kind": "redirector",
+      "overlay": {
+        "server": "nginx",
+        "hostname": "a.example-lure.com",
+        "tls": {
+          "cert_source": "letsencrypt"
+        },
+        "gating": {
+          "header_name": "X-Request-Id",
+          "header_value": "CHANGE-ME",
+          "redirect_rules": true,
+          "decoy": "cdn"
+        }
+      }
+    },
+    {
+      "id": "ts-01",
+      "kind": "teamserver",
+      "overlay": {
+        "c2": "mythic"
+      }
+    },
+    {
+      "id": "rdir-02",
+      "kind": "redirector",
+      "overlay": {
+        "server": "apache",
+        "hostname": "b.example-lure.com",
+        "tls": {
+          "cert_source": "letsencrypt"
+        },
+        "gating": {
+          "header_name": "X-Request-Id",
+          "header_value": "CHANGE-ME",
+          "redirect_rules": true,
+          "decoy": "cdn"
+        }
+      }
+    },
+    {
+      "id": "ts-02",
+      "kind": "teamserver",
+      "overlay": {
+        "c2": "sliver"
+      }
+    },
+    {
+      "id": "subnet-mgmt-a",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.41.0.0/24",
+        "egress": "allowed",
+        "exposure": "internet",
+        "tier": "management"
+      }
+    },
+    {
+      "id": "subnet-log-a",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.41.30.0/24",
+        "egress": "allowed",
+        "exposure": "local",
+        "tier": "collector"
+      }
+    },
+    {
+      "id": "jump-02",
+      "kind": "jumpbox",
+      "overlay": {
+        "services": [
+          "ssh",
+          "guacamole"
+        ],
+        "certificate_authority": true
+      }
+    },
+    {
+      "id": "log-01",
+      "kind": "collector",
+      "overlay": {
+        "sink": "opensearch",
+        "shipper": "filebeat",
+        "ingest_port": 5044,
+        "tls": true
+      }
+    },
+    {
+      "id": "subnet-mgmt-b",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.42.0.0/24",
+        "egress": "allowed",
+        "exposure": "internet",
+        "tier": "management"
+      }
+    },
+    {
+      "id": "subnet-log-b",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.42.30.0/24",
+        "egress": "allowed",
+        "exposure": "local",
+        "tier": "collector"
+      }
+    },
+    {
+      "id": "jump-03",
+      "kind": "jumpbox",
+      "overlay": {
+        "services": [
+          "ssh",
+          "guacamole"
+        ],
+        "certificate_authority": true
+      }
+    },
+    {
+      "id": "log-02",
+      "kind": "collector",
+      "overlay": {
+        "sink": "opensearch",
+        "shipper": "filebeat",
+        "ingest_port": 5044,
+        "tls": true
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-segmgmt-network",
+      "role": "attached",
+      "source": "subnet-mgmt",
+      "target": "network-mgmt"
+    },
+    {
+      "id": "e-segrdira-network",
+      "role": "attached",
+      "source": "subnet-rdir-a",
+      "target": "network-chain-a"
+    },
+    {
+      "id": "e-segc2a-network",
+      "role": "attached",
+      "source": "subnet-c2-a",
+      "target": "network-chain-a"
+    },
+    {
+      "id": "e-segrdirb-network",
+      "role": "attached",
+      "source": "subnet-rdir-b",
+      "target": "network-chain-b"
+    },
+    {
+      "id": "e-segc2b-network",
+      "role": "attached",
+      "source": "subnet-c2-b",
+      "target": "network-chain-b"
+    },
+    {
+      "id": "e-jump-subnet",
+      "role": "attached",
+      "source": "jump-01",
+      "target": "subnet-mgmt"
+    },
+    {
+      "id": "e-rdira01-subnet",
+      "role": "attached",
+      "source": "rdir-01",
+      "target": "subnet-rdir-a"
+    },
+    {
+      "id": "e-tsa01-subnet",
+      "role": "attached",
+      "source": "ts-01",
+      "target": "subnet-c2-a"
+    },
+    {
+      "id": "e-rdirb01-subnet",
+      "role": "attached",
+      "source": "rdir-02",
+      "target": "subnet-rdir-b"
+    },
+    {
+      "id": "e-tsb01-subnet",
+      "role": "attached",
+      "source": "ts-02",
+      "target": "subnet-c2-b"
+    },
+    {
+      "id": "e-front-a01",
+      "role": "fronts",
+      "source": "rdir-01",
+      "target": "ts-01",
+      "protocol": "https",
+      "listen_port": 443,
+      "upstream_port": 443,
+      "uri_prefix": "/cdn/assets"
+    },
+    {
+      "id": "e-front-b01",
+      "role": "fronts",
+      "source": "rdir-02",
+      "target": "ts-02",
+      "protocol": "https",
+      "listen_port": 443,
+      "upstream_port": 443,
+      "uri_prefix": "/updates"
+    },
+    {
+      "id": "e-log-rdira01",
+      "role": "logs_to",
+      "source": "rdir-01",
+      "target": "log-01"
+    },
+    {
+      "id": "e-log-tsa01",
+      "role": "logs_to",
+      "source": "ts-01",
+      "target": "log-01"
+    },
+    {
+      "id": "e-log-rdirb01",
+      "role": "logs_to",
+      "source": "rdir-02",
+      "target": "log-02"
+    },
+    {
+      "id": "e-log-tsb01",
+      "role": "logs_to",
+      "source": "ts-02",
+      "target": "log-02"
+    },
+    {
+      "id": "e-manage-mgmt",
+      "role": "manages",
+      "source": "jump-01",
+      "target": "network-mgmt"
+    },
+    {
+      "id": "e-subnet-mgmt-a-network",
+      "role": "attached",
+      "source": "subnet-mgmt-a",
+      "target": "network-chain-a"
+    },
+    {
+      "id": "e-subnet-log-a-network",
+      "role": "attached",
+      "source": "subnet-log-a",
+      "target": "network-chain-a"
+    },
+    {
+      "id": "e-jump-a-subnet",
+      "role": "attached",
+      "source": "jump-02",
+      "target": "subnet-mgmt-a"
+    },
+    {
+      "id": "e-log-a-subnet",
+      "role": "attached",
+      "source": "log-01",
+      "target": "subnet-log-a"
+    },
+    {
+      "id": "e-manage-network-a",
+      "role": "manages",
+      "source": "jump-02",
+      "target": "network-chain-a"
+    },
+    {
+      "id": "e-subnet-mgmt-b-network",
+      "role": "attached",
+      "source": "subnet-mgmt-b",
+      "target": "network-chain-b"
+    },
+    {
+      "id": "e-subnet-log-b-network",
+      "role": "attached",
+      "source": "subnet-log-b",
+      "target": "network-chain-b"
+    },
+    {
+      "id": "e-jump-b-subnet",
+      "role": "attached",
+      "source": "jump-03",
+      "target": "subnet-mgmt-b"
+    },
+    {
+      "id": "e-log-b-subnet",
+      "role": "attached",
+      "source": "log-02",
+      "target": "subnet-log-b"
+    },
+    {
+      "id": "e-manage-network-b",
+      "role": "manages",
+      "source": "jump-03",
+      "target": "network-chain-b"
+    }
+  ],
+  "prefix": "rt"
+}

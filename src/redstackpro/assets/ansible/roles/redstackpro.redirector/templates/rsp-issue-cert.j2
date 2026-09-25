@@ -1,0 +1,134 @@
+#!/bin/sh
+# The redirector's certificate command. Three jobs, one command:
+#
+#   1. FINISH what the deploy could not. Issuance validates over HTTP, so it
+#      needs an A record only the operator can create at their registrar. The
+#      deploy prints that record and waits a while, but it does not hold a range
+#      hostage to a registrar: if the record is not there in time the redirector
+#      keeps its bootstrap self signed certificate and the run carries on. Run
+#      this once the record exists.
+#
+#   2. RENEW a certificate that is getting old. Let's Encrypt certificates last
+#      ninety days, which outlives many engagements but not all of them.
+#
+#   3. SWITCH a redirector that was built self signed onto a real certificate.
+#      Nothing about a self signed redirector forecloses this: the web server
+#      already serves /.well-known/acme-challenge and certbot is already
+#      installed, so all that was ever missing is the issuance itself. Someone
+#      who chose self signed at compile time and later has a domain does not
+#      need to redeploy the range to use it.
+#
+# Written by redstackpro.redirector. Safe to run repeatedly: without --force an
+# existing certificate that is not near expiry is kept, and the rest is
+# idempotent.
+
+set -eu
+
+HOSTNAME='{{ redstackpro_redirector_hostname }}'
+EXPECT='{{ redstackpro_redirector_pubip.stdout | default("") }}'
+{% if redstackpro_redirector_server == 'apache' %}
+SERVICE=apache2
+{% else %}
+SERVICE=nginx
+{% endif %}
+LIVE="/etc/letsencrypt/live/$HOSTNAME"
+FORCE=""
+
+usage() {
+  cat <<USAGE
+Usage: rsp-issue-cert [--force] [--host NAME]
+
+  (no options)  Issue a Let's Encrypt certificate for $HOSTNAME, or keep the
+                existing one if it is not near expiry.
+  --force       Renew now even if the current certificate is still good.
+  --host NAME   Use a different hostname than the one this range was built with.
+
+Run it after creating the A record for the name at your registrar.
+USAGE
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --force) FORCE="--force-renewal"; shift ;;
+    --host) HOSTNAME="${2:?--host needs a name}"; LIVE="/etc/letsencrypt/live/$HOSTNAME"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "rsp-issue-cert must run as root: try 'sudo rsp-issue-cert'" >&2
+  exit 1
+fi
+
+if [ -z "$HOSTNAME" ]; then
+  echo "This redirector has no hostname set. Pass one with --host NAME." >&2
+  exit 1
+fi
+
+# certbot ships on every redirector now, but a host built before that change, or
+# one someone has pruned, should say something better than 'not found'.
+if ! command -v certbot >/dev/null 2>&1; then
+  echo "certbot is not installed. Installing it." >&2
+  apt-get update -qq && apt-get install -y -qq certbot
+fi
+
+# The deploy only learns the public address when it was going to issue, so a
+# redirector built self signed has none recorded. Ask now, so the mismatch check
+# below still works on the switch-back path.
+if [ -z "$EXPECT" ]; then
+  EXPECT=$(curl -fsS --max-time 15 https://api.ipify.org 2>/dev/null || true)
+fi
+
+# Check the record first. certbot's own failure for an unresolvable name is a
+# wall of ACME text; this says the one thing that is actually wrong.
+RESOLVED=$(getent ahostsv4 "$HOSTNAME" 2>/dev/null || true)
+if [ -z "$RESOLVED" ]; then
+  echo "$HOSTNAME does not resolve yet." >&2
+  echo "Create an A record '$HOSTNAME' -> ${EXPECT:-this host's public address} at your" >&2
+  echo "registrar, give it a minute, then run this again." >&2
+  exit 1
+fi
+
+if [ -n "$EXPECT" ] && ! echo "$RESOLVED" | grep -qF "$EXPECT"; then
+  echo "$HOSTNAME resolves, but not to this redirector." >&2
+  echo "  expected: $EXPECT" >&2
+  echo "  got:      $(echo "$RESOLVED" | awk '{print $1}' | sort -u | tr '\n' ' ')" >&2
+  echo "Point the A record at $EXPECT and run this again." >&2
+  exit 1
+fi
+
+if [ -d "$LIVE" ] && [ -z "$FORCE" ]; then
+  echo "A certificate for $HOSTNAME already exists; renewing only if it is near expiry."
+  echo "Use --force to renew it now."
+else
+  echo "Resolving correctly. Asking Let's Encrypt for a certificate."
+fi
+
+# --keep-until-expiring makes the no-op case cheap, so this one command covers
+# both first issuance and renewal without the caller having to know which.
+# shellcheck disable=SC2086
+certbot certonly --webroot -w /var/www/redstackpro-acme \
+  -d "$HOSTNAME" \
+  --non-interactive --agree-tos --keep-until-expiring $FORCE \
+{% if redstackpro_redirector_tls.email | default('') %}
+  --email '{{ redstackpro_redirector_tls.email }}'
+{% else %}
+  --register-unsafely-without-email
+{% endif %}
+
+# Repointing is what actually moves a self signed redirector onto the real
+# certificate: the web server reads these two paths and nothing else.
+ln -sf "$LIVE/fullchain.pem" /etc/redstackpro/tls/redirector.crt
+ln -sf "$LIVE/privkey.pem" /etc/redstackpro/tls/redirector.key
+
+# The warning described a problem that no longer exists.
+if [ -f /etc/motd ]; then
+  sed -i '/# BEGIN REDSTACKPRO TLS/,/# END REDSTACKPRO TLS/d' /etc/motd
+fi
+
+echo "Reloading $SERVICE."
+systemctl restart "$SERVICE"
+
+echo "Done. $HOSTNAME is now served with a Let's Encrypt certificate."
+echo "Certificates last 90 days; run this again to renew, or 'certbot renew'."

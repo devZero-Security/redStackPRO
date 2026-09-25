@@ -1,0 +1,10 @@
+---
+- name: Restart apache
+  ansible.builtin.service:
+    name: apache2
+    state: restarted
+
+- name: Restart nginx
+  ansible.builtin.service:
+    name: nginx
+    state: restarted

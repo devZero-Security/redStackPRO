@@ -1,0 +1,61 @@
+---
+- name: Install hardening packages
+  ansible.builtin.apt:
+    name:
+      - fail2ban
+      - unattended-upgrades
+    state: present
+
+- name: Configure sshd
+  ansible.builtin.template:
+    src: sshd-redstackpro.conf.j2
+    dest: /etc/ssh/sshd_config.d/redstackpro.conf
+    mode: "0644"
+  notify: Reload sshd
+
+# A drop-in cannot be validated on its own, so the whole configuration is
+# checked instead. Shipping a broken sshd to the only host with a public address
+# would lock the operator out of the entire estate.
+- name: Check the sshd configuration parses before reloading
+  ansible.builtin.command:
+    cmd: /usr/sbin/sshd -t
+  changed_when: false
+
+- name: Ban repeat offenders on the public listener
+  ansible.builtin.template:
+    src: fail2ban-sshd.local.j2
+    dest: /etc/fail2ban/jail.d/redstackpro-sshd.local
+    mode: "0644"
+  notify: Restart fail2ban
+
+- name: Take security updates without being asked
+  ansible.builtin.copy:
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    dest: /etc/apt/apt.conf.d/20redstackpro-auto-upgrades
+    mode: "0644"
+
+- name: Harden the network stack
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/60-redstackpro.conf
+    state: present
+    reload: true
+  loop:
+    - { name: net.ipv4.conf.all.accept_redirects, value: "0" }
+    - { name: net.ipv4.conf.all.send_redirects, value: "0" }
+    - { name: net.ipv4.conf.all.accept_source_route, value: "0" }
+    - { name: net.ipv4.conf.all.log_martians, value: "1" }
+    - { name: net.ipv4.tcp_syncookies, value: "1" }
+    # Forwarding stays on. A VPN service on this host is useless without it,
+    # and the segment boundary is enforced in the generated firewall rules
+    # rather than here.
+    - { name: net.ipv4.ip_forward, value: "1" }
+
+- name: Start fail2ban
+  ansible.builtin.service:
+    name: fail2ban
+    state: started
+    enabled: true

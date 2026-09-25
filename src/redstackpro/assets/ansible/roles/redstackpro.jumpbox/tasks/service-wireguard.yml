@@ -1,0 +1,52 @@
+---
+# The server side only. Client peers are added from the topology once the peers
+# relation exists; until then a peer is appended by hand or by wg set. See
+# schema.md, which records peers as unbuilt.
+
+- name: Install wireguard
+  ansible.builtin.apt:
+    name:
+      - wireguard
+      - wireguard-tools
+    state: present
+
+- name: Create the wireguard directory
+  ansible.builtin.file:
+    path: /etc/wireguard
+    state: directory
+    mode: "0700"
+
+- name: Generate the server private key
+  ansible.builtin.shell:
+    cmd: umask 077 && wg genkey > /etc/wireguard/server.key
+    creates: /etc/wireguard/server.key
+
+- name: Derive the server public key
+  ansible.builtin.shell:
+    cmd: wg pubkey < /etc/wireguard/server.key > /etc/wireguard/server.pub
+    creates: /etc/wireguard/server.pub
+
+- name: Read the server private key
+  ansible.builtin.slurp:
+    src: /etc/wireguard/server.key
+  register: redstackpro_wg_key
+
+- name: Write the interface configuration
+  ansible.builtin.template:
+    src: wg0.conf.j2
+    dest: /etc/wireguard/wg0.conf
+    mode: "0600"
+  notify: Restart wireguard
+
+- name: Start the tunnel
+  ansible.builtin.service:
+    name: "wg-quick@wg0"
+    state: started
+    enabled: true
+
+- name: Say where the server public key is
+  ansible.builtin.debug:
+    msg: >-
+      WireGuard is up on port {{ redstackpro_wireguard_port }}. The server public
+      key is in /etc/wireguard/server.pub. Peers are not generated from the
+      topology yet, so add operator peers with wg set.

@@ -1,0 +1,16 @@
+---
+# Leave an auto-logon credential in the registry: AutoAdminLogon on with the user
+# name and a cleartext DefaultPassword, which anyone who can read the Winlogon key
+# recovers. Uses the lab password so the account it names actually logs on.
+- name: Enable auto-logon with a cleartext credential
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon
+    name: "{{ item.name }}"
+    data: "{{ item.data }}"
+    type: string
+  loop:
+    - { name: "AutoAdminLogon", data: "1" }
+    - { name: "DefaultUserName", data: "{{ redstackpro_host_autologon_user | default('administrator') }}" }
+    - { name: "DefaultPassword", data: "{{ (redstackpro_user_passwords | default({})).get(redstackpro_host_autologon_user | default('administrator'), redstackpro_lab_password) }}" }
+  loop_control:
+    label: "{{ item.name }}"

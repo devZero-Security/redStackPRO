@@ -1,0 +1,231 @@
+{
+  "schema_version": "0.4.0",
+  "mode": "range",
+  "name": "MINILAB",
+  "prefix": "cyb",
+  "auto_stop": {
+    "enabled": true,
+    "after_hours": 8,
+    "timezone": "UTC"
+  },
+  "nodes": [
+    {
+      "id": "net01",
+      "kind": "network",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "overlay": {
+        "cidr": "192.168.0.0/16"
+      }
+    },
+    {
+      "id": "sub01",
+      "kind": "segment",
+      "position": {
+        "x": 16,
+        "y": 44
+      },
+      "overlay": {
+        "cidr": "192.168.56.0/24",
+        "egress": "allowed",
+        "exposure": "local"
+      }
+    },
+    {
+      "id": "minilab",
+      "kind": "domain",
+      "position": {
+        "x": 16,
+        "y": 48
+      },
+      "overlay": {
+        "fqdn": "mini.lab",
+        "netbios": "MINILAB",
+        "users": [
+          {
+            "username": "alice",
+            "display_name": "alice",
+            "email": "alice@mini.lab",
+            "groups": [
+              "wsadmin",
+              "Domain Admins"
+            ],
+            "privilege": "domain_admin",
+            "flaws": [
+              "weak_password"
+            ],
+            "weak_password": "superman",
+            "password": "spongebob"
+          },
+          {
+            "username": "bob",
+            "display_name": "bob",
+            "email": "bob@mini.lab",
+            "groups": [
+              "wsadmin"
+            ],
+            "privilege": "user",
+            "description": "(Password : superman)",
+            "flaws": [
+              "weak_password"
+            ],
+            "weak_password": "123456789",
+            "password": "superman"
+          },
+          {
+            "username": "carol",
+            "display_name": "carol",
+            "email": "carol@mini.lab",
+            "groups": [
+              "wsadmin",
+              "Domain Admins"
+            ],
+            "privilege": "domain_admin",
+            "flaws": [
+              "weak_password"
+            ],
+            "weak_password": "letmein",
+            "password": "123456789"
+          },
+          {
+            "username": "dave",
+            "display_name": "dave",
+            "email": "dave@mini.lab",
+            "groups": [
+              "wsrdp"
+            ],
+            "privilege": "user",
+            "flaws": [
+              "weak_password"
+            ],
+            "weak_password": "rockyou",
+            "password": "rockyou"
+          }
+        ],
+        "acls": [
+          {
+            "principal": "NT AUTHORITY\\ANONYMOUS LOGON",
+            "target": "DC=mini,DC=lab",
+            "right": "ReadProperty"
+          },
+          {
+            "principal": "NT AUTHORITY\\ANONYMOUS LOGON",
+            "target": "DC=mini,DC=lab",
+            "right": "GenericExecute"
+          }
+        ]
+      }
+    },
+    {
+      "id": "dc",
+      "kind": "dc",
+      "position": {
+        "x": 16,
+        "y": 48
+      },
+      "overlay": {
+        "os": "windows_server_2019",
+        "hostname": "dc",
+        "vulns": [
+          "stored_credential",
+          "schedule",
+          "enable_credssp_client"
+        ],
+        "notes": "Unmapped GOAD vulns: files, enable_credssp_client, schedule.",
+        "vulns_vars": {
+          "stored_credential": {
+            "owner": "MINILAB\\alice",
+            "target": "TERMSRV/alicesecret",
+            "username": "MINILAB\\alice"
+          },
+          "schedule": {
+            "name": "connect_bot",
+            "script_path": "C:\\bot.ps1",
+            "script_content": "New-PSDrive -Name X -PSProvider FileSystem -Root \\\\ws\\C$ -ErrorAction SilentlyContinue | Out-Null\nStart-Sleep -Seconds 5\n",
+            "command": "& C:\\bot.ps1",
+            "interval_minutes": 1,
+            "user": "MINILAB\\alice"
+          }
+        }
+      }
+    },
+    {
+      "id": "ws",
+      "kind": "wks",
+      "position": {
+        "x": 268,
+        "y": 48
+      },
+      "overlay": {
+        "os": "windows_10",
+        "hostname": "ws",
+        "notes": "Unmapped GOAD vulns: disable_firewall, enable_credssp_server.",
+        "vulns": [
+          "enable_credssp_server"
+        ]
+      }
+    },
+    {
+      "id": "jumpbox",
+      "kind": "jumpbox",
+      "position": {
+        "x": 16,
+        "y": 248
+      },
+      "overlay": {
+        "services": [
+          "ssh",
+          "guacamole",
+          "wireguard"
+        ],
+        "certificate_authority": true
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-sub01-net01",
+      "role": "attached",
+      "source": "sub01",
+      "target": "net01"
+    },
+    {
+      "id": "e-dc-sub01",
+      "role": "attached",
+      "source": "dc",
+      "target": "sub01"
+    },
+    {
+      "id": "e-dc-joins",
+      "role": "joins",
+      "source": "dc",
+      "target": "minilab"
+    },
+    {
+      "id": "e-ws-sub01",
+      "role": "attached",
+      "source": "ws",
+      "target": "sub01"
+    },
+    {
+      "id": "e-ws-joins",
+      "role": "joins",
+      "source": "ws",
+      "target": "minilab"
+    },
+    {
+      "id": "e-jumpbox-sub01",
+      "role": "attached",
+      "source": "jumpbox",
+      "target": "sub01"
+    },
+    {
+      "id": "e-jumpbox-net01-manages",
+      "role": "manages",
+      "source": "jumpbox",
+      "target": "net01"
+    }
+  ]
+}

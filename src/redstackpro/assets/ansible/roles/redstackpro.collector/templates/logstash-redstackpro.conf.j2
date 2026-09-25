@@ -1,0 +1,621 @@
+{{ ansible_managed | comment }}
+# The beats input is the port the topology put in the overlay. Which hosts may
+# reach it is enforced in the generated firewall rules, not here.
+#
+# Three log classes, three indices, routed on the class the shipper tagged. The
+# model is RedELK, which keeps redirector traffic and teamserver operations in
+# separate indices because they answer different questions and a single index
+# forces every query to filter first. Ours are:
+#
+#   redstackpro-redirtraffic-*  every request that touched a front door
+#   redstackpro-callbacks-*     the subset that carried the key and was proxied
+#   redstackpro-auth-*          logins to the operator's own infrastructure
+#   redstackpro-c2-*            what the teamservers themselves said
+#
+# callbacks is derived rather than shipped: a request that presented a valid
+# gating header AND named a backend is, by construction, a beacon reaching its
+# teamserver. That needs no per-C2 log parser and works the day a range comes up.
+#
+# It also cannot say WHICH implant called, only which teamserver answered, which
+# is the ceiling of anything derived from a redirector. The c2 class is what
+# lifts it: sliver's audit log names the operator, the method and the session or
+# beacon id. The two indices answer different halves and neither replaces the
+# other, so the derivation above stays exactly as it is.
+
+input {
+  beats {
+    port => {{ redstackpro_collector_ingest_port }}
+{% if redstackpro_collector_tls | bool %}
+    ssl_enabled => true
+    ssl_certificate => "{{ redstackpro_collector_tls_dir }}/collector.crt"
+    ssl_key => "{{ redstackpro_collector_tls_dir }}/collector.pkcs8.key"
+{% endif %}
+  }
+}
+
+filter {
+  # The shipper tags every event with the node it came from, which is the topology
+  # identity rather than a hostname someone can change.
+  mutate {
+    rename => { "[fields][redstackpro_node_id]" => "[redstackpro][node_id]" }
+    rename => { "[fields][redstackpro_kind]" => "[redstackpro][kind]" }
+    rename => { "[fields][redstackpro_log_type]" => "[redstackpro][log_type]" }
+    # Only the c2 inputs carry these. A rename of a field that is not there is a
+    # no-op, so they unpack in the same place as the rest rather than in a branch.
+    rename => { "[fields][redstackpro_c2_product]" => "[redstackpro][c2][product]" }
+    rename => { "[fields][redstackpro_c2_stream]" => "[redstackpro][c2][stream]" }
+  }
+
+  # ---------------------------------------------------------- redirector traffic
+  if [redstackpro][log_type] == "redirtraffic" {
+    # combined, plus the two fields the redstackpro format adds. Apache and nginx
+    # are configured to emit the same shape, so one pattern serves both.
+    grok {
+      match => { "message" => [
+        '%{IPORHOST:[source][ip]} %{USER:[http][ident]} %{USER:[user][name]} \[%{HTTPDATE:[redstackpro][timestamp]}\] "%{WORD:[http][request][method]} %{NOTSPACE:[url][original]} HTTP/%{NUMBER:[http][version]}" %{INT:[http][response][status_code]} (?:%{INT:[http][response][body][bytes]}|-) "%{DATA:[http][request][referrer]}" "%{DATA:[user_agent][original]}" rsp_gate="%{DATA:[redstackpro][gate_presented]}" rsp_backend="%{DATA:[redstackpro][backend]}" rsp_host="%{DATA:[url][domain]}"'
+      ] }
+      tag_on_failure => ["_redirtraffic_unparsed"]
+    }
+
+    date {
+      match => [ "[redstackpro][timestamp]", "dd/MMM/yyyy:HH:mm:ss Z" ]
+      target => "@timestamp"
+      timezone => "Etc/UTC"
+    }
+
+    # An absent header and an absent backend both log "-", which is a value
+    # rather than a gap. Normalising here means a dashboard filters on a boolean
+    # instead of every query knowing the sentinel.
+    # "-" is the absent sentinel, but a field can also be absent because the
+    # grok did not match at all, and the two must land in the same place. The
+    # first version only tested the sentinel, so an UNPARSED line fell to the
+    # else and was labelled proxied -- a scanner probing /%2e%2e%2f%2eenv from
+    # Amsterdam was cloned into the callbacks index as a beacon reaching a
+    # teamserver. A dashboard that counts scans as callbacks is worse than one
+    # with no data.
+    if ![redstackpro][gate_presented] or [redstackpro][gate_presented] == "-" {
+      mutate { remove_field => ["[redstackpro][gate_presented]"] }
+      mutate { add_field => { "[redstackpro][gate]" => "absent" } }
+    } else {
+      mutate { add_field => { "[redstackpro][gate]" => "presented" } }
+    }
+
+    if ![redstackpro][backend] or [redstackpro][backend] == "-" {
+      mutate { remove_field => ["[redstackpro][backend]"] }
+      mutate { add_field => { "[redstackpro][proxied]" => "false" } }
+    } else {
+      mutate { add_field => { "[redstackpro][proxied]" => "true" } }
+    }
+
+    # THE signal worth alarming on, and the reason the gate is logged as
+    # presented rather than as a yes/no. Someone who sends a wrong token has
+    # found a path that is not linked from anywhere, which means they are looking
+    # rather than browsing. RedELK calls this class of query a bluecheck.
+    if [redstackpro][gate] == "presented" and [redstackpro][proxied] == "false" {
+      mutate { add_tag => ["rsp_bad_key"] }
+    }
+
+    # The URI prefix a request aimed at, which is what makes "traffic per front
+    # door per backend" a chart rather than a string search.
+    grok {
+      match => { "[url][original]" => "^(?<[redstackpro][uri_prefix]>/[^/]+(?:/[^/]+)?)" }
+      tag_on_failure => []
+    }
+
+    useragent {
+      source => "[user_agent][original]"
+      target => "[user_agent]"
+    }
+
+    # Where the request came from. The database ships with logstash; an address
+    # it does not know simply adds no fields rather than failing the event.
+    #
+    # target is [source], NOT [source][geo]: the filter adds its own `geo` object
+    # under whatever target it is given, so naming [source][geo] produced
+    # source.geo.geo.country_name. ECS says source.geo.*, the dashboard queries
+    # that, and the panel was silently empty until a field listing showed the
+    # doubled path.
+    geoip {
+      source => "[source][ip]"
+      target => "[source]"
+      tag_on_failure => []
+    }
+
+    mutate {
+      convert => {
+        "[http][response][status_code]" => "integer"
+        "[http][response][body][bytes]" => "integer"
+      }
+    }
+
+    # A proxied request that presented a valid key IS a beacon callback. Cloning
+    # rather than moving keeps the full traffic picture intact while giving
+    # callbacks their own index to chart and retain differently.
+    # Both conditions, not just the proxy flag: a callback is a request that
+    # presented the key AND reached a teamserver. Either alone is something else.
+    if [redstackpro][proxied] == "true" and [redstackpro][gate] == "presented" {
+      clone {
+        clones => ["callback"]
+      }
+    }
+  }
+
+  # ------------------------------------------------------------------- logins
+  if [redstackpro][log_type] == "auth" {
+    grok {
+      match => { "message" => [
+        # Debian's rsyslog writes ISO8601 by default now, not the classic
+        # 'Sep 13 19:56:54' that SYSLOGTIMESTAMP matches. Both are listed,
+        # ISO first because it is what current hosts actually emit. Found on
+        # a live range: every auth line arrived tagged unrecognised and the
+        # sample showed the format in one glance.
+        '%{TIMESTAMP_ISO8601:[redstackpro][timestamp]} %{SYSLOGHOST:[host][name]} %{DATA:[process][name]}(?:\[%{POSINT:[process][pid]}\])?: %{GREEDYDATA:[redstackpro][detail]}',
+        '%{SYSLOGTIMESTAMP:[redstackpro][timestamp]} %{SYSLOGHOST:[host][name]} %{DATA:[process][name]}(?:\[%{POSINT:[process][pid]}\])?: %{GREEDYDATA:[redstackpro][detail]}'
+      ] }
+      tag_on_failure => ["_auth_unparsed"]
+    }
+    # The portal is a container logging in Java's shape, not syslog's, so the
+    # pattern above does not fit it and [detail] stays unset. Guacamole is the
+    # operator's ACTUAL front door -- sshd never sees a portal login -- so these
+    # lines matter more than the sshd ones, and dropping them as unparsed would
+    # lose the better half of "who logged in".
+    if ![redstackpro][detail] {
+      grok {
+        match => { "message" => [
+          'User "%{DATA:[user][name]}" successfully authenticated from \[%{IP:[source][ip]}',
+          'Authentication attempt from \[%{IP:[source][ip]}(?:, [^\]]*)?\] for user "%{DATA:[user][name]}" failed'
+        ] }
+        tag_on_failure => ["_portal_unparsed"]
+      }
+      if "_portal_unparsed" not in [tags] {
+        mutate { add_field => { "[redstackpro][auth][method]" => "portal" } }
+        if [message] =~ /successfully authenticated/ {
+          mutate { add_field => { "[event][outcome]" => "success" } }
+        } else {
+          mutate { add_field => { "[event][outcome]" => "failure" } }
+        }
+      }
+    }
+
+    # Only the lines that say someone got in, or tried to. Everything else in
+    # auth.log is session bookkeeping and would bury the signal.
+    if [redstackpro][detail] =~ /^Accepted / {
+      grok {
+        match => { "[redstackpro][detail]" =>
+          "Accepted %{WORD:[redstackpro][auth][method]} for %{USER:[user][name]} from %{IP:[source][ip]} port %{INT:[source][port]}" }
+        tag_on_failure => []
+      }
+      mutate { add_field => { "[event][outcome]" => "success" } }
+    } else if [redstackpro][detail] =~ /^Failed / {
+      grok {
+        match => { "[redstackpro][detail]" =>
+          "Failed %{WORD:[redstackpro][auth][method]} for (?:invalid user )?%{USER:[user][name]} from %{IP:[source][ip]} port %{INT:[source][port]}" }
+        tag_on_failure => []
+      }
+      mutate { add_field => { "[event][outcome]" => "failure" } }
+    } else if [redstackpro][detail] {
+      # Parsed as syslog and said nothing about an authentication decision:
+      # session opened, cron, sudo bookkeeping. Dropping it is the point -- it
+      # is most of auth.log and it buries the logins this index exists to show.
+      drop { }
+    } else if ![event][outcome] {
+      # Neither shape matched and the portal branch did not classify it. KEPT,
+      # not dropped: a line nobody has seen yet is a pattern still to write, and
+      # a silent drop is how you find out months later that a whole source was
+      # never indexed. It arrives tagged, so it is easy to find and easy to
+      # count, and the tag going quiet is how you know the patterns are right.
+      mutate { add_tag => ["rsp_auth_unrecognised"] }
+    }
+
+    if [source][ip] {
+      geoip {
+        source => "[source][ip]"
+        target => "[source]"
+        tag_on_failure => []
+      }
+    }
+  }
+
+  # -------------------------------------------------------- teamserver activity
+  # The class the shipper could always send and the pipeline could never read.
+  # Unlike the other two classes, c2 has no single format to parse: four products
+  # write four unrelated shapes, so the shipper stamps which product and which of
+  # its streams each event came from and the branches below route on that. Read
+  # the stamp, never sniff the line -- a heuristic that guesses sliver from a
+  # leading brace is a heuristic that mislabels the day another C2 emits JSON.
+  if [redstackpro][log_type] == "c2" {
+
+    # ---- sliver ------------------------------------------------------------
+    # Its root logger is a logrus JSONFormatter onto sliver.json, so the file
+    # streams are an envelope of level/msg/time with the payload inside msg.
+    # The journal stream is ordinary systemd text and is left as message.
+    if [redstackpro][c2][product] == "sliver" and [redstackpro][c2][stream] != "unit" {
+      json {
+        source => "message"
+        target => "[rsp_logrus]"
+        tag_on_failure => ["_c2_unparsed"]
+      }
+
+      if "_c2_unparsed" not in [tags] {
+        # The event's own time, not filebeat's read time. Without this every c2
+        # document is stamped when the shipper happened to catch up, which makes
+        # the one chart anybody wants -- activity over time -- a chart of the
+        # shipper rather than of the teamserver.
+        date {
+          match => [ "[rsp_logrus][time]", "ISO8601" ]
+          target => "@timestamp"
+        }
+        mutate { rename => { "[rsp_logrus][level]" => "[log][level]" } }
+      }
+
+      # audit.json is the one worth having, and it is doubly encoded: sliver
+      # marshals its audit struct to JSON and passes the RESULT AS A STRING to
+      # the logger, so the fields sit inside logrus's msg rather than beside it.
+      # One json filter gets you a document whose only interesting field is a
+      # blob; it takes two.
+      if [redstackpro][c2][stream] == "audit" and [rsp_logrus][msg] {
+        json {
+          source => "[rsp_logrus][msg]"
+          target => "[rsp_audit]"
+          tag_on_failure => ["_c2_audit_unparsed"]
+        }
+        mutate {
+          rename => {
+            "[rsp_audit][user]"      => "[user][name]"
+            "[rsp_audit][method]"    => "[redstackpro][c2][method]"
+            "[rsp_audit][session]"   => "[redstackpro][c2][session]"
+            "[rsp_audit][beacon]"    => "[redstackpro][c2][beacon]"
+          }
+        }
+
+        # remote_ip is NOT an address. Sliver writes a Go net.Addr, so it is
+        # host:port -- "127.0.0.1:54962" -- and source.ip is mapped as type ip.
+        # Renaming it straight across made OpenSearch reject the WHOLE document
+        # with mapper_parsing_exception, so every audit event was dropped and the
+        # operator attribution this branch exists to produce never landed. The
+        # parse itself was perfect; one strict field threw the event away.
+        #
+        # Seen on a live range 2026-09-18, and invisible before that: the shape
+        # is right in every sample, and nothing short of a real teamserver and a
+        # real index tells you the value has a port glued to it.
+        if [rsp_audit][remote_ip] {
+          grok {
+            match => { "[rsp_audit][remote_ip]" => [
+              "^\[%{IPV6:[source][ip]}\]:%{POSINT:[source][port]:int}$",
+              "^%{IPV4:[source][ip]}:%{POSINT:[source][port]:int}$",
+              "^%{IP:[source][ip]}$"
+            ] }
+            tag_on_failure => ["_c2_remote_ip_unparsed"]
+          }
+        }
+
+        # session and beacon are the same question asked of two transports, and
+        # sliver sets whichever applies. Collapsing them gives the field this
+        # whole class exists for: WHICH IMPLANT. The callbacks index, derived
+        # from the redirector, can only ever say which teamserver answered.
+        if [redstackpro][c2][session] {
+          mutate { add_field => { "[redstackpro][c2][implant]" => "%{[redstackpro][c2][session]}" } }
+        } else if [redstackpro][c2][beacon] {
+          mutate { add_field => { "[redstackpro][c2][implant]" => "%{[redstackpro][c2][beacon]}" } }
+        }
+
+        # An audit entry is an operator acting, so say so in the same field the
+        # auth class uses. That makes "who touched this range" one query across
+        # logins and teamserver actions instead of two.
+        mutate { add_field => { "[event][kind]" => "event" } }
+        if [user][name] {
+          mutate { add_field => { "[event][category]" => "process" } }
+        }
+      } else if [redstackpro][c2][stream] == "app" and [rsp_logrus][msg] {
+        # The human-readable line, promoted over the envelope so Discover shows
+        # the message rather than a JSON blob.
+        mutate { replace => { "message" => "%{[rsp_logrus][msg]}" } }
+      }
+
+      mutate { remove_field => ["[rsp_logrus]", "[rsp_audit]"] }
+    }
+
+    # ---- adaptix -----------------------------------------------------------
+    # Its "logs" package writes no file: the whole logger is fmt.Printf to
+    # stdout, so the journal is not a fallback here, it is the only source.
+    # Layout is `[sev] message [dd/MM HH:mm:ss]` with ANSI in it.
+    #
+    # The escapes are in an odd place because the server calls its own
+    # SetColor(color, text) with the arguments swapped, so the marker renders as
+    # plain text followed by an EMPTY colour span. Stripping all escapes first
+    # means the grok never has to care.
+    # ---- adaptix, the task export -------------------------------------------
+    # The task history out of its database, which is the only place Adaptix
+    # records an operator or an agent. Written as JSON lines by the exporter on
+    # the teamserver, so there is nothing to grok.
+    if [redstackpro][c2][product] == "adaptix" and [redstackpro][c2][stream] == "events" {
+      json {
+        source => "message"
+        target => "[rsp_adx]"
+        tag_on_failure => ["_c2_unparsed"]
+      }
+      if "_c2_unparsed" not in [tags] {
+        mutate {
+          rename => {
+            "[rsp_adx][operator]" => "[user][name]"
+            "[rsp_adx][agent_id]" => "[redstackpro][c2][implant]"
+            "[rsp_adx][command]" => "[redstackpro][c2][command]"
+            "[rsp_adx][agent_name]" => "[redstackpro][c2][implant_label]"
+            "[rsp_adx][agent_username]" => "[redstackpro][c2][implant_user]"
+            "[rsp_adx][agent_computer]" => "[host][name]"
+            "[rsp_adx][agent_external_ip]" => "[source][ip]"
+            "[rsp_adx][event]" => "[redstackpro][c2][event]"
+          }
+        }
+        # The exporter already resolved the epoch-unit ambiguity and emits
+        # ISO8601, so this is a real event time rather than a poll time. It is
+        # the one place in this class where a date filter earns its keep: the
+        # file is written by a timer, so filebeat's read time can be half a
+        # minute after the operator actually ran the command.
+        date {
+          match => [ "[rsp_adx][started]", "ISO8601" ]
+          target => "@timestamp"
+          tag_on_failure => []
+        }
+        mutate { add_field => { "[event][kind]" => "event" } }
+        mutate { replace => { "message" => "%{[redstackpro][c2][command]}" } }
+      }
+      # KEPT, not removed. The renames above take the fields the dashboards and
+      # the ECS names need; everything else the exporter wrote -- task_id, the
+      # listener, the agent's domain, its internal address, whether it is
+      # elevated, when it finished -- is real and was being dropped on the floor
+      # by a remove_field, which is a silent loss that nothing would report.
+      # Under its own object it costs one mapping and stays answerable, and a
+      # field added to the exporter later arrives without a pipeline change.
+      mutate { rename => { "[rsp_adx]" => "[redstackpro][c2][adaptix]" } }
+    }
+
+    # ---- adaptix, the journal ----------------------------------------------
+    if [redstackpro][c2][product] == "adaptix" and [redstackpro][c2][stream] != "events" {
+      mutate { gsub => [ "message", "\p{Cntrl}\[[0-9;]*[a-zA-Z]", "" ] }
+      grok {
+        match => { "message" => [
+          '^\s*\[(?<[rsp_sev]>[*+!\-#])\] (?<[redstackpro][c2][detail]>.*) \[%{NOTSPACE:[rsp_date]} %{NOTSPACE:[rsp_time]}\]\s*$'
+        ] }
+        tag_on_failure => ["_c2_unparsed"]
+      }
+      # [*] info  [+] success  [!] warn  [-] error  [#] debug
+      if [rsp_sev] == "-" {
+        mutate { add_field => { "[log][level]" => "error" } }
+      } else if [rsp_sev] == "!" {
+        mutate { add_field => { "[log][level]" => "warn" } }
+      } else if [rsp_sev] == "#" {
+        mutate { add_field => { "[log][level]" => "debug" } }
+      } else {
+        mutate { add_field => { "[log][level]" => "info" } }
+      }
+      mutate { remove_field => ["[rsp_sev]", "[rsp_date]", "[rsp_time]"] }
+    }
+
+    # ---- mythic, the server container --------------------------------------
+    # mythic_server is zerolog with a ConsoleWriter, so it is colourised text
+    # rather than JSON, and its fields are developer diagnostics: func, line and
+    # error. It carries NO operator and NO callback id on any code path, so this
+    # branch deliberately extracts only health. Anything claiming to read a
+    # callback out of THIS stream would be inventing fields; the attribution
+    # comes from the logging container below.
+    if [redstackpro][c2][product] == "mythic" and [redstackpro][c2][stream] == "unit" {
+      mutate { gsub => [ "message", "\p{Cntrl}\[[0-9;]*[a-zA-Z]", "" ] }
+      grok {
+        match => { "message" => [
+          '^%{TIMESTAMP_ISO8601:[rsp_ts]} (?<[rsp_lvl]>[A-Z?]{3}) (?<[redstackpro][c2][detail]>.*)$'
+        ] }
+        tag_on_failure => ["_c2_unparsed"]
+      }
+      if [rsp_lvl] == "ERR" or [rsp_lvl] == "FTL" or [rsp_lvl] == "PNC" {
+        mutate { add_field => { "[log][level]" => "error" } }
+      } else if [rsp_lvl] == "WRN" {
+        mutate { add_field => { "[log][level]" => "warn" } }
+      } else if [rsp_lvl] == "DBG" or [rsp_lvl] == "TRC" {
+        mutate { add_field => { "[log][level]" => "debug" } }
+      } else {
+        mutate { add_field => { "[log][level]" => "info" } }
+      }
+      mutate { remove_field => ["[rsp_ts]", "[rsp_lvl]"] }
+    }
+
+    # ---- mythic, the logging container --------------------------------------
+    # The stream that can actually answer "who did what to which implant".
+    # Mythic publishes new_callback / new_task / new_response to RabbitMQ and the
+    # logging container subscribes and writes them as zerolog JSON -- no
+    # ConsoleWriter this time, so it really is JSON rather than text with colour
+    # in it. `message` carries the ACTION, and `data` the payload.
+    #
+    # The payload is shaped inconsistently and that has to be handled rather than
+    # wished away: the container's callback handler logs the whole envelope, so a
+    # new_callback puts the operator at data.username and the callback itself one
+    # level further down at data.data.*. Every other handler logs the bare
+    # payload, so a new_task has its fields directly under data. That asymmetry
+    # is upstream's, and reading new_task's operator from data.username would
+    # find nothing.
+    if [redstackpro][c2][product] == "mythic" and [redstackpro][c2][stream] == "events" {
+      json {
+        source => "message"
+        target => "[rsp_mythic]"
+        tag_on_failure => ["_c2_unparsed"]
+      }
+
+      if "_c2_unparsed" not in [tags] {
+        # No date filter, though this stream is the one c2 source that prints a
+        # complete RFC3339 timestamp with a year and a zone. It arrives through
+        # journald, which already stamped it with the real entry time, and the
+        # logger's own `time` is the moment it wrote the line rather than
+        # anything earlier. Parsing it would swap a correct timestamp for an
+        # equivalent one and break the rule the rest of this branch follows.
+        #
+        # The action is the event type, and it is what `message` holds rather
+        # than any prose. Keep it as its own field so a panel can split on it.
+        mutate { rename => { "[rsp_mythic][message]" => "[redstackpro][c2][event]" } }
+
+        # new_callback: envelope at data, payload at data.data.
+        if [redstackpro][c2][event] == "new_callback" {
+          mutate {
+            rename => {
+              "[rsp_mythic][data][username]" => "[user][name]"
+              # THE JOIN KEY, and it has to be `id` rather than the more
+              # readable agent_callback_id. A task carries `callback_id`, which
+              # is the callback's DATABASE id, so keying callbacks on their uuid
+              # instead would put a uuid on one event and an integer on the
+              # other and the two would never join -- every task orphaned from
+              # the callback it ran against, with nothing reporting a problem.
+              "[rsp_mythic][data][data][id]" => "[redstackpro][c2][implant]"
+              # Kept alongside it: the uuid is what appears on the wire and
+              # display_id is what the Mythic UI shows an operator, so these are
+              # how a person maps the join key back to something they recognise.
+              "[rsp_mythic][data][data][agent_callback_id]" => "[redstackpro][c2][implant_uuid]"
+              "[rsp_mythic][data][data][display_id]" => "[redstackpro][c2][implant_label]"
+              "[rsp_mythic][data][data][user]" => "[redstackpro][c2][implant_user]"
+              "[rsp_mythic][data][data][host]" => "[host][name]"
+              "[rsp_mythic][data][data][external_ip]" => "[source][ip]"
+              "[rsp_mythic][data][data][process_name]" => "[process][name]"
+            }
+          }
+        } else {
+          # new_task and the rest: the payload IS data. A task carries the
+          # operator and the callback it was run against, which is the pair that
+          # makes this whole class of log worth shipping.
+          mutate {
+            rename => {
+              "[rsp_mythic][data][operator_username]" => "[user][name]"
+              "[rsp_mythic][data][callback_id]" => "[redstackpro][c2][implant]"
+              "[rsp_mythic][data][command_name]" => "[redstackpro][c2][method]"
+              "[rsp_mythic][data][display_params]" => "[redstackpro][c2][command]"
+            }
+          }
+        }
+
+        mutate { add_field => { "[event][kind]" => "event" } }
+        # Readable in Discover rather than a blob, and it matches what the sliver
+        # audit branch does with its own envelope.
+        mutate { replace => { "message" => "%{[redstackpro][c2][event]}" } }
+      }
+
+      # THE PART THAT IS NOT OPTIONAL. A new_callback payload carries the
+      # implant's dec_key and enc_key. Shipping those would put live implant
+      # crypto into the log store, where it is searchable by anyone who can open
+      # the dashboard and retained for as long as the index is. Dropped before
+      # the event leaves this branch, whether or not the parse above succeeded.
+      mutate {
+        remove_field => [
+          "[rsp_mythic][data][data][dec_key]",
+          "[rsp_mythic][data][data][enc_key]",
+          "[rsp_mythic][data][dec_key]",
+          "[rsp_mythic][data][enc_key]"
+        ]
+      }
+      mutate { remove_field => ["[rsp_mythic]"] }
+    }
+
+    # ---- cobalt strike -----------------------------------------------------
+    # Text files, no structured output of any kind, and the one source here
+    # whose implant id is NOT in the line: it is in the FILENAME,
+    # beacon_<bid>.log, so it comes off the path rather than the message. The
+    # operator IS in the line, but only on [input].
+    if [redstackpro][c2][product] == "cobaltstrike" {
+      grok {
+        match => { "message" => [
+          '^%{NOTSPACE:[rsp_date]} %{NOTSPACE:[rsp_time]} %{WORD:[rsp_zone]} \[(?<[redstackpro][c2][entry]>[a-z]+)\]\s*(?<[redstackpro][c2][detail]>(?m:.*))$',
+          # events.log is the operator chat and uses *** rather than a type.
+          '^%{NOTSPACE:[rsp_date]} %{NOTSPACE:[rsp_time]} %{WORD:[rsp_zone]} \*\*\* (?<[redstackpro][c2][detail]>(?m:.*))$'
+        ] }
+        tag_on_failure => ["_c2_unparsed"]
+      }
+
+      # The beacon id, from the path. logs/YYMMDD/<target>/beacon_<bid>.log
+      grok {
+        match => { "[log][file][path]" => [
+          "beacon_(?<[redstackpro][c2][beacon]>[0-9]+)\.log$"
+        ] }
+        tag_on_failure => []
+      }
+      if [redstackpro][c2][beacon] {
+        mutate { add_field => { "[redstackpro][c2][implant]" => "%{[redstackpro][c2][beacon]}" } }
+      }
+
+      # Only [input] carries an operator. The angle brackets on [task] hold
+      # MITRE technique ids -- <T1113, T1093> -- so a pattern that read the
+      # brackets without checking the entry type would file ATT&CK numbers as
+      # the names of people.
+      if [redstackpro][c2][entry] == "input" {
+        grok {
+          match => { "[redstackpro][c2][detail]" =>
+            "^<%{DATA:[user][name]}> %{GREEDYDATA:[redstackpro][c2][command]}" }
+          tag_on_failure => []
+        }
+      }
+      mutate { remove_field => ["[rsp_date]", "[rsp_time]", "[rsp_zone]"] }
+    }
+
+    # The printed timestamp is deliberately NOT re-derived for the three text
+    # sources above. Two of them reach us through journald, whose own entry time
+    # filebeat uses, and that is the real event time rather than a read time --
+    # the problem the sliver file inputs had. The printed ones are worse anyway:
+    # adaptix prints dd/MM with NO YEAR in host-local time, and cobalt strike
+    # prints MM/dd with no year either, so parsing them would replace a correct
+    # timestamp with one guessed at a year. Cobalt Strike's date lives in the
+    # directory name, and if its line time is ever wanted, that is where the year
+    # has to come from.
+
+    # A c2 event nobody claimed. KEPT and tagged, for the same reason the auth
+    # class keeps its unrecognised lines: a silent drop is how a whole source
+    # turns out to have been missing for months. The tag going quiet is the
+    # signal that the branches above cover what actually arrives.
+    if ![redstackpro][c2][product] {
+      mutate { add_tag => ["rsp_c2_unstamped"] }
+    }
+  }
+}
+
+output {
+{% if redstackpro_collector_sink == 'opensearch' %}
+  # OpenSearch needs its OWN output plugin. Elastic's logstash-output-elasticsearch
+  # runs a product check and refuses to talk to OpenSearch on purpose -- it fails
+  # with "Could not connect to a compatible version of Elasticsearch", the
+  # pipeline never starts, and logstash EXITS. systemd still reported the unit
+  # active, so a range came up with nothing bound on the ingest port and zero
+  # indices, having reported a successful deploy. Found live 2026-09-13.
+  #
+  # PLAIN http, and no credentials, because opensearch.yml sets
+  # plugins.security.disabled: the demo security plugin would generate its own
+  # certificates and admin password on first boot, neither of which belongs in a
+  # generated export, and the sink is bound to loopback where its only client is
+  # the receiver on this same host.
+  #
+  # The admin password that 2.12 demands at INSTALL time is for the package's own
+  # post-install step; it is not evidence that the running node speaks TLS.
+  # Assuming it was cost a deploy: logstash answered "Unsupported or unrecognized
+  # SSL message" -- a TLS client meeting a plaintext server -- and the pipeline
+  # never started, so nothing bound 5044.
+  if "callback" in [tags] {
+    opensearch {
+      hosts => ["http://127.0.0.1:9200"]
+      index => "redstackpro-callbacks-%{+YYYY.MM.dd}"
+    }
+  } else {
+    opensearch {
+      hosts => ["http://127.0.0.1:9200"]
+      index => "redstackpro-%{[redstackpro][log_type]}-%{+YYYY.MM.dd}"
+    }
+  }
+{% elif redstackpro_collector_sink == 'elasticsearch' %}
+  elasticsearch {
+    hosts => ["http://127.0.0.1:9200"]
+    index => "redstackpro-%{[redstackpro][log_type]}-%{+YYYY.MM.dd}"
+  }
+{% elif redstackpro_collector_sink == 'splunk' %}
+  http {
+    url => "https://127.0.0.1:{{ redstackpro_splunk_hec_port }}/services/collector/event"
+    http_method => "post"
+    format => "json"
+    headers => {
+      "Authorization" => "Splunk ${REDSTACKPRO_HEC_TOKEN}"
+    }
+    cacert => "{{ redstackpro_collector_tls_dir }}/redstackpro-ca.crt"
+  }
+{% endif %}
+}

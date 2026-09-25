@@ -1,0 +1,135 @@
+{
+  "schema_version": "0.3.0",
+  "mode": "ops",
+  "name": "Minimal single redirector",
+  "description": "Smallest valid graph. One redirector fronting one teamserver, reached for configuration through a jumpbox. No log collection.",
+  "nodes": [
+    {
+      "id": "network-main",
+      "kind": "network",
+      "overlay": {
+        "cidr": "10.20.0.0/16"
+      }
+    },
+    {
+      "id": "subnet-mgmt",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.20.0.0/24",
+        "egress": "allowed",
+        "exposure": "internet",
+        "tier": "management"
+      }
+    },
+    {
+      "id": "subnet-rdir",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.20.10.0/24",
+        "egress": "allowed",
+        "exposure": "internet",
+        "tier": "redirector"
+      }
+    },
+    {
+      "id": "subnet-c2",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.20.20.0/24",
+        "egress": "allowed",
+        "exposure": "local",
+        "tier": "c2"
+      }
+    },
+    {
+      "id": "jump-01",
+      "kind": "jumpbox",
+      "overlay": {
+        "services": [
+          "ssh",
+          "wireguard"
+        ],
+        "certificate_authority": true
+      }
+    },
+    {
+      "id": "rdir-01",
+      "kind": "redirector",
+      "overlay": {
+        "server": "nginx",
+        "hostname": "assets.example-lure.com",
+        "tls": {
+          "cert_source": "letsencrypt"
+        },
+        "gating": {
+          "header_name": "X-Request-Id",
+          "header_value": "CHANGE-ME",
+          "redirect_rules": true,
+          "decoy": "cdn"
+        }
+      }
+    },
+    {
+      "id": "ts-01",
+      "kind": "teamserver",
+      "overlay": {
+        "c2": "mythic"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-subnet-mgmt-network",
+      "role": "attached",
+      "source": "subnet-mgmt",
+      "target": "network-main"
+    },
+    {
+      "id": "e-subnet-rdir-network",
+      "role": "attached",
+      "source": "subnet-rdir",
+      "target": "network-main"
+    },
+    {
+      "id": "e-subnet-c2-network",
+      "role": "attached",
+      "source": "subnet-c2",
+      "target": "network-main"
+    },
+    {
+      "id": "e-jump-subnet",
+      "role": "attached",
+      "source": "jump-01",
+      "target": "subnet-mgmt"
+    },
+    {
+      "id": "e-rdir-subnet",
+      "role": "attached",
+      "source": "rdir-01",
+      "target": "subnet-rdir"
+    },
+    {
+      "id": "e-ts-subnet",
+      "role": "attached",
+      "source": "ts-01",
+      "target": "subnet-c2"
+    },
+    {
+      "id": "e-front-01",
+      "role": "fronts",
+      "source": "rdir-01",
+      "target": "ts-01",
+      "protocol": "https",
+      "listen_port": 443,
+      "upstream_port": 443,
+      "uri_prefix": "/cdn/assets"
+    },
+    {
+      "id": "e-manage-network",
+      "role": "manages",
+      "source": "jump-01",
+      "target": "network-main"
+    }
+  ],
+  "prefix": "rt"
+}

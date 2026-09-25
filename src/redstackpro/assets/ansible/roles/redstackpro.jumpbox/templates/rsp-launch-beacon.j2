@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+{{ ansible_managed | comment }}
+# Headless counterpart to the portal's patient-zero tile.
+#
+#   rsp-launch-beacon <file> [host] [user]
+#
+# <file> is a name in the drop folder ({{ redstackpro_guacamole_drop_dir }}),
+# the same folder every RDP tile maps as a drive -- so a beacon put there is
+# reachable both ways, by a person clicking and by this script. host and user
+# default to the patient-zero landing spot the compiler chose.
+#
+# See launch-beacon.yml for why staging uses the range admin and execution does
+# not.
+set -euo pipefail
+
+DROP="{{ redstackpro_guacamole_drop_dir }}"
+PLAYBOOK="{{ redstackpro_jumpbox_share_dir }}/launch-beacon.yml"
+PROVISION="{{ redstackpro_provision_dir }}"
+{% set tile = (redstackpro_jumpbox_foothold_tiles | default([]))[0] | default({}) %}
+DEF_HOST="{{ tile.host | default('') }}"
+DEF_USER="{{ (tile.domain ~ '\\' ~ tile.username) if tile.domain is defined and tile.domain else (tile.username | default('')) }}"
+
+usage() {
+  echo "usage: $(basename "$0") <file-in-drop-folder> [host] [user]" >&2
+  echo "  drop folder: $DROP" >&2
+  [ -n "$DEF_HOST" ] && echo "  defaults:    $DEF_HOST as $DEF_USER" >&2
+  exit 2
+}
+
+[ $# -ge 1 ] || usage
+BEACON="$DROP/$1"
+HOST="${2:-$DEF_HOST}"
+USER_SPEC="${3:-$DEF_USER}"
+
+[ -f "$BEACON" ] || { echo "no such file: $BEACON" >&2; exit 1; }
+[ -n "$HOST" ] || { echo "no target host, and this range declared no patient zero" >&2; exit 1; }
+
+# The lab password is the fallback the dc role uses for a user with no declared
+# password, so it is also this script's fallback. It is read here rather than
+# baked in, so it never lands in the export.
+PASSWORD="{{ tile.password | default('') }}"
+if [ -z "$PASSWORD" ]; then
+  PASSWORD="$(sudo cat /etc/redstackpro/lab-password)"
+fi
+
+# Extra vars go in a 0600 file rather than on the command line: an argv is
+# readable by every account on this box, and this one carries a credential.
+# SINGLE-quoted YAML on purpose: run_as is DOMAIN\user, and a backslash in a
+# double-quoted YAML scalar is an invalid escape (\h) that fails to parse. Single
+# quotes are literal -- no escapes -- so the backslash and the lab password's
+# special characters pass through untouched. (A single quote in a value would
+# still need doubling, but neither a NETBIOS name nor the generated lab password
+# charset contains one.)
+VARS="$(mktemp)"
+chmod 600 "$VARS"
+trap 'rm -f "$VARS"' EXIT
+cat >"$VARS" <<EOF
+target: '$HOST'
+beacon: '$BEACON'
+run_as: '$USER_SPEC'
+run_password: '$PASSWORD'
+EOF
+
+echo "staging $(basename "$BEACON") on $HOST, launching as $USER_SPEC"
+cd "$PROVISION"
+# The provisioning tools live in the user's pip bin, which a non-login shell does
+# not add to PATH, and the Windows psrp connection reads the lab password from
+# the environment (inventory: ansible_password = env REDSTACKPRO_LAB_PASSWORD).
+# Set both here so the launcher works whether invoked from a login shell, a
+# script, or cron, without the caller having to arrange them. The lab password
+# file is root-only (0600), so sudo reads it -- the platform account has
+# passwordless sudo on this host, and reading it any other way was a permission
+# denied that emptied the psrp credential and failed the connect.
+export PATH="$HOME/.local/bin:$PATH"
+export REDSTACKPRO_LAB_PASSWORD="$(sudo cat /etc/redstackpro/lab-password)"
+# No "$@" here: the positional arguments were the file, host and user, and
+# passing them on would make ansible-playbook read them as more playbooks.
+exec ansible-playbook -i ansible/inventory.yml "$PLAYBOOK" --extra-vars "@$VARS"

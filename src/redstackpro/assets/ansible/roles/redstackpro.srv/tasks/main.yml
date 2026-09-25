@@ -1,0 +1,118 @@
+---
+# redStackPRO member server. Clean-room MIT: joins the domain the canvas points
+# it at. A Windows member joins over WinRM; a Linux member (GOAD's lx01, or
+# Dracarys's syrax) enrols with realm/sssd over SSH. Service roles and planted
+# attack paths come from the attack-path layer. See goad-native-recreation.
+
+- name: Join a Windows member server
+  ansible.builtin.include_tasks: join_windows.yml
+  when: redstackpro_srv_os | default('windows') is match('^windows')
+
+- name: Enrol a Linux member server
+  ansible.builtin.include_tasks: join_linux.yml
+  when: redstackpro_srv_os | default('windows') is not match('^windows')
+
+# A member flagged role: adcs stands up an Enterprise CA before its attack paths
+# run, so the ESCx templates have a CA to publish to.
+- name: Stand up an Enterprise CA on an ADCS member
+  ansible.builtin.include_role:
+    name: redstackpro.adcs
+  vars:
+    redstackpro_adcs_ca_name: "{{ redstackpro_join_netbios | default('redStackPro') }}-CA"
+    # A lab's ADCS member sits in a forest-root domain, so its own domain admin is
+    # the Enterprise Admin the CA install needs.
+    redstackpro_adcs_enterprise_admin: "Administrator@{{ redstackpro_join_fqdn }}"
+    # The whole forest's ESC set (the compiler aggregates ESCs declared on any node
+    # in this domain to the CA host), falling back to this host's own esc vulns.
+    redstackpro_adcs_templates: >-
+      {{ redstackpro_adcs_forest_escs
+         | default(redstackpro_srv_vulns | default([]) | select('match', '^esc') | list) }}
+    # ESC7 CA-manager and ESC13 group, aggregated from wherever they are declared,
+    # falling back to this host's own vulns_vars.
+    redstackpro_adcs_esc7_manager: >-
+      {{ (redstackpro_adcs_esc_vars | default({})).esc7_manager
+         | default((redstackpro_srv_vulns_vars | default({})).esc7_manager | default('')) }}
+    redstackpro_adcs_esc13_group: >-
+      {{ (redstackpro_adcs_esc_vars | default({})).esc13_group
+         | default((redstackpro_srv_vulns_vars | default({})).esc13_group | default('greatmaster')) }}
+    redstackpro_adcs_esc5_principal: >-
+      {{ (redstackpro_adcs_esc_vars | default({})).esc5_principal
+         | default((redstackpro_srv_vulns_vars | default({})).esc5_principal | default('Domain Users')) }}
+    redstackpro_adcs_esc14_target: >-
+      {{ (redstackpro_adcs_esc_vars | default({})).esc14_target
+         | default((redstackpro_srv_vulns_vars | default({})).esc14_target | default('')) }}
+    redstackpro_adcs_esc14_subject: >-
+      {{ (redstackpro_adcs_esc_vars | default({})).esc14_subject
+         | default((redstackpro_srv_vulns_vars | default({})).esc14_subject | default('CN=rsp-esc14')) }}
+  when:
+    - redstackpro_srv_os | default('windows') is match('^windows')
+    - redstackpro_srv_role | default('') == 'adcs'
+
+# A member flagged role: sql (or carrying mssql services/vulns) installs SQL Server
+# and its attack surface: a domain service account, sysadmins, impersonation,
+# linked servers.
+- name: Install and configure MSSQL on a SQL member
+  ansible.builtin.include_role:
+    name: redstackpro.mssql
+  vars:
+    redstackpro_mssql_domain_admin: "Administrator@{{ redstackpro_join_fqdn }}"
+    redstackpro_mssql_domain_users_group: "{{ redstackpro_join_netbios }}\\Domain Users"
+    redstackpro_mssql_vulns: "{{ redstackpro_srv_vulns | default([]) | select('match', '^mssql') | list }}"
+    # Linked-server targets (other SQL hosts to reach, often cross-domain) carried
+    # on the host overlay's vulns_vars.
+    redstackpro_mssql_linked_targets: "{{ (redstackpro_srv_vulns_vars | default({})).mssql_linked_targets | default([]) }}"
+    redstackpro_mssql_linked_logins: "{{ (redstackpro_srv_vulns_vars | default({})).mssql_linked_logins | default([]) }}"
+    redstackpro_mssql_sysadmins: "{{ (redstackpro_srv_vulns_vars | default({})).mssql_sysadmins | default([]) }}"
+    redstackpro_mssql_execas_logins: "{{ (redstackpro_srv_vulns_vars | default({})).mssql_execas_logins | default([]) }}"
+    redstackpro_mssql_execas_users: "{{ (redstackpro_srv_vulns_vars | default({})).mssql_execas_users | default([]) }}"
+    redstackpro_mssql_edition: "{{ (redstackpro_srv_vulns_vars | default({})).mssql_edition | default('express') }}"
+  when:
+    - redstackpro_srv_os | default('windows') is match('^windows')
+    - redstackpro_srv_role | default('') == 'sql' or 'mssql' in (redstackpro_srv_services | default([]))
+
+# A member carrying the iis service installs IIS and publishes the upload
+# application. Declaring the service alone is not an attack path: the iis_webshell
+# host vuln, planted later by the attack-path layer, is what makes a dropped file
+# executable. See goad-fidelity-build (F-iis-webshell).
+- name: Install and configure IIS on a web member
+  ansible.builtin.include_role:
+    name: redstackpro.iis
+  vars:
+    # Honour an iis_webshell path override so the role and the vuln agree on which
+    # folder the application writes into. Single-quoted: see files.yml on the
+    # backslash trap.
+    redstackpro_iis_upload_dir: '{{ ((redstackpro_srv_vulns_vars | default({})).iis_webshell | default({})).path | default("C:\\inetpub\\wwwroot\\upload") }}'
+  when:
+    - redstackpro_srv_os | default('windows') is match('^windows')
+    - "'iis' in (redstackpro_srv_services | default([]))"
+
+# A member flagged role: mecm stands up a MECM primary site and its attack surface
+# (NAA, client push, PXE, RBAC). Heavy install; the SQL member and this host's
+# MECM$ sysadmin grant must be in place first (ordered by the site.yml plays).
+- name: Install and configure a MECM site
+  ansible.builtin.include_role:
+    name: redstackpro.mecm
+  vars:
+    redstackpro_mecm_domain_admin: "Administrator@{{ redstackpro_join_fqdn }}"
+    redstackpro_mecm_hostname: "{{ redstackpro_srv_hostname | default(inventory_hostname | regex_replace('^cyb-', '')) }}"
+    redstackpro_mecm_fqdn: "{{ (redstackpro_srv_hostname | default(inventory_hostname | regex_replace('^cyb-', ''))) }}.{{ redstackpro_join_fqdn }}"
+    redstackpro_mecm_sql_fqdn: "{{ (redstackpro_srv_vulns_vars | default({})).mecm.sql_fqdn | default('') }}"
+    redstackpro_mecm_site_code: "{{ (redstackpro_srv_vulns_vars | default({})).mecm.site_code | default('P01') }}"
+    redstackpro_mecm_site_name: "{{ (redstackpro_srv_vulns_vars | default({})).mecm.site_name | default('redStackPRO Site') }}"
+    redstackpro_mecm_naa_account: "{{ (redstackpro_srv_vulns_vars | default({})).mecm.naa_account | default('') }}"
+    redstackpro_mecm_client_push_account: "{{ (redstackpro_srv_vulns_vars | default({})).mecm.client_push_account | default('') }}"
+    redstackpro_mecm_da_account: "{{ (redstackpro_srv_vulns_vars | default({})).mecm.da_account | default('') }}"
+    redstackpro_mecm_admin_group: "{{ (redstackpro_srv_vulns_vars | default({})).mecm.admin_group | default('') }}"
+  when:
+    - redstackpro_srv_os | default('windows') is match('^windows')
+    - redstackpro_srv_role | default('') == 'mecm'
+
+# Host-level attack paths this member declares on the canvas (SMBv1, LLMNR, etc.).
+# Windows-only for now; Linux host vulns come with the Linux attack-path work.
+- name: Plant host-level attack paths
+  ansible.builtin.include_role:
+    name: redstackpro.host_vulns
+  vars:
+    redstackpro_host_vulns: "{{ redstackpro_srv_vulns | default([]) }}"
+    redstackpro_host_vulns_vars: "{{ redstackpro_srv_vulns_vars | default({}) }}"
+  when: redstackpro_srv_os | default('windows') is match('^windows')

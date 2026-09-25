@@ -1,0 +1,22 @@
+---
+# ESC10: weak certificate-to-account mapping on the domain controller, so a
+# certificate issued for one principal can authenticate as another. Both upstream
+# GOAD cases are pure registry on the DC (no certificate template needed), and we
+# plant both under the single "esc10" catalog id:
+#   case1 - Kdc StrongCertificateBindingEnforcement = 0 (no strong binding)
+#   case2 - Schannel CertificateMappingMethods = 0x4 (weak UPN mapping)
+# See goad-fidelity-build.
+
+- name: ESC10 case1 - disable Kdc strong certificate binding enforcement
+  ansible.windows.win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Services\Kdc
+    name: StrongCertificateBindingEnforcement
+    data: 0
+    type: dword
+
+- name: ESC10 case2 - enable weak Schannel UPN certificate mapping
+  ansible.windows.win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\Schannel
+    name: CertificateMappingMethods
+    data: 4
+    type: dword

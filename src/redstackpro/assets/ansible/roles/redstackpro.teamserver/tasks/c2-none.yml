@@ -1,0 +1,12 @@
+---
+# The plain Debian catchall. Nothing is installed; the box is prepared and the
+# operator brings their own C2, which is the point of this overlay value.
+- name: Note that no C2 is installed
+  ansible.builtin.copy:
+    content: |
+      This teamserver has redstackpro_teamserver_c2 set to none.
+      Nothing was installed. Bind your C2 to {{ redstackpro_teamserver_bind }} and
+      serve under {{ uri_prefix }}, and require this header:
+        {{ gating_header_name }}: {{ gating_header_value }}
+    dest: "{{ redstackpro_teamserver_root }}/README"
+    mode: "0644"

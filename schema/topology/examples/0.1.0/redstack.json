@@ -1,0 +1,202 @@
+{
+  "schema_version": "0.1.0",
+  "mode": "ops",
+  "name": "redStack default blueprint",
+  "description": "Shape of the current redStack topology. Two teamservers, a three redirector pool with rollover on the Mythic server, a log collector in its own tier, and operator boxes reached through Guacamole. Correct this against the real redStack before it ships as the default blueprint.",
+  "nodes": [
+    {
+      "id": "network-main",
+      "kind": "network",
+      "name": "RT-NET",
+      "overlay": { "cidr": "10.30.0.0/16" }
+    },
+
+    {
+      "id": "subnet-mgmt",
+      "kind": "segment",
+      "name": "RT-SEG-MGMT",
+      "overlay": {
+        "cidr": "10.30.0.0/24",
+        "egress": "allowed",
+        "exposure": "internet",
+        "tier": "management"
+      }
+    },
+    {
+      "id": "subnet-ops",
+      "kind": "segment",
+      "name": "RT-SEG-OPS",
+      "overlay": {
+        "cidr": "10.30.1.0/24",
+        "egress": "allowed",
+        "exposure": "local",
+        "tier": "management"
+      }
+    },
+    {
+      "id": "subnet-rdir",
+      "kind": "segment",
+      "name": "RT-SEG-RDIR",
+      "overlay": {
+        "cidr": "10.30.10.0/24",
+        "egress": "allowed",
+        "exposure": "internet",
+        "tier": "redirector"
+      }
+    },
+    {
+      "id": "subnet-c2",
+      "kind": "segment",
+      "name": "RT-SEG-C2",
+      "overlay": {
+        "cidr": "10.30.20.0/24",
+        "egress": "allowed",
+        "exposure": "local",
+        "tier": "c2"
+      }
+    },
+    {
+      "id": "subnet-log",
+      "kind": "segment",
+      "name": "RT-SEG-LOG",
+      "overlay": {
+        "cidr": "10.30.30.0/24",
+        "egress": "allowed",
+        "exposure": "local",
+        "tier": "collector"
+      }
+    },
+
+    {
+      "id": "rt-jump-01",
+      "kind": "jumpbox",
+      "name": "RT-JUMP-01",
+      "overlay": {
+        "services": ["ssh", "guacamole", "wireguard"],
+        "certificate_authority": true
+      }
+    },
+
+    {
+      "id": "rt-rdir-01",
+      "kind": "redirector",
+      "name": "RT-RDIR-01",
+      "overlay": {
+        "server": "nginx",
+        "hostname": "cdn.example-lure.com",
+        "tls": { "cert_source": "letsencrypt" }
+      }
+    },
+    {
+      "id": "rt-rdir-02",
+      "kind": "redirector",
+      "name": "RT-RDIR-02",
+      "overlay": {
+        "server": "nginx",
+        "hostname": "static.example-lure.com",
+        "tls": { "cert_source": "letsencrypt" }
+      }
+    },
+    {
+      "id": "rt-rdir-03",
+      "kind": "redirector",
+      "name": "RT-RDIR-03",
+      "overlay": {
+        "server": "apache",
+        "hostname": "updates.example-lure.com",
+        "tls": { "cert_source": "letsencrypt" }
+      }
+    },
+
+    {
+      "id": "rt-ts-01",
+      "kind": "teamserver",
+      "name": "RT-TS-01",
+      "overlay": { "c2": "mythic" }
+    },
+    {
+      "id": "rt-ts-02",
+      "kind": "teamserver",
+      "name": "RT-TS-02",
+      "overlay": { "c2": "sliver" }
+    },
+
+    {
+      "id": "rt-log-01",
+      "kind": "collector",
+      "name": "RT-LOG-01",
+      "overlay": {
+        "sink": "opensearch",
+        "shipper": "filebeat",
+        "ingest_port": 5044,
+        "tls": true
+      }
+    },
+
+    {
+      "id": "rt-ops-01",
+      "kind": "operator",
+      "name": "RT-OPS-01",
+      "overlay": { "os": "kali" }
+    },
+    {
+      "id": "rt-ops-02",
+      "kind": "operator",
+      "name": "RT-OPS-02",
+      "overlay": { "os": "windows" }
+    }
+  ],
+  "edges": [
+    { "id": "e-subnet-mgmt-network", "role": "attached", "source": "subnet-mgmt", "target": "network-main" },
+    { "id": "e-subnet-ops-network", "role": "attached", "source": "subnet-ops", "target": "network-main" },
+    { "id": "e-subnet-rdir-network", "role": "attached", "source": "subnet-rdir", "target": "network-main" },
+    { "id": "e-subnet-c2-network", "role": "attached", "source": "subnet-c2", "target": "network-main" },
+    { "id": "e-subnet-log-network", "role": "attached", "source": "subnet-log", "target": "network-main" },
+
+    { "id": "e-jump-subnet", "role": "attached", "source": "rt-jump-01", "target": "subnet-mgmt" },
+    { "id": "e-rdir01-subnet", "role": "attached", "source": "rt-rdir-01", "target": "subnet-rdir" },
+    { "id": "e-rdir02-subnet", "role": "attached", "source": "rt-rdir-02", "target": "subnet-rdir" },
+    { "id": "e-rdir03-subnet", "role": "attached", "source": "rt-rdir-03", "target": "subnet-rdir" },
+    { "id": "e-ts01-subnet", "role": "attached", "source": "rt-ts-01", "target": "subnet-c2" },
+    { "id": "e-ts02-subnet", "role": "attached", "source": "rt-ts-02", "target": "subnet-c2" },
+    { "id": "e-log01-subnet", "role": "attached", "source": "rt-log-01", "target": "subnet-log" },
+    { "id": "e-ops01-subnet", "role": "attached", "source": "rt-ops-01", "target": "subnet-ops" },
+    { "id": "e-ops02-subnet", "role": "attached", "source": "rt-ops-02", "target": "subnet-ops" },
+
+    {
+      "id": "e-front-01",
+      "role": "fronts",
+      "source": "rt-rdir-01",
+      "target": "rt-ts-01",
+      "protocol": "https",
+      "listen_port": 443,
+      "upstream_port": 443
+    },
+    {
+      "id": "e-front-02",
+      "role": "fronts",
+      "source": "rt-rdir-02",
+      "target": "rt-ts-01",
+      "protocol": "https",
+      "listen_port": 443,
+      "upstream_port": 443
+    },
+    {
+      "id": "e-front-03",
+      "role": "fronts",
+      "source": "rt-rdir-03",
+      "target": "rt-ts-02",
+      "protocol": "https",
+      "listen_port": 443,
+      "upstream_port": 443
+    },
+
+    { "id": "e-log-rdir01", "role": "logs_to", "source": "rt-rdir-01", "target": "rt-log-01" },
+    { "id": "e-log-rdir02", "role": "logs_to", "source": "rt-rdir-02", "target": "rt-log-01" },
+    { "id": "e-log-rdir03", "role": "logs_to", "source": "rt-rdir-03", "target": "rt-log-01" },
+    { "id": "e-log-ts01", "role": "logs_to", "source": "rt-ts-01", "target": "rt-log-01" },
+    { "id": "e-log-ts02", "role": "logs_to", "source": "rt-ts-02", "target": "rt-log-01" },
+
+    { "id": "e-manage-network", "role": "manages", "source": "rt-jump-01", "target": "network-main" }
+  ]
+}
