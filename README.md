@@ -1,3 +1,5 @@
+![redStackPRO: red team infrastructure and cyber ranges](docs/images/banner.png)
+
 # redStackPRO
 
 Visual composition for red team infrastructure and cyber ranges.
