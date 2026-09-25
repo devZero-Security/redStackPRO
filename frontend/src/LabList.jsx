@@ -40,6 +40,7 @@ function LabButton({ lab, onLoad }) {
       title={lab.teaches || lab.blurb}
     >
       <span className="rg-palette-label">{lab.name}</span>
+      {lab.blurb ? <span className="rg-palette-lab-blurb">{lab.blurb}</span> : null}
     </button>
   );
 }

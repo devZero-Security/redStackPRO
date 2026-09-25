@@ -15,11 +15,12 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Editable install keeps the repo layout so the API resolves schema and seed paths from /app.
-# The postgres extra ships psycopg + alembic so one image runs on either backend.
+# schema/ now lives inside the package (src/redstackpro/schema) and is resolved
+# from the package, not the CWD, so the install carries it and there is nothing to
+# copy alongside. The postgres extra ships psycopg + alembic so one image runs on
+# either backend.
 COPY pyproject.toml README.md LICENSE ./
 COPY src/ ./src/
-COPY schema/ ./schema/
 RUN pip install -e ".[postgres]" "uvicorn[standard]"
 
 COPY --from=canvas /canvas/dist ./frontend/dist

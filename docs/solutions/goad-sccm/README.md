@@ -24,6 +24,31 @@ rules apply. See [[range-access-model]]:
 3. **Linux tooling runs through the pivot** (the beacon's SOCKS) with
    proxychains. Windows side work runs through the beacon.
 
+## Provider differences
+
+redStackPRO compiles this range for cloud backends (`gcp`, `aws`, `azure`) and
+on-prem backends (`proxmox`, `esxi`). The attack chain is identical on all of
+them; what differs is the operator's path to the range, because the on-prem
+backends declare fewer network capabilities (`schema/registry/providers/`).
+
+| capability | cloud (gcp/aws/azure) | on-prem (proxmox/esxi) |
+|------------|-----------------------|------------------------|
+| public address | allocated: the jumpbox gets an external IP | none: reachability depends on the operator's own network and any upstream NAT or firewall |
+| private DNS | managed zone, hosts resolve by name | none: use static hosts entries |
+| network peering | managed: a jumpbox or collector can serve across the project boundary | none: joining networks is the host network's routing, which redStackPRO does not control |
+| host firewall | per-VM firewall | proxmox has one, esxi has none (layer-2 VLAN isolation only) |
+
+- **Range access.** On cloud the jumpbox has an allocated (per-deploy, ephemeral)
+  public address, read from `RANGE-BRIEFING.md`. On on-prem there is no allocated
+  external IP: reach the jumpbox over the operator's own network or VPN.
+- **Name resolution.** On cloud the range can resolve through managed private DNS.
+  On on-prem there is no managed zone, so populate static hosts entries from the
+  internal IPs. Static entries work on cloud too and keep the commands identical.
+
+Azure is a preview backend: it allocates public addresses, but its private DNS
+and peering modules are not built yet (`azure.yaml`), so on azure treat name
+resolution as on-prem (static hosts entries) and expect no managed peering.
+
 ## Topology under test
 
 Domain `sccm.lab`, subnet `192.168.56.0/24`, prefix `cysc` on the range's GCP

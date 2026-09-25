@@ -27,7 +27,7 @@ validating the deploy pipeline itself rather than an attack chain.
 
 **Generated, not maintained here.** See
 [the goad-mini solution set](../goad-mini/README.md), produced from this lab's
-own canvas template by `python tools/gen_solutions.py`. It reaches **5 of the 14
+own canvas template by `python -m redstackpro.tools.gen_solutions`. It reaches **5 of the 14
 parts**: 1 recon, 2 find users, 3 enumeration (minus kerberoasting), 6 ADCS
 (the ESC1 page, not the essos one) and 11 ACL.
 

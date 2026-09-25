@@ -80,7 +80,7 @@ a zip of the working directory described below.
 **Or skip the canvas entirely** and compile a shipped template from the command
 line -- same compiler, same output:
 
-    python tools/compile.py frontend/public/goad/goad-light.json -o export
+    redstackpro compile frontend/public/goad/goad-light.json -o export
 
 That writes **190 files**: Terraform for the cloud, Ansible for everything that
 happens on the boxes, a `deploy.sh`, and a `RANGE-BRIEFING.md` telling you the
@@ -100,7 +100,7 @@ reach. Your cloud credentials stay on your machine throughout.
 
 Everything the canvas does is available headless, so an agent can operate
 redStackPRO without a person clicking through it. A topology is plain JSON against
-a published schema (`schema/topology/`, also served at `/api/v1/registry/schema`),
+a published schema (`src/redstackpro/schema/topology/`, also served at `/api/v1/registry/schema`),
 the registry endpoints report the vocabulary of node kinds, providers and roles,
 and the validate and compile steps the canvas calls are the same REST endpoints.
 The API is documented at `/docs` and `/openapi.json`, which a model can read as
@@ -120,8 +120,8 @@ prose and a remedy, and the compiler refuses a document with errors and hands ba
 those same findings. The loop is read the schema, compose a topology, validate,
 fix what the findings name, compile. A model iterates on the outcome rather than
 scraping prose, and the validate call stores nothing along the way. The command
-line is the same pipeline for a shell agent, `tools/validate.py` and
-`tools/compile.py`.
+line is the same pipeline for a shell agent, `redstackpro validate` and
+`redstackpro compile`.
 
 The running instance trusts the local caller, which suits a single-user or
 self-hosted deployment. Authenticated, multi-tenant agentic access over the API
@@ -140,26 +140,45 @@ target ranges on the same canvas.
 - `docs/schema.md`
 - `docs/validation.md`
 - `docs/solutions/`
-- `schema/topology/`
+- `src/redstackpro/schema/topology/`
+
+## Repo layout
+
+    src/                     the Python package and everything it ships
+      redstackpro/           the composition layer: validator, compiler, API
+        schema/              the document schema, registry data, worked examples
+        tools/               command line tools (compile, validate, dev tooling)
+        assets/              Ansible roles and static files baked into the export
+    frontend/                the web canvas (Vite + React)
+    tests/                   the suite: compiler, validator, API, export
+    docs/                    architecture, schema, validation, solutions, decisions
+    pyproject.toml           package metadata, deps, and the console entry points
+    alembic.ini              migration config for the Postgres backend
+    Dockerfile               the one-container build (API plus built canvas)
+    docker-compose.yml       local run, with an optional Postgres profile
+    .dockerignore            build context trim
+    README.md                this file
+    LICENSE                  MIT, with the GOAD templates under GPLv3
+    .github/                 CI workflows
 
 ## Checks
 
 CI runs these on every push and pull request. All of them run locally except the
 Ansible ones, which need a Linux control node.
 
-    pytest -q                                   the compiler, validator, and API
-    python tools/validate.py --hostname <name>  the worked examples
-    python tools/check_conventions.py           the house rules in the project conventions
-    cd frontend && npm test && npm run build    the canvas
+    pytest -q                                     the compiler, validator, and API
+    redstackpro validate --hostname <name>        the worked examples
+    python -m redstackpro.tools.check_conventions the house rules in the project conventions
+    cd frontend && npm test && npm run build      the canvas
 
 The rest run against a compiled export rather than against the generator,
 because a working directory a person unzips and runs is the thing being claimed:
 
-    python tools/compile.py schema/topology/examples/0.4.0/redstack.json --hostname <name> -o export
+    redstackpro compile src/redstackpro/schema/topology/examples/0.4.0/redstack.json --hostname <name> -o export
     terraform -chdir=export/terraform fmt -check -recursive
     terraform -chdir=export/terraform validate
     ansible-playbook -i export/ansible/inventory.yml export/ansible/site.yml --syntax-check
-    python tools/check_roles.py export/ansible
+    python -m redstackpro.tools.check_roles export/ansible
 
 `--hostname` is not a flag to work around a broken example. Every shipped example
 carrying a redirector arrives one field short on purpose: a redirector is the one

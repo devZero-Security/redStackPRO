@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "src/redstackpro/tools"))
 
 import verify  # noqa: E402
 
@@ -83,7 +83,7 @@ def test_no_deploy_is_written_down_in_the_checker():
     repo is meant to go public. A hostname in a tracked file is a checker that
     verifies one range.
     """
-    source = (ROOT / "tools/verify.py").read_text(encoding="utf-8")
+    source = (ROOT / "src/redstackpro/tools/verify.py").read_text(encoding="utf-8")
     # The two tokens the replaced scripts carried in the clear.
     assert "t29quvzqywnthhnuaqccigyi" not in source
     assert "rkhydtb5qu6sa7h29hpo3ccn" not in source
@@ -362,7 +362,7 @@ def test_the_certificate_command_probe_does_not_fail_on_a_healthy_redirector():
     can run it, installed but this account cannot prove that -- and only the
     first is a failure.
     """
-    source = (ROOT / "tools/verify.py").read_text(encoding="utf-8")
+    source = (ROOT / "src/redstackpro/tools/verify.py").read_text(encoding="utf-8")
     probe = source[source.index("the certificate command"):]
     probe = probe[:probe.index("check(s) failed")]
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Run the validator over the worked examples.
 
-    python tools/validate.py
-    python tools/validate.py --provider proxmox
-    python tools/validate.py schema/topology/examples/0.1.0/redstack.json --json
+    redstackpro validate
+    redstackpro validate --provider proxmox
+    redstackpro validate <topology> --json
 """
 
 import argparse
@@ -12,17 +12,18 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-
-import _report
 from redstackpro import Registry, validate
 from redstackpro.authoring import set_redirector_hostname
 
-EXAMPLES = "schema/topology/examples/0.4.0/*.json"
+from . import _report
+
+# Resolved from the package: the shipped examples travel with the install, so the
+# default run no longer depends on the CWD being the repo root.
+EXAMPLES = str(Path(__file__).resolve().parents[1]
+               / "schema" / "topology" / "examples" / "0.4.0" / "*.json")
 
 
-def main():
-    ap = argparse.ArgumentParser()
+def configure(ap):
     ap.add_argument("paths", nargs="*", help="topology documents; defaults to the examples")
     ap.add_argument("--provider", help="also run capability rules against this provider")
     ap.add_argument("--json", action="store_true", help="machine readable output")
@@ -32,11 +33,13 @@ def main():
     # a person would after filling the inspector field.
     ap.add_argument("--hostname",
                     help="domain to give every redirector, as the canvas would")
-    args = ap.parse_args()
+    return ap
 
+
+def run(args):
     paths = args.paths or sorted(glob.glob(EXAMPLES))
     if not paths:
-        sys.exit("no topologies found; run from the repo root")
+        sys.exit("no topologies found")
 
     registry = Registry() if args.provider else None
     worst = 0
@@ -62,6 +65,10 @@ def main():
     if args.json:
         print(json.dumps(out, indent=2))
     sys.exit(worst)
+
+
+def main(argv=None):
+    run(configure(argparse.ArgumentParser()).parse_args(argv))
 
 
 if __name__ == "__main__":

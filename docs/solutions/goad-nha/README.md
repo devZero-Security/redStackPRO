@@ -28,6 +28,32 @@ private, and the operator works through a beacon's SOCKS proxy
 ([[tests-run-through-beacon]]). Commands below assume `proxychains` over that
 SOCKS and the two domains in `/etc/hosts`.
 
+## Provider differences
+
+redStackPRO compiles this range for cloud backends (`gcp`, `aws`, `azure`) and
+on-prem backends (`proxmox`, `esxi`). The attack chain is identical on all of
+them; what differs is the operator's path to the range, because the on-prem
+backends declare fewer network capabilities (`schema/registry/providers/`).
+
+| capability | cloud (gcp/aws/azure) | on-prem (proxmox/esxi) |
+|------------|-----------------------|------------------------|
+| public address | allocated: the jumpbox gets an external IP | none: reachability depends on the operator's own network and any upstream NAT or firewall |
+| private DNS | managed zone, hosts resolve by name | none: use static hosts entries |
+| network peering | managed: a jumpbox or collector can serve across the project boundary | none: joining networks is the host network's routing, which redStackPRO does not control |
+| host firewall | per-VM firewall | proxmox has one, esxi has none (layer-2 VLAN isolation only) |
+
+- **Range access.** On cloud the jumpbox has an allocated (per-deploy, ephemeral)
+  public address, read from `RANGE-BRIEFING.md`. On on-prem there is no allocated
+  external IP: reach the jumpbox over the operator's own network or VPN.
+- **Name resolution.** The two domains already go in `/etc/hosts` above, which is
+  exactly what on-prem needs (`proxmox`, `esxi` have no managed private DNS). On a
+  cloud backend the range can also resolve through managed private DNS, but the
+  static entries keep the commands identical, so use them either way.
+
+Azure is a preview backend: it allocates public addresses, but its private DNS
+and peering modules are not built yet (`azure.yaml`), so on azure treat name
+resolution as on-prem (static hosts entries) and expect no managed peering.
+
 ## Topology - and why it makes this a cross-forest problem
 
 **nha is two forests, not a parent and a child.** Both domains compile with

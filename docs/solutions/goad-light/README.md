@@ -2,7 +2,7 @@
 
 **Generated. Do not edit this folder by hand** - it is produced from
 [the authored GOAD series](../goad/README.md) by
-`python tools/gen_solutions.py`, filtered to what this lab actually
+`python -m redstackpro.tools.gen_solutions`, filtered to what this lab actually
 carries. Edit the source pages, not these.
 
 The `goad-light` lab carries **22 techniques** and reaches

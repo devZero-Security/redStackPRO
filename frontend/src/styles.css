@@ -237,8 +237,33 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 /* GOAD labs sit at the top of the palette, above the topology kinds: pick a lab
    to load it onto the canvas, then build on it. */
-.rg-palette-labs { margin-bottom: 8px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
-.rg-palette-lab { justify-content: flex-start; font-weight: 600; }
+.rg-palette-labs {
+  margin: 0 0 12px;
+  padding: 8px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--panel-2);
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+.rg-palette-labs > h3 { color: var(--accent); margin-top: 0; }
+.rg-palette-lab {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 7px 9px;
+  justify-content: flex-start;
+  font-weight: 600;
+}
+.rg-palette-lab .rg-palette-label { flex: none; }
+.rg-palette-lab-blurb {
+  font-weight: 400;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+  white-space: normal;
+}
 .rg-unlock { margin-top: 10px; width: 100%; }
 
 /* Drop-to-delete bin: shown only while a node is being dragged, and turns red

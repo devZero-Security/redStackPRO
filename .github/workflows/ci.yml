@@ -36,7 +36,7 @@ jobs:
         # the way a person would in the canvas before pressing Compile. The rule is
         # not relaxed: test_every_shipped_redirector_example_demands_a_hostname_first
         # asserts the raw examples still refuse.
-        run: python tools/validate.py --hostname cdn.redops.design
+        run: redstackpro validate --hostname cdn.redops.design
 
   postgres:
     # The rest of the suite runs on SQLite, where create_app builds the schema
@@ -78,11 +78,11 @@ jobs:
           python-version: "3.11"
       # No em dashes anywhere, and no credentials or tfvars values tracked.
       # Both are rules in the project conventions that nothing else checks.
-      - run: python tools/check_conventions.py
+      - run: python -m redstackpro.tools.check_conventions
       # The per-lab solution folders are generated. A stale one reads as a
       # maintained guide while describing a lab that has moved on, so the
       # committed output has to match what the tool writes today.
-      - run: python tools/gen_solutions.py --check
+      - run: python -m redstackpro.tools.gen_solutions --check
 
   frontend:
     runs-on: ubuntu-latest
@@ -129,8 +129,8 @@ jobs:
       - name: Compile the worked example
         # --hostname is the operator's one keystroke; see the python job.
         run: |
-          python tools/compile.py \
-            schema/topology/examples/0.4.0/${{ matrix.example }}.json \
+          redstackpro compile \
+            src/redstackpro/schema/topology/examples/0.4.0/${{ matrix.example }}.json \
             --provider ${{ matrix.provider }} --hostname cdn.redops.design -o export
 
       - name: The generated HCL is already formatted
@@ -167,8 +167,8 @@ jobs:
       - name: Compile the worked example
         # --hostname is the operator's one keystroke; see the python job.
         run: |
-          python tools/compile.py \
-            schema/topology/examples/0.4.0/redstack.json \
+          redstackpro compile \
+            src/redstackpro/schema/topology/examples/0.4.0/redstack.json \
             --hostname cdn.redops.design -o export
 
       - name: Install the collections the export declares
@@ -181,4 +181,4 @@ jobs:
       - name: Every role branch parses and every module resolves
         # A syntax check never opens a file reached by include_tasks with a
         # templated name, which is every branch these roles have.
-        run: python tools/check_roles.py export/ansible
+        run: python -m redstackpro.tools.check_roles export/ansible

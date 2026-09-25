@@ -35,24 +35,29 @@ difference between the two labs. Both dimensions are counted below.
 | [minilab](minilab.md) | 1 | 3 | 5 | 4 unique |
 | dracarys | 1 | 4 | 6 | 5 unique, plus a Linux member. Gets its own solution |
 | sccm | 1 | 5 | 2 | surface is the MECM service, not vulns. Gets its own solution |
+| [harbor](../harbor/README.md) | 2 | 5 | 10 | 3 unique techniques on redStackPRO's own range, not a GOAD lab. Gets its own solution |
 
 "Surface" counts host vulns and user flaws together. It measures technique
 variety, not difficulty or host count.
 
 ## Which labs get a full solution
 
-Upstream mayfly wrote attack solutions for three of these labs only, and that
-is what the deep pages follow:
+Every range now has an authored solution folder (ADR 0061). Some follow an
+upstream write-up; the rest are hand-authored from the lab's own template and
+carry an "authored, not yet run live" banner until a live pass covers them. The
+coverage pages in this folder stay as the technique and detection checklists the
+solutions build on, so the per-lab pages here are not replaced.
 
-| lab | upstream source | our page |
-|-----|-----------------|----------|
-| goad | GOADv2 pwning part1-13 plus ADCS part14 | [14 parts](../goad/README.md) |
-| sccm | SCCM-LAB part0x0-0x3 | planned |
-| dracarys | Dracarys-lab | planned |
-| goad-wazuh | none | [detection page](goad-wazuh.md) |
-
-The remaining four have no upstream solution to be faithful to, so they get
-the coverage pages in this folder instead of invented prose.
+| lab | solution | source |
+|-----|----------|--------|
+| goad | [14 parts](../goad/README.md) | GOADv2 pwning part1-13 plus ADCS part14, run live per step |
+| goad-light, goad-mini | [goad-light](goad-light.md), [goad-mini](goad-mini.md) | generated from the goad series by `python -m redstackpro.tools.gen_solutions` |
+| sccm | [goad-sccm](../goad-sccm/README.md) | mayfly SCCM-LAB part0x0-0x3 |
+| dracarys | [goad-dracarys](../goad-dracarys/README.md) | reconstructed (mayfly publishes no solution) |
+| nha | [goad-nha](../goad-nha/README.md) | hand-authored from the template |
+| minilab | [goad-minilab](../goad-minilab/README.md) | hand-authored from the template |
+| goad-wazuh | [goad-wazuh](../goad-wazuh/README.md) | hand-authored, the detection axis is the point |
+| harbor | [harbor](../harbor/README.md) | redStackPRO original, not a GOAD lab |
 
 ## Standing rule
 

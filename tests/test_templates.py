@@ -15,7 +15,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC = ROOT / "frontend/public"
-SCHEMA = json.loads((ROOT / "schema/topology/0.4.0.json").read_text())
+SCHEMA = json.loads((ROOT / "src/redstackpro/schema/topology/0.4.0.json").read_text())
 
 RANGE_HOST_KINDS = {"dc", "srv", "wks", "fw"}
 SIEM_EDRS = {"wazuh", "elastic"}

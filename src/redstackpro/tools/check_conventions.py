@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check the rules in the project conventions that a person would otherwise have to remember.
 
-    python tools/check_conventions.py
+    python -m redstackpro.tools.check_conventions
 
 Three of them. None is a style preference: the dash rule is a house convention
 that applies to generated output as well as source, the second is the one
@@ -14,7 +14,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+# tools now lives at src/redstackpro/tools/; the repo root is three parents up.
+ROOT = Path(__file__).resolve().parents[3]
 
 # No em dashes or en dashes in any output, including generated docs and
 # comments. the project conventions.

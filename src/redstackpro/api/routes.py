@@ -49,7 +49,7 @@ TAGS = [
     {"name": "system", "description": "Liveness."},
 ]
 
-SCHEMA_PATH = (Path(__file__).resolve().parents[3]
+SCHEMA_PATH = (Path(__file__).resolve().parents[1]
                / "schema/topology/0.4.0.json")
 
 router = APIRouter()

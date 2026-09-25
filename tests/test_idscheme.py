@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_kind_tags_match_the_registry():
-    reg = Registry(ROOT / "schema/registry")
+    reg = Registry(ROOT / "src/redstackpro/schema/registry")
     for kind, spec in reg.kinds.items():
         assert KIND_TAG[kind] == spec["abbrev"], kind
     # every kind is covered, so a new kind cannot slip in untagged
@@ -43,7 +43,7 @@ def test_renumber_cascades_and_validates():
     for edge in out["edges"]:
         assert edge["source"] in ids, edge
         assert edge["target"] in ids, edge
-    reg = Registry(ROOT / "schema/registry")
+    reg = Registry(ROOT / "src/redstackpro/schema/registry")
     errors = {f.code for f in validate(out, registry=reg) if f.severity == "error"}
     assert errors == set(), errors
 

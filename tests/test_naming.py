@@ -131,7 +131,7 @@ def test_firewall_tags_match_host_module_tags(redstack):
 
 def test_migration_moves_0_1_0_forward():
     old = json.loads(
-        (ROOT / "schema/topology/examples/0.1.0/redstack.json").read_text())
+        (ROOT / "src/redstackpro/schema/topology/examples/0.1.0/redstack.json").read_text())
     # Steps chain, so a 0.1.0 document comes out at whatever is current rather
     # than at the next version along.
     assert migrate(old, to="0.2.0", prefix="rt")["schema_version"] == "0.2.0"
@@ -144,7 +144,7 @@ def test_migration_moves_0_1_0_forward():
 
 def test_migration_rewrites_edge_endpoints():
     old = json.loads(
-        (ROOT / "schema/topology/examples/0.1.0/minimal.json").read_text())
+        (ROOT / "src/redstackpro/schema/topology/examples/0.1.0/minimal.json").read_text())
     new = migrate(old, prefix="rt")
     ids = {n["id"] for n in new["nodes"]}
     for edge in new["edges"]:
@@ -154,7 +154,7 @@ def test_migration_rewrites_edge_endpoints():
 
 def test_migration_refuses_to_guess_the_prefix():
     old = json.loads(
-        (ROOT / "schema/topology/examples/0.1.0/minimal.json").read_text())
+        (ROOT / "src/redstackpro/schema/topology/examples/0.1.0/minimal.json").read_text())
     with pytest.raises(MigrationError):
         migrate(old)
 
@@ -162,7 +162,7 @@ def test_migration_refuses_to_guess_the_prefix():
 def test_migrated_documents_validate(registry):
     for name in ("minimal", "redstack", "parallel-chains"):
         old = json.loads(
-            (ROOT / ("schema/topology/examples/0.1.0/%s.json" % name)).read_text())
+            (ROOT / ("src/redstackpro/schema/topology/examples/0.1.0/%s.json" % name)).read_text())
         new = migrate(old, prefix="rt")
         errors = codes(new, registry=registry)
         # RDR001 is expected here: the legacy examples predate it and carry a

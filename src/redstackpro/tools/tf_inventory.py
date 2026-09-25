@@ -4,9 +4,9 @@
 Addresses do not exist until apply, so redStackPRO emits <<tf:node_id:field>> tokens
 and this fills them in place. Run after `terraform apply`, before `ansible-playbook`.
 
-    python3 tools/tf_inventory.py
-    python3 tools/tf_inventory.py --tf-dir terraform --ansible-dir ansible
-    python3 tools/tf_inventory.py --dry-run
+    python -m redstackpro.tools.tf_inventory
+    python -m redstackpro.tools.tf_inventory --tf-dir terraform --ansible-dir ansible
+    python -m redstackpro.tools.tf_inventory --dry-run
 
 Expects a terraform output named redstackpro_addresses shaped as:
 

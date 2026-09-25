@@ -1,9 +1,11 @@
 """Command line entry point.
 
-`redstackpro serve` runs the API locally, the same thing tools/serve.py does, so an
-installed package is launchable without the raw uvicorn incantation. redStackPRO
-generates code: it never runs the IaC engine and never holds a cloud credential.
-See 0001.
+`redstackpro serve` runs the API locally, the same thing redstackpro.tools.serve
+does, so an installed package is launchable without the raw uvicorn incantation.
+`redstackpro compile` and `redstackpro validate` are the command line half of the
+pipeline the canvas drives, sharing their code with redstackpro.tools so the CLI
+and the download button cannot diverge. redStackPRO generates code: it never runs
+the IaC engine and never holds a cloud credential. See 0001.
 """
 
 import argparse
@@ -28,6 +30,19 @@ def main(argv=None):
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
     serve.set_defaults(func=_serve)
+
+    from .tools import compile as compile_tool
+    from .tools import validate as validate_tool
+
+    comp = sub.add_parser("compile",
+                          help="compile a topology into a working directory")
+    compile_tool.configure(comp)
+    comp.set_defaults(func=lambda a: compile_tool.run(a, comp.error))
+
+    val = sub.add_parser("validate",
+                         help="validate a topology, or the worked examples")
+    validate_tool.configure(val)
+    val.set_defaults(func=lambda a: validate_tool.run(a))
 
     args = parser.parse_args(argv)
     args.func(args)

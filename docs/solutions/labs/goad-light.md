@@ -24,7 +24,7 @@ Dropped relative to goad: the whole `essos.local` forest, so `meereen` and
 **The mapping is generated now, not maintained here.** See
 [the goad-light solution set](../goad-light/README.md): a filtered copy of the
 GOAD series carrying only the steps this lab can reach, produced from this lab's
-own canvas template by `python tools/gen_solutions.py`. Its table is the
+own canvas template by `python -m redstackpro.tools.gen_solutions`. Its table is the
 authority for which parts apply.
 
 A hand-written table used to live here and **three of its fourteen rows were

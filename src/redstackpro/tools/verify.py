@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Check a deployed range against the export that built it.
 
-    python tools/verify.py doors build/          probe the front doors from outside
-    python tools/verify.py stack build/          check the stack from its jumpbox
-    python tools/verify.py doors build/ --plan   print the checks, run none
+    python -m redstackpro.tools.verify doors build/   probe the front doors from outside
+    python -m redstackpro.tools.verify stack build/   check the stack from its jumpbox
+    python -m redstackpro.tools.verify doors build/ --plan   print the checks, run none
 
 Both subcommands read the compiled export and derive every input from it: which
 hosts are redirectors, the domain each one answers on, its gating header and

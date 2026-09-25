@@ -61,7 +61,7 @@ def seed_blueprints(session_factory):
 
     The document is migrated to the current schema on the way in, the same as any
     ingested document, so the seed does not go stale when the schema moves."""
-    example = (Path(__file__).resolve().parents[3]
+    example = (Path(__file__).resolve().parents[1]
                / "schema/topology/examples" / LATEST / "redstack.json")
     if not example.is_file():
         return

@@ -8,7 +8,9 @@ from pathlib import Path
 
 import yaml
 
-DEFAULT_ROOT = Path("schema/registry")
+# Resolve from the package, not the CWD: schema/ ships as package data, so the
+# app no longer has to be run from the repo root. See 0013.
+DEFAULT_ROOT = Path(__file__).resolve().parent / "schema" / "registry"
 
 
 class Registry:

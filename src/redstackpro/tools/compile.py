@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Compile a topology into a working directory.
 
-    python tools/compile.py schema/topology/examples/0.2.0/redstack.json -o build/
-    python tools/compile.py <topology> --list
+    redstackpro compile <topology> -o build/
+    redstackpro compile <topology> --list
 
 A formatter over the same file map the API returns, so the CLI and the download
 button cannot produce different output. See 0010.
@@ -14,17 +14,15 @@ import shutil
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-
-import _report
 from redstackpro import Registry, validate
 from redstackpro.authoring import set_redirector_hostname
 from redstackpro.export import compile_topology
 from redstackpro.terraform import GenerationError
 
+from . import _report
 
-def main():
-    ap = argparse.ArgumentParser()
+
+def configure(ap):
     ap.add_argument("topology")
     ap.add_argument("-o", "--out", default="build")
     ap.add_argument("--provider", default="gcp")
@@ -44,13 +42,17 @@ def main():
     ap.add_argument("--hostname", action="append", default=[],
                     help="domain to give every redirector, or node=domain "
                          "(repeatable) to name them one at a time")
-    args = ap.parse_args()
+    return ap
 
+
+def run(args, error):
+    # `error` is the parser's .error: prints usage and exits, whether the parser
+    # is the standalone one or the `redstackpro compile` subparser.
     document = json.loads(Path(args.topology).read_text())
     if args.hostname:
         paired = [h for h in args.hostname if "=" in h]
         if paired and len(paired) != len(args.hostname):
-            ap.error("--hostname takes either one bare domain or only node=domain pairs")
+            error("--hostname takes either one bare domain or only node=domain pairs")
         try:
             if paired:
                 set_redirector_hostname(document,
@@ -61,7 +63,7 @@ def main():
             # A per-redirector map that misses one or names a stranger is a typo
             # in the command, not a compiler fault. Say which, the way the
             # generation error below does, rather than with a traceback.
-            ap.error(str(exc))
+            error(str(exc))
     try:
         files = compile_topology(document, Registry(), provider=args.provider,
                               region=args.region)
@@ -99,6 +101,11 @@ def main():
         target.write_text(contents, encoding="utf-8", newline="\n")
 
     print("wrote %d files to %s" % (len(files), out))
+
+
+def main(argv=None):
+    ap = configure(argparse.ArgumentParser())
+    run(ap.parse_args(argv), ap.error)
 
 
 if __name__ == "__main__":

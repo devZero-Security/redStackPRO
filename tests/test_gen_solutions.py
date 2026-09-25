@@ -12,19 +12,24 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-_spec = importlib.util.spec_from_file_location("gen_solutions", ROOT / "tools/gen_solutions.py")
+_spec = importlib.util.spec_from_file_location("gen_solutions", ROOT / "src/redstackpro/tools/gen_solutions.py")
 gen = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(gen)
 
 
 def _template(lab):
-    return json.loads((ROOT / f"frontend/public/goad/{lab}.json").read_text(encoding="utf-8"))
+    # Most templates live under the goad/ tree; harbor is redStackPRO's own range
+    # and sits at frontend/public/harbor.json, so fall back to the public root.
+    path = ROOT / f"frontend/public/goad/{lab}.json"
+    if not path.exists():
+        path = ROOT / f"frontend/public/{lab}.json"
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def test_committed_output_matches_the_generator():
     """Regenerating must be a no-op, or the folders are stale."""
     assert gen.main_check() == 0, (
-        "docs/solutions/<lab>/ is out of date. Run python tools/gen_solutions.py"
+        "docs/solutions/<lab>/ is out of date. Run python -m redstackpro.tools.gen_solutions"
     )
 
 
@@ -72,7 +77,7 @@ def test_the_lab_coverage_matrix_matches_the_templates():
         # too, so it is checked with the rest rather than left to prose.
         unique = int(cells[4].split()[0]) if cells[4].split()[:2][-1:] == ["unique"] else None
         rows[name] = tuple(int(c) for c in cells[1:4]) + (unique,)
-    assert len(rows) == 8, f"parsed {len(rows)} lab rows, expected 8"
+    assert len(rows) == 9, f"parsed {len(rows)} lab rows, expected 9"
 
     goad = gen.lab_surface(_template("goad"))
     wrong = []

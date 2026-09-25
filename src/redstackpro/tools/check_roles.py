@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check the Ansible half of a compiled export more deeply than a syntax check.
 
-    python tools/check_roles.py build/ansible
+    python -m redstackpro.tools.check_roles build/ansible
 
 `ansible-playbook --syntax-check` parses site.yml and the static role entry
 points. It never opens a file reached by `include_tasks` with a templated name,

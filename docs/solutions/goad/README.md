@@ -39,6 +39,14 @@ See [[range-access-model]]. Rules:
 Each step records which method was used, so we can see how much of the chain is
 operable purely from within redStack.
 
+> **Provider note (range access).** The public surface above (the jumpbox and the
+> redirector) assumes a cloud backend, where both get an allocated public address.
+> On an on-prem backend (`proxmox`, `esxi`) there is no allocated external IP: you
+> reach the jumpbox over your own network or VPN, whatever fronts the range. There
+> is also no managed private DNS on-prem, so name resolution runs off static hosts
+> entries (part 1). The attack chain itself is unchanged. See
+> [Provider differences](#provider-differences) below.
+
 ## Which GOAD lab these pages target
 
 These pages follow the **full GOAD** lab (`frontend/public/goad/goad.json`): three
@@ -49,7 +57,7 @@ GOAD host.
 
 **If you deployed a smaller lab, read that lab's own set instead of this one:**
 [goad-light](../goad-light/README.md) and [goad-mini](../goad-mini/README.md) are
-generated from these pages by `python tools/gen_solutions.py`, filtered to what
+generated from these pages by `python -m redstackpro.tools.gen_solutions`, filtered to what
 each lab actually carries, so a step that has no target on your range is removed
 up front rather than footnoted at the end of the section you just read. The
 pages below are the authored source and target full GOAD.
@@ -79,6 +87,35 @@ collector. Mythic is the C2 of record. redStack and the GOAD range are **separat
 GCP projects** (one for redStack, one for the range); the operator reaches the range
 through the C2 (beacon + SOCKS), not by direct L2 adjacency. GOAD's range subnet
 is `192.168.56.0/24`.
+
+## Provider differences
+
+redStackPRO compiles this range for cloud backends (`gcp`, `aws`, `azure`) and
+on-prem backends (`proxmox`, `esxi`). The attack chain is identical on all of
+them; what differs is the operator's path to the range, because the on-prem
+backends declare fewer network capabilities (`schema/registry/providers/`).
+
+| capability | cloud (gcp/aws/azure) | on-prem (proxmox/esxi) |
+|------------|-----------------------|------------------------|
+| public address | allocated: the jumpbox gets an external IP | none: reachability depends on the operator's own network and any upstream NAT or firewall |
+| private DNS | managed zone, hosts resolve by name | none: use static hosts entries |
+| network peering | managed: a jumpbox or collector can serve across the project boundary | none: joining networks is the host network's routing, which redStackPRO does not control |
+| host firewall | per-VM firewall | proxmox has one, esxi has none (layer-2 VLAN isolation only) |
+
+Two steps change in practice:
+
+- **Range access and initial reachability.** On cloud the jumpbox has an
+  allocated public address (still per-deploy and ephemeral, so read it from
+  `RANGE-BRIEFING.md`). On on-prem there is no allocated external IP: reach the
+  jumpbox over the operator's own network or VPN.
+- **Name resolution.** On cloud the range can resolve through managed private DNS.
+  On on-prem there is no managed zone, so populate static hosts entries (the
+  operator's `/etc/hosts`, and the Windows hosts file where needed) from the
+  internal IPs. Part 1 sets these up either way, so the commands stay identical.
+
+Azure is a preview backend: it allocates public addresses, but its private DNS
+and network peering modules are not built yet (`azure.yaml`), so on azure treat
+name resolution as on-prem (static hosts entries) and expect no managed peering.
 
 ## Standing objectives
 

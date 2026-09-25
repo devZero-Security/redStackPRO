@@ -18,7 +18,7 @@ from shipped import example
 from sqlalchemy import select
 
 ROOT = Path(__file__).resolve().parent.parent
-EXAMPLES = ROOT / "schema/topology/examples/0.4.0"
+EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.4.0"
 V1 = "/api/v1"
 
 
@@ -86,7 +86,7 @@ def test_errors_are_structured_not_bare_strings(client):
 # -- migration on ingest
 
 def test_an_old_document_is_migrated_on_create(client):
-    old = json.loads((ROOT / "schema/topology/examples/0.1.0/redstack.json").read_text())
+    old = json.loads((ROOT / "src/redstackpro/schema/topology/examples/0.1.0/redstack.json").read_text())
     r = client.post(V1 + "/topologies", json={"name": "old", "document": old})
     assert r.status_code == 422, "0.1.0 cannot be migrated without a prefix"
     assert "prefix" in r.json()["message"]

@@ -5,9 +5,9 @@ their examples stay in the repo as migration fixtures.
 
 The schema is the artifact, not this file.
 
-- `schema/topology/0.4.0.json` is the document schema
-- `schema/topology/examples/0.4.0/` holds three worked examples that double as test
-  fixtures
+- `src/redstackpro/schema/topology/0.4.0.json` is the document schema
+- `src/redstackpro/schema/topology/examples/0.4.0/` holds three worked examples that
+  double as test fixtures
 - `docs/validation.md` holds the rules JSON Schema cannot express
 - Decision 0007 is why the model is shaped the way it is, 0021 is why exposure is
   a per-host ceiling rather than a segment property, and 0029 is the `peers` role
@@ -30,7 +30,7 @@ at all.
 Documents hold user-supplied values. Derived overlay fields and per-kind
 requirements are not in the document, because the compiler computes the first and
 declares the second per kind rather than per instance. Both live in the registry
-at `schema/registry/`. See 0013.
+at `src/redstackpro/schema/registry/`. See 0013.
 
 - `kinds/<kind>.yaml`, one per node kind. Category, ansible group, derived
   fields, and requirements. Requirements may carry a `when` clause, which is
@@ -40,7 +40,7 @@ at `schema/registry/`. See 0013.
 - `roles.yaml`, the closed set of five edge roles, each declaring legal endpoint
   kinds, whether it requires reachability, and what it injects into which endpoint
 
-`tools/registry.py` loads it and runs the capability check. It exits if the
+`python -m redstackpro.tools.registry` loads it and runs the capability check. It exits if the
 registry and this schema version disagree on kinds or roles, which is the drift
 guard between two files that would otherwise diverge.
 

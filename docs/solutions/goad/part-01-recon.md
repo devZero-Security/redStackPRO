@@ -57,6 +57,14 @@ tied to a live C2 redirector does not belong in a solution.
 
 ### Operator `/etc/hosts` block (redStack Kali op)
 
+> **Provider note (name resolution).** These static `/etc/hosts` and `krb5.conf`
+> entries are how you resolve range names on an **on-prem** backend (`proxmox`,
+> `esxi`), which has no managed private DNS: enter the internal IPs by hand. On a
+> **cloud** backend (`gcp`, `aws`) the range can also resolve through managed
+> private DNS, but static entries still work and keep the commands identical, so
+> use them either way. On on-prem there is also no allocated public jumpbox
+> address, so reach the jumpbox over your own network or VPN.
+
 > This and the `krb5.conf` below are the **full-GOAD** set. On **GOAD-Light** drop
 > the `meereen`/`braavos`/`the-eyrie` lines and the `ESSOS.LOCAL` realm - those
 > hosts and that forest are not deployed.

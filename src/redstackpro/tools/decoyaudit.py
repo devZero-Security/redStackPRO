@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Audit the decoy cover sites' imagery against the live image source.
 
-    tools/decoyaudit.py terms              which search terms still return usable photographs
-    tools/decoyaudit.py fill [--vertical X] fetch every vertical and report what filled
-    tools/decoyaudit.py sheet --out FILE    fetch and lay the heroes out as one contact sheet
+    python -m redstackpro.tools.decoyaudit terms   which search terms still return usable photographs
+    python -m redstackpro.tools.decoyaudit fill [--vertical X]  fetch every vertical and report what filled
+    python -m redstackpro.tools.decoyaudit sheet --out FILE  fetch and lay the heroes out as one contact sheet
 
 Why this is a tool and not a test: every answer here depends on what a third
 party holds today, so it cannot run in the suite without making the suite depend
@@ -29,10 +29,7 @@ import os
 import subprocess
 import sys
 
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
-
-from redstackpro import decoyassets  # noqa: E402
+from redstackpro import decoyassets
 
 ROLE = os.path.join(os.path.dirname(decoyassets.__file__), "assets", "ansible",
                     "roles", "redstackpro.redirector")

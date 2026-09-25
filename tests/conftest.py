@@ -65,7 +65,7 @@ def rollover(redstack):
 @pytest.fixture
 def registry():
     from redstackpro import Registry
-    return Registry(ROOT / "schema/registry")
+    return Registry(ROOT / "src/redstackpro/schema/registry")
 
 
 @pytest.fixture

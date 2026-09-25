@@ -42,6 +42,9 @@ packages = ["src/redstackpro"]
 # files copied by the CLI. See 0015.
 artifacts = [
     "src/redstackpro/assets/**",
+    # The document schema, the registry data, and the worked examples now live in
+    # the package and are resolved from it at runtime, so they ship as data too.
+    "src/redstackpro/schema/**",
     # The revision template ships so `alembic revision` works from an installed
     # package. The revisions themselves are .py and are packaged already.
     "src/redstackpro/api/migrations/script.py.mako",
