@@ -23,7 +23,7 @@ chain is covered by the GOAD series, with a four technique delta.
 | 3 enumeration with user | yes | |
 | 4 poison and relay | no | no poisoning vulns set on either DC |
 | 5 exploit with user | no | no autologon, sysvol or GPO material |
-| 6 ADCS | no | the authored part-6 page targets essos - but this lab has its own ESC4, served on [its own page](../nha/README.md) |
+| 6 ADCS | no | the authored part-6 page targets essos - but this lab has its own ESC4, served on [its own page](../goad-nha/README.md) |
 | 7 MSSQL | yes | `mssql_impersonation` and `mssql_linked`, the full part 7 chain including the linked server hop |
 | 8 privilege escalation | yes | `iis_webshell` then `writable_share` on web |
 | 9 lateral move | yes | web, sql and share are all reachable targets |
@@ -113,7 +113,7 @@ the suffixes differ (`.lan` against `.hack`), which is what makes them separate
 forests.
 
 This matters beyond the table. Every member server is in ACADEMY while the CA and
-the ESC4 template are in NINJA, so the [ESC4 chain](../nha/README.md) is reached
+the ESC4 template are in NINJA, so the [ESC4 chain](../goad-nha/README.md) is reached
 **across that forest trust** - the technique the old note said did not apply.
 
 Part 14 stays correctly "no", for its own stated reason: ESC7 needs `manageCA`,

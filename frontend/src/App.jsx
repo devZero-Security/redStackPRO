@@ -1425,7 +1425,7 @@ function Editor() {
             presets={presetsFor(document.mode)}
             onAddPreset={(preset) => addPreset(preset)}
             labsMode={document.mode}
-            labsTitle={document.mode === "range" ? "Range templates" : "Starters"}
+            labsTitle="Templates"
             onLoadLab={(file) => loadDocFromUrl(`/${file}.json`)}
           />
         )}
@@ -1551,7 +1551,7 @@ function Editor() {
                 subnets and hosts inside it.
               </p>
               <p className="rg-muted">
-                Or pick a {document.mode === "range" ? "GOAD lab" : "starter"} from the top of the palette.
+                Or pick a {document.mode === "range" ? "GOAD lab" : "template"} from the top of the palette.
               </p>
             </div>
           ) : null}

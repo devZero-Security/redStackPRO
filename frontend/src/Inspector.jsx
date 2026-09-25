@@ -644,7 +644,7 @@ function overlaySchemaFor(schema, kind) {
 function Field({ name, spec, value, required, onChange, disabled }) {
   const label = (
     <span className="rg-field-label">
-      {name}
+      {spec.title || name}
       {required ? <span className="rg-required">required</span> : null}
     </span>
   );

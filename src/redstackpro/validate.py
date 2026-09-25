@@ -632,18 +632,18 @@ def rdr001_redirector_hostname_unset(ctx):
         if hostname:
             yield finding(
                 "RDR001", "error", [node["id"]],
-                "{name} still carries the placeholder hostname {hostname}. A beacon "
+                "{name} still carries the placeholder domain {hostname}. A beacon "
                 "would call a domain you do not own.",
-                remedy="Set hostname to a domain you control and point it at this "
+                remedy="Set the domain to an FQDN you control and point it at this "
                        "redirector's address before deploying.",
                 name=ctx.name(node["id"]), hostname=hostname)
         else:
             yield finding(
                 "RDR001", "error", [node["id"]],
-                "{name} has no hostname. A redirector is the one host in the range "
-                "that answers to the internet by name, so the name is yours to "
+                "{name} has no domain set. A redirector is the one host in the range "
+                "that answers to the internet by name, so the domain is yours to "
                 "choose before anything is built.",
-                remedy="Set hostname to a domain you control and point it at this "
+                remedy="Set the domain to an FQDN you control and point it at this "
                        "redirector's address. Keep tls.cert_source letsencrypt to "
                        "have a real certificate issued for it, or set self_signed "
                        "if you would rather not.",

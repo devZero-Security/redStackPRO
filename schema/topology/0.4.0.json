@@ -532,6 +532,7 @@
         },
         "hostname": {
           "type": "string",
+          "title": "Domain (FQDN)",
           "x-redstackpro-source": "user",
           "x-redstackpro-placeholder": "cdn.your-domain.com",
           "description": "Public name this redirector answers on. Required: a compile is refused until you set a domain you control, because nothing can invent one for you."
