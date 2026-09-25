@@ -47,7 +47,7 @@ linked-server hop in part 7) and the whole essos ADCS set (part 14).
 
 ## Delta
 
-None. Its 22 techniques are a strict subset of goad's 35.
+None. Its 22 techniques are a strict subset of goad's 39.
 
 ## Stand-up gate
 

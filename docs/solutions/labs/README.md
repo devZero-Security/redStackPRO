@@ -64,7 +64,7 @@ solutions build on, so the per-lab pages here are not replaced.
 Every lab still has to clear the **stand-up gate**: it compiles from the canvas
 with no errors, `deploy.sh` reaches `RUN EXITED ok=1` in a single pass, and the
 jumpbox comes up with the Guacamole portal and the assumed-breach foothold
-account. That gate is independent of technique coverage and applies to all eight.
+account. That gate is independent of technique coverage and applies to all nine.
 
 ## Measured deploy runtimes (2026-09-09, GCP us-east4 / AWS us-east-1)
 

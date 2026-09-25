@@ -33,7 +33,7 @@ SOCKS and the two domains in `/etc/hosts`.
 redStackPRO compiles this range for cloud backends (`gcp`, `aws`, `azure`) and
 on-prem backends (`proxmox`, `esxi`). The attack chain is identical on all of
 them; what differs is the operator's path to the range, because the on-prem
-backends declare fewer network capabilities (`schema/registry/providers/`).
+backends declare fewer network capabilities (`src/redstackpro/schema/registry/providers/`).
 
 | capability | cloud (gcp/aws/azure) | on-prem (proxmox/esxi) |
 |------------|-----------------------|------------------------|
@@ -76,8 +76,8 @@ you in the wrong forest, and reaching the template means crossing the trust.
 
 ## The chain
 
-Four ACL edges in `ninja.hack` form one path from a low user to Domain Admin.
-Read them as a chain rather than four findings:
+Three ACL edges in `ninja.hack` form one path from a low user to Domain Admin.
+Read them as a chain rather than three findings:
 
 ```
 olivia.davis  --WriteDacl-->  rachel.philips  (member of Sanin)

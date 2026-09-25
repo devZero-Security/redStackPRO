@@ -68,7 +68,7 @@ Across both domains, and they form real chains rather than isolated grants:
 
 - `ninja.hack`: `Sanin -> Jonin` GenericAll, `olivia.davis -> rachel.philips`
   WriteDacl, `hokage -> Domain Admins` GenericAll, `hokage -> AdminSDHolder`
-  GenericAll
+  GenericAll, `Jonin -> SignatureValidation` GenericAll (the ESC4 template edge)
 - `academy.ninja.lan`: `backup -> Sensei` WriteOwner, `backup -> AdminSDHolder`
   WriteOwner, `gmsaNFS$ -> backup` ForceChangePassword, `SQL$ -> CN=Computers`
   GenericAll

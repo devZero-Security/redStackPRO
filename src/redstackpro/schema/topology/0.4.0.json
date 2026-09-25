@@ -468,7 +468,7 @@
             "proxmox"
           ],
           "x-redstackpro-source": "user",
-          "description": "Optional. Absent means this network compiles to whatever target the compile call names, which is the only supported behaviour today. Present pins the network, which is the placement mixed-provider graphs will need. Nothing reads it yet."
+          "description": "Optional. Absent means this network compiles to whatever target the compile call names, which is the only supported behaviour today. Present pins the network, which is the placement mixed-provider topologies will need. Nothing reads it yet."
         }
       }
     },

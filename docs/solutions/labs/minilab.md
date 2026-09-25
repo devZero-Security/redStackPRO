@@ -56,10 +56,13 @@ A scheduled task abuse primitive. Confirm the task exists, note the principal it
 runs as and who can modify it, then take the escalation only if the task's ACL
 actually permits a lower privileged identity to rewrite its action.
 
-### `stored_credential` (dc)
+### `weak_password` (domain users)
 
-Shared with goad part 5. Credentials in the Windows Credential Manager,
-recoverable without touching LSASS.
+Guessable passwords on `alice`, `bob`, `carol`, and `dave`. A password guess or
+spray lands a first domain foothold without kerberoasting or relay.
+
+(`stored_credential` on the dc is also in the lab, but it is shared with goad
+part 5, so it is not part of this delta.)
 
 ## Audited against the template (2026-09-14)
 

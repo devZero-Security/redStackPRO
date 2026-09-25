@@ -6,7 +6,7 @@ their examples stay in the repo as migration fixtures.
 The schema is the artifact, not this file.
 
 - `src/redstackpro/schema/topology/0.4.0.json` is the document schema
-- `src/redstackpro/schema/topology/examples/0.4.0/` holds three worked examples that
+- `src/redstackpro/schema/topology/examples/0.4.0/` holds four worked examples that
   double as test fixtures
 - `docs/validation.md` holds the rules JSON Schema cannot express
 - Decision 0007 is why the model is shaped the way it is, 0021 is why exposure is
@@ -37,7 +37,7 @@ at `src/redstackpro/schema/registry/`. See 0013.
   equality on a single overlay field and deliberately not an expression language
 - `providers/<provider>.yaml`, capabilities offered, and an `unsupported` list
   carrying the prose a capability failure reports
-- `roles.yaml`, the closed set of five edge roles, each declaring legal endpoint
+- `roles.yaml`, the closed set of seven edge roles, each declaring legal endpoint
   kinds, whether it requires reachability, and what it injects into which endpoint
 
 `python -m redstackpro.tools.registry` loads it and runs the capability check. It exits if the
@@ -56,6 +56,8 @@ guard between two files that would otherwise diverge.
 - `parallel-chains.json`, two independent chains in separate routing domains with
   one management network reaching both. Substituted for the GOAD example, which
   moves to the range pass
+- `peered.json`, two networks joined by a `peers` edge so a jumpbox in one manages
+  hosts in the other across the peered boundary
 
 ## Range model
 

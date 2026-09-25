@@ -1,12 +1,20 @@
+<!-- markdownlint-disable MD033 MD041 -->
+
 ![redStackPRO: red team infrastructure and cyber ranges](docs/images/banner.png)
+
+<p align="center">
+  <img src="https://img.shields.io/badge/license-MIT-3B9EFF" alt="MIT license">
+  <img src="https://img.shields.io/badge/version-0.9.0-CF2127" alt="version 0.9.0">
+  <img src="https://img.shields.io/badge/providers-GCP%20%7C%20AWS-3B9EFF" alt="providers GCP and AWS">
+  <img src="https://img.shields.io/badge/status-pre--release-A97BFF" alt="status pre-release">
+  <img src="https://img.shields.io/badge/exports-Terraform%20%2B%20Ansible-844FBA?logo=terraform&logoColor=white" alt="Terraform and Ansible">
+</p>
 
 # redStackPRO
 
-Visual composition for red team infrastructure and cyber ranges.
-
-redStackPRO is a web canvas where you build infrastructure as a topology, then
-export a complete, runnable working directory of Terraform and Ansible. You run it
-from your own machine. redStackPRO never holds your cloud credentials.
+> A web canvas where you build infrastructure as a topology, then export a
+> complete, runnable working directory of Terraform and Ansible. You run it from
+> your own machine. **redStackPRO never holds your cloud credentials.**
 
 redStackPRO puts attack infrastructure and target ranges on the same canvas.
 
@@ -26,17 +34,34 @@ the reference range the written solution follows.
 
 ![The GOAD lab on the canvas: sevenkingdoms, north and essos across two forests, their intra and cross-forest trusts, five machines and a jumpbox.](docs/images/goad.png)
 
-Status: pre-release, and the topology schema is still moving. The pipeline itself
-works end to end: a topology compiles to Terraform and Ansible, and the export
-deploys. GCP and AWS are the supported providers, tested end to end for both
-target ranges and attack infrastructure. Azure, Proxmox and ESXi are on the
-roadmap: Azure needs a peering module for the attack side, and neither Proxmox
-nor ESXi can allocate a public address on its own, so redirector reachability
-there depends on a network redStackPRO does not control.
+> [!IMPORTANT]
+> **The export is the boundary.** The canvas generates files; you run them under
+> your own credentials. redStackPRO never deploys anything and never holds a secret.
 
-## Run with Docker
+> [!CAUTION]
+> **Authorized use only.** redStackPRO builds offensive infrastructure and
+> deliberately vulnerable ranges. Use it only in lab environments you own or are
+> explicitly authorized to test, never against systems you do not have written
+> permission for.
 
-The whole canvas in one container -- the API and the web app on one port:
+---
+
+## 🧭 Status
+
+Pre-release, and the topology schema is still moving. The pipeline itself works end
+to end: a topology compiles to Terraform and Ansible, and the export deploys.
+
+| Provider | State |
+| -------- | ----- |
+| GCP, AWS | Supported and tested end to end, for both target ranges and attack infrastructure. |
+| Azure | On the roadmap. Needs a peering module for the attack side. |
+| Proxmox, ESXi | On the roadmap. Neither can allocate a public address on its own, so redirector reachability depends on a network redStackPRO does not control. |
+
+---
+
+## 🐳 Run with Docker
+
+The whole canvas in one container, the API and the web app on one port:
 
     docker compose up                    # builds from this repo, http://127.0.0.1:8000
 
@@ -58,7 +83,9 @@ The image is the composition layer only. It does not carry Terraform or Ansible
 and never holds your cloud credentials: you run the export it produces from your
 own machine, exactly as in the from-source flow below.
 
-## Run from source
+---
+
+## ⚙️ Run from source
 
 Python 3.11 or newer, and Node 24 for the canvas.
 
@@ -79,16 +106,16 @@ provider selector (GCP or AWS), press Compile, then Download. You get a zip of t
 working directory described below.
 
 **Or skip the canvas entirely** and compile a shipped template from the command
-line -- same compiler, same output:
+line, same compiler, same output:
 
     redstackpro compile frontend/public/goad/goad-light.json -o export
 
 The command line defaults to GCP. Pass `--provider aws` for AWS.
 
-That writes **190 files**: Terraform for the cloud, Ansible for everything that
-happens on the boxes, a `deploy.sh`, and a `RANGE-BRIEFING.md` telling you the
+That writes about **200 files**: Terraform for the cloud, Ansible for everything
+that happens on the boxes, a `deploy.sh`, and a `RANGE-BRIEFING.md` telling you the
 credentials and what is planted where. `goad-light` is a two-domain Active
-Directory range -- `sevenkingdoms` and `north` across a forest trust, two domain
+Directory range: `sevenkingdoms` and `north` across a forest trust, two domain
 controllers and a member server, plus a jumpbox.
 
 To deploy it, fill in `export/terraform/terraform.tfvars` and run:
@@ -99,7 +126,9 @@ To deploy it, fill in `export/terraform/terraform.tfvars` and run:
 jumpbox, because the managed hosts sit on a private subnet nothing else can
 reach. Your cloud credentials stay on your machine throughout.
 
-## API and agents
+---
+
+## 🤖 API and agents
 
 Everything the canvas does is available headless, so an agent can operate
 redStackPRO without a person clicking through it. A topology is plain JSON against
@@ -131,13 +160,17 @@ self-hosted deployment. Authenticated, multi-tenant agentic access over the API
 is part of the enterprise edition. redStackPRO holds no cloud credentials on any
 path: the export is the handoff, and you run it yourself.
 
-## Why
+---
+
+## 💡 Why
 
 redStack proved the pattern but the topology is fixed in code. redStackPRO makes
 it composable, adds multi-provider support, and puts attack infrastructure and
 target ranges on the same canvas.
 
-## Docs
+---
+
+## 📚 Docs
 
 - `docs/architecture.md`
 - `docs/schema.md`
@@ -145,7 +178,9 @@ target ranges on the same canvas.
 - `docs/solutions/`
 - `src/redstackpro/schema/topology/`
 
-## Repo layout
+---
+
+## 🗂️ Repo layout
 
     src/                     the Python package and everything it ships
       redstackpro/           the composition layer: validator, compiler, API
@@ -164,10 +199,16 @@ target ranges on the same canvas.
     LICENSE                  MIT, with the GOAD templates under GPLv3
     .github/                 CI workflows
 
-## Checks
+---
 
-CI runs these on every push and pull request. All of them run locally except the
-Ansible ones, which need a Linux control node.
+## ✅ Checks
+
+CI runs these on every push and pull request.
+
+<details>
+<summary>CI checks</summary>
+
+All of them run locally except the Ansible ones, which need a Linux control node.
 
     pytest -q                                     the compiler, validator, and API
     redstackpro validate --hostname <name>        the worked examples
@@ -192,6 +233,10 @@ fill it the way you would in the canvas inspector before pressing Compile.
 
 `check_roles.py` exists because a syntax check never opens a file reached by
 `include_tasks` with a templated name, which is every branch the roles have.
+
+</details>
+
+---
 
 ## License
 

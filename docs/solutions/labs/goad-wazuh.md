@@ -125,7 +125,7 @@ not verified live:
 | 8 privilege escalation | yes | `iis_webshell` on castelblack |
 | 9 lateral move | yes | four Windows hosts |
 | 10 delegations | yes | `unconstrained_delegation` on winterfell |
-| 11 ACL | yes | the full sevenkingdoms chain, fourteen edges |
+| 11 ACL | yes | the full sevenkingdoms chain, twelve edges |
 | 12 trusts | partial | parent and child, so the child-to-parent hop applies; no second forest |
 | 13 having fun | no | no writable share or open share |
 | 14 ADCS advanced | no | no CA |

@@ -91,7 +91,7 @@ Names are composed from the topology `prefix` and the node `id`, never stored. S
   addresses the target provider reserves at either end of a subnet. AWS and Azure
   hold back the first four and the last; GCP holds back the first two and the last
   two. The counts are data, in each provider's `reserved_addresses` block under
-  `schema/registry/providers/`. Because the bands differ, one topology can be legal
+  `src/redstackpro/schema/registry/providers/`. Because the bands differ, one topology can be legal
   on GCP and refused by AWS: the stock GOAD labs shipped a jumpbox pinned to
   `192.168.56.2` that deployed on GCP for months, then failed every AWS apply with
   "Address 192.168.56.2 is in subnet's reserved address range" two minutes in,
@@ -101,7 +101,7 @@ Names are composed from the topology `prefix` and the node `id`, never stored. S
   the way the gating header value is: someone has to register one and point it at the
   redirector's address. Shipping a plausible placeholder hid that until deploy, where
   it surfaced as the redirector blocking on "create an A record for
-  cdn.example-lure.com" -- an instruction nobody could follow, because satisfying it
+  cdn.example-lure.com", an instruction nobody could follow, because satisfying it
   needed a topology edit rather than a DNS edit. Failing in the canvas costs seconds and
   says what to do.
 
@@ -115,7 +115,7 @@ Names are composed from the topology `prefix` and the node `id`, never stored. S
   This is why a shipped example carrying a redirector does not validate as it stands:
   it is exactly one field short, and that field is yours. Set the domain and it
   compiles. `tests/shipped.py` fills it for the test suite, and
-  `test_every_shipped_redirector_example_demands_a_hostname_first` pins both halves --
+  `test_every_shipped_redirector_example_demands_a_hostname_first` pins both halves:
   that `RDR001` is the only error in a shipped example, and that supplying the domain
   clears it.
 
@@ -129,7 +129,7 @@ Names are composed from the topology `prefix` and the node `id`, never stored. S
   other asset on the cover page has a keyless fallback, so turning a knob on always
   produces something; a hero clip has none. Free-licence libraries carry documentary
   footage rather than short quiet brand-free b-roll, and the libraries that do carry
-  b-roll want their terms discharged with a visible credit on the page -- which is
+  b-roll want their terms discharged with a visible credit on the page, which is
   the one thing a cover page cannot show without announcing what it is. So an
   operator's own pack is the only source.
 
@@ -221,9 +221,10 @@ Requirements come from the node kind registry, not from the document.
   has to be able to open a connection to the collector, and a peering carries that
   across a network boundary. See 0029.
 - `LOG002` warning. A collector with `tls: false`.
-- `LOG003` warning. A collector sharing a segment with the jumpbox. It accepts
-  inbound from hosts assumed to be takedown targets, so it belongs in its own
-  tier.
+- `LOG003` **removed**, deliberately. It warned that a collector sharing a segment
+  with the jumpbox belongs in its own tier. redStack runs the collector in the one
+  internal segment alongside the jumpbox and the operator boxes, so warning about
+  the shipped shape every time was noise. See 0039.
 
 ## Ordering
 

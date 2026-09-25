@@ -32,7 +32,7 @@ like `192.168.56.0/24`, so do not let any tool assume the GOAD subnet).
 redStackPRO compiles this range for cloud backends (`gcp`, `aws`, `azure`) and
 on-prem backends (`proxmox`, `esxi`). The attack chain is identical on all of
 them; what differs is the operator's path to the range, because the on-prem
-backends declare fewer network capabilities (`schema/registry/providers/`).
+backends declare fewer network capabilities (`src/redstackpro/schema/registry/providers/`).
 
 | capability | cloud (gcp/aws/azure) | on-prem (proxmox/esxi) |
 |------------|-----------------------|------------------------|

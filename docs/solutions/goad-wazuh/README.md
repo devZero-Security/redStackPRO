@@ -33,7 +33,7 @@ reached Wazuh and whether a rule fired.
 redStackPRO compiles this range for cloud backends (`gcp`, `aws`, `azure`) and
 on-prem backends (`proxmox`, `esxi`). The attack chain is identical on all of
 them; what differs is the operator's path to the range, because the on-prem
-backends declare fewer network capabilities (`schema/registry/providers/`).
+backends declare fewer network capabilities (`src/redstackpro/schema/registry/providers/`).
 
 | capability | cloud (gcp/aws/azure) | on-prem (proxmox/esxi) |
 |------------|-----------------------|------------------------|
@@ -60,7 +60,7 @@ SIEM and a hardened workstation, on `192.168.56.0/24`.
 
 | host | AD name | domain | range IP | role |
 |------|---------|--------|----------|------|
-| kingslanding | KINGSLANDING | sevenkingdoms.local (root) | 192.168.56.10 | DC, `ldap_signing_off`, the full sevenkingdoms ACL chain (14 edges), Wazuh agent |
+| kingslanding | KINGSLANDING | sevenkingdoms.local (root) | 192.168.56.10 | DC, `ldap_signing_off`, the full sevenkingdoms ACL chain (12 edges), Wazuh agent |
 | winterfell | WINTERFELL | north.sevenkingdoms.local | 192.168.56.11 | DC, `unconstrained_delegation`, `llmnr_poisoning`, `ldap_signing_off`, Wazuh agent |
 | castelblack | CASTELBLACK | north.sevenkingdoms.local | 192.168.56.22 | member, MSSQL + IIS, `iis_webshell`, `mssql_impersonation`, `gpp_password`, Wazuh agent |
 | ws01 | WS01 | sevenkingdoms.local | 192.168.56.30 | Windows 10 workstation, **hardened** (ASR, RunAsPPL, constrained PowerShell, Defender tamper protection), no planted vulns |
@@ -110,7 +110,7 @@ otherwise-blind rows come into range here. See the coverage page for the full ma
    ([part 10](../goad/part-10-delegations.md)): coerce a DC, capture its TGT.
    Detection: **partial**, subtle 4624/4769 around the capture.
 8. **ACL abuse chain** in sevenkingdoms
-   ([part 11](../goad/part-11-acl.md)): the fourteen-edge path to Domain Admin
+   ([part 11](../goad/part-11-acl.md)): the twelve-edge path to Domain Admin
    (ForceChangePassword, GenericWrite, WriteDacl, WriteOwner, GenericAll).
    Detection: 4724/4728 are **partial to good**; the object-modify evidence (5136)
    is **blind** without directory-service auditing, which the toggle turns on here.
@@ -149,7 +149,7 @@ confirmed PASS).
 | 5 IIS webshell + MSSQL impersonation | | blind (needs Sysmon / SQL audit) | |
 | 6 GPP cpassword | | blind (SYSVOL read) | |
 | 7 unconstrained delegation | | partial | coerce a DC |
-| 8 ACL chain to DA | | partial/blind (5136) | 14 edges, sevenkingdoms |
+| 8 ACL chain to DA | | partial/blind (5136) | 12 edges, sevenkingdoms |
 | 9 child to parent trust | | partial | one forest |
 | ws01 hardening control | | ASR/Defender events | negative control, not a target |
 

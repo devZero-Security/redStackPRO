@@ -29,7 +29,7 @@ rules apply. See [[range-access-model]]:
 redStackPRO compiles this range for cloud backends (`gcp`, `aws`, `azure`) and
 on-prem backends (`proxmox`, `esxi`). The attack chain is identical on all of
 them; what differs is the operator's path to the range, because the on-prem
-backends declare fewer network capabilities (`schema/registry/providers/`).
+backends declare fewer network capabilities (`src/redstackpro/schema/registry/providers/`).
 
 | capability | cloud (gcp/aws/azure) | on-prem (proxmox/esxi) |
 |------------|-----------------------|------------------------|
@@ -51,17 +51,17 @@ resolution as on-prem (static hosts entries) and expect no managed peering.
 
 ## Topology under test
 
-Domain `sccm.lab`, subnet `192.168.56.0/24`, prefix `cysc` on the range's GCP
+Domain `sccm.lab`, subnet `192.168.56.0/24`, prefix `cyb` on the range's GCP
 project. Cloud resource names carry the prefix, Windows and AD names do
 not.
 
 | host | AD name | address | role |
 |------|---------|---------|------|
-| cysc-jumpbox | - | 192.168.56.2 | foothold, Guacamole, ssh |
-| cysc-mecm | MECM | 192.168.56.3 | site server, MECM primary site |
-| cysc-client | CLIENT | 192.168.56.4 | Windows 10 client |
-| cysc-dc | DC | 192.168.56.5 | domain controller |
-| cysc-mssql | MSSQL | 192.168.56.6 | remote site database |
+| cyb-jumpbox | - | 192.168.56.2 | foothold, Guacamole, ssh |
+| cyb-mecm | MECM | 192.168.56.3 | site server, MECM primary site |
+| cyb-client | CLIENT | 192.168.56.4 | Windows 10 client |
+| cyb-dc | DC | 192.168.56.5 | domain controller |
+| cyb-mssql | MSSQL | 192.168.56.6 | remote site database |
 
 The separate site database matters: it is what makes TAKEOVER-1 and TAKEOVER-2
 reachable, because the site server authenticates to a **different** host.

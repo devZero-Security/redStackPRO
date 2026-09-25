@@ -66,7 +66,7 @@ pages below are the authored source and target full GOAD.
 common one is **GOAD-Light** (`goad-light.json`): two domains
 (`sevenkingdoms.local`, `north.sevenkingdoms.local`) and three Windows hosts -
 kingslanding (DC, ADCS ESC1), winterfell (DC), castelblack (MSSQL/IIS member).
-It has no `essos.local`, so meereen, braavos, the-eyrie and every essos user
+It has no `essos.local`, so meereen, braavos and every essos user
 (khal.drogo and the rest) do not exist on it, and neither does the cross-forest
 trust. The per-lab column in the parts table below says what each lab can reach.
 
@@ -93,7 +93,7 @@ is `192.168.56.0/24`.
 redStackPRO compiles this range for cloud backends (`gcp`, `aws`, `azure`) and
 on-prem backends (`proxmox`, `esxi`). The attack chain is identical on all of
 them; what differs is the operator's path to the range, because the on-prem
-backends declare fewer network capabilities (`schema/registry/providers/`).
+backends declare fewer network capabilities (`src/redstackpro/schema/registry/providers/`).
 
 | capability | cloud (gcp/aws/azure) | on-prem (proxmox/esxi) |
 |------------|-----------------------|------------------------|
@@ -131,10 +131,11 @@ name resolution as on-prem (static hosts entries) and expect no managed peering.
   | meereen | essos.local | ☑ | ☐ | DC - Apollo as ESSOS\administrator (high integrity) |
   | castelblack | north.sevenkingdoms.local | ☑ | ☐ | MSSQL member - Apollo as NORTH\administrator (also reachable via xp_cmdshell as NT Service\MSSQL$SQLEXPRESS) |
   | braavos | essos.local | ☑ | ☐ | MSSQL/ADCS member - Apollo as ESSOS\administrator (high integrity) |
-  | the-eyrie (srv01) | sevenkingdoms.local | ☑ | ☐ | Exchange member - Apollo as SEVENKINGDOMS\administrator (high integrity) |
+  | the-eyrie (srv01) | sevenkingdoms.local | ☑ | ☐ | Exchange member (optional add-on, not in base goad.json) - Apollo as SEVENKINGDOMS\administrator (high integrity) |
 
-  Beacon coverage validated live 2026-09-07: all six servers ran a fresh Apollo
-  beacon that checked in through cdn.redops.design → redirector → Mythic and
+  Beacon coverage validated live 2026-09-07: all five base servers plus the
+  optional the-eyrie add-on ran a fresh Apollo beacon that checked in through
+  cdn.redops.design → redirector → Mythic and
   returned `whoami` on task (callbacks 9-14). Delivery was uniform - wmiexec as
   the host's domain administrator (lab password), staging `b2.exe` over HTTP
   from the jumpbox foothold (192.168.56.4:1025), Defender off by default. This
