@@ -82,3 +82,48 @@ def test_briefing_filename_is_mode_specific():
     ops_files = compile_topology(redstack, Registry(), provider="aws")
     assert "ARTIE-BRIEFING.md" in ops_files
     assert "HAVEN-BRIEFING.md" not in ops_files
+
+
+# -- the artie operators / VPN access section (vpn-multiuser-spec)
+
+def _artie_with_operators(access_mode=None, operators=None, **vpn):
+    doc = json.loads(
+        (ROOT / "frontend/public/redstack.json").read_text(encoding="utf-8"))
+    for n in doc["nodes"]:
+        if n["kind"] == "jumpbox":
+            ov = n.setdefault("overlay", {})
+            if access_mode:
+                ov["access_mode"] = access_mode
+            ov.update(vpn)
+            if operators is not None:
+                ov["operators"] = operators
+    return doc
+
+
+def test_briefing_lists_each_operator_and_their_wireguard_credential():
+    md = range_briefing(_artie_with_operators(
+        access_mode="wireguard",
+        operators=[{"handle": "alice"}, {"handle": "bob", "role": "lead"}]))
+    assert "## Operators & VPN access" in md
+    assert "wireguard" in md
+    # The endpoint is the jumpbox public address token, filled at apply.
+    assert "public_address>>:51820/udp" in md
+    # Each operator: a portal account and a personal WireGuard config to fetch.
+    assert "| alice |" in md and "`/opt/redstackpro/vpn/alice.conf`" in md
+    assert "| bob |" in md and "lead" in md
+    assert "scp" in md and "<handle>.conf" in md
+
+
+def test_briefing_openvpn_uses_the_custom_port_protocol_and_ovpn_extension():
+    md = range_briefing(_artie_with_operators(
+        access_mode="openvpn", vpn_protocol="tcp", vpn_port=5124,
+        operators=[{"handle": "carol"}]))
+    assert "public_address>>:5124/tcp" in md
+    assert "`/opt/redstackpro/vpn/carol.ovpn`" in md
+
+
+def test_briefing_omits_the_operator_section_without_vpn_or_roster():
+    """A plain artie stack (no access_mode, no operators) gets no section, the
+    same as before the feature."""
+    md = range_briefing(_artie_with_operators(operators=[]))
+    assert "## Operators & VPN access" not in md

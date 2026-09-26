@@ -164,6 +164,62 @@ def range_briefing(document, registry=None):
         "Get it with `terraform output -raw lab_password`.",
     ]
 
+    # -- Operators and VPN access (artie only). The roster and the VPN access mode
+    # are artie concepts; a haven range ignores them (VPN002), so the section is
+    # rendered only for an artie stack that declared either. Each operator gets a
+    # personal portal account, and on a VPN access mode a personal credential the
+    # jumpbox generates at apply; this names where to fetch each one. See
+    # vpn-multiuser-spec.
+    if jump and document.get("mode") == "artie":
+        jov = jump.get("overlay", {}) or {}
+        operators = jov.get("operators") or []
+        vpn_mode = jov.get("access_mode", "public")
+        is_vpn = vpn_mode in ("wireguard", "openvpn")
+        if operators or is_vpn:
+            addr = _tok(ctx, jump["id"], "public_address")
+            vpn_dir = "/opt/redstackpro/vpn"
+            lines += ["", "## Operators & VPN access", ""]
+            ext = None
+            if is_vpn:
+                ext = "conf" if vpn_mode == "wireguard" else "ovpn"
+                proto = "udp" if vpn_mode == "wireguard" \
+                    else jov.get("vpn_protocol", "udp")
+                port = jov.get("vpn_port") or \
+                    {"wireguard": 51820, "openvpn": 1194}[vpn_mode]
+                lines += [
+                    "This stack fronts the team over a **%s** VPN. Each operator "
+                    "has a personal portal account and a personal VPN credential, "
+                    "generated on the jumpbox at apply; the keys never leave the "
+                    "box, so fetch each file and hand it to that operator." % vpn_mode,
+                    "",
+                    "- **VPN endpoint:** `%s:%s/%s`" % (addr, port, proto),
+                    "- **Fetch a credential:** `scp %s@%s:%s/<handle>.%s .`" % (
+                        account, addr, vpn_dir, ext),
+                ]
+            else:
+                lines.append(
+                    "Each operator has a personal portal account; access is the "
+                    "shared public portal (no VPN).")
+            header = "| Operator | Role | Portal account |"
+            rule = "| --- | --- | --- |"
+            if ext:
+                header += " VPN credential (on the jumpbox) |"
+                rule += " --- |"
+            lines += ["", header, rule]
+            if operators:
+                for op in operators:
+                    handle = op.get("handle", "-")
+                    row = "| %s | %s | `%s` / lab password |" % (
+                        handle, op.get("role", "-"), handle)
+                    if ext:
+                        row += " `%s/%s.%s` |" % (vpn_dir, handle, ext)
+                    lines.append(row)
+            else:
+                row = "| (none declared) | - | shared `operator` only |"
+                if ext:
+                    row += " - |"
+                lines.append(row)
+
     # -- Hosts
     hosts = sorted(ctx.hosts(), key=lambda n: (n["kind"], n["id"]))
     lines += ["", "## Hosts (%d)" % len(hosts), "",
