@@ -25,10 +25,11 @@ where the host was provisioned.
 
 **Node kinds** are what a thing is: network, segment, teamserver, redirector,
 collector, jumpbox, operator box. Containers are node kinds too, which is what
-lets every edge endpoint be a bare node id. No provider vocabulary. See 0007.
+lets every edge endpoint be a bare node id. No provider vocabulary.
 
 **Blueprints** are saved topologies users clone and modify. Current redStack ships as
-the default blueprint. GOAD variants become blueprints in phase three.
+the default blueprint. The GOAD-derived range labs ship as their own topology
+templates, built on the same model.
 
 **Overlays** are per-node parameters: which C2 on this teamserver, which gating
 rules on this redirector, which services on this jumpbox.
@@ -42,10 +43,11 @@ know whether to emit a variable or a reference.
 
 A `mode` field on the topology document with values `ops` and `range`. Mode gates the
 canvas palette, icons, and chrome. The compiler ignores it. One topology model, one
-validator, one compiler, one export shape, one set of backends. See 0012.
+validator, one compiler, one export shape, one set of backends.
 
-Range mode ships without an editor: a shipped GOAD topology rendered read-only with a
-parameter form. Custom range authoring unlocks the same canvas later.
+Range mode ships as a set of preset topologies, the GOAD-derived labs, rendered
+read-only with a parameter form. Free-form range authoring on the same canvas
+used for `ops` mode is not built yet.
 
 ## Provider support is declarative
 
@@ -67,7 +69,7 @@ reader. The prose matters because the eventual agent harness iterates on it.
 
 Every saved topology carries `schema_version` with a migration path from day one.
 Documents are stored as JSONB with immutable revisions, which is also what
-supplies the corpus migrations get tested against. See 0008.
+supplies the corpus migrations get tested against.
 Users will save blueprints the week this ships and the model will change the
 following month.
 
@@ -88,7 +90,7 @@ loop is what a language model is good at.
 ## Export
 
 Compile returns a map of paths to contents. The archive endpoint is a formatter
-over that map for the browser download. See 0010.
+over that map for the browser download.
 
 The deliverable is a complete working directory: root module, `modules/`,
 populated tfvars, ansible tree, and a README with run order. The user unzips and
@@ -96,22 +98,18 @@ runs `terraform init` without assembling anything.
 
 ## Scope
 
-Revised by 0012. The original ordering put ranges at phase three and Azure ahead
-of AWS.
+The canvas covers `ops` mode and `range` mode, generating for GCP and AWS, both
+supported and tested end to end for target ranges and attack infrastructure.
+Azure is a preview backend: public addressing works, but private DNS and
+peering are not built yet. Proxmox and ESXi are on the roadmap as on-prem
+targets; neither can allocate a public address on its own, so redirector
+reachability would depend on a network redStackPRO does not control.
 
-1. Canvas, schema, validation, compile preview that deploys nothing
-2. `ops` mode generation across GCP, AWS, and Proxmox
-3. `range` mode as a rendered GOAD template with instantiation parameters, same
-   three providers, no custom authoring
-4. Packaging and self-hosting
-5. Azure, custom range authoring, and multi-provider export
+Range mode ships as a rendered GOAD template with instantiation parameters;
+custom range authoring over the same providers is not built yet.
 
-Proxmox and QEMU are the on-prem target. ESXi is deferred and costs nothing to
-add later, since it is a packaging problem rather than a provider port. See 0003.
-
-Ansible generation is in scope from the first release. Inventory, variables, and
-play ordering are derived from the topology; role bodies come from redStack. See
-0011.
+Ansible generation ships from the first release. Inventory, variables, and
+play ordering are derived from the topology; role bodies come from redStack.
 
 ## Known gaps accepted by the export-only model
 
@@ -119,5 +117,5 @@ play ordering are derived from the topology; role bodies come from redStack. See
 - No destroy button
 - No drift detection
 
-An optional import path where users paste back outputs or state would close these
-if it turns out to matter. Not in scope for the demo.
+An optional import path where users paste back outputs or state would close
+these if it turns out to matter. Nothing in redStackPRO does this today.

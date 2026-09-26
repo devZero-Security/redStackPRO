@@ -63,7 +63,7 @@ a choice of impacket methods.
 - **Fidelity delta:** `jeor.mormont` is not local admin on castelblack in our
   build (mayfly makes him admin there, enabling the SAM-dump-then-PTH story from
   a member). Consider seeding the local-admin membership as a toggle so the
-  password-reuse → DA narrative reproduces from castelblack. Batched per
-  [[defer-rebuilds-keep-pushing]].
+  password-reuse → DA narrative reproduces from castelblack. Batched for a
+  later rebuild.
 - **wmiexec semi-interactive stdout** can need the target share writable; when in
   doubt, use `-shell-type` / redirect to a file, or prefer `atexec` for one-shots.

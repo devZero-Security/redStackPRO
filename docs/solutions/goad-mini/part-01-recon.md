@@ -19,9 +19,10 @@ deterministic (redStack pins each core host's last octet via the `internal_ip`
 field to GOAD's canonical scheme per P1.6 / ADR 0055, so a fresh deploy
 reproduces them) and safe to publish as-is. **Public addresses are
 per-deploy and cloud-ephemeral** - the jumpbox and redirector get a fresh IP
-each apply, so re-fetch them from your own deploy ([[range-access-model]]); they
-are never published here, both because they change and because a real address
-tied to a live C2 redirector does not belong in a solution.
+each apply, so re-fetch them from your own deploy (see the
+[range access model](../README.md#range-access-model)); they are never
+published here, both because they change and because a real address tied to a
+live C2 redirector does not belong in a solution.
 
 > **Read `RANGE-BRIEFING.md` before this page.** Every deploy writes it into the
 > export, filled in after `terraform apply` with **this deploy's** real public
@@ -49,12 +50,13 @@ tied to a live C2 redirector does not belong in a solution.
 > as written. Optional add-on hosts (the-eyrie/wazuh) are not IP-pinned even on
 > full GOAD and stay DHCP-assigned - verify at runtime.
 
-- redStack redirector (public, per-deploy): **cdn.redops.design** → Mythic C2.
+- redStack redirector (public, per-deploy): **cdn.redops.design** (an example
+  value, your deploy's own `--hostname` domain goes here) → Mythic C2.
 - Mythic teamserver: `10.30.20.4` (myth-ts01), UI `:7443` via jumpbox tunnel
   (Sliver `10.30.20.2`, Adaptix `10.30.20.3`; the redirector routes to each).
   These live in the separate redStack ops project, reached only through the C2.
 
-### Assumed-breach identity - patient zero = **hodor** ([[range-access-model]])
+### Assumed-breach identity - patient zero = **hodor** (see the [range access model](../README.md#range-access-model))
 
 - **Portal entry:** the Guacamole portal on the jumpbox (`https://<jumpbox-public-ip>/guacamole`), then the **`castelblack as hodor (patient zero)`** RDP tile. That tile signs straight in as `NORTH\hodor` on a range host - the operator never touches SSH. This is the way in for the whole engagement.
 - **Domain patient zero:** `north\hodor` / its lab password (see the briefing), **Domain Users only** (low-priv). The seeded phished-employee credential the RDP tile logs in with. Verified live: hodor is a `north.sevenkingdoms.local` user, global groups `*Stark` + `*Domain Users`.
@@ -115,10 +117,12 @@ that.
 
 The initial access **is a C2 beacon in patient zero's context**, delivered and
 run through the portal - not an SSH foothold on the jumpbox. This is the
-canonical starting point ([[range-access-model]]) and it is proven live: patient
-zero (`NORTH\hodor`) executes an Apollo beacon that calls home to Mythic through
-the redirector, and every later step runs through *that* beacon. It is a stronger,
-more realistic initial access than dropping a beacon on the jumpbox itself.
+default starting point (see the
+[range access model](../README.md#range-access-model)) and it runs live:
+patient zero (`NORTH\hodor`) executes an Apollo beacon that calls home to
+Mythic through the redirector, and every later step runs through *that*
+beacon. It models initial access more realistically than dropping a beacon on
+the jumpbox itself.
 
 **Build the Apollo payload** (from the redStack offense side; headless via the
 Mythic scripting library on the teamserver, or the Mythic UI). The two things

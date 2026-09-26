@@ -76,7 +76,7 @@ proxychains -q python3 sccmwtf.py fake fakepc.sccm.lab MECM 'SCCMLAB\<machine>$'
   Confirm which coercion primitive lands.
 - **MECM$ is sysadmin on the DB.** This is exactly what the sccm role sets up
   (MECM$ plus the site admin account granted sysadmin on the site database), so
-  TAKEOVER-1 and TAKEOVER-2 should both be reachable. See [[sccm-mecm-deploy-state]].
+  TAKEOVER-1 and TAKEOVER-2 should both be reachable.
 - **ntlmrelayx dsinternals.** ntlmrelayx crashes without `dsinternals`; ship it
   on the operator toolchain (PZ-2).
 

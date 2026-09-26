@@ -95,7 +95,7 @@ ACLs themselves.
   `ETYPE_NOSUPP`. If the solution should show targeted kerberoast broadly,
   widen the RC4 allowance (toggle) - trade-off with realism.
 - **LAPS not deployed** (legacy attribute absent) - add LAPS (+ read-ACL) as a
-  toggle for the LAPS-read technique. Batched per [[defer-rebuilds-keep-pushing]].
+  toggle for the LAPS-read technique. Batched for a later rebuild.
 - **Lab artifact:** jaime.lannister password changed to `Jaime123!` (ForceChange
   demo); reset from a DA if original fidelity matters.
 - **Missing tools (PZ-2):** `net` (samba), `ldeep`, `targetedKerberoast`,

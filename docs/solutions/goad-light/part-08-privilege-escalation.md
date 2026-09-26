@@ -92,7 +92,7 @@ findings).
   Defender-on host, prepend the AMSI bypass + reflective assembly load.
 - **KrbRelayUp blocked by LDAP signing** - if a solution should demonstrate
   it, that's a fidelity toggle (LDAP signing not enforced) on the DC, opposite to
-  the current secure default. Batched (rebuild) per [[defer-rebuilds-keep-pushing]].
+  the current secure default. Batched for a later rebuild.
 - **PrintSpoofer `-c` stdout** isn't relayed back through xp_cmdshell; the
   `CreateProcessAsUser() OK` line is the success signal (or write output to a
   file and read it back).

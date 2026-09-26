@@ -11,17 +11,18 @@ domain admin, and that child admin walks the trust into the root.
 
 > **Status: verified live on AWS, 2026-09-26.** The chain was run end to end from a
 > beacon in patient zero's context through the portal. Steps 0 to 4 are confirmed on
-> a real deploy; step 5 (the trust hop) behaves as a patched forest does, see its
-> note. Two operational details the live run pinned down: `svc.reports`' password is
-> a season+year that a plain wordlist misses (step 2), and patient zero has to be a
-> Remote Desktop Users member for the portal tile to open (step 0).
+> a real deploy; step 5 (the trust hop) behaves the way a patched forest does. See
+> its note. Two operational details the live run pinned down: the password for
+> `svc.reports` is a season+year that a plain wordlist misses (step 2), and patient
+> zero has to be a Remote Desktop Users member for the portal tile to open (step 0).
 
 ## Methodology
 
-Same external red team framing as the [GOAD series](../goad/README.md), see
-[[range-access-model]]: the jumpbox is the only public host, every range backend
-is private, and the operator works through a beacon's SOCKS proxy
-([[tests-run-through-beacon]]). Initial access is a beacon in patient zero's
+Same external red team framing as the [GOAD series](../goad/README.md), see the
+[range access model](../README.md#range-access-model): the jumpbox is the only
+public host, every range backend is private, and the operator works through a
+beacon's SOCKS proxy (see [tests run through the
+beacon](../README.md#tests-run-through-the-beacon)). Initial access is a beacon in patient zero's
 context, delivered through the Guacamole portal, not an SSH foothold on the
 jumpbox. Commands below assume `proxychains` over that SOCKS and the forest names
 in static hosts entries (this range is on `172.20.10.0/24`, deliberately nothing
@@ -92,7 +93,8 @@ App Maintainers  --ForceChangePassword-->       eric.vance        (child DA)
 ## The chain
 
 Read passwords and exact names from this deploy's `RANGE-BRIEFING.md`; the names
-below are the template's.
+below are the template's. Steps are numbered from 0, the order patient zero
+actually meets them.
 
 ### 0. Foothold as patient zero
 
@@ -111,10 +113,11 @@ proxychains bloodhound-python -d freight.harbor.corp -u dana.brooks -p '<pw>' \
 
 Patient zero is reached through the portal's patient-zero tile, an RDP session as
 `dana.brooks` (she has to be a Remote Desktop Users member on `fr-wks01` for the tile
-to open, which the range grants). Landing the first payload is the practical hurdle:
-the tile carries a shared drive (GuacShare) you can drop a file into, but if the
+to open, which the range grants). Landing the first payload is the practical hurdle.
+The tile carries a shared drive (GuacShare) you can drop a file into, but if the
 browser upload stalls, smuggle the payload in over the range's own management plane
-instead, which is more reliable and leaves no mark-of-the-web to raise SmartScreen:
+instead. That path is more reliable and leaves no mark-of-the-web to raise
+SmartScreen:
 
 ```
 # SSH the file to the jumpbox's shared drop, then pull it in from the RDP session:
@@ -218,9 +221,9 @@ attempt against a monitored, patched forest.
   so a roast against the root DC is a second path that does not depend on the
   trust hop. It only lands if the password cracks.
 - **Unconstrained delegation on fr-app01.** `fr-app01` is trusted for
-  unconstrained delegation. Coerce a domain controller to authenticate to it
-  (for example with the printer bug), capture the DC's TGT from LSASS, and use it
-  for DCSync. This is a member-server path to domain compromise.
+  unconstrained delegation. Coerce a domain controller to authenticate to it,
+  for example with the printer bug, then capture the DC's TGT from LSASS and
+  use it for DCSync. This is a member-server path to domain compromise.
 - **Open shares on fr-app01.** `openshares` means readable SMB shares to loot for
   credentials, scripts or config; a common source of the next credential.
 

@@ -5,11 +5,11 @@ mayfly's write-up is the reference template; these pages capture the **same
 attack path executed the redStackPRO way** and are updated as we validate each
 step live.
 
-## Governing methodology (read first)
+## Methodology
 
 We reframe GOAD from an **external red-team point of view**. GOAD is normally an
 internal-pentest lab; here redStack enforces the realistic external kill-chain.
-See [[range-access-model]]. Rules:
+See the [range access model](../README.md#range-access-model). Conventions we follow:
 
 1. **External POV, C2-only.** No VPC peering, no network shortcut. The only
    public surface is the **jumpbox** and the redStack **redirector**; every
@@ -19,15 +19,18 @@ See [[range-access-model]]. Rules:
    opening the **patient-zero RDP tile** (it signs in as the phished user, e.g.
    `NORTH\hodor`, on a range host). The operator drops an **Apollo** payload onto
    the session's **GuacShare** drive and runs it; it calls home to Mythic through
-   the redirector (`cdn.redops.design`). If the browser upload into GuacShare
+   the redirector (`cdn.redops.design`, an example value: your deploy's own
+   `--hostname` domain goes here instead). If the browser upload into GuacShare
    stalls, smuggle the payload in over the range's own management plane instead:
    `scp` it to the jumpbox's shared drop, or copy it straight onto the host over
    WinRM from the jumpbox (`win_copy` / `Copy-Item` over a PSSession); a WinRM copy
-   also carries no mark-of-the-web, so it runs without a SmartScreen prompt. This is the canonical starting point,
-   proven live, and a stronger, more realistic initial access than dropping a
-   beacon on the jumpbox itself. See [[range-access-model]]. (The jumpbox SSH
-   SOCKS path, `ssh -D 1080 hodor@<jumpbox>`, still exists as an agent/admin
-   convenience and a fallback, but it is **not** the engagement's initial access.)
+   also carries no mark-of-the-web, so it runs without a SmartScreen prompt. This
+   is the default starting point for the series and it runs live: it models
+   initial access more realistically than dropping a beacon on the jumpbox
+   itself. See the [range access model](../README.md#range-access-model). (The
+   jumpbox SSH SOCKS path, `ssh -D 1080 hodor@<jumpbox>`, still exists as an
+   agent/admin convenience and a fallback, but it is **not** the engagement's
+   initial access.)
 3. **Mythic is the C2.** From that first beacon the engagement runs through C2:
    - Apollo built-ins (`net`, `ls`, token ops),
    - **execute-assembly** of .NET tooling (Rubeus, Certify/Certipy, SharpHound,

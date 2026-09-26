@@ -18,10 +18,11 @@ and CredSSP hands you the admin's plaintext credential.
 
 ## Methodology
 
-Same external red team framing as the [GOAD series](../goad/README.md), see
-[[range-access-model]]: the jumpbox is the only public host, the DC and the
-workstation are private, and the operator works through a beacon's SOCKS proxy
-([[tests-run-through-beacon]]). Initial access is a beacon delivered through the
+Same external red team framing as the [GOAD series](../goad/README.md), see the
+[range access model](../README.md#range-access-model): the jumpbox is the only
+public host, the DC and the workstation are private, and the operator works
+through a beacon's SOCKS proxy (see [tests run through the
+beacon](../README.md#tests-run-through-the-beacon)). Initial access is a beacon delivered through the
 Guacamole portal. Commands below assume `proxychains` over that SOCKS and the
 domain name in static hosts entries.
 

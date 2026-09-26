@@ -20,10 +20,11 @@ the operator walkthrough over it.
 
 ## Methodology
 
-Same external red team framing as the [GOAD series](../goad/README.md), see
-[[range-access-model]]: the jumpbox is the only public host, every AD host is
-private, and the operator works through a beacon's SOCKS proxy
-([[tests-run-through-beacon]]). Initial access is a beacon in patient zero's
+Same external red team framing as the [GOAD series](../goad/README.md), see the
+[range access model](../README.md#range-access-model): the jumpbox is the only
+public host, every AD host is private, and the operator works through a
+beacon's SOCKS proxy (see [tests run through the
+beacon](../README.md#tests-run-through-the-beacon)). Initial access is a beacon in patient zero's
 context (`NORTH\hodor`) through the Guacamole portal. The one addition here is the
 **Wazuh manager**: after each attack step, check whether the expected event
 reached Wazuh and whether a rule fired.

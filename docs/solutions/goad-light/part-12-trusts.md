@@ -81,7 +81,7 @@ Domain ownership is already established via parts 6/10.
 - **SID-history fidelity:** confirm whether SID history is enabled on the
   sevenkingdoms↔essos trust and whether a privileged RID>1000 group exists
   (mayfly's dragonrider). Add as a toggle for the forest SID-history attack.
-  Batched per [[defer-rebuilds-keep-pushing]].
+  Batched for a later rebuild.
 
 ## Not on this lab
 

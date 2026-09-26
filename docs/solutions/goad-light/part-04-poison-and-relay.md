@@ -46,8 +46,10 @@ Coercion and the relay listener run from the **operator foothold** (the jumpbox,
 which carries the PZ-2 toolkit), not down the beacon's SOCKS: `ntlmrelayx` has to
 *receive* the coerced inbound authentication, so it needs a listener on an
 address the coerced DC can reach, which the SOCKS proxy is not. This is the
-documented exception to [[tests-run-through-beacon]] (a step that cannot go
-through the beacon, and why). Run the listener under a pty (`screen -dmS`) so it
+documented exception to
+[tests running through the beacon](../README.md#tests-run-through-the-beacon)
+(a step that cannot go through the beacon, and why). Run the listener under a
+pty (`screen -dmS`) so it
 keeps running detached, and `--no-http-server` because nginx owns :80 for the
 portal.
 

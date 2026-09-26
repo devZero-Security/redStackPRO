@@ -17,7 +17,7 @@ replaces it entirely: the lab is compiled from the canvas and deployed with one
 ## Methodology
 
 Same external red team framing as the [GOAD series](../goad/README.md), and the same
-rules apply. See [[range-access-model]]:
+rules apply. See the [range access model](../README.md#range-access-model):
 
 1. **External POV, C2 only.** The jumpbox is the only public host. Every SCCM
    host is private with no internet exposed port.

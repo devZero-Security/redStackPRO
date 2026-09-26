@@ -22,10 +22,11 @@ known limit recorded in ADR 0058, of which this is the concrete instance.
 
 ## Methodology
 
-Same external red-team framing as the [GOAD series](../goad/README.md), see
-[[range-access-model]]: the jumpbox is the only public host, everything else is
-private, and the operator works through a beacon's SOCKS proxy
-([[tests-run-through-beacon]]). Commands below assume `proxychains` over that
+Same external red-team framing as the [GOAD series](../goad/README.md), see the
+[range access model](../README.md#range-access-model): the jumpbox is the only
+public host, everything else is private, and the operator works through a
+beacon's SOCKS proxy (see [tests run through the
+beacon](../README.md#tests-run-through-the-beacon)). Commands below assume `proxychains` over that
 SOCKS and the two domains in `/etc/hosts`.
 
 ## Provider differences

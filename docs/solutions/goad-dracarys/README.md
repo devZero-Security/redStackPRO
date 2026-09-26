@@ -5,7 +5,7 @@ start with no credentials and reach Domain Admin on `dracarys.lab`. Unlike the
 GOAD pwning series, mayfly deliberately publishes no solution. This page
 documents the intended chain against redStackPRO's faithful recreation of the
 lab, reconstructed from the upstream `ad/DRACARYS` definition and the redStackPRO
-roles that reproduce it. See [[dracarys-fidelity-gap]].
+roles that reproduce it.
 
 > **Status: authored from the upstream lab definition, not fully live-verified.** The
 > chain below follows the intended DRACARYS path; parts of the edge set (the KeePass
@@ -14,9 +14,10 @@ roles that reproduce it. See [[dracarys-fidelity-gap]].
 
 ## Methodology
 
-Same external red-team framing as the [GOAD series](../goad/README.md), see
-[[range-access-model]]: the jumpbox is the only public host, everything else is
-private, and the operator pivots through the jumpbox (SSH SOCKS or a beacon).
+Same external red-team framing as the [GOAD series](../goad/README.md), see the
+[range access model](../README.md#range-access-model): the jumpbox is the only
+public host, everything else is private, and the operator pivots through the
+jumpbox (SSH SOCKS or a beacon).
 Within the lab, the challenge's own start point is the Linux member.
 
 ## Provider differences
