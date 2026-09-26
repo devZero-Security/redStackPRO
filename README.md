@@ -24,6 +24,17 @@ network, with the teamservers, collector and operators behind a jumpbox.
 
 ![Split horizon C2 on the canvas: two redirector networks, Apache fronting Sliver and Nginx fronting Mythic, over a shared C2 subnet with the teamservers, an OpenSearch collector, operators and a jumpbox.](docs/images/split-horizon.png)
 
+**Multiple operators, one stack.** An attack-infrastructure jumpbox can name a
+list of `operators` (handle plus role), and each gets a Guacamole portal login
+on the shared lab password. Set the jumpbox's `access_mode` to `wireguard` or
+`openvpn` (default is a public portal) and every operator also gets a personal
+VPN credential generated on the jumpbox at apply: the keys never leave the box
+or enter the export, only the client config file does. On a VPN access mode
+the portal closes to the internet and moves behind the tunnel, while SSH stays
+open so the admin can keep deploying and managing the box. Add or remove a
+teammate on a running jumpbox with `sudo rsp-operator add <handle>`. See the
+wiki [Deploying a Range](https://github.com/devZero-Security/redStackPRO/wiki/Deploying-a-Range).
+
 Harbor, a target range: a small corporate forest, a root domain and a child over a
 parent-child trust, with the ordinary path from a phished workstation to the forest.
 
@@ -113,7 +124,7 @@ line, same compiler, same output:
 The command line defaults to GCP. Pass `--provider aws` for AWS.
 
 That writes about **200 files**: Terraform for the cloud, Ansible for everything
-that happens on the boxes, a `deploy.sh`, and a `RANGE-BRIEFING.md` telling you the
+that happens on the boxes, a `deploy.sh`, and a `HAVEN-BRIEFING.md` telling you the
 credentials and what is planted where. `goad-light` is a two-domain Active
 Directory range: `sevenkingdoms` and its child `north`, a parent-child trust in
 one forest, two domain controllers and a member server, plus a jumpbox.
@@ -136,6 +147,11 @@ for detail.
 `deploy.sh` applies the Terraform and then provisions from the range's own
 jumpbox, because the managed hosts sit on a private subnet nothing else can
 reach. Your cloud credentials stay on your machine throughout.
+
+Every run writes a timestamped, secret-scrubbed log to
+`logs/deploy-<timestamp>.log` in the export. If a deploy fails or a range
+comes up wrong, attach the newest one to a GitHub issue; `deploy.sh` prints
+its path and a link when something goes wrong.
 
 ---
 
