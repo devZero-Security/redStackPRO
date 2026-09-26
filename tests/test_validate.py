@@ -96,6 +96,21 @@ def test_car007_unfronted_teamserver_warns(minimal):
     assert is_valid(minimal), "an unfronted teamserver is a warning, not an error"
 
 
+def test_car008_ui_c2_without_gui_operator_warns(redstack):
+    # redstack runs a mythic teamserver and ships a Windows operator, so it is clean.
+    assert "CAR008" not in codes(redstack)
+    # Drop the Windows operator: a Kali operator is SSH only, so nothing can open
+    # the mythic web UI. This is exactly what stranded the operator on the harbor run.
+    win_ops = {n["id"] for n in redstack["nodes"]
+               if n["kind"] == "operator" and (n.get("overlay") or {}).get("os") == "windows"}
+    assert win_ops, "fixture should ship a Windows operator"
+    redstack["nodes"] = [n for n in redstack["nodes"] if n["id"] not in win_ops]
+    redstack["edges"] = [e for e in redstack["edges"]
+                         if e["source"] not in win_ops and e["target"] not in win_ops]
+    assert "CAR008" in codes(redstack)
+    assert is_valid(redstack), "a UI C2 without a GUI operator is a warning, not an error"
+
+
 def test_rng009_user_flaw_declared_as_host_vuln_warns():
     """Kerberoasting on a host is a no-op (it is a user flaw), so the compiler
     warns rather than silently planting nothing. It stays valid: a warning, not

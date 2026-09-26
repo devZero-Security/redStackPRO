@@ -432,6 +432,31 @@ def car007_teamserver_unfronted(ctx):
                 name=self_name(ctx, n))
 
 
+def car008_ui_c2_needs_gui_operator(ctx):
+    """A web-UI C2 (Mythic, Adaptix) needs an operator that can open its interface.
+    A Kali operator is reached over SSH only, so a topology whose teamserver runs
+    Mythic or Adaptix but has no Windows operator has no way to drive the C2 as
+    shipped. A warning, not an error: the range still deploys, the operator just
+    cannot open the UI. See minimal-uses-sliver."""
+    ui_c2 = {"mythic", "adaptix"}
+    driven = [n for n in ctx.of_kind("teamserver")
+              if ((n.get("overlay") or {}).get("c2")) in ui_c2]
+    if not driven:
+        return
+    if any(((n.get("overlay") or {}).get("os")) == "windows"
+           for n in ctx.of_kind("operator")):
+        return
+    for n in driven:
+        yield finding(
+            "CAR008", "warning", [n["id"]],
+            "{name} runs {c2}, a web-UI C2, but the topology has no Windows operator "
+            "to open it (a Kali operator is SSH only).",
+            remedy="Add a Windows operator to drive the C2, or use a headless C2 "
+                   "such as Sliver.",
+            name=self_name(ctx, n),
+            c2=((n.get("overlay") or {}).get("c2")))
+
+
 # ---------------------------------------------------------------- management
 
 def mgt001_unreachable_host(ctx):
@@ -1190,6 +1215,7 @@ RULES = [
     car006_shared_redirector,
     frt002_prefix_collision,
     car007_teamserver_unfronted,
+    car008_ui_c2_needs_gui_operator,
     frt001_pool_disagrees,
     rdr001_redirector_hostname_unset,
     rdr002_decoy_video_without_a_pack,
