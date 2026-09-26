@@ -676,13 +676,23 @@ def test_aws_gives_an_egress_ip_to_an_addressless_host_on_an_internet_segment():
         if n["kind"] == "redirector":
             n.setdefault("overlay", {})["hostname"] = "cdn.redteam.test"
     mods = _modules_for(topo, provider="aws")
+    # Select hosts by kind, not by a hardcoded id: a teamserver's default id slug
+    # encodes its C2 (myth/sliv/adpx), so keying on the id breaks the moment the
+    # C2 is swapped. What is under test is the kind's routing, not the C2.
+    prefix = topo.get("prefix", "red")
+
+    def ref(kind):
+        nid = next(n["id"] for n in topo["nodes"] if n["kind"] == kind)
+        return "%s_%s" % (prefix, nid.replace("-", "_"))
+
+    op, ts = ref("operator"), ref("teamserver")
     # The operator sits on the internet-exposure mgmt segment with no Elastic IP,
     # so it needs an auto-assigned public IP purely for egress.
-    assert mods["red_kali_op01"]["public_address"] is False
-    assert mods["red_kali_op01"]["auto_public_ip"] is True
+    assert mods[op]["public_address"] is False
+    assert mods[op]["auto_public_ip"] is True
     # The teamserver sits on a local, NAT-routed segment: private, egress via NAT.
-    assert mods["red_myth_ts01"]["public_address"] is False
-    assert mods["red_myth_ts01"]["auto_public_ip"] is False
+    assert mods[ts]["public_address"] is False
+    assert mods[ts]["auto_public_ip"] is False
 
 
 def test_aws_skips_the_gateway_when_nothing_needs_it(redstack):
@@ -760,6 +770,46 @@ def test_aws_declares_only_capabilities_it_renders(redstack, registry):
         assert capability in evidence, \
             "aws declares %s and nothing here shows it is real" % capability
         assert evidence[capability] in rendered, capability
+
+
+def test_aws_honors_the_named_linux_os(redstack):
+    """AWS used to ignore os: every non-Windows host resolved to the Debian
+    default, so a lab pinned to ubuntu_2204 or debian_12 silently booted Debian
+    13. Each named distribution must now resolve to its own owner/pattern, and
+    the two must be distinct from each other and from the default."""
+    from redstackpro.terraform import TerraformPlan
+    plan = TerraformPlan(redstack, provider="aws")
+    default = aws_images.DEFAULT_IMAGES["debian"]
+
+    def linux(os):
+        # A collector, not an AD host kind: with os unset an AD kind defaults to
+        # Windows, so this exercises the Linux branch for the unset case too.
+        return aws_images.image_for(
+            plan, {"id": "c2-col01", "kind": "collector", "overlay": {"os": os}})
+
+    ubuntu = linux("ubuntu_2204")
+    debian12 = linux("debian_12")
+    assert ubuntu != default and "jammy" in ubuntu[1]
+    assert debian12 == ("136693071363", "debian-12-amd64-*")
+    assert ubuntu != debian12
+    # Unset still falls back to the Debian default, the unchanged behavior. The
+    # generic "linux" (GOAD's syrax uses it) does too rather than erroring.
+    assert linux(None) == default
+    assert linux("linux") == default
+
+
+def test_aws_rejects_an_unknown_os(redstack):
+    """An unrecognized os is a topology error with a clean message naming the node
+    and the bad value, not a bare KeyError. Covers the operator branch (where the
+    old code indexed DEFAULT_IMAGES directly) and the Linux host branch."""
+    from redstackpro.terraform import TerraformPlan
+    plan = TerraformPlan(redstack, provider="aws")
+    for node in (
+            {"id": "cyb-srv09", "kind": "srv", "overlay": {"os": "plan9"}},
+            {"id": "op-op01", "kind": "operator", "overlay": {"os": "plan9"}}):
+        with pytest.raises(GenerationError) as exc:
+            aws_images.image_for(plan, node)
+        assert "plan9" in str(exc.value) and node["id"] in str(exc.value)
 
 
 def test_the_linux_default_is_new_enough_for_the_toolchain():
