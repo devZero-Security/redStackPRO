@@ -128,6 +128,31 @@ reach. Your cloud credentials stay on your machine throughout.
 
 ---
 
+## ☁️ Plan AWS quotas per region
+
+AWS quotas are per region, and a compile does not check them. Scope them before a
+large or concurrent deploy, so an apply does not fail partway and leave
+infrastructure running and billing.
+
+- **Elastic IPs.** The default is 5 per region. A defense/AD range uses about 2
+  (jumpbox plus NAT gateway), an offense range about 3 (jumpbox, redirector, NAT
+  gateway), so the default holds only one or two concurrent ranges. Request an
+  increase per region in advance. An EIP shortfall surfaces at provisioning, after
+  the instances are up, so a failed apply leaves them running to be destroyed.
+- **vCPUs.** The running On-Demand standard vCPU limit caps a region. Hosts are
+  mostly `t3.large` and `t3.medium` (2 vCPU each), and a full AD range (GOAD plus a
+  SIEM) can exceed the default. Check and raise it before large deploys.
+- **Kali subscription.** A Kali operator needs a one-time Marketplace subscription
+  on the account, per region. redStackPRO generates code and touches no account, so
+  you subscribe once per region you deploy Kali into.
+
+All of this is per region, along with the key pair name. The full quota table, the
+increase commands, and the pre-deploy checklist are in the wiki:
+[Providers](https://github.com/devzero-security/redStackPRO/wiki/Providers) and
+[Deploying a Range](https://github.com/devzero-security/redStackPRO/wiki/Deploying-a-Range).
+
+---
+
 ## 🤖 API and agents
 
 Everything the canvas does is available headless, so an agent can operate
