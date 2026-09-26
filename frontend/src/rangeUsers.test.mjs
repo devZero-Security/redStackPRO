@@ -2,12 +2,18 @@
 // below hold every time. See rangeUsers.js.
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import {
   USER_ARCHETYPES, addUser, buildArchetype, generateUsers, recommendedUserCount,
   removeUser, seededRng, setUsers, updateUser,
 } from "./rangeUsers.js";
 
-const schema = JSON.parse(readFileSync("../schema/topology/0.4.0.json", "utf8"));
+// The schema lives in the package since ADR 0062, resolved from this file so the
+// test does not depend on the cwd it runs from.
+const HERE = dirname(fileURLToPath(import.meta.url));
+const schema = JSON.parse(
+  readFileSync(join(HERE, "../../src/redstackpro/schema/topology/0.4.0.json"), "utf8"));
 const USER_SCHEMA = schema.$defs.overlay_domain.properties.users.items;
 const PRIVILEGES = new Set(USER_SCHEMA.properties.privilege.enum);
 const FLAWS = new Set(USER_SCHEMA.properties.flaws.items.enum);

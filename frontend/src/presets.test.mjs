@@ -2,9 +2,15 @@
 // preset that seeds an invalid overlay would ship a node the validator rejects.
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { HOST_PRESETS, OPS_PRESETS, presetsFor } from "./presets.js";
 
-const schema = JSON.parse(readFileSync("../schema/topology/0.4.0.json", "utf8"));
+// The schema lives in the package since ADR 0062, resolved from this file so the
+// test does not depend on the cwd it runs from.
+const HERE = dirname(fileURLToPath(import.meta.url));
+const schema = JSON.parse(
+  readFileSync(join(HERE, "../../src/redstackpro/schema/topology/0.4.0.json"), "utf8"));
 const rangeHostRoles = schema.$defs.overlay_range_host.properties.role.enum;
 const HOST_KINDS = new Set(["srv", "wks", "dc", "fw"]);
 const OPS_KINDS = new Set(["redirector", "teamserver", "operator"]);

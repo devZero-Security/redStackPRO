@@ -14,7 +14,7 @@ import { HARDENING_CATALOG, HARDENING_IDS } from "./hardening.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const schema = JSON.parse(
-  readFileSync(join(HERE, "../../schema/topology/0.4.0.json"), "utf8")
+  readFileSync(join(HERE, "../../src/redstackpro/schema/topology/0.4.0.json"), "utf8")
 );
 const enumIds =
   schema.$defs.overlay_range_host.properties.hardening.items.enum;
