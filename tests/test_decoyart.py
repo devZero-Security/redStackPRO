@@ -138,7 +138,7 @@ def _redirector_topology():
         "schema_version": "0.6.0",
         "mode": "artie",
         "name": "art",
-        "prefix": "red",
+        "prefix": "art",
         "nodes": [
             {"id": "net01", "kind": "network", "overlay": {"cidr": "10.30.0.0/16"}},
             {"id": "sub01", "kind": "segment",
@@ -156,7 +156,7 @@ def _redirector_topology():
 
 def test_a_redirector_carries_its_artwork_in_host_vars():
     plan = AnsiblePlan(_redirector_topology())
-    art = plan.host_vars["red-rd01"]["redstackpro_decoy_art"]
+    art = plan.host_vars["art-rd01"]["redstackpro_decoy_art"]
     assert set(art) >= {"logo", "logo_footer", "hero", "band", "map",
                         "icons", "avatars"}
 
@@ -165,8 +165,8 @@ def test_two_builds_of_one_topology_draw_different_artwork():
     """The seed is a per-build nonce, so the same topology exported twice does not
     produce the same pictures. This is what keeps the art off a signature."""
     topology = _redirector_topology()
-    first = AnsiblePlan(topology).host_vars["red-rd01"]["redstackpro_decoy_art"]
-    second = AnsiblePlan(topology).host_vars["red-rd01"]["redstackpro_decoy_art"]
+    first = AnsiblePlan(topology).host_vars["art-rd01"]["redstackpro_decoy_art"]
+    second = AnsiblePlan(topology).host_vars["art-rd01"]["redstackpro_decoy_art"]
     assert first["hero"] != second["hero"]
 
 
@@ -174,7 +174,7 @@ def test_a_redirector_with_the_decoy_off_carries_no_artwork():
     topology = _redirector_topology()
     topology["nodes"][2]["overlay"]["gating"]["decoy"] = "none"
     plan = AnsiblePlan(topology)
-    assert "redstackpro_decoy_art" not in plan.host_vars["red-rd01"]
+    assert "redstackpro_decoy_art" not in plan.host_vars["art-rd01"]
 
 
 # No number on a cover page may be capable of ringing anyone. An arbitrary

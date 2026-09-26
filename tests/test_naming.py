@@ -181,7 +181,7 @@ def test_every_kind_has_display_metadata(registry):
             assert display.get(field), "%s is missing display.%s" % (kind, field)
 
 
-def test_palette_groups_by_declared_group(registry):
+def test_palette_groups_by_declaart_group(registry):
     palette = registry.palette("artie")
     assert set(palette) == {
         "topology", "redirector", "teamservers", "management", "operator"}

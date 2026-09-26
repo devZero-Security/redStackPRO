@@ -17,7 +17,7 @@ def test_message_renders_the_template():
     assert f.message == "rt-rdir-01 fronts 3 teamservers."
 
 
-def test_to_dict_carries_the_rendered_message_and_lists_targets():
+def test_to_dict_carries_the_rendeart_message_and_lists_targets():
     d = finding("X001", "error", ["a", "b"], "{n} bad", n="two").to_dict()
     # target_ids is a list, not a tuple, because the dict goes over the wire.
     assert d["target_ids"] == ["a", "b"]

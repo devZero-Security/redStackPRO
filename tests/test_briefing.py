@@ -33,8 +33,8 @@ def test_briefing_covers_boxes_accounts_users_trusts_and_siem():
     assert "/guacamole" in md
     assert "terraform output -raw lab_password" in md
     # Addresses are tokens tf_inventory fills after apply.
-    assert "<<tf:cyb-jumpbox:public_address>>" in md
-    assert "<<tf:cyb-kingslanding:private_address>>" in md
+    assert "<<tf:hvn-jumpbox:public_address>>" in md
+    assert "<<tf:hvn-kingslanding:private_address>>" in md
     # The lab's substance: a controller, a domain, a user from the cast, a trust,
     # and the ACL attack chain.
     assert "Domain Controller" in md

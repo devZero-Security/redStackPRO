@@ -5,9 +5,9 @@ nothing can drift. See 0016.
 
     prefix   red                     topology level, the instantiation parameter
     id       myth-ts01               node level, slug then kind tag then ordinal
-    name     red-myth-ts01           composed, what a person and a host both see
+    name     art-myth-ts01           composed, what a person and a host both see
     tf_ref   red_myth_ts01           Terraform labels take underscores
-    tag      red-myth-ts01           GCP network tag
+    tag      art-myth-ts01           GCP network tag
 
 An id reads left to right as a purpose slug, the kind tag, and a two digit
 ordinal: myth-ts01 is a teamserver running Mythic, main-net01 is the network

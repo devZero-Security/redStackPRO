@@ -10,7 +10,7 @@ const test = (name, fn) => { fn(); passed += 1; console.log("  ok", name); };
 // A small document: one network holding one subnet holding one host, wired by
 // attachment, so families roll up the way retitle expects.
 const build = (hostKind, overlay) => ({
-  prefix: "red",
+  prefix: "art",
   nodes: [
     { id: "net01", kind: "network", overlay: {} },
     { id: "sub01", kind: "segment", overlay: {} },

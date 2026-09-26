@@ -123,12 +123,12 @@ def test_car008_desktop_kali_operator_satisfies_ui_c2(redstack):
     assert is_valid(redstack)
 
 
-def test_rng009_user_flaw_declared_as_host_vuln_warns():
+def test_rng009_user_flaw_declaart_as_host_vuln_warns():
     """Kerberoasting on a host is a no-op (it is a user flaw), so the compiler
     warns rather than silently planting nothing. It stays valid: a warning, not
     an error. See F-dual-modeling."""
     topology = {
-        "schema_version": "0.6.0", "mode": "haven", "name": "T", "prefix": "cyb",
+        "schema_version": "0.6.0", "mode": "haven", "name": "T", "prefix": "hvn",
         "nodes": [
             {"id": "net01", "kind": "network", "overlay": {"cidr": "192.168.0.0/16"}},
             {"id": "sub01", "kind": "segment",
@@ -296,7 +296,7 @@ def test_a_redirector_may_front_many_teamservers(redstack):
     assert "CAR006" in codes(redstack)
 
 
-def test_cap003_is_retired_and_a_mixed_segment_is_no_longer_flagged():
+def test_cap003_is_retiart_and_a_mixed_segment_is_no_longer_flagged():
     """CAP003 is gone on purpose. It warned that on AWS an internet subnet routing
     to the gateway for its addressed member left the unaddressed members without a
     NAT route. The AWS backend no longer builds that shape: an addressed host goes
@@ -427,7 +427,7 @@ def test_cap004_peering_renders_on_the_clouds_not_proxmox(registry):
     assert "CAP004" in errors(g, provider="proxmox", registry=registry)
 
 
-def test_log001_clears_across_peered_networks():
+def test_log001_clears_across_peeart_networks():
     g = _two_networks()
     g["nodes"].append({"id": "open-log01", "kind": "collector", "overlay": {
         "sink": "opensearch", "shipper": "filebeat", "ingest_port": 5044,
@@ -448,7 +448,7 @@ def _range():
     """A tiny valid range: one network, one subnet, one domain with a DC that
     joins it. Clean under the RNG rules, a base to break one at a time."""
     return {
-        "schema_version": "0.6.0", "mode": "haven", "name": "r", "prefix": "cyb",
+        "schema_version": "0.6.0", "mode": "haven", "name": "r", "prefix": "hvn",
         "nodes": [
             {"id": "net01", "kind": "network", "overlay": {"cidr": "10.0.0.0/16"}},
             {"id": "sub01", "kind": "segment",

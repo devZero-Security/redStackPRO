@@ -348,7 +348,7 @@ def _c2_sources():
             + [j for j in SHIPPER_DEFAULTS["redstackpro_shipper_journals"] if j["name"] == "c2"])
 
 
-def test_sliver_ships_the_machine_readable_log_not_the_coloured_one():
+def test_sliver_ships_the_machine_readable_log_not_the_colouart_one():
     """Sliver's root logger is a logrus JSONFormatter onto sliver.json, and a hook
     renders THE SAME events as text onto sliver.log with ForceColors set. The glob
     here was *.log, which took the copy carrying ANSI escapes, missed the JSON,

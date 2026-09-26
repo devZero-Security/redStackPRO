@@ -62,8 +62,8 @@ def rollover(tmp_path_factory):
 def test_every_probe_comes_from_the_export(split_horizon):
     """The header name, the token and the path are all compiled values."""
     doors = {d["node"]: d for d in verify.door_plan(split_horizon)}
-    apache = doors["red-apa-rd01"]
-    nginx = doors["red-ngx-rd02"]
+    apache = doors["art-apa-rd01"]
+    nginx = doors["art-ngx-rd02"]
 
     assert apache["hostname"] == "static.redops.design"
     assert nginx["hostname"] == "status.redops.design"
@@ -96,7 +96,7 @@ def test_the_probe_goes_one_segment_under_the_prefix(split_horizon):
     """A redirector rewrites `^<prefix>/(.*)`, so the prefix itself does not
     match the route and probing it measures the decoy. Cost a false failure."""
     door = next(d for d in verify.door_plan(split_horizon)
-                if d["node"] == "red-apa-rd01")
+                if d["node"] == "art-apa-rd01")
     prefix = door["prefixes"][0]
     path = "%s/%s" % (prefix.rstrip("/"), verify.PROBE_LEAF)
     assert path.startswith(prefix + "/")
@@ -108,11 +108,11 @@ def test_doors_with_their_own_tokens_are_checked_in_both_directions(split_horizo
     so each one's key must be tried against the other."""
     verify.check_doors(split_horizon, plan_only=True)
     printed = capsys.readouterr().out
-    assert "with red-apa-rd01's header (must not open it)" in printed
-    assert "with red-ngx-rd02's header (must not open it)" in printed
+    assert "with art-apa-rd01's header (must not open it)" in printed
+    assert "with art-ngx-rd02's header (must not open it)" in printed
 
 
-def test_a_shared_token_is_not_reported_as_a_broken_gate(rollover, capsys):
+def test_a_shaart_token_is_not_reported_as_a_broken_gate(rollover, capsys):
     """A rollover pool is several front doors for one teamserver and the compiler
     rolls one token for the whole pool. Holding that shape to the independence
     rule would report a deliberate property as a defect, which is what the
@@ -137,7 +137,7 @@ def test_the_targets_do_not_come_from_the_thing_being_checked(split_horizon):
     the reason it came up empty.
     """
     found = split_horizon.group("teamservers")
-    assert sorted(found) == ["red-adpx-ts03", "red-myth-ts02", "red-sliv-ts01"]
+    assert sorted(found) == ["art-adpx-ts03", "art-myth-ts02", "art-sliv-ts01"]
     # Not a naming guess either: every one of them is in the inventory group.
     assert all(split_horizon.hosts[n]["redstackpro_kind"] == "teamserver"
                for n in found)
@@ -160,7 +160,7 @@ def test_a_renamed_teamserver_is_still_found(tmp_path):
                      {"apa-rd01": "static.redops.design",
                       "ngx-rd02": "status.redops.design"},
                      edit=rename)
-    assert "red-haul-ts02" in export.group("teamservers")
+    assert "art-haul-ts02" in export.group("teamservers")
 
 
 def test_an_undeployed_export_refuses_instead_of_probing_a_placeholder(tmp_path):
@@ -302,12 +302,12 @@ def test_targets_lost_between_the_export_and_the_inventory_is_a_failure(capsys):
     script's exact defect: the run must not come back clean.
     """
     report = verify.Report()
-    empty = verify._no_targets(report, [], ["red-myth-ts01", "red-sliv-ts02"],
+    empty = verify._no_targets(report, [], ["art-myth-ts01", "art-sliv-ts02"],
                                "teamserver", "C2 listener")
     out = capsys.readouterr().out
     assert empty is True
     assert report.failed == 1
-    assert "red-myth-ts01" in out and "zero times" in out, out
+    assert "art-myth-ts01" in out and "zero times" in out, out
 
 
 def test_a_full_target_list_is_left_alone(capsys):

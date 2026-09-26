@@ -26,7 +26,7 @@ const DOC = {
   schema_version: "0.2.0",
   mode: "artie",
   name: "Cloned",
-  prefix: "red",
+  prefix: "art",
   nodes: [{ id: "myth-ts01", kind: "teamserver", overlay: { c2: "mythic" },
     position: { x: 10, y: 10 } }],
   edges: [],
@@ -161,7 +161,7 @@ describe("browsing", () => {
       // URL names it so a reload comes back to it.
       await waitFor(() =>
         expect(backend.calls.some((c) => c.url.includes("/clone"))).toBe(true));
-      expect(await screen.findByText("red-myth-ts01")).toBeTruthy();
+      expect(await screen.findByText("art-myth-ts01")).toBeTruthy();
       await waitFor(() => expect(window.location.search).toMatch(/topology=c\d+/));
       expect(screen.queryByRole("dialog", { name: "Library" })).toBeNull();
     });

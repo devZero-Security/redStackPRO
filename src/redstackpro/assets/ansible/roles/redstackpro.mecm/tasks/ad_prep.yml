@@ -109,7 +109,7 @@
     parameters:
       Ea: "{{ redstackpro_mecm_domain_admin }}"
       Pass: "{{ redstackpro_lab_password }}"
-      Mecm: "{{ redstackpro_mecm_hostname | default(inventory_hostname | regex_replace('^cyb-', '')) }}"
+      Mecm: "{{ redstackpro_mecm_hostname | default(redstackpro_host_shortname) }}"
       Bin: "{{ redstackpro_mecm_bin }}"
   register: redstackpro_mecm_adprep
   changed_when: true

@@ -122,18 +122,18 @@ def test_gcp_renders_a_peering_for_a_peers_edge(peered):
     mods = modules(peered)
     peering = next(b for name, b in mods.items()
                    if b.get("source") == "./modules/gcp/peering")
-    assert peering["network_a"] == "${module.red_main_net01.self_link}"
-    assert peering["network_b"] == "${module.red_c2_net01.self_link}"
+    assert peering["network_a"] == "${module.art_main_net01.self_link}"
+    assert peering["network_b"] == "${module.art_c2_net01.self_link}"
 
 
 def test_cross_network_management_uses_a_cidr_rule_not_a_tag(peered):
     """A network tag does not cross a peering, so the rule reaching managed hosts
     in the other network names the jumpbox subnet by CIDR instead. See 0030."""
     rules = firewall_rules(peered)
-    rule = rules["mgmt_out_red_jump_bx01_red_c2_net01_22"]
+    rule = rules["mgmt_out_art_jump_bx01_art_c2_net01_22"]
     assert rule["source_ranges"] == ["10.60.0.0/24"]      # the jumpbox subnet
     assert "source_tags" not in rule
-    assert set(rule["target_tags"]) == {"red-nginx-rd01", "red-myth-ts01"}
+    assert set(rule["target_tags"]) == {"art-nginx-rd01", "art-myth-ts01"}
 
 
 def test_aws_renders_a_peering_with_routes(peered):
@@ -142,15 +142,15 @@ def test_aws_renders_a_peering_with_routes(peered):
     mods = aws_modules(peered)
     peering = next(b for b in mods.values()
                    if b.get("source") == "./modules/aws/peering")
-    assert peering["vpc_a"] == "${module.red_main_net01.id}"
+    assert peering["vpc_a"] == "${module.art_main_net01.id}"
     assert peering["cidr_b"] == "10.61.0.0/16"
     # Every segment on each side hands its route table to the module: one in the
     # management VPC, two in the operations VPC.
     # A real HCL list now (not a compact() string), so membership is exact.
     tables_a = " ".join(peering["route_tables_a"])
     tables_b = " ".join(peering["route_tables_b"])
-    assert "module.red_mgmt_sub01.route_table_id" in tables_a
-    for seg in ("red_c2_sub01", "red_rdir_sub01"):
+    assert "module.art_mgmt_sub01.route_table_id" in tables_a
+    for seg in ("art_c2_sub01", "art_rdir_sub01"):
         assert "module.%s.route_table_id" % seg in tables_b, seg
 
     # And the PUBLIC route table on each side, which is the one that matters for
@@ -159,8 +159,8 @@ def test_aws_renders_a_peering_with_routes(peered):
     # able to reach the internet and its own VPC but nothing across the peering
     # -- with the peering active and looking perfectly healthy. A live ops
     # deploy stalled on exactly that, its jumpbox unable to SSH the redirector.
-    assert "module.red_main_net01.public_route_table_id" in tables_a
-    assert "module.red_c2_net01.public_route_table_id" in tables_b
+    assert "module.art_main_net01.public_route_table_id" in tables_a
+    assert "module.art_c2_net01.public_route_table_id" in tables_b
     # The public route table is included at COMPILE time, only for a network that
     # actually builds one, so the list is a statically known length. It must NOT
     # be a compact(try(...,null)) computed at apply: the peering module's
@@ -182,7 +182,7 @@ def test_aws_cross_network_management_uses_a_cidr_not_a_group(peered):
     10.30.0.0/24 while the jumpbox sat at 10.30.255.249.
     """
     rules = aws_rules(peered)
-    rule = rules["mgmt_out_red_jump_bx01_red_nginx_rd01"]
+    rule = rules["mgmt_out_art_jump_bx01_art_nginx_rd01"]
     assert rule["cidr_ipv4"] == "10.60.255.240/28"   # the jumpbox's real subnet
     assert "referenced_security_group_id" not in rule
 
@@ -208,19 +208,19 @@ def test_one_module_per_node(redstack):
 
 def test_segment_references_its_network(redstack):
     mods = modules(redstack)
-    assert mods["red_c2_sub01"]["network"] == "${module.red_main_net01.self_link}"
+    assert mods["art_c2_sub01"]["network"] == "${module.art_main_net01.self_link}"
 
 
 def test_host_references_its_segment(redstack):
     mods = modules(redstack)
-    assert mods["red_myth_ts01"]["subnetwork"] == "${module.red_c2_sub01.self_link}"
+    assert mods["art_myth_ts01"]["subnetwork"] == "${module.art_c2_sub01.self_link}"
 
 
 def test_exposure_drives_public_address(redstack):
     mods = modules(redstack)
-    assert mods["red_apache_rd01"]["public_address"] in (True, "true")
-    assert mods["red_myth_ts01"]["public_address"] in (False, "false")
-    assert mods["red_win_op01"]["public_address"] in (False, "false")
+    assert mods["art_apache_rd01"]["public_address"] in (True, "true")
+    assert mods["art_myth_ts01"]["public_address"] in (False, "false")
+    assert mods["art_win_op01"]["public_address"] in (False, "false")
 
 
 def test_redirector_and_jumpbox_reserve_a_static_ip(redstack):
@@ -229,18 +229,18 @@ def test_redirector_and_jumpbox_reserve_a_static_ip(redstack):
     resolving and the jumpbox is the Guacamole/SSH entry point. Private hosts do
     not reserve one. See the ephemeral-IP finding."""
     mods = modules(redstack)
-    assert mods["red_apache_rd01"]["reserve_ip"] in (True, "true")   # redirector
-    assert mods["red_jump_bx01"]["reserve_ip"] in (True, "true")     # jumpbox
-    assert mods["red_myth_ts01"]["reserve_ip"] in (False, "false")   # private
+    assert mods["art_apache_rd01"]["reserve_ip"] in (True, "true")   # redirector
+    assert mods["art_jump_bx01"]["reserve_ip"] in (True, "true")     # jumpbox
+    assert mods["art_myth_ts01"]["reserve_ip"] in (False, "false")   # private
 
 
 def test_operator_os_selects_the_image(redstack):
     mods = modules(redstack)
-    assert "windows" in mods["red_win_op01"]["image"]
+    assert "windows" in mods["art_win_op01"]["image"]
     # A GCP Kali operator boots the red-kali custom image (Kali's official cloud
     # disk imported into the project), unqualified so terraform resolves it in
     # the deploy's own project. Runtime debian->kali conversion was unreliable.
-    assert mods["red_kali_op01"]["image"] == "red-kali"
+    assert mods["art_kali_op01"]["image"] == "red-kali"
 
 
 def test_offense_windows_operator_takes_the_setup_at_boot(redstack):
@@ -251,7 +251,7 @@ def test_offense_windows_operator_takes_the_setup_at_boot(redstack):
     MobaXterm sessions use (mythic/sliver/adaptix/redirector/kali/guac). See
     operator_setup.ps1 and the /etc/hosts PAI item."""
     mods = modules(redstack)
-    winop = mods["red_win_op01"]
+    winop = mods["art_win_op01"]
     assert winop["operator_setup"] is True
     assert "scripts/operator_setup.ps1" in winop["operator_setup_script"]
     # It also takes the stack's SSH key, so MobaXterm key-auths instead of
@@ -266,14 +266,14 @@ def test_offense_windows_operator_takes_the_setup_at_boot(redstack):
     assert "apache-rd01 redirector" in hosts
     assert "kali-op01 kali" in hosts
     assert "jump-bx01 guac" in hosts
-    assert "module.red_myth_ts01.private_address" in hosts
+    assert "module.art_myth_ts01.private_address" in hosts
     # The win-op must NOT reference its own private_address, or Terraform sees a
     # dependency cycle (operator_hosts -> its own instance -> operator_hosts).
     assert "win-op01" not in hosts
-    assert "module.red_win_op01.private_address" not in hosts
+    assert "module.art_win_op01.private_address" not in hosts
     # No other host runs the setup.
-    assert "operator_setup" not in mods["red_kali_op01"]
-    assert "operator_setup" not in mods["red_apache_rd01"]
+    assert "operator_setup" not in mods["art_kali_op01"]
+    assert "operator_setup" not in mods["art_apache_rd01"]
 
 
 def test_offense_windows_operator_takes_the_setup_on_aws_and_azure(redstack):
@@ -286,7 +286,7 @@ def test_offense_windows_operator_takes_the_setup_on_aws_and_azure(redstack):
         # unrelated to the boot wiring under test; skip validation to exercise the
         # codegen. AWS validates cleanly and is checked the same way.
         winop = _modules_for(redstack, provider=provider,
-                             skip_validation=True)["red_win_op01"]
+                             skip_validation=True)["art_win_op01"]
         assert winop["operator_setup"] is True, provider
         encoder = "base64gzip" if provider == "aws" else "base64encode"
         assert encoder in winop["operator_setup_script_b64"], provider
@@ -330,26 +330,26 @@ def test_setup_script_is_shipped_for_every_provider(redstack):
 # -- firewall, derived from edges
 
 def test_redirector_accepts_public_traffic(redstack):
-    rule = firewall_rules(redstack)["in_red_apache_rd01_443"]
+    rule = firewall_rules(redstack)["in_art_apache_rd01_443"]
     assert rule["source_ranges"] == ["0.0.0.0/0"]
-    assert rule["target_tags"] == ["red-apache-rd01"]
+    assert rule["target_tags"] == ["art-apache-rd01"]
 
 
 def test_redirector_opens_port_80_for_certbot(redstack):
     # Let's Encrypt validates the ACME http-01 challenge over HTTP on 80, whatever
     # port the redirector fronts on, so every redirector keeps 80 open to the
     # internet or an otherwise correct letsencrypt cert never issues.
-    rule = firewall_rules(redstack)["acme_in_red_apache_rd01"]
+    rule = firewall_rules(redstack)["acme_in_art_apache_rd01"]
     ports = [p for a in rule.get("allow", []) for p in a.get("ports", [])]
     assert "80" in ports
     assert rule["source_ranges"] == ["0.0.0.0/0"]
-    assert rule["target_tags"] == ["red-apache-rd01"]
+    assert rule["target_tags"] == ["art-apache-rd01"]
 
 
 def test_teamserver_accepts_only_its_redirectors(rollover):
     rules = firewall_rules(rollover)
     forwarding = {name: r for name, r in rules.items()
-                  if r.get("target_tags") == ["red-myth-ts01"]}
+                  if r.get("target_tags") == ["art-myth-ts01"]}
     # The rollover pool lives in a peered network, so the teamserver names the
     # redirector subnet by CIDR rather than by tag. Both redirectors share it,
     # and the subnet holds nothing but redirectors, so it is still the pool and
@@ -366,8 +366,8 @@ def test_no_teamserver_is_publicly_reachable(redstack):
     for name, rule in firewall_rules(redstack).items():
         targets = rule.get("target_tags")
         hits_teamserver = (targets is None
-                           or "red-myth-ts01" in targets
-                           or "red-sliv-ts01" in targets)
+                           or "art-myth-ts01" in targets
+                           or "art-sliv-ts01" in targets)
         if hits_teamserver:
             assert "0.0.0.0/0" not in rule.get("source_ranges", []), \
                 "%s exposes a teamserver to the internet" % name
@@ -375,29 +375,29 @@ def test_no_teamserver_is_publicly_reachable(redstack):
 
 def test_collector_ingress_names_only_its_senders(redstack):
     rules = firewall_rules(redstack)
-    same = rules["log_red_open_log01"]
-    assert same["target_tags"] == ["red-open-log01"]
+    same = rules["log_art_open_log01"]
+    assert same["target_tags"] == ["art-open-log01"]
     # The teamservers share the collector's network and are named by tag; the
     # redirector ships across the peering, so it is a separate CIDR rule. See 0030.
-    assert set(same["source_tags"]) == {"red-myth-ts01", "red-sliv-ts01", "red-adpx-ts01"}
+    assert set(same["source_tags"]) == {"art-myth-ts01", "art-sliv-ts01", "art-adpx-ts01"}
     assert same["allow"][0]["ports"] == ["5044"]
-    peered = rules["log_red_open_log01_peered"]
-    assert peered["target_tags"] == ["red-open-log01"]
+    peered = rules["log_art_open_log01_peered"]
+    assert peered["target_tags"] == ["art-open-log01"]
     assert peered["source_ranges"] == ["10.31.10.0/24"]
 
 
 def test_collector_source_is_tags_not_a_cidr(redstack):
     """Source restriction derives from logs_to edges, not from the segment
     range, so a host in the same segment without an edge is not permitted."""
-    rule = firewall_rules(redstack)["log_red_open_log01"]
+    rule = firewall_rules(redstack)["log_art_open_log01"]
     assert "source_ranges" not in rule
 
 
 def test_management_ssh_only_from_the_jumpbox(redstack):
-    rule = firewall_rules(redstack)["mgmt_out_red_jump_bx01_22"]
-    assert rule["source_tags"] == ["red-jump-bx01"]
+    rule = firewall_rules(redstack)["mgmt_out_art_jump_bx01_22"]
+    assert rule["source_tags"] == ["art-jump-bx01"]
     assert rule["allow"][0]["ports"] == ["22"]
-    assert "red-jump-bx01" not in rule["target_tags"], \
+    assert "art-jump-bx01" not in rule["target_tags"], \
         "the jumpbox does not proxy to itself"
 
 
@@ -405,14 +405,14 @@ def test_a_windows_host_gets_winrm_not_ssh(redstack):
     """Opening 22 to a Windows box opens nothing. The management rule follows
     the same branch the Ansible connection plugin does. See 0019."""
     rules = firewall_rules(redstack)
-    assert "red-win-op01" not in rules["mgmt_out_red_jump_bx01_22"]["target_tags"]
-    winrm = rules["mgmt_out_red_jump_bx01_5986"]
-    assert winrm["target_tags"] == ["red-win-op01"]
-    assert winrm["source_tags"] == ["red-jump-bx01"]
+    assert "art-win-op01" not in rules["mgmt_out_art_jump_bx01_22"]["target_tags"]
+    winrm = rules["mgmt_out_art_jump_bx01_5986"]
+    assert winrm["target_tags"] == ["art-win-op01"]
+    assert winrm["source_tags"] == ["art-jump-bx01"]
     # guacd on the jumpbox also needs 3389 to render the Windows RDP tile.
-    rdp = rules["mgmt_out_red_jump_bx01_3389"]
-    assert rdp["target_tags"] == ["red-win-op01"]
-    assert rdp["source_tags"] == ["red-jump-bx01"]
+    rdp = rules["mgmt_out_art_jump_bx01_3389"]
+    assert rdp["target_tags"] == ["art-win-op01"]
+    assert rdp["source_tags"] == ["art-jump-bx01"]
 
 
 def _minimalc2_gui():
@@ -431,33 +431,33 @@ def test_gcp_gui_operator_opens_3389_and_gets_a_bigger_disk():
     and CAR008."""
     doc = _minimalc2_gui()
     mods = modules(doc)
-    op = mods["red_kali_op01"]
+    op = mods["art_kali_op01"]
     assert op["disk_size_gb"] == 50
     rules = firewall_rules(doc)
-    assert "red-kali-op01" in rules["mgmt_out_red_jump_bx01_22"]["target_tags"]
-    assert "red-kali-op01" in rules["mgmt_out_red_jump_bx01_3389"]["target_tags"]
+    assert "art-kali-op01" in rules["mgmt_out_art_jump_bx01_22"]["target_tags"]
+    assert "art-kali-op01" in rules["mgmt_out_art_jump_bx01_3389"]["target_tags"]
 
 
 def test_aws_gui_operator_opens_3389_and_gets_a_bigger_disk():
     doc = _minimalc2_gui()
     mods = aws_modules(doc)
-    op = mods["red_kali_op01"]
+    op = mods["art_kali_op01"]
     assert op["disk_size_gb"] == 50
     rules = aws_rules(doc)
-    assert rules["mgmt_out_red_jump_bx01_red_kali_op01"]["from_port"] == 22
-    assert rules["mgmt_out_red_jump_bx01_red_kali_op01_rdp"]["from_port"] == 3389
+    assert rules["mgmt_out_art_jump_bx01_art_kali_op01"]["from_port"] == 22
+    assert rules["mgmt_out_art_jump_bx01_art_kali_op01_rdp"]["from_port"] == 3389
 
 
 def test_offense_jumpbox_opens_the_guacamole_portal(redstack):
     """Guacamole runs on the jumpbox in every mode, so the offense topology's
     jumpbox must open 443 to the operator, not only a defensive range."""
-    rule = firewall_rules(redstack)["guac_in_red_jump_bx01"]
+    rule = firewall_rules(redstack)["guac_in_art_jump_bx01"]
     assert rule["allow"][0]["ports"] == ["443"]
-    assert rule["target_tags"] == ["red-jump-bx01"]
+    assert rule["target_tags"] == ["art-jump-bx01"]
 
 
 def test_operator_access_is_a_variable_not_a_wildcard(redstack):
-    rule = firewall_rules(redstack)["mgmt_in_red_jump_bx01"]
+    rule = firewall_rules(redstack)["mgmt_in_art_jump_bx01"]
     assert rule["source_ranges"] == "${var.operator_source_ranges}"
 
 
@@ -467,9 +467,9 @@ def test_jumpbox_foothold_accepts_its_own_segment(redstack):
     operator listener on it must be allowed. This is internal (range-segment)
     surface, so the source is the segment CIDR, never the operator wildcard, and
     it is all-protocol like the AD hosts' intra-segment rule."""
-    rule = firewall_rules(redstack)["foothold_in_red_jump_bx01"]
+    rule = firewall_rules(redstack)["foothold_in_art_jump_bx01"]
     assert rule["allow"][0]["protocol"] == "all"
-    assert rule["target_tags"] == ["red-jump-bx01"]
+    assert rule["target_tags"] == ["art-jump-bx01"]
     assert isinstance(rule["source_ranges"], list)
     assert "/" in "".join(rule["source_ranges"])           # a CIDR, not a var
     assert "operator_source_ranges" not in "".join(rule["source_ranges"])
@@ -482,13 +482,13 @@ def test_operator_reaches_each_teamserver_control_plane(redstack):
     Operators and teamservers share the main network here, so the source is the
     operator tags, not a wildcard."""
     rules = firewall_rules(redstack)
-    expected = {"red-myth-ts01": "7443", "red-sliv-ts01": "31337",
-                "red-adpx-ts01": "4321"}
+    expected = {"art-myth-ts01": "7443", "art-sliv-ts01": "31337",
+                "art-adpx-ts01": "4321"}
     for ts, port in expected.items():
         rule = rules["ctl_%s" % ts.replace("-", "_")]
         assert rule["allow"][0]["ports"] == [port]
         assert rule["target_tags"] == [ts]
-        assert set(rule["source_tags"]) == {"red-kali-op01", "red-win-op01"}
+        assert set(rule["source_tags"]) == {"art-kali-op01", "art-win-op01"}
         assert "source_ranges" not in rule           # not an internet wildcard
 
 
@@ -500,9 +500,9 @@ def test_generic_teamserver_opens_no_operator_control_path(redstack):
     for node in g["nodes"]:
         if node["id"] == "myth-ts01":
             node["overlay"].pop("c2", None)
-    assert "ctl_red_myth_ts01" not in firewall_rules(g)
+    assert "ctl_art_myth_ts01" not in firewall_rules(g)
     # the others, still C2-typed, keep theirs
-    assert "ctl_red_sliv_ts01" in firewall_rules(g)
+    assert "ctl_art_sliv_ts01" in firewall_rules(g)
 
 
 def test_aws_operator_reaches_each_teamserver_control_plane(redstack):
@@ -510,18 +510,18 @@ def test_aws_operator_reaches_each_teamserver_control_plane(redstack):
     operator's security group (same VPC), opening each teamserver's C2 control
     port. Never an internet wildcard."""
     rules = aws_rules(redstack)
-    rule = rules["ctl_red_myth_ts01_red_kali_op01_7443"]
+    rule = rules["ctl_art_myth_ts01_art_kali_op01_7443"]
     assert rule["from_port"] == 7443 and rule["to_port"] == 7443
     assert "security_group_id" in rule["referenced_security_group_id"]
     assert "cidr_ipv4" not in rule
-    assert "ctl_red_sliv_ts01_red_win_op01_31337" in rules
-    assert "ctl_red_adpx_ts01_red_kali_op01_4321" in rules
+    assert "ctl_art_sliv_ts01_art_win_op01_31337" in rules
+    assert "ctl_art_adpx_ts01_art_kali_op01_4321" in rules
 
 
 def test_parallel_chains_rules_land_in_the_right_networks(parallel_chains):
     text = files(parallel_chains)["terraform/firewall.tf"]
-    assert "module.red_main_net02.self_link" in text
-    assert "module.red_main_net03.self_link" in text
+    assert "module.art_main_net02.self_link" in text
+    assert "module.art_main_net03.self_link" in text
 
 
 # -- multi-user VPN access (artie): the jumpbox VPN listen port
@@ -550,19 +550,19 @@ def test_wireguard_jumpbox_opens_the_vpn_port_keeps_ssh_and_drops_the_portal(
     because the portal is reached over the tunnel."""
     doc = _vpn_jumpbox(redstack, access_mode="wireguard")
     rules = (firewall_rules if provider == "gcp" else aws_rules)(doc)
-    vpn = rules["vpn_in_red_jump_bx01"]
+    vpn = rules["vpn_in_art_jump_bx01"]
     if provider == "gcp":
         assert vpn["allow"][0]["protocol"] == "udp"
         assert vpn["allow"][0]["ports"] == ["51820"]
         assert vpn["source_ranges"] == "${var.operator_source_ranges}"
-        assert vpn["target_tags"] == ["red-jump-bx01"]
-        assert rules["mgmt_in_red_jump_bx01"]["allow"][0]["ports"] == ["22"]
+        assert vpn["target_tags"] == ["art-jump-bx01"]
+        assert rules["mgmt_in_art_jump_bx01"]["allow"][0]["ports"] == ["22"]
     else:
         assert vpn["ip_protocol"] == "udp"
         assert vpn["from_port"] == 51820 and vpn["to_port"] == 51820
         assert vpn["for_each"] == "${toset(var.operator_source_ranges)}"
-        assert rules["mgmt_in_red_jump_bx01"]["from_port"] == 22
-    assert "guac_in_red_jump_bx01" not in rules    # the portal rides the tunnel
+        assert rules["mgmt_in_art_jump_bx01"]["from_port"] == 22
+    assert "guac_in_art_jump_bx01" not in rules    # the portal rides the tunnel
 
 
 @pytest.mark.parametrize("provider", ["gcp", "aws"])
@@ -572,16 +572,16 @@ def test_openvpn_tcp_custom_port_jumpbox_opens_that_tcp_port(redstack, provider)
     doc = _vpn_jumpbox(redstack, access_mode="openvpn",
                        vpn_protocol="tcp", vpn_port=5124)
     rules = (firewall_rules if provider == "gcp" else aws_rules)(doc)
-    vpn = rules["vpn_in_red_jump_bx01"]
+    vpn = rules["vpn_in_art_jump_bx01"]
     if provider == "gcp":
         assert vpn["allow"][0]["protocol"] == "tcp"
         assert vpn["allow"][0]["ports"] == ["5124"]
-        assert rules["mgmt_in_red_jump_bx01"]["allow"][0]["ports"] == ["22"]
+        assert rules["mgmt_in_art_jump_bx01"]["allow"][0]["ports"] == ["22"]
     else:
         assert vpn["ip_protocol"] == "tcp"
         assert vpn["from_port"] == 5124 and vpn["to_port"] == 5124
-        assert rules["mgmt_in_red_jump_bx01"]["from_port"] == 22
-    assert "guac_in_red_jump_bx01" not in rules   # ssh stays, the portal rides the tunnel
+        assert rules["mgmt_in_art_jump_bx01"]["from_port"] == 22
+    assert "guac_in_art_jump_bx01" not in rules   # ssh stays, the portal rides the tunnel
 
 
 @pytest.mark.parametrize("provider", ["gcp", "aws"])
@@ -589,13 +589,13 @@ def test_public_jumpbox_keeps_ssh_and_portal_and_opens_no_vpn(redstack, provider
     """The default (access_mode absent, public) is unchanged: ssh on 22 and the
     Guacamole portal on 443, no VPN listener."""
     rules = (firewall_rules if provider == "gcp" else aws_rules)(redstack)
-    assert "vpn_in_red_jump_bx01" not in rules
+    assert "vpn_in_art_jump_bx01" not in rules
     if provider == "gcp":
-        assert rules["mgmt_in_red_jump_bx01"]["allow"][0]["ports"] == ["22"]
-        assert rules["guac_in_red_jump_bx01"]["allow"][0]["ports"] == ["443"]
+        assert rules["mgmt_in_art_jump_bx01"]["allow"][0]["ports"] == ["22"]
+        assert rules["guac_in_art_jump_bx01"]["allow"][0]["ports"] == ["443"]
     else:
-        assert rules["mgmt_in_red_jump_bx01"]["from_port"] == 22
-        assert rules["guac_in_red_jump_bx01"]["from_port"] == 443
+        assert rules["mgmt_in_art_jump_bx01"]["from_port"] == 22
+        assert rules["guac_in_art_jump_bx01"]["from_port"] == 443
 
 
 # -- outputs
@@ -606,14 +606,14 @@ def test_addresses_output_covers_every_host(redstack):
     for node in redstack["nodes"]:
         if node["kind"] in ("network", "segment"):
             continue
-        assert '"red-%s"' % node["id"] in text
+        assert '"art-%s"' % node["id"] in text
 
 
 def test_rollover_pool_is_an_output(rollover):
     text = files(rollover)["terraform/outputs.tf"]
     assert "redirector_pools" in text
-    assert "module.red_apache_rd01.public_address" in text
-    assert "module.red_apache_rd02.public_address" in text
+    assert "module.art_apache_rd01.public_address" in text
+    assert "module.art_apache_rd02.public_address" in text
 
 
 # -- secrets
@@ -682,21 +682,21 @@ def test_aws_makes_one_module_per_node(redstack):
 
 def test_aws_host_references_its_segment_and_network(redstack):
     mods = aws_modules(redstack)
-    assert mods["red_myth_ts01"]["subnet_id"] == "${module.red_c2_sub01.subnet_id}"
-    assert mods["red_myth_ts01"]["vpc_id"] == "${module.red_main_net01.id}"
+    assert mods["art_myth_ts01"]["subnet_id"] == "${module.art_c2_sub01.subnet_id}"
+    assert mods["art_myth_ts01"]["vpc_id"] == "${module.art_main_net01.id}"
 
 
 def test_aws_restricts_by_security_group_not_by_range(redstack):
     """The leak. A GCP rule names a tag; an AWS rule names a group that has to
     exist as a resource, which is why the host module owns one. Shown on a
     same-VPC rule; across a peering the source is a CIDR instead."""
-    rule = aws_rules(redstack)["log_red_open_log01_red_myth_ts01"]
+    rule = aws_rules(redstack)["log_art_open_log01_art_myth_ts01"]
     assert rule["referenced_security_group_id"] == \
-        "${module.red_myth_ts01.security_group_id}"
+        "${module.art_myth_ts01.security_group_id}"
     assert "cidr_ipv4" not in rule
 
 
-def test_aws_fans_a_shared_sink_into_one_rule_per_sender(redstack):
+def test_aws_fans_a_shaart_sink_into_one_rule_per_sender(redstack):
     """A security group rule carries exactly one source, so the fan in that is
     one rule on GCP is several here. This is the shape 0015 predicted. A sender
     in the collector's VPC names a group; one across a peering names a CIDR."""
@@ -705,22 +705,22 @@ def test_aws_fans_a_shared_sink_into_one_rule_per_sender(redstack):
                if e["role"] == "logs_to" and e["target"] == "open-log01"]
     assert len(senders) > 1, "the example is meant to have several shippers"
     for sender in senders:
-        name = "log_red_open_log01_red_%s" % sender.replace("-", "_")
+        name = "log_art_open_log01_art_%s" % sender.replace("-", "_")
         assert name in rules, name
         rule = rules[name]
         # Exactly one source per rule, a group in the same VPC or a CIDR across
         # the peering, never both.
         assert ("referenced_security_group_id" in rule) ^ ("cidr_ipv4" in rule)
     # The teamservers share the collector VPC, so they are named by group.
-    assert rules["log_red_open_log01_red_myth_ts01"]["referenced_security_group_id"] == \
-        "${module.red_myth_ts01.security_group_id}"
+    assert rules["log_art_open_log01_art_myth_ts01"]["referenced_security_group_id"] == \
+        "${module.art_myth_ts01.security_group_id}"
     # The redirector ships across the peering, so it is named by CIDR -- and the
     # CIDR is the PUBLIC subnet it was relocated into, not its declared segment.
     # A public-addressed host leaves its segment on AWS (0054), so the declared
     # range would not contain it. GCP keeps the host in its subnet and only
     # attaches an address, which is why the GCP tests above still name the
     # segment.
-    assert rules["log_red_open_log01_red_apache_rd01"]["cidr_ipv4"] == \
+    assert rules["log_art_open_log01_art_apache_rd01"]["cidr_ipv4"] == \
         "10.31.255.240/28"
 
 
@@ -729,14 +729,14 @@ def test_aws_jumpbox_foothold_accepts_its_own_segment(redstack):
     any pivoted callback) a range host initiates back to an operator listener on
     the jumpbox must be allowed. Internal (segment) surface, so the source is the
     segment CIDR, never the operator wildcard, and it is every protocol."""
-    rule = aws_rules(redstack)["foothold_in_red_jump_bx01"]
+    rule = aws_rules(redstack)["foothold_in_art_jump_bx01"]
     assert rule["ip_protocol"] == "-1"                     # every protocol/port
     assert "/" in rule["cidr_ipv4"]                        # a CIDR, not a var
     assert "operator_source_ranges" not in rule["cidr_ipv4"]
 
 
 def test_aws_operator_access_stays_a_variable(redstack):
-    rule = aws_rules(redstack)["mgmt_in_red_jump_bx01"]
+    rule = aws_rules(redstack)["mgmt_in_art_jump_bx01"]
     assert rule["for_each"] == "${toset(var.operator_source_ranges)}"
     assert rule["cidr_ipv4"] == "${each.value}"
 
@@ -744,12 +744,12 @@ def test_aws_operator_access_stays_a_variable(redstack):
 def test_aws_windows_host_gets_winrm_and_a_listener(redstack):
     """A fresh Windows image has no listener on 5986, and opening 22 to it opens
     nothing. Both halves have to be true or the operators play cannot run."""
-    assert aws_modules(redstack)["red_win_op01"]["windows"] is True
-    assert aws_modules(redstack)["red_kali_op01"]["windows"] is False
-    assert aws_rules(redstack)["mgmt_out_red_jump_bx01_red_win_op01"]["from_port"] == 5986
-    assert aws_rules(redstack)["mgmt_out_red_jump_bx01_red_kali_op01"]["from_port"] == 22
+    assert aws_modules(redstack)["art_win_op01"]["windows"] is True
+    assert aws_modules(redstack)["art_kali_op01"]["windows"] is False
+    assert aws_rules(redstack)["mgmt_out_art_jump_bx01_art_win_op01"]["from_port"] == 5986
+    assert aws_rules(redstack)["mgmt_out_art_jump_bx01_art_kali_op01"]["from_port"] == 22
     # guacd on the jumpbox also needs 3389 to render the Windows RDP tile.
-    assert aws_rules(redstack)["mgmt_out_red_jump_bx01_red_win_op01_rdp"]["from_port"] == 3389
+    assert aws_rules(redstack)["mgmt_out_art_jump_bx01_art_win_op01_rdp"]["from_port"] == 3389
 
 
 def test_aws_internal_hosts_are_private_behind_a_nat(redstack):
@@ -758,8 +758,8 @@ def test_aws_internal_hosts_are_private_behind_a_nat(redstack):
     so it cannot be scanned or reached from the internet, and egresses through a
     NAT gateway. See 0021."""
     mods = aws_modules(redstack)
-    ref = lambda nid: "red_" + nid.replace("-", "_")
-    public = {"red_jump_bx01", "red_apache_rd01"}
+    ref = lambda nid: "art_" + nid.replace("-", "_")
+    public = {"art_jump_bx01", "art_apache_rd01"}
     hosts = [n for n in redstack["nodes"]
              if n["kind"] not in ("network", "segment")]
     for node in hosts:
@@ -767,8 +767,8 @@ def test_aws_internal_hosts_are_private_behind_a_nat(redstack):
         assert mods[ref(node["id"])]["public_address"] is want, node["id"]
     # The main network builds a NAT gateway for its private members; the
     # redirector network holds only the public redirector, so it needs none.
-    assert mods["red_main_net01"]["create_nat"] is True
-    assert mods["red_rdir_net01"]["create_nat"] is False
+    assert mods["art_main_net01"]["create_nat"] is True
+    assert mods["art_rdir_net01"]["create_nat"] is False
 
 
 def test_aws_gives_a_stable_ip_only_to_the_hosts_reached_from_outside(redstack):
@@ -776,7 +776,7 @@ def test_aws_gives_a_stable_ip_only_to_the_hosts_reached_from_outside(redstack):
     Elastic IP that survives a stop and start; every other host keeps the
     auto-assigned address it uses only for outbound, which may change."""
     mods = aws_modules(redstack)
-    ref = lambda nid: "red_" + nid.replace("-", "_")
+    ref = lambda nid: "art_" + nid.replace("-", "_")
     for node in redstack["nodes"]:
         if node["kind"] in ("network", "segment"):
             continue
@@ -799,7 +799,7 @@ def test_aws_gives_an_egress_ip_to_an_addressless_host_on_an_internet_segment():
     # Select hosts by kind, not by a hardcoded id: a teamserver's default id slug
     # encodes its C2 (myth/sliv/adpx), so keying on the id breaks the moment the
     # C2 is swapped. What is under test is the kind's routing, not the C2.
-    prefix = topo.get("prefix", "red")
+    prefix = topo.get("prefix", "art")
 
     def ref(kind):
         nid = next(n["id"] for n in topo["nodes"] if n["kind"] == kind)
@@ -829,8 +829,8 @@ def test_aws_skips_the_gateway_when_nothing_needs_it(redstack):
     mods = {}
     for block in parsed.get("module", []):
         mods.update(block)
-    assert mods["red_main_net01"]["create_nat"] is False
-    assert "nat_subnet_cidr" not in mods["red_main_net01"]
+    assert mods["art_main_net01"]["create_nat"] is False
+    assert "nat_subnet_cidr" not in mods["art_main_net01"]
 
 
 def test_aws_gateway_says_so_when_the_network_is_full(redstack):
@@ -844,7 +844,7 @@ def test_aws_gateway_says_so_when_the_network_is_full(redstack):
     plan = TerraformPlan(redstack, provider="aws")
     with pytest.raises(GenerationError) as exc:
         plan.spare_subnet("main-net01")
-    assert "red-main-net01" in str(exc.value)
+    assert "art-main-net01" in str(exc.value)
 
 
 def test_aws_emits_no_credentials(redstack):
@@ -925,7 +925,7 @@ def test_aws_rejects_an_unknown_os(redstack):
     from redstackpro.terraform import TerraformPlan
     plan = TerraformPlan(redstack, provider="aws")
     for node in (
-            {"id": "cyb-srv09", "kind": "srv", "overlay": {"os": "plan9"}},
+            {"id": "hvn-srv09", "kind": "srv", "overlay": {"os": "plan9"}},
             {"id": "op-op01", "kind": "operator", "overlay": {"os": "plan9"}}):
         with pytest.raises(GenerationError) as exc:
             aws_images.image_for(plan, node)
@@ -1035,10 +1035,10 @@ def test_aws_uses_the_official_kali_image(redstack):
     """os kali gets a real Kali box on AWS, the same as it does on GCP, rather
     than Debian with the archive repointed at run time. See the 0020 amendment."""
     mods = aws_modules(redstack)
-    assert "kali" in mods["red_kali_op01"]["image_name"]
-    assert mods["red_kali_op01"]["image_owner"] != mods["red_myth_ts01"]["image_owner"], \
+    assert "kali" in mods["art_kali_op01"]["image_name"]
+    assert mods["art_kali_op01"]["image_owner"] != mods["art_myth_ts01"]["image_owner"], \
         "a Kali box and a Debian box do not come from the same publisher"
-    assert "debian" in mods["red_myth_ts01"]["image_name"]
+    assert "debian" in mods["art_myth_ts01"]["image_name"]
 
 
 def test_the_export_says_what_the_account_has_to_do_first(redstack, registry):
@@ -1182,7 +1182,7 @@ def test_internal_ip_pins_the_exact_address(provider, var):
     (GOAD's own canonical octet, see 0055); every provider that takes it must
     render that literal address on kingslanding's module, not an auto-assigned
     one."""
-    kingslanding = _modules_for(_range_doc(), provider=provider)["cyb_kingslanding"]
+    kingslanding = _modules_for(_range_doc(), provider=provider)["hvn_kingslanding"]
     assert kingslanding[var] == "192.168.56.10"
 
 
@@ -1194,13 +1194,13 @@ def test_aws_puts_an_addressed_host_in_the_public_subnet():
     must land in the network's public subnet instead, while the AD hosts stay in
     the segment."""
     mods = _modules_for(_range_doc(), provider="aws")
-    assert mods["cyb_jumpbox"]["subnet_id"] == \
-        "${module.cyb_net01.public_subnet_id}"
-    assert mods["cyb_kingslanding"]["subnet_id"] == \
-        "${module.cyb_sub01.subnet_id}"
+    assert mods["hvn_jumpbox"]["subnet_id"] == \
+        "${module.hvn_net01.public_subnet_id}"
+    assert mods["hvn_kingslanding"]["subnet_id"] == \
+        "${module.hvn_sub01.subnet_id}"
     # The network has to be told to build it, and be given a range for it.
-    assert mods["cyb_net01"]["create_public_subnet"] is True
-    assert mods["cyb_net01"]["public_subnet_cidr"]
+    assert mods["hvn_net01"]["create_public_subnet"] is True
+    assert mods["hvn_net01"]["public_subnet_cidr"]
 
 
 def test_aws_drops_a_pin_on_a_host_it_moves_to_the_public_subnet():
@@ -1209,8 +1209,8 @@ def test_aws_drops_a_pin_on_a_host_it_moves_to_the_public_subnet():
     address outside the subnet. The jumpbox's pin is dropped; the AD pins, which
     are the ones fidelity depends on, are untouched."""
     mods = _modules_for(_range_doc(), provider="aws")
-    assert "private_ip" not in mods["cyb_jumpbox"]
-    assert mods["cyb_kingslanding"]["private_ip"] == "192.168.56.10"
+    assert "private_ip" not in mods["hvn_jumpbox"]
+    assert mods["hvn_kingslanding"]["private_ip"] == "192.168.56.10"
 
 
 def test_aws_keeps_the_foothold_reaching_the_ad_hosts():
@@ -1223,11 +1223,11 @@ def test_aws_keeps_the_foothold_reaching_the_ad_hosts():
     rules = {}
     for block in parsed.get("resource", []):
         rules.update(block.get("aws_vpc_security_group_ingress_rule", {}))
-    name = "ad_intra_cyb_kingslanding_from_cyb_jumpbox"
+    name = "ad_intra_hvn_kingslanding_from_hvn_jumpbox"
     assert name in rules, sorted(rules)
     assert rules[name]["ip_protocol"] == "-1"
     assert rules[name]["referenced_security_group_id"] == \
-        "${module.cyb_jumpbox.security_group_id}"
+        "${module.hvn_jumpbox.security_group_id}"
 
 
 def test_gcp_leaves_the_jumpbox_in_the_range_segment():
@@ -1235,19 +1235,19 @@ def test_gcp_leaves_the_jumpbox_in_the_range_segment():
     instances without an external address, so an addressed host sits happily in
     the range subnet and keeps its pinned octet."""
     mods = _modules_for(_range_doc(), provider="gcp")
-    assert mods["cyb_jumpbox"]["subnetwork"] == "${module.cyb_sub01.self_link}"
-    assert mods["cyb_jumpbox"]["network_ip"] == "192.168.56.4"
+    assert mods["hvn_jumpbox"]["subnetwork"] == "${module.hvn_sub01.self_link}"
+    assert mods["hvn_jumpbox"]["network_ip"] == "192.168.56.4"
 
 
 def test_internal_ip_pins_the_exact_address_proxmox():
     # Proxmox's ip_address carries the prefix length too (static config, not a
     # bare address), so it is checked separately from the other providers.
-    kingslanding = _modules_for(_range_doc(), provider="proxmox")["cyb_kingslanding"]
+    kingslanding = _modules_for(_range_doc(), provider="proxmox")["hvn_kingslanding"]
     assert kingslanding["ip_address"] == "192.168.56.10/24"
 
 
 def test_internal_ip_pins_the_exact_address_esxi():
-    kingslanding = _modules_for(_range_doc(), provider="esxi")["cyb_kingslanding"]
+    kingslanding = _modules_for(_range_doc(), provider="esxi")["hvn_kingslanding"]
     assert kingslanding["ip_address"] == "192.168.56.10"
 
 
@@ -1260,7 +1260,7 @@ def test_unset_internal_ip_leaves_the_default_dhcp_assignment(provider):
     kingslanding = next(n for n in doc["nodes"] if n["id"] == "kingslanding")
     del kingslanding["overlay"]["internal_ip"]
     key = "network_ip" if provider == "gcp" else "private_ip"
-    assert key not in _modules_for(doc, provider=provider)["cyb_kingslanding"]
+    assert key not in _modules_for(doc, provider=provider)["hvn_kingslanding"]
 
 
 # -- auto stop (0057)

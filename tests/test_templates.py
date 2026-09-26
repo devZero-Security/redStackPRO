@@ -19,7 +19,7 @@ SCHEMA = json.loads((ROOT / "src/redstackpro/schema/topology/0.6.0.json").read_t
 
 RANGE_HOST_KINDS = {"dc", "srv", "wks", "fw"}
 SIEM_EDRS = {"wazuh", "elastic"}
-MODE_PREFIX = {"artie": "red", "haven": "cyb"}
+MODE_PREFIX = {"artie": "art", "haven": "hvn"}
 
 
 def _templates():

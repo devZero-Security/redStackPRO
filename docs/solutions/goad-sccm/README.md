@@ -62,11 +62,11 @@ not.
 
 | host | AD name | address | role |
 |------|---------|---------|------|
-| cyb-jumpbox | - | 192.168.56.2 | foothold, Guacamole, ssh |
-| cyb-mecm | MECM | 192.168.56.3 | site server, MECM primary site |
-| cyb-client | CLIENT | 192.168.56.4 | Windows 10 client |
-| cyb-dc | DC | 192.168.56.5 | domain controller |
-| cyb-mssql | MSSQL | 192.168.56.6 | remote site database |
+| hvn-jumpbox | - | 192.168.56.2 | foothold, Guacamole, ssh |
+| hvn-mecm | MECM | 192.168.56.3 | site server, MECM primary site |
+| hvn-client | CLIENT | 192.168.56.4 | Windows 10 client |
+| hvn-dc | DC | 192.168.56.5 | domain controller |
+| hvn-mssql | MSSQL | 192.168.56.6 | remote site database |
 
 The separate site database matters: it is what makes TAKEOVER-1 and TAKEOVER-2
 reachable, because the site server authenticates to a **different** host.

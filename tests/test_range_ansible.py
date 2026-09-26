@@ -40,7 +40,7 @@ def test_assumed_breach_user_becomes_a_jumpbox_foothold():
     admin patient-zero can SSH in as. It stays a low-priv domain member on the
     dc side. See range-access-model and P2.5."""
     files = generate(GOAD_FULL)
-    jb = yaml.safe_load(files["ansible/host_vars/cyb-jumpbox.yml"])
+    jb = yaml.safe_load(files["ansible/host_vars/hvn-jumpbox.yml"])
     assert "hodor" in (jb.get("redstackpro_jumpbox_foothold_users") or [])
 
 
@@ -51,10 +51,10 @@ def test_local_admin_users_are_added_to_member_administrators():
     to vhagar for the keepass_bot CredSSP hop to run there. The DC itself gets no
     such list. See dracarys-fidelity-gap."""
     files = generate(DRACARYS)
-    vhagar = yaml.safe_load(files["ansible/host_vars/cyb-vhagar.yml"])
+    vhagar = yaml.safe_load(files["ansible/host_vars/hvn-vhagar.yml"])
     assert "DRACARYS\\rhaegal" in (vhagar.get("redstackpro_srv_local_admins") or [])
     # The DC is not a member server and carries no local-admin injection.
-    balerion = yaml.safe_load(files["ansible/host_vars/cyb-balerion.yml"])
+    balerion = yaml.safe_load(files["ansible/host_vars/hvn-balerion.yml"])
     assert "redstackpro_srv_local_admins" not in balerion
 
 
@@ -95,9 +95,9 @@ def test_endpoint_telemetry_toggle_reaches_the_host():
     does not. goad-wazuh opts its Wazuh-monitored hosts in. See F-wazuh-telemetry."""
     files = generate(json.loads(
         (ROOT / "frontend/public/goad/goad-wazuh.json").read_text(encoding="utf-8")))
-    wint = yaml.safe_load(files["ansible/host_vars/cyb-winterfell.yml"])
+    wint = yaml.safe_load(files["ansible/host_vars/hvn-winterfell.yml"])
     assert wint.get("redstackpro_endpoint_telemetry") is True
-    ws01 = yaml.safe_load(files["ansible/host_vars/cyb-ws01.yml"])
+    ws01 = yaml.safe_load(files["ansible/host_vars/hvn-ws01.yml"])
     assert "redstackpro_endpoint_telemetry" not in ws01
 
 
@@ -107,11 +107,11 @@ def test_dracarys_vault_and_bots_are_faithful():
     LDAPS. These make the challenge's credential-exposure path real rather than a
     hollow stand-in. See dracarys-fidelity-gap."""
     files = generate(DRACARYS)
-    vhagar = yaml.safe_load(files["ansible/host_vars/cyb-vhagar.yml"])
+    vhagar = yaml.safe_load(files["ansible/host_vars/hvn-vhagar.yml"])
     assert "keepass_vault" in (vhagar.get("redstackpro_srv_vulns") or [])
     bot = vhagar["redstackpro_srv_vulns_vars"]["schedule"]["script_content"]
     assert "plink" in bot and "syrax" in bot
-    balerion = yaml.safe_load(files["ansible/host_vars/cyb-balerion.yml"])
+    balerion = yaml.safe_load(files["ansible/host_vars/hvn-balerion.yml"])
     assert "ldaps" in (balerion.get("redstackpro_dc_vulns") or [])
     kb = balerion["redstackpro_dc_vulns_vars"]["schedule"]["script_content"]
     assert "Credssp" in kb and "vhagar" in kb
@@ -196,8 +196,8 @@ def _render_guac_seed(hostvars):
         redstackpro_guac_password="labpw",
         redstackpro_jumpbox_user="redop",
         redstackpro_guac_ssh_key="fake-key",
-        inventory_hostname="red-jump-bx01",
-        groups={"all": ["red-jump-bx01"] + list(hostvars)},
+        inventory_hostname="art-jump-bx01",
+        groups={"all": ["art-jump-bx01"] + list(hostvars)},
         hostvars=hostvars,
     )
 
@@ -207,20 +207,20 @@ def test_a_desktop_kali_operator_gets_an_rdp_tile_not_ssh():
     left a desktop:true Kali operator on the ssh branch with no way to reach its
     xrdp session. See CAR008 and overlay_operator.desktop."""
     seed = _render_guac_seed({
-        "red-kali-op01": {
+        "art-kali-op01": {
             "ansible_host": "10.20.0.5",
             "redstackpro_operator_os": "kali",
             "redstackpro_operator_desktop": True,
         },
-        "red-ssh-op01": {
+        "art-ssh-op01": {
             "ansible_host": "10.20.0.6",
             "redstackpro_operator_os": "kali",
         },
     })
-    assert "-- red-kali-op01 (rdp)" in seed
-    assert "-- red-ssh-op01 (ssh)" in seed
+    assert "-- art-kali-op01 (rdp)" in seed
+    assert "-- art-ssh-op01 (ssh)" in seed
     # The rdp tile for the GUI operator, not just any rdp tile in the file.
-    gui_tile = seed.split("-- red-kali-op01 (rdp)")[1].split("-- red-ssh-op01")[0]
+    gui_tile = seed.split("-- art-kali-op01 (rdp)")[1].split("-- art-ssh-op01")[0]
     assert "'rdp'" in gui_tile
     assert "'3389'" in gui_tile
 
@@ -233,7 +233,7 @@ def test_patient_zero_gets_a_portal_tile_on_one_landing_host():
     breach domain, that host lets p0 log on over RDP, and the tile carries the
     credential the dc role actually seeded. See range-access-model."""
     out = generate(GOAD_FULL)
-    jumpbox = yaml.safe_load(out["ansible/host_vars/cyb-jumpbox.yml"])
+    jumpbox = yaml.safe_load(out["ansible/host_vars/hvn-jumpbox.yml"])
     tiles = jumpbox["redstackpro_jumpbox_foothold_tiles"]
     # GOAD's patient zero is hodor, a NORTH domain member with a declared
     # password. The declared password must win: falling back to the shared lab
@@ -246,7 +246,7 @@ def test_patient_zero_gets_a_portal_tile_on_one_landing_host():
     # controller -- signing a Domain Users member in interactively on a DC is not
     # the shape being modelled.
     landing = tiles[0]["host"]
-    assert landing != "cyb-winterfell"
+    assert landing != "hvn-winterfell"
     host = yaml.safe_load(out["ansible/host_vars/%s.yml" % landing])
     assert host["redstackpro_srv_rdp_users"] == ["NORTH\\hodor"]
 
@@ -272,15 +272,15 @@ def test_every_host_is_named_for_a_hosts_file():
     members are excluded from the play because they resolve through the DCs'
     DNS. See range-access-model and the /etc/hosts PAI item."""
     out = generate(GOAD_FULL)
-    wint = yaml.safe_load(out["ansible/host_vars/cyb-winterfell.yml"])
+    wint = yaml.safe_load(out["ansible/host_vars/hvn-winterfell.yml"])
     assert wint["redstackpro_host_fqdn"] == "winterfell.north.sevenkingdoms.local"
     assert wint["redstackpro_host_shortname"] == "winterfell"
     # A member resolves to the domain it joins, not a forest-root guess.
-    cb = yaml.safe_load(out["ansible/host_vars/cyb-castelblack.yml"])
+    cb = yaml.safe_load(out["ansible/host_vars/hvn-castelblack.yml"])
     assert cb["redstackpro_host_fqdn"] == "castelblack.north.sevenkingdoms.local"
     # The jumpbox is not an AD host: it carries the alias but no FQDN, and it
     # is a recipient of the block (it does not join a domain).
-    jb = yaml.safe_load(out["ansible/host_vars/cyb-jumpbox.yml"])
+    jb = yaml.safe_load(out["ansible/host_vars/hvn-jumpbox.yml"])
     assert jb["redstackpro_host_shortname"] == "jumpbox"
     assert "redstackpro_host_fqdn" not in jb
     site = out["ansible/site.yml"]
@@ -321,14 +321,14 @@ def test_defender_off_by_default_and_opts_in_per_host():
     (a defended range) gets redstackpro_defender_enabled true. See PZ-5 / P0.2."""
     import copy
     files = generate(GOAD_FULL)
-    kl = yaml.safe_load(files["ansible/host_vars/cyb-kingslanding.yml"])
+    kl = yaml.safe_load(files["ansible/host_vars/hvn-kingslanding.yml"])
     assert kl.get("redstackpro_defender_enabled") in (None, False)
     g = copy.deepcopy(GOAD_FULL)
     for n in g["nodes"]:
         if n["id"] == "kingslanding":
             n.setdefault("overlay", {})["defender_enabled"] = True
     kl2 = yaml.safe_load(
-        generate(g)["ansible/host_vars/cyb-kingslanding.yml"])
+        generate(g)["ansible/host_vars/hvn-kingslanding.yml"])
     assert kl2.get("redstackpro_defender_enabled") is True
 
 
@@ -340,7 +340,7 @@ def test_range_connects_as_the_blueop_account():
     assert all_vars["ansible_user"] == "blueop"
 
 
-def test_printnightmare_kept_optin_not_declared_on_default_dcs():
+def test_printnightmare_kept_optin_not_declaart_on_default_dcs():
     """PrintNightmare is RETAINED as an opt-in host_vulns role (task file +
     implemented id) but is not declared on any default GOAD DC. Its live
     exploitation is patch-blocked on any fully-patched build regardless of
@@ -351,7 +351,7 @@ def test_printnightmare_kept_optin_not_declared_on_default_dcs():
     declared by the default templates. See goad-fidelity-build and
     current-activity-list (session 4 Part 4/5 conclusions)."""
     files = generate(GOAD_FULL)
-    for dc in ("cyb-kingslanding", "cyb-winterfell", "cyb-meereen"):
+    for dc in ("hvn-kingslanding", "hvn-winterfell", "hvn-meereen"):
         vulns = yaml.safe_load(files[f"ansible/host_vars/{dc}.yml"])[
             "redstackpro_dc_vulns"]
         assert "printnightmare" not in vulns, dc
@@ -368,7 +368,7 @@ def test_ldap_signing_off_is_provider_gated_to_proxmox_and_esxi():
     aws/gcp/azure) silently drops it; Proxmox/ESXi keep it. See
     redstackpro.ansible.VULN_PROVIDERS and current-activity-list (provider-aware
     toggles)."""
-    dcs = ("cyb-kingslanding", "cyb-winterfell", "cyb-meereen")
+    dcs = ("hvn-kingslanding", "hvn-winterfell", "hvn-meereen")
 
     def _dc_vulns(provider):
         files = generate(GOAD_FULL, provider=provider)
@@ -414,7 +414,7 @@ def test_essos_ca_plants_the_full_esc_template_set():
     each ESC template has a clean-room planter script. Closes the Part 6 fidelity
     delta where ESSOS-CA shipped only ESC4+ESC13. See goad-fidelity-build."""
     files = generate(GOAD_FULL)
-    escs = yaml.safe_load(files["ansible/host_vars/cyb-braavos.yml"])[
+    escs = yaml.safe_load(files["ansible/host_vars/hvn-braavos.yml"])[
         "redstackpro_adcs_forest_escs"]
     for e in ("esc1", "esc2", "esc3"):
         assert e in escs, e
@@ -430,7 +430,7 @@ def test_linked_sql_hosts_map_a_remote_login_not_self():
     not double-hop to ANONYMOUS (the Part 7 finding) and the link RCE chain lands.
     See goad-fidelity-build."""
     files = generate(GOAD_FULL)
-    for h in ("cyb-castelblack", "cyb-braavos"):
+    for h in ("hvn-castelblack", "hvn-braavos"):
         vv = yaml.safe_load(files[f"ansible/host_vars/{h}.yml"])[
             "redstackpro_srv_vulns_vars"]
         targets = vv.get("mssql_linked_targets") or []
@@ -473,7 +473,7 @@ def test_ad_hosts_stay_in_their_play():
 
 def test_controller_is_reached_over_psrp_with_its_domain_file():
     files = _files()
-    dc = yaml.safe_load(files["ansible/host_vars/cyb-kingslanding.yml"])
+    dc = yaml.safe_load(files["ansible/host_vars/hvn-kingslanding.yml"])
     assert dc["ansible_connection"] == "psrp"
     assert dc["redstackpro_domain_vars"] == "vars/domains/sevenkingdoms.local.yml"
     assert dc["redstackpro_join_fqdn"] == "sevenkingdoms.local"
@@ -481,10 +481,10 @@ def test_controller_is_reached_over_psrp_with_its_domain_file():
 
 def test_member_points_dns_at_its_controller():
     files = _files()
-    member = yaml.safe_load(files["ansible/host_vars/cyb-castelblack.yml"])
+    member = yaml.safe_load(files["ansible/host_vars/hvn-castelblack.yml"])
     # castelblack joins north, whose controller is winterfell.
     assert member["redstackpro_join_dc_address"] == \
-        "<<tf:cyb-winterfell:private_address>>"
+        "<<tf:hvn-winterfell:private_address>>"
     assert member["redstackpro_join_fqdn"] == "north.sevenkingdoms.local"
 
 
@@ -493,7 +493,7 @@ def test_child_domain_knows_its_parent_and_parent_dc():
     north = yaml.safe_load(files["ansible/vars/domains/north.sevenkingdoms.local.yml"])
     assert north["forest_root"] is False
     assert north["parent_fqdn"] == "sevenkingdoms.local"
-    assert north["parent_dc_address"] == "<<tf:cyb-kingslanding:private_address>>"
+    assert north["parent_dc_address"] == "<<tf:hvn-kingslanding:private_address>>"
     root = yaml.safe_load(files["ansible/vars/domains/sevenkingdoms.local.yml"])
     assert root["forest_root"] is True
     # A parent_child trust to north is carried on the source domain.
@@ -554,13 +554,13 @@ def test_the_password_policy_relax_is_verified_not_assumed():
     assert "Set-ADDefaultDomainPasswordPolicy" not in main
 
 
-def test_a_weak_password_flaw_never_overwrites_a_declared_password():
+def test_a_weak_password_flaw_never_overwrites_a_declaart_password():
     """A user's declared password IS the lab's documented credential. The
     weak_password flaw exists to make an account sprayable, which an already-weak
     declared password satisfies, so it must only fill in for an account that has
     none. Found live on minilab: this ran after user creation and replaced alice's
     "spongebob" with "superman", so the documented credential stopped working AND
-    the deploy deadlocked, because stored_credential registers a scheduled task as
+    the deploy deadlocked, because stoart_credential registers a scheduled task as
     alice using the declared password."""
     paths = (DC_TASKS / "attack_paths.yml").read_text(encoding="utf-8")
     tasks = yaml.safe_load(paths)
@@ -601,7 +601,7 @@ def test_a_host_declaring_no_vulns_compiles_to_an_empty_list():
     topology = json.loads(
         (ROOT / "frontend/public/goad/goad-wazuh.json").read_text(encoding="utf-8"))
     files = generate(topology)
-    ws01 = yaml.safe_load(files["ansible/host_vars/cyb-ws01.yml"])
+    ws01 = yaml.safe_load(files["ansible/host_vars/hvn-ws01.yml"])
     assert ws01["redstackpro_wks_vulns"] == []
 
 
@@ -612,7 +612,7 @@ def test_a_range_jumpbox_carries_the_toolchain_by_default():
     from, so leaving it bare would mean every operator hand-installs the same tools
     before step one."""
     files = _files()
-    jb = yaml.safe_load(files["ansible/host_vars/cyb-jumpbox.yml"])
+    jb = yaml.safe_load(files["ansible/host_vars/hvn-jumpbox.yml"])
     assert jb["redstackpro_jumpbox_offensive_toolkit"] is True
 
 
@@ -624,7 +624,7 @@ def test_the_overlay_can_decline_the_toolchain():
         if node["kind"] == "jumpbox":
             node["overlay"]["offensive_toolkit"] = False
     jb = yaml.safe_load(
-        generate(topology)["ansible/host_vars/cyb-jumpbox.yml"])
+        generate(topology)["ansible/host_vars/hvn-jumpbox.yml"])
     assert jb["redstackpro_jumpbox_offensive_toolkit"] is False
 
 

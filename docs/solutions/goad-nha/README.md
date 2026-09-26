@@ -98,7 +98,7 @@ The `ninja.hack` cast: `alice.johnson` is Hokage and **Domain Admin**;
 `SignatureValidation` is not an upstream Windows template. redStackPRO plants a
 generic enrollable template of that exact name on the CA host so the lab's ACL has
 something to resolve against (`redstackpro_adcs_acl_templates`, injected by the
-compiler onto `cyb-dc-vil`). Find it, and find who controls it:
+compiler onto `hvn-dc-vil`). Find it, and find who controls it:
 
 ```bash
 proxychains certipy find -u 'olivia.davis@ninja.hack' -p '<pw>' \

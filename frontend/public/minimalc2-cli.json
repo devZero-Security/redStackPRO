@@ -2,7 +2,7 @@
   "schema_version": "0.6.0",
   "mode": "artie",
   "name": "MinimalC2-CLI",
-  "prefix": "red",
+  "prefix": "art",
   "description": "The smallest usable redStack: one Sliver teamserver, headless with no web UI, driven from the Kali operator over SSH, behind a single Apache redirector, reached through a Guacamole jumpbox. The redirector sits in its own peered network so the internet facing tier is its own blast radius, the same isolation redStack uses, trimmed to a single C2 backend with no log collector and no second operator. A starting point to grow from.",
   "auto_stop": {
     "enabled": true,

@@ -63,7 +63,7 @@ def make_db(path, tasks=(), agents=()):
     conn.close()
 
 
-def run(tmp_path, node="red-adpx-ts01"):
+def run(tmp_path, node="art-adpx-ts01"):
     out, state = tmp_path / "out/adaptix.jsonl", tmp_path / "state.json"
     n = exporter.export(str(tmp_path / "adaptixserver.db"), str(out), str(state), node)
     lines = ([json.loads(x) for x in out.read_text(encoding="utf-8").splitlines()]
@@ -87,7 +87,7 @@ def test_it_exports_the_operator_and_the_agent(tmp_path):
     assert ev["operator"] == "redop"
     assert ev["agent_id"] == "a77"
     assert ev["command"] == "whoami"
-    assert ev["node_id"] == "red-adpx-ts01"
+    assert ev["node_id"] == "art-adpx-ts01"
     # Joined from Agents, which is where the implant's context lives.
     assert ev["listener"] == "http"
     assert ev["agent_domain"] == "ESSOS"

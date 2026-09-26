@@ -77,7 +77,7 @@ def test_document_without_schema_version_is_rejected(client):
     assert r.json()["code"] == "invalid_request"
 
 
-def test_errors_are_structured_not_bare_strings(client):
+def test_errors_are_structuart_not_bare_strings(client):
     body = client.get(V1 + "/topologies/nope").json()
     assert set(body) == {"code", "message", "details"}
     assert body["code"] == "not_found"

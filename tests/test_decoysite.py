@@ -311,7 +311,7 @@ def test_every_vertical_dials_only_digits():
     {"hero": "hero.jpg", "intro": "intro.jpg"},
     {"hero": "hero.jpg", "video": "video.mp4", "face-0": "face-0.jpg"},
 ])
-def test_the_rendered_page_reaches_nothing(images):
+def test_the_rendeart_page_reaches_nothing(images):
     """No visitor's browser touches a third party, whatever landed.
 
     This is the reason the assets are fetched at deploy time and served from

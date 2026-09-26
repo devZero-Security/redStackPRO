@@ -2,7 +2,7 @@
   "schema_version": "0.6.0",
   "mode": "haven",
   "name": "DRACARYS",
-  "prefix": "cyb",
+  "prefix": "hvn",
   "auto_stop": {
     "enabled": true,
     "after_hours": 8,

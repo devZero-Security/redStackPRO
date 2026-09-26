@@ -2,7 +2,7 @@
   "schema_version": "0.6.0",
   "mode": "artie",
   "name": "redStack default blueprint",
-  "prefix": "red",
+  "prefix": "art",
   "description": "The redStack topology: an Apache redirector in its own network, peered to the main range, routing three C2 backends on separate URI prefixes. The main range holds the teamservers in their own subnet, and one internal subnet holding the Guacamole jumpbox, the Kali and Windows operator boxes, and a log collector. That one subnet is redStack's shape: the jumpbox holds a public address, everyone behind it is internal only and reaches out through it. The redirector sits in a separate peered network so the internet facing tier is its own blast radius. A log collector is included because a blueprint should be the recommended shape rather than a transcription; redStack itself has none. The URI prefixes and the gating header are placeholders, not redStack's values.",
   "nodes": [
     {

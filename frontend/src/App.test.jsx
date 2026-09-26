@@ -31,7 +31,7 @@ const SAVED_DOCUMENT = {
   schema_version: "0.2.0",
   mode: "artie",
   name: "Saved range",
-  prefix: "red",
+  prefix: "art",
   nodes: [
     { id: "c2-net01", kind: "network", overlay: { cidr: "10.30.0.0/16" },
       position: { x: 0, y: 0 }, width: 700, height: 300 },
@@ -133,7 +133,7 @@ describe("loading", () => {
 
     // This is the reload. Nothing was carried over in memory; the id in the
     // URL is the only thing that survived.
-    expect(await screen.findByText("red-myth-ts01")).toBeTruthy();
+    expect(await screen.findByText("art-myth-ts01")).toBeTruthy();
     expect(screen.getByLabelText("Topology name").value).toBe("Saved range");
   });
 
@@ -141,7 +141,7 @@ describe("loading", () => {
     openUrl("?topology=g1");
     fakeBackend();
     render(<App />);
-    await screen.findByText("red-myth-ts01");
+    await screen.findByText("art-myth-ts01");
 
     expect(screen.getByText(/Saved, version 3/)).toBeTruthy();
   });
@@ -164,7 +164,7 @@ describe("saving", () => {
       const calls = fakeBackend();
       const user = userEvent.setup();
       render(<App />);
-      await screen.findByText("red-myth-ts01");
+      await screen.findByText("art-myth-ts01");
 
       await user.type(screen.getByLabelText("Topology name"), "!");
       expect(await screen.findByText("Unsaved changes")).toBeTruthy();
@@ -188,7 +188,7 @@ describe("saving", () => {
     const calls = fakeBackend();
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByText("red-myth-ts01");
+    await screen.findByText("art-myth-ts01");
 
     await user.type(screen.getByLabelText("Topology name"), "!");
     await user.click(screen.getByRole("button", { name: "Save" }));
@@ -242,7 +242,7 @@ describe("two tabs", () => {
     fakeBackend({ putResult: "conflict" });
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByText("red-myth-ts01");
+    await screen.findByText("art-myth-ts01");
 
     await user.type(screen.getByLabelText("Topology name"), "!");
     await user.click(screen.getByRole("button", { name: "Save" }));
@@ -263,7 +263,7 @@ describe("two tabs", () => {
       const calls = fakeBackend({ putResult: "conflict" });
       const user = userEvent.setup();
       render(<App />);
-      await screen.findByText("red-myth-ts01");
+      await screen.findByText("art-myth-ts01");
 
       await user.type(screen.getByLabelText("Topology name"), "!");
       await user.click(screen.getByRole("button", { name: "Save" }));
@@ -285,7 +285,7 @@ describe("two tabs", () => {
     fakeBackend({ putResult: "conflict" });
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByText("red-myth-ts01");
+    await screen.findByText("art-myth-ts01");
 
     await user.type(screen.getByLabelText("Topology name"), "!");
     await user.click(screen.getByRole("button", { name: "Save" }));

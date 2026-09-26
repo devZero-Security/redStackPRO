@@ -56,7 +56,7 @@ def test_generates_expected_paths(redstack):
     assert "ansible/inventory.yml" in out
     assert "ansible/site.yml" in out
     assert "ansible/group_vars/all.yml" in out
-    assert "ansible/host_vars/red-myth-ts01.yml" in out
+    assert "ansible/host_vars/art-myth-ts01.yml" in out
 
 
 def test_output_is_valid_yaml(redstack):
@@ -79,9 +79,9 @@ def test_groups_come_from_the_registry(redstack):
     # bootstrap play a target. See 0022.
     assert set(children) == {"collectors", "jumpboxes", "operators",
                              "redirectors", "teamservers", "windows"}
-    assert set(children["redirectors"]["hosts"]) == {"red-apache-rd01"}
+    assert set(children["redirectors"]["hosts"]) == {"art-apache-rd01"}
     assert set(children["teamservers"]["hosts"]) == {
-        "red-myth-ts01", "red-sliv-ts01", "red-adpx-ts01"}
+        "art-myth-ts01", "art-sliv-ts01", "art-adpx-ts01"}
 
 
 def test_containers_are_not_hosts(redstack):
@@ -96,46 +96,46 @@ def test_fronts_collects_one_upstream_per_edge(redstack):
     """A redirector fronts as many teamservers as it has edges, each on its own
     prefix. Overwriting instead of collecting would silently drop two of the
     three."""
-    rdir = load(files(redstack), "ansible/host_vars/red-apache-rd01.yml")
+    rdir = load(files(redstack), "ansible/host_vars/art-apache-rd01.yml")
     assert len(rdir["upstreams"]) == 3
     by_prefix = {u["uri_prefix"]: u for u in rdir["upstreams"]}
     assert set(by_prefix) == {"/api/v1", "/cdn/assets", "/updates"}
-    assert by_prefix["/api/v1"]["address"] == "<<tf:red-myth-ts01:private_address>>"
-    assert by_prefix["/api/v1"]["name"] == "red-myth-ts01"
+    assert by_prefix["/api/v1"]["address"] == "<<tf:art-myth-ts01:private_address>>"
+    assert by_prefix["/api/v1"]["name"] == "art-myth-ts01"
 
 
 def test_a_rollover_pool_carries_the_same_prefixes(rollover):
     out = files(rollover)
-    first = load(out, "ansible/host_vars/red-apache-rd01.yml")["upstreams"]
-    second = load(out, "ansible/host_vars/red-apache-rd02.yml")["upstreams"]
+    first = load(out, "ansible/host_vars/art-apache-rd01.yml")["upstreams"]
+    second = load(out, "ansible/host_vars/art-apache-rd02.yml")["upstreams"]
     assert ([u["uri_prefix"] for u in first]
             == [u["uri_prefix"] for u in second])
 
 
 def test_logs_to_injects_sink_address(redstack):
-    ts = load(files(redstack), "ansible/host_vars/red-myth-ts01.yml")
-    assert ts["log_sink_address"] == "<<tf:red-open-log01:private_address>>"
+    ts = load(files(redstack), "ansible/host_vars/art-myth-ts01.yml")
+    assert ts["log_sink_address"] == "<<tf:art-open-log01:private_address>>"
 
 
 def test_collector_does_not_ship_to_itself(redstack):
-    log = load(files(redstack), "ansible/host_vars/red-open-log01.yml")
+    log = load(files(redstack), "ansible/host_vars/art-open-log01.yml")
     assert "log_sink_address" not in log
 
 
 def test_manages_injects_proxy_jump(redstack):
     # The proxy user is the single platform account, redop in ops mode (P1.7).
-    ts = load(files(redstack), "ansible/host_vars/red-myth-ts01.yml")
-    assert "ProxyJump=redop@<<tf:red-jump-bx01:public_address>>" in \
+    ts = load(files(redstack), "ansible/host_vars/art-myth-ts01.yml")
+    assert "ProxyJump=redop@<<tf:art-jump-bx01:public_address>>" in \
         ts["ansible_ssh_common_args"]
 
 
 def test_jumpbox_does_not_proxy_through_itself(redstack):
-    jump = load(files(redstack), "ansible/host_vars/red-jump-bx01.yml")
+    jump = load(files(redstack), "ansible/host_vars/art-jump-bx01.yml")
     assert "ansible_ssh_common_args" not in jump
 
 
 def test_host_key_policy_is_accept_new(redstack):
-    ts = load(files(redstack), "ansible/host_vars/red-myth-ts01.yml")
+    ts = load(files(redstack), "ansible/host_vars/art-myth-ts01.yml")
     assert "StrictHostKeyChecking=accept-new" in ts["ansible_ssh_common_args"]
     assert "StrictHostKeyChecking=no" not in ts["ansible_ssh_common_args"]
 
@@ -145,8 +145,8 @@ def test_host_key_policy_is_accept_new(redstack):
 def test_the_jumpbox_is_addressed_at_its_public_address(redstack):
     # The jumpbox is the one host reached directly, so it is addressed at its
     # public address. Every other host is managed through it.
-    jump = load(files(redstack), "ansible/host_vars/red-jump-bx01.yml")
-    assert jump["ansible_host"] == "<<tf:red-jump-bx01:public_address>>"
+    jump = load(files(redstack), "ansible/host_vars/art-jump-bx01.yml")
+    assert jump["ansible_host"] == "<<tf:art-jump-bx01:public_address>>"
 
 
 def test_a_proxied_exposed_host_is_managed_at_its_private_address(redstack):
@@ -154,14 +154,14 @@ def test_a_proxied_exposed_host_is_managed_at_its_private_address(redstack):
     # is managed through the jumpbox, so ssh goes to its private address. The
     # jumpbox reaching the public address would hairpin out through the internet
     # gateway and miss the management security group. See ansible.py.
-    rdir = load(files(redstack), "ansible/host_vars/red-apache-rd01.yml")
-    assert rdir["ansible_host"] == "<<tf:red-apache-rd01:private_address>>"
+    rdir = load(files(redstack), "ansible/host_vars/art-apache-rd01.yml")
+    assert rdir["ansible_host"] == "<<tf:art-apache-rd01:private_address>>"
     assert "ProxyJump" in rdir["ansible_ssh_common_args"]
 
 
 def test_unexposed_host_uses_private_address(redstack):
-    ts = load(files(redstack), "ansible/host_vars/red-myth-ts01.yml")
-    assert ts["ansible_host"] == "<<tf:red-myth-ts01:private_address>>"
+    ts = load(files(redstack), "ansible/host_vars/art-myth-ts01.yml")
+    assert ts["ansible_host"] == "<<tf:art-myth-ts01:private_address>>"
 
 
 def test_no_key_material_in_output(redstack):
@@ -180,18 +180,18 @@ def test_placeholders_are_not_jinja(redstack):
 # -- overlays
 
 def test_overlay_values_are_namespaced(redstack):
-    ts = load(files(redstack), "ansible/host_vars/red-myth-ts01.yml")
+    ts = load(files(redstack), "ansible/host_vars/art-myth-ts01.yml")
     assert ts["redstackpro_teamserver_c2"] == "mythic"
 
 
 def test_operator_os_reaches_the_role(redstack):
-    ops = load(files(redstack), "ansible/host_vars/red-win-op01.yml")
+    ops = load(files(redstack), "ansible/host_vars/art-win-op01.yml")
     assert ops["redstackpro_operator_os"] == "windows"
 
 
 # -- ordering
 
-def test_supplier_configured_before_consumer(redstack):
+def test_supplier_configuart_before_consumer(redstack):
     site = load(files(redstack), "ansible/site.yml")
     order = [play["hosts"] for play in site]
     assert order.index("teamservers") < order.index("redirectors")
@@ -222,10 +222,10 @@ def test_role_name_comes_from_the_kind(redstack):
 
 def test_parallel_chains_each_use_their_own_jumpbox(parallel_chains):
     out = files(parallel_chains)
-    a = load(out, "ansible/host_vars/red-myth-ts01.yml")
-    b = load(out, "ansible/host_vars/red-sliv-ts01.yml")
-    assert "red-jump-bx02" in a["ansible_ssh_common_args"]
-    assert "red-jump-bx03" in b["ansible_ssh_common_args"]
+    a = load(out, "ansible/host_vars/art-myth-ts01.yml")
+    b = load(out, "ansible/host_vars/art-sliv-ts01.yml")
+    assert "art-jump-bx02" in a["ansible_ssh_common_args"]
+    assert "art-jump-bx03" in b["ansible_ssh_common_args"]
 
 
 # -- gating, injected across the fronts edge
@@ -234,12 +234,12 @@ def test_gating_reaches_the_teamserver(redstack):
     """The redirector holds the gating rules; the teamserver has to know them or
     its C2 profile and the redirector disagree and every beacon gets the decoy."""
     out = files(redstack)
-    ts = load(out, "ansible/host_vars/red-myth-ts01.yml")
+    ts = load(out, "ansible/host_vars/art-myth-ts01.yml")
     assert ts["gating_header_name"] == "X-Request-Id"
     assert ts["uri_prefix"] == "/api/v1"
     # An untouched redirector ships a random secret, not the placeholder, and the
     # teamserver's copy is the same value the redirector will demand.
-    rd = load(out, "ansible/host_vars/red-apache-rd01.yml")
+    rd = load(out, "ansible/host_vars/art-apache-rd01.yml")
     assert ts["gating_header_value"] != "CHANGE-ME"
     assert re.fullmatch(r"[a-z0-9]{24}", ts["gating_header_value"])
     assert ts["gating_header_value"] == rd["redstackpro_redirector_gating"][
@@ -252,7 +252,7 @@ def test_explicit_gating_value_is_kept(redstack):
     for node in redstack["nodes"]:
         if node["id"] == "apache-rd01":
             node["overlay"]["gating"]["header_value"] = "operator-chosen"
-    ts = load(files(redstack), "ansible/host_vars/red-myth-ts01.yml")
+    ts = load(files(redstack), "ansible/host_vars/art-myth-ts01.yml")
     assert ts["gating_header_value"] == "operator-chosen"
 
 
@@ -261,7 +261,7 @@ def test_rollover_front_doors_share_one_gating_value(rollover):
     a beacon works through one door and gets the decoy through the next."""
     out = files(rollover)
     values = {
-        load(out, "ansible/host_vars/red-%s.yml" % rd)[
+        load(out, "ansible/host_vars/art-%s.yml" % rd)[
             "redstackpro_redirector_gating"]["header_value"]
         for rd in ("apache-rd01", "apache-rd02")
     }
@@ -305,7 +305,7 @@ def test_windows_operator_is_not_reached_over_ssh(redstack):
     """A role cannot choose its own connection: Ansible picks the plugin before
     the first task runs. So the connection is part of what the topology derives,
     the same as the group and the play position. See 0019."""
-    ops = load(files(redstack), "ansible/host_vars/red-win-op01.yml")
+    ops = load(files(redstack), "ansible/host_vars/art-win-op01.yml")
     assert ops["redstackpro_operator_os"] == "windows"
     assert ops["ansible_connection"] == "psrp"
     assert ops["ansible_port"] == 5986
@@ -315,7 +315,7 @@ def test_windows_operator_is_not_reached_over_ssh(redstack):
 def test_windows_operator_gets_no_proxy_jump(redstack):
     """ProxyJump is an OpenSSH feature. Emitting it on a psrp host would look
     like a management path that works."""
-    ops = load(files(redstack), "ansible/host_vars/red-win-op01.yml")
+    ops = load(files(redstack), "ansible/host_vars/art-win-op01.yml")
     assert "ansible_ssh_common_args" not in ops
 
 
@@ -330,7 +330,7 @@ def test_windows_is_excluded_from_the_operators_play(redstack):
 
 def test_linux_operator_keeps_its_proxy_jump(redstack):
     """The Windows branch must not cost the other operator box its path."""
-    ops = load(files(redstack), "ansible/host_vars/red-kali-op01.yml")
+    ops = load(files(redstack), "ansible/host_vars/art-kali-op01.yml")
     assert ops["redstackpro_operator_os"] == "kali"
     assert "ProxyJump" in ops["ansible_ssh_common_args"]
     assert "ansible_connection" not in ops
@@ -341,7 +341,7 @@ def test_linux_operator_keeps_its_proxy_jump(redstack):
 def test_windows_host_vars_validate_against_the_authority(redstack):
     """The steady state validates. The listener is signed by the bootstrap play,
     so host_vars point at the authority rather than ignoring the certificate."""
-    ops = load(files(redstack), "ansible/host_vars/red-win-op01.yml")
+    ops = load(files(redstack), "ansible/host_vars/art-win-op01.yml")
     assert ops["ansible_psrp_cert_validation"] == "{{ redstackpro_ca_local_path }}"
     assert ops["ansible_psrp_cert_validation"] != "ignore"
 
@@ -350,8 +350,8 @@ def test_windows_group_holds_only_windows_hosts(redstack):
     """An auxiliary group for the bootstrap play. The Windows host is in it and
     still in operators; the Kali operator is not."""
     inv = load(files(redstack), "ansible/inventory.yml")
-    assert set(inv["all"]["children"]["windows"]["hosts"]) == {"red-win-op01"}
-    assert "red-win-op01" in inv["all"]["children"]["operators"]["hosts"]
+    assert set(inv["all"]["children"]["windows"]["hosts"]) == {"art-win-op01"}
+    assert "art-win-op01" in inv["all"]["children"]["operators"]["hosts"]
 
 
 def test_no_windows_host_means_no_bootstrap_play_or_group(minimal):
@@ -401,7 +401,7 @@ def test_collector_wire_reaches_the_shippers(redstack):
     """The port and the TLS choice are declared on the collector, so they travel
     to every shipper. Two defaults that agree today drift the moment someone
     edits the overlay, and the failure is a shipper talking to a closed port."""
-    for host in ("red-myth-ts01", "red-apache-rd01"):
+    for host in ("art-myth-ts01", "art-apache-rd01"):
         vars_ = load(files(redstack), "ansible/host_vars/%s.yml" % host)
         assert vars_["redstackpro_shipper_port"] == 5044
         assert vars_["redstackpro_shipper_tls"] is True
@@ -412,9 +412,9 @@ def test_a_changed_ingest_port_moves_every_shipper(redstack):
         if node["id"] == "open-log01":
             node["overlay"]["ingest_port"] = 5999
     out = files(redstack)
-    assert load(out, "ansible/host_vars/red-open-log01.yml")[
+    assert load(out, "ansible/host_vars/art-open-log01.yml")[
         "redstackpro_collector_ingest_port"] == 5999
-    assert load(out, "ansible/host_vars/red-myth-ts01.yml")[
+    assert load(out, "ansible/host_vars/art-myth-ts01.yml")[
         "redstackpro_shipper_port"] == 5999
 
 
@@ -439,7 +439,7 @@ def test_the_shipper_runs_after_the_role_that_makes_the_logs(redstack):
     assert names == ["redstackpro.redirector", "redstackpro.shipper"]
 
 
-def test_the_certificate_authority_path_is_shared_not_per_role(redstack):
+def test_the_certificate_authority_path_is_shaart_not_per_role(redstack):
     """Three roles on three hosts need the same two paths, and a role default is
     scoped to the role that declares it."""
     group = load(files(redstack), "ansible/group_vars/all.yml")
@@ -549,9 +549,9 @@ def test_an_overlay_value_reaches_host_vars_unchanged(redstack):
             node["overlay"]["gating"]["header_value"] = "off"
             node["overlay"]["hostname"] = "007"
     out = files(redstack)
-    ts = load(out, "ansible/host_vars/red-myth-ts01.yml")
+    ts = load(out, "ansible/host_vars/art-myth-ts01.yml")
     assert ts["gating_header_value"] == "off", "became a boolean"
-    rdir = load(out, "ansible/host_vars/red-apache-rd01.yml")
+    rdir = load(out, "ansible/host_vars/art-apache-rd01.yml")
     assert rdir["redstackpro_redirector_hostname"] == "007", "became a number"
 
 

@@ -2,7 +2,7 @@
   "schema_version": "0.6.0",
   "mode": "artie",
   "name": "MinimalC2-GUI",
-  "prefix": "red",
+  "prefix": "art",
   "description": "The smallest UI-driven redStack: one Mythic teamserver behind a single Apache redirector, driven from a browser on a GUI-mode Kali operator reached over a Guacamole RDP tile rather than SSH, through a Guacamole jumpbox. The redirector sits in its own peered network so the internet facing tier is its own blast radius, the same isolation redStack uses, trimmed to a single C2 backend with no log collector and no second operator. A starting point to grow from.",
   "auto_stop": {
     "enabled": true,

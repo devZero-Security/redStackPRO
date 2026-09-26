@@ -94,8 +94,8 @@
     name: redstackpro.mecm
   vars:
     redstackpro_mecm_domain_admin: "Administrator@{{ redstackpro_join_fqdn }}"
-    redstackpro_mecm_hostname: "{{ redstackpro_srv_hostname | default(inventory_hostname | regex_replace('^cyb-', '')) }}"
-    redstackpro_mecm_fqdn: "{{ (redstackpro_srv_hostname | default(inventory_hostname | regex_replace('^cyb-', ''))) }}.{{ redstackpro_join_fqdn }}"
+    redstackpro_mecm_hostname: "{{ redstackpro_srv_hostname | default(redstackpro_host_shortname) }}"
+    redstackpro_mecm_fqdn: "{{ (redstackpro_srv_hostname | default(redstackpro_host_shortname)) }}.{{ redstackpro_join_fqdn }}"
     redstackpro_mecm_sql_fqdn: "{{ (redstackpro_srv_vulns_vars | default({})).mecm.sql_fqdn | default('') }}"
     redstackpro_mecm_site_code: "{{ (redstackpro_srv_vulns_vars | default({})).mecm.site_code | default('P01') }}"
     redstackpro_mecm_site_name: "{{ (redstackpro_srv_vulns_vars | default({})).mecm.site_name | default('redStackPRO Site') }}"
