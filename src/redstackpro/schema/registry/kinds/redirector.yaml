@@ -12,7 +12,7 @@ display:
   color: "#f59f00"
 
 modes:
-  - ops
+  - artie
 
 derived:
   - name: private_address

@@ -41,13 +41,13 @@ know whether to emit a variable or a reference.
 
 ## Two modes, one schema
 
-A `mode` field on the topology document with values `ops` and `range`. Mode gates the
+A `mode` field on the topology document with values `artie` and `haven`. Mode gates the
 canvas palette, icons, and chrome. The compiler ignores it. One topology model, one
 validator, one compiler, one export shape, one set of backends.
 
-Range mode ships as a set of preset topologies, the GOAD-derived labs, rendered
+Haven mode ships as a set of preset topologies, the GOAD-derived labs, rendered
 read-only with a parameter form. Free-form range authoring on the same canvas
-used for `ops` mode is not built yet.
+used for `artie` mode is not built yet.
 
 ## Provider support is declarative
 
@@ -98,7 +98,7 @@ runs `terraform init` without assembling anything.
 
 ## Scope
 
-The canvas covers `ops` mode and `range` mode, generating for GCP and AWS, both
+The canvas covers `artie` mode and `haven` mode, generating for GCP and AWS, both
 supported and tested end to end for target ranges and attack infrastructure.
 Azure is a preview backend: public addressing works, but private DNS and
 peering are not built yet. Proxmox and ESXi are on the roadmap as on-prem

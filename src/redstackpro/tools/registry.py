@@ -4,7 +4,7 @@
     python -m redstackpro.tools.registry                      capability matrix
     python -m redstackpro.tools.registry --provider proxmox   one provider, verbose
     python -m redstackpro.tools.registry --palette            what the canvas offers
-    python -m redstackpro.tools.registry --palette range
+    python -m redstackpro.tools.registry --palette haven
 
 The registry itself lives in the package at redstackpro/schema/registry/ as data.
 See 0013.
@@ -19,8 +19,8 @@ from redstackpro import Registry
 
 # Resolved from the package (schema ships as package data), not the CWD.
 _SCHEMA_ROOT = Path(__file__).resolve().parents[1] / "schema" / "topology"
-SCHEMA = _SCHEMA_ROOT / "0.5.0.json"
-EXAMPLES = _SCHEMA_ROOT / "examples" / "0.5.0"
+SCHEMA = _SCHEMA_ROOT / "0.6.0.json"
+EXAMPLES = _SCHEMA_ROOT / "examples" / "0.6.0"
 
 
 def sanity(reg):
@@ -82,7 +82,7 @@ def check(reg, topology, provider):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--provider", help="check one provider verbosely")
-    ap.add_argument("--palette", metavar="MODE", nargs="?", const="ops",
+    ap.add_argument("--palette", metavar="MODE", nargs="?", const="artie",
                     help="print the canvas palette for a mode")
     args = ap.parse_args()
 

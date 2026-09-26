@@ -79,7 +79,7 @@ export const OPS_PRESETS = [
 // Each canvas has its own presets: range starters on the defend canvas, the C2
 // and redirector flavours on the attack canvas.
 export function presetsFor(mode) {
-  return mode === "range" ? HOST_PRESETS : OPS_PRESETS;
+  return mode === "haven" ? HOST_PRESETS : OPS_PRESETS;
 }
 
 // The presets that are flavours of one host kind, shown folded under it in the

@@ -70,11 +70,15 @@ def test_briefing_states_the_password_the_dc_role_actually_seeds():
     assert "Summer2024!" not in md
 
 
-def test_briefing_is_emitted_for_a_range_not_for_ops():
+def test_briefing_filename_is_mode_specific():
+    # A haven range emits HAVEN-BRIEFING.md; an artie stack emits ARTIE-BRIEFING.md.
+    # The old fixed RANGE-BRIEFING.md name is gone from both.
     files = compile_topology(_goad(), Registry(), provider="aws")
-    assert "RANGE-BRIEFING.md" in files
-    assert "Range Briefing" in files["RANGE-BRIEFING.md"]
+    assert "HAVEN-BRIEFING.md" in files
+    assert "Range Briefing" in files["HAVEN-BRIEFING.md"]
+    assert "RANGE-BRIEFING.md" not in files
 
     redstack = load(ROOT / "frontend/public/redstack.json")
     ops_files = compile_topology(redstack, Registry(), provider="aws")
-    assert "RANGE-BRIEFING.md" not in ops_files
+    assert "ARTIE-BRIEFING.md" in ops_files
+    assert "HAVEN-BRIEFING.md" not in ops_files

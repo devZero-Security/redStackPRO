@@ -64,7 +64,7 @@ export function isProven(provider) {
 // payload: [{name, capabilities, unsupported, maturity}]. Preview targets are
 // included -- greying is the picker's job, not this function's.
 export function providersFor(mode, providers) {
-  const usable = mode === "range" ? providers.filter(hostsRange) : providers;
+  const usable = mode === "haven" ? providers.filter(hostsRange) : providers;
   return sortProviders(usable.map((p) => p.name));
 }
 

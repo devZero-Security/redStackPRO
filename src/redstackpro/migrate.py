@@ -11,7 +11,7 @@ Migrations never guess. If a document cannot be moved forward without inventing
 information, they raise.
 """
 
-LATEST = "0.5.0"
+LATEST = "0.6.0"
 
 # What a host gets when it says nothing. A jumpbox and a redirector are what
 # something outside is meant to reach; nothing else is. See 0021.
@@ -141,11 +141,30 @@ def _0_4_0_to_0_5_0(doc, prefix=None):
     return out
 
 
+def _0_5_0_to_0_6_0(doc, prefix=None):
+    """The two mode values are renamed: ops -> artie, haven <- range.
+
+    ARTIE (Automated Red Team Infrastructure Environment) and HAVEN (Hardened
+    Adversary Validation Environment) replace the internal ops/range labels. Only
+    the value changes; the field still gates the palette and nothing else. A
+    document with no mode is left as it is except for the version bump, since
+    there is nothing to rename. See 0047.
+    """
+    out = dict(doc)
+    out["schema_version"] = "0.6.0"
+    rename = {"ops": "artie", "range": "haven"}
+    mode = doc.get("mode")
+    if mode in rename:
+        out["mode"] = rename[mode]
+    return out
+
+
 MIGRATIONS = {
     "0.1.0": ("0.2.0", _0_1_0_to_0_2_0),
     "0.2.0": ("0.3.0", _0_2_0_to_0_3_0),
     "0.3.0": ("0.4.0", _0_3_0_to_0_4_0),
     "0.4.0": ("0.5.0", _0_4_0_to_0_5_0),
+    "0.5.0": ("0.6.0", _0_5_0_to_0_6_0),
 }
 
 

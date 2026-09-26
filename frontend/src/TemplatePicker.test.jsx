@@ -26,12 +26,12 @@ function cardNames() {
 
 describe("the range picker", () => {
   test("labels the templates that belong to no family", () => {
-    render(<TemplatePicker mode="range" onPick={vi.fn()} onDismiss={vi.fn()} />);
+    render(<TemplatePicker mode="haven" onPick={vi.fn()} onDismiss={vi.fn()} />);
     expect(headings()).toEqual(["GOAD", UNGROUPED_LABEL]);
   });
 
   test("Harbor is under that heading and not under GOAD", () => {
-    render(<TemplatePicker mode="range" onPick={vi.fn()} onDismiss={vi.fn()} />);
+    render(<TemplatePicker mode="haven" onPick={vi.fn()} onDismiss={vi.fn()} />);
     const sections = document.querySelectorAll(".rg-template-group");
     const goad = [...sections].find((s) => s.querySelector("h3").textContent === "GOAD");
     const ours = [...sections].find(
@@ -47,7 +47,7 @@ describe("the range picker", () => {
   test("the Red Infra canvas gets no heading, having no family to contrast", () => {
     // Every ops template is ungrouped, so a lone heading over the whole list
     // would name a distinction that is not being drawn.
-    render(<TemplatePicker mode="ops" onPick={vi.fn()} onDismiss={vi.fn()} />);
+    render(<TemplatePicker mode="artie" onPick={vi.fn()} onDismiss={vi.fn()} />);
     expect(headings()).toEqual([]);
     expect(cardNames()).toContain("redStack");
   });
@@ -55,8 +55,8 @@ describe("the range picker", () => {
   test("every template in the data reaches the screen", () => {
     // A grouping change that dropped a section would still satisfy the
     // assertions above.
-    render(<TemplatePicker mode="range" onPick={vi.fn()} onDismiss={vi.fn()} />);
-    const expected = groupedTemplates("range").flatMap((g) => g.templates);
+    render(<TemplatePicker mode="haven" onPick={vi.fn()} onDismiss={vi.fn()} />);
+    const expected = groupedTemplates("haven").flatMap((g) => g.templates);
     expect(cardNames()).toEqual(expected.map((t) => t.name));
   });
 });

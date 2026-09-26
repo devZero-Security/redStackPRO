@@ -15,7 +15,7 @@ from redstackpro.api.app import BLUEPRINT_REDSTACK_ID
 from redstackpro.api.principal import Principal
 
 ROOT = Path(__file__).resolve().parent.parent
-EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.5.0"
+EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.6.0"
 V1 = "/api/v1"
 
 

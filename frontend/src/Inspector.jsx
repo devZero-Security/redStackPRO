@@ -1014,7 +1014,7 @@ export function Inspector({
         />
       ) : null}
 
-      {document.mode === "range" && !readOnly && (onJoinDomain || onPlaceSubnet) ? (
+      {document.mode === "haven" && !readOnly && (onJoinDomain || onPlaceSubnet) ? (
         <RangePlacement
           node={node}
           document={document}

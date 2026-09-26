@@ -24,7 +24,7 @@ const PALETTE = {
 
 const DOC = {
   schema_version: "0.2.0",
-  mode: "ops",
+  mode: "artie",
   name: "Cloned",
   prefix: "red",
   nodes: [{ id: "myth-ts01", kind: "teamserver", overlay: { c2: "mythic" },
@@ -33,7 +33,7 @@ const DOC = {
 };
 
 const summary = (over) => ({
-  id: "g", name: "Topology", mode: "ops", visibility: "private",
+  id: "g", name: "Topology", mode: "artie", visibility: "private",
   schema_version: "0.2.0", version: 1, owner_id: "u1",
   is_blueprint: false, editable: true, ...over,
 });

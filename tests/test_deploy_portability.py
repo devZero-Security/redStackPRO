@@ -200,7 +200,7 @@ def test_the_export_ships_a_place_for_the_operators_key(tmp_path):
 def test_a_topology_with_no_jumpbox_gets_neither_wrapper_nor_keys():
     """Both only mean anything alongside a deploy, and a topology with no jumpbox
     has nothing to deploy through."""
-    document = {"schema_version": "0.4.0", "mode": "ops", "name": "no jumpbox",
+    document = {"schema_version": "0.6.0", "mode": "artie", "name": "no jumpbox",
                 "nodes": [], "edges": []}
     files = compile_topology(document, Registry(), provider="gcp")
     assert "deploy.sh" not in files

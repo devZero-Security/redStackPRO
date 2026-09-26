@@ -50,7 +50,7 @@ TAGS = [
 ]
 
 SCHEMA_PATH = (Path(__file__).resolve().parents[1]
-               / "schema/topology/0.5.0.json")
+               / "schema/topology/0.6.0.json")
 
 router = APIRouter()
 
@@ -166,7 +166,7 @@ def _compile(document, provider, region=None):
 # ---------------------------------------------------------------- registry
 
 @router.get("/registry/palette", tags=["registry"])
-def get_palette(mode: str = Query("ops")):
+def get_palette(mode: str = Query("artie")):
     """What the canvas offers. Read from the registry rather than hardcoded, so
     pro adds a node kind by dropping a file in. See 0013."""
     return {"mode": mode, "groups": registry.palette(mode)}
@@ -249,7 +249,7 @@ def create_topology(body: TopologyCreate,
         org_id=principal.org_id,
         owner_id=principal.id,
         name=body.name,
-        mode=document.get("mode", "ops"),
+        mode=document.get("mode", "artie"),
         visibility=body.visibility,
         schema_version=document["schema_version"],
         version=1,

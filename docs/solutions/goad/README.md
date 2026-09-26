@@ -79,7 +79,7 @@ trust. The per-lab column in the parts table below says what each lab can reach.
 
 ## Read your own range briefing first
 
-Every deploy writes a **`RANGE-BRIEFING.md`** into the export, filled in after
+Every deploy writes a **`HAVEN-BRIEFING.md`** into the export, filled in after
 `terraform apply` with **this deploy's** real addresses, the exact user /
 password / flaw table, patient zero, the trusts, and every planted vuln and ACL
 chain. It is the source of truth for the range in front of you - hosts and
@@ -113,7 +113,7 @@ Two steps change in practice:
 
 - **Range access and initial reachability.** On cloud the jumpbox has an
   allocated public address (still per-deploy and ephemeral, so read it from
-  `RANGE-BRIEFING.md`). On on-prem there is no allocated external IP: reach the
+  `HAVEN-BRIEFING.md`). On on-prem there is no allocated external IP: reach the
   jumpbox over the operator's own network or VPN.
 - **Name resolution.** On cloud the range can resolve through managed private DNS.
   On on-prem there is no managed zone, so populate static hosts entries (the

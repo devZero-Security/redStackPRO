@@ -1,0 +1,147 @@
+{
+  "schema_version": "0.6.0",
+  "mode": "artie",
+  "name": "Peered management and operations",
+  "description": "A management network and an operations network joined by a peering, the shape redStack actually runs. The jumpbox lives in the management network and reaches the redirector and teamserver in the operations network across the peering, so management is one blast radius and operations is another. Compiles on gcp and aws; proxmox refuses, since it cannot render network peering. See 0029, 0030, and 0031.",
+  "nodes": [
+    {
+      "id": "main-net01",
+      "kind": "network",
+      "overlay": {
+        "cidr": "10.60.0.0/16"
+      }
+    },
+    {
+      "id": "c2-net01",
+      "kind": "network",
+      "overlay": {
+        "cidr": "10.61.0.0/16"
+      }
+    },
+    {
+      "id": "mgmt-sub01",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.60.0.0/24",
+        "egress": "allowed",
+        "exposure": "internet",
+        "tier": "management"
+      }
+    },
+    {
+      "id": "rdir-sub01",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.61.10.0/24",
+        "egress": "allowed",
+        "exposure": "internet",
+        "tier": "redirector"
+      }
+    },
+    {
+      "id": "c2-sub01",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.61.20.0/24",
+        "egress": "allowed",
+        "exposure": "local",
+        "tier": "c2"
+      }
+    },
+    {
+      "id": "jump-bx01",
+      "kind": "jumpbox",
+      "overlay": {
+        "services": [
+          "ssh",
+          "wireguard"
+        ],
+        "certificate_authority": true
+      }
+    },
+    {
+      "id": "nginx-rd01",
+      "kind": "redirector",
+      "overlay": {
+        "server": "nginx",
+        "tls": {
+          "cert_source": "letsencrypt"
+        },
+        "gating": {
+          "header_name": "X-Request-Id",
+          "header_value": "",
+          "redirect_rules": true,
+          "decoy": "cdn"
+        }
+      }
+    },
+    {
+      "id": "myth-ts01",
+      "kind": "teamserver",
+      "overlay": {
+        "c2": "mythic"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-mgmt-sub01-main-net01-attached",
+      "role": "attached",
+      "source": "mgmt-sub01",
+      "target": "main-net01"
+    },
+    {
+      "id": "e-rdir-sub01-c2-net01-attached",
+      "role": "attached",
+      "source": "rdir-sub01",
+      "target": "c2-net01"
+    },
+    {
+      "id": "e-c2-sub01-c2-net01-attached",
+      "role": "attached",
+      "source": "c2-sub01",
+      "target": "c2-net01"
+    },
+    {
+      "id": "e-jump-bx01-mgmt-sub01-attached",
+      "role": "attached",
+      "source": "jump-bx01",
+      "target": "mgmt-sub01"
+    },
+    {
+      "id": "e-nginx-rd01-rdir-sub01-attached",
+      "role": "attached",
+      "source": "nginx-rd01",
+      "target": "rdir-sub01"
+    },
+    {
+      "id": "e-myth-ts01-c2-sub01-attached",
+      "role": "attached",
+      "source": "myth-ts01",
+      "target": "c2-sub01"
+    },
+    {
+      "id": "e-nginx-rd01-myth-ts01-fronts",
+      "role": "fronts",
+      "source": "nginx-rd01",
+      "target": "myth-ts01",
+      "protocol": "https",
+      "listen_port": 443,
+      "upstream_port": 443,
+      "uri_prefix": "/cdn/assets"
+    },
+    {
+      "id": "e-main-net01-c2-net01-peers",
+      "role": "peers",
+      "source": "main-net01",
+      "target": "c2-net01"
+    },
+    {
+      "id": "e-jump-bx01-c2-net01-manages",
+      "role": "manages",
+      "source": "jump-bx01",
+      "target": "c2-net01"
+    }
+  ],
+  "prefix": "red"
+}

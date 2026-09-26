@@ -1310,7 +1310,7 @@ def test_a_range_keeps_strictly_edge_derived_rules():
     import re
     goad = json.loads(
         (ROOT / "frontend/public/goad/goad.json").read_text(encoding="utf-8"))
-    assert goad["mode"] == "range"
+    assert goad["mode"] == "haven"
     for provider in ("gcp", "aws"):
         fw = generate(goad, provider=provider)["terraform/firewall.tf"]
         # ad_intra_* rules are a different, edge-derived thing and stay.

@@ -547,7 +547,7 @@ class AnsiblePlan:
         return dict(sorted(out.items()))
 
     def _is_range(self):
-        return self.ctx.topology.get("mode") == "range"
+        return self.ctx.topology.get("mode") == "haven"
 
     def _provider_vulns(self, vulns):
         """A declared vulns list, dropping any id VULN_PROVIDERS restricts to

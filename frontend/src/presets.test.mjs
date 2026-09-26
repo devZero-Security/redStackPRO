@@ -10,7 +10,7 @@ import { HOST_PRESETS, OPS_PRESETS, presetsFor } from "./presets.js";
 // test does not depend on the cwd it runs from.
 const HERE = dirname(fileURLToPath(import.meta.url));
 const schema = JSON.parse(
-  readFileSync(join(HERE, "../../src/redstackpro/schema/topology/0.5.0.json"), "utf8"));
+  readFileSync(join(HERE, "../../src/redstackpro/schema/topology/0.6.0.json"), "utf8"));
 const rangeHostRoles = schema.$defs.overlay_range_host.properties.role.enum;
 const HOST_KINDS = new Set(["srv", "wks", "dc", "fw"]);
 const OPS_KINDS = new Set(["redirector", "teamserver", "operator"]);
@@ -35,8 +35,8 @@ test("preset keys are unique", () => {
 });
 
 test("each canvas serves its own presets", () => {
-  assert.equal(presetsFor("range").length, HOST_PRESETS.length);
-  assert.equal(presetsFor("ops").length, OPS_PRESETS.length);
+  assert.equal(presetsFor("haven").length, HOST_PRESETS.length);
+  assert.equal(presetsFor("artie").length, OPS_PRESETS.length);
   assert.ok(OPS_PRESETS.length > 0);
 });
 

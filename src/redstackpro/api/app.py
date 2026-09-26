@@ -74,7 +74,7 @@ def seed_blueprints(session_factory):
             org_id=LOCAL_ORG_ID,
             owner_id=None,
             name="redStack starter",
-            mode=document.get("mode", "ops"),
+            mode=document.get("mode", "artie"),
             visibility="org",
             schema_version=document["schema_version"],
             version=1,

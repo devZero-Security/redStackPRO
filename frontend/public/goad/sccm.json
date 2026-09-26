@@ -1,6 +1,6 @@
 {
-  "schema_version": "0.5.0",
-  "mode": "range",
+  "schema_version": "0.6.0",
+  "mode": "haven",
   "name": "SCCM",
   "prefix": "cyb",
   "auto_stop": {

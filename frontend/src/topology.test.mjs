@@ -238,7 +238,7 @@ test("a range jumpbox and SIEM nest in the subnet, not a domain", () => {
 });
 
 test("a host preset arrives with its role and services filled in", () => {
-  const empty = { schema_version: "0.5.0", mode: "range", prefix: "cyb", nodes: [], edges: [] };
+  const empty = { schema_version: "0.6.0", mode: "haven", prefix: "cyb", nodes: [], edges: [] };
   const sql = HOST_PRESETS.find((p) => p.key === "sql");
   const next = addHostPreset(empty, sql, { x: 0, y: 0 });
   assert.equal(next.nodes.length, 1);

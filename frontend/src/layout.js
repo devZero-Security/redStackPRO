@@ -206,7 +206,7 @@ export function rangeLayout(document) {
 }
 
 export function autoLayout(document) {
-  if (document.mode === "range") return rangeLayout(document);
+  if (document.mode === "haven") return rangeLayout(document);
   const byId = Object.fromEntries(document.nodes.map((n) => [n.id, n]));
 
   const parentOf = {};

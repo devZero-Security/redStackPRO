@@ -1,6 +1,6 @@
 {
-  "schema_version": "0.5.0",
-  "mode": "ops",
+  "schema_version": "0.6.0",
+  "mode": "artie",
   "name": "Redirector rollover",
   "prefix": "red",
   "description": "A resilience shape: three interchangeable front doors, two Apache and one Nginx on distinct hostnames, all fronting one Mythic teamserver on the same URI. When a redirector is burned or blocked you roll traffic to the next without touching the backend. The redirectors share their own peered network so the internet facing tier is a single blast radius, and every front door plus the teamserver ships hits to a log collector so you can see which lure is still alive. Hostnames, prefixes, and the gating header are placeholders.",

@@ -1,6 +1,6 @@
 {
-  "schema_version": "0.5.0",
-  "mode": "ops",
+  "schema_version": "0.6.0",
+  "mode": "artie",
   "name": "Split horizon C2",
   "prefix": "red",
   "description": "Two front doors that do not share a fate, each serving the backends it was chosen for. A long haul Apache redirector fronts a Sliver teamserver for the slow beacons that have to survive weeks, and a separate Nginx redirector on its own network fronts Mythic and Adaptix for the interactive work, each on its own URI prefix. Each redirector sits in its own peered network, so burning the interactive front door costs you the interactive sessions and nothing else, and the long haul chain never appears in the same blast radius. Every front door and every teamserver ships to one collector, because the whole point of splitting the tiers is being able to tell which one is still alive. A Kali box and a Windows operator box sit behind the jumpbox, which is the only public host and manages all three networks.",

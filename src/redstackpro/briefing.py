@@ -19,6 +19,14 @@ from .validate import Context
 
 PLACEHOLDER = "<<tf:%s:%s>>"
 
+
+def briefing_filename(mode):
+    """The hand-off file's name, chosen by mode: HAVEN-BRIEFING.md for a haven
+    range, ARTIE-BRIEFING.md for an artie stack. tf_inventory and the deploy
+    script find it by the *-BRIEFING.md glob, so both names carry the same
+    address tokens. See 0047."""
+    return "ARTIE-BRIEFING.md" if mode == "artie" else "HAVEN-BRIEFING.md"
+
 _KIND_ROLE = {
     "dc": "Domain Controller",
     "srv": "Server",

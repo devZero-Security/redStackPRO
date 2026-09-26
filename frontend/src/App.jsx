@@ -135,7 +135,7 @@ function Editor() {
   // The template a loaded document came from, while its summary card is on
   // screen. Cleared when the card is dismissed, so it is not document state.
   const [summary, setSummary] = useState(null);
-  const readOnly = document.mode === "range" && templateView;
+  const readOnly = document.mode === "haven" && templateView;
 
   // Copy the full diagnostics (recent events, document shape, environment) to the
   // clipboard, or log them if the clipboard is unavailable, so a canvas problem
@@ -183,7 +183,7 @@ function Editor() {
   useEffect(() => {
     // Range naming is deferred: the GOAD templates keep their canonical names,
     // so the auto-rename runs on ops only. See 0047.
-    if (document.mode === "range") return;
+    if (document.mode === "haven") return;
     const { document: next, renamed } = retitle(document, pinned.current);
     const moved = Object.keys(renamed);
     if (moved.length === 0) return;
@@ -312,7 +312,7 @@ function Editor() {
     );
   }, [dirty]);
 
-  const resetToEmpty = useCallback((mode = "ops") => {
+  const resetToEmpty = useCallback((mode = "artie") => {
     const doc = emptyDocument(mode);
     setDocument(doc);
     setSaved(doc);
@@ -1247,7 +1247,7 @@ function Editor() {
       // A GOAD range loads locked so the baseline stays intact while you explore
       // it; unlock (or add an extension) to customise. Ops templates open
       // editable. See 0047 and 0051.
-      setTemplateView(doc.mode === "range");
+      setTemplateView(doc.mode === "haven");
       setSaved(emptyDocument(doc.mode));
       setDomainsText((doc.domains || []).join(", "));
       setTopology(null);
@@ -1300,7 +1300,7 @@ function Editor() {
   const warnings = findings.filter((f) => f.severity === "warning");
 
   return (
-    <div className={`rg-app rg-mode-${document.mode || "ops"}`}>
+    <div className={`rg-app rg-mode-${document.mode || "artie"}`}>
       <header className="rg-header">
         <span className="rg-brand">
           red<b>Stack</b>PRO
@@ -1309,20 +1309,20 @@ function Editor() {
           <button
             type="button"
             role="tab"
-            aria-selected={document.mode !== "range"}
-            className={`rg-mode-seg rg-mode-ops ${document.mode !== "range" ? "is-active" : ""}`}
-            onClick={() => chooseMode("ops")}
+            aria-selected={document.mode !== "haven"}
+            className={`rg-mode-seg rg-mode-artie ${document.mode !== "haven" ? "is-active" : ""}`}
+            onClick={() => chooseMode("artie")}
           >
-            Offense
+            ARTIE
           </button>
           <button
             type="button"
             role="tab"
-            aria-selected={document.mode === "range"}
-            className={`rg-mode-seg rg-mode-range ${document.mode === "range" ? "is-active" : ""}`}
-            onClick={() => chooseMode("range")}
+            aria-selected={document.mode === "haven"}
+            className={`rg-mode-seg rg-mode-haven ${document.mode === "haven" ? "is-active" : ""}`}
+            onClick={() => chooseMode("haven")}
           >
-            Defense
+            HAVEN
           </button>
         </div>
         <TopologyPicker
@@ -1358,7 +1358,7 @@ function Editor() {
           selectable={selectableProviders(document.mode, providers)}
           onChange={setProvider}
           title={
-            document.mode === "range"
+            document.mode === "haven"
               ? "Deploy target. Every target listed compiles the range natively."
               : "Deploy target"
           }
@@ -1382,7 +1382,7 @@ function Editor() {
           {saving ? "Saving" : saveMode(topology) === "fork" ? "Save a copy" : "Save"}
         </button>
         <button onClick={() => setTemplatePickerOpen(true)}>Load template</button>
-        {document.mode === "range" ? (
+        {document.mode === "haven" ? (
           <button onClick={() => setExtensionsOpen(true)} title="Add GOAD extensions">
             Extensions
           </button>
@@ -1406,7 +1406,7 @@ function Editor() {
             <section className="rg-palette-labs">
               <h3>Range templates</h3>
               <LabList
-                mode="range"
+                mode="haven"
                 onLoad={(file) => loadDocFromUrl(`/${file}.json`)}
               />
             </section>
@@ -1496,7 +1496,7 @@ function Editor() {
             maxZoom={1.75}
             proOptions={{ hideAttribution: true }}
           >
-            <Background color={document.mode === "range" ? "#37424e" : "#4a373b"} gap={18} />
+            <Background color={document.mode === "haven" ? "#37424e" : "#4a373b"} gap={18} />
             <Panel position="top-left" className="rg-legend">
               {legendItems(document).map((item) => (
                 <span key={item.key} className="rg-legend-item">
@@ -1545,13 +1545,13 @@ function Editor() {
           </CanvasErrorBoundary>
           {!readOnly && document.nodes.length === 0 ? (
             <div className="rg-empty-hint">
-              <p className="rg-empty-title">Start your {document.mode === "range" ? "range" : "topology"}</p>
+              <p className="rg-empty-title">Start your {document.mode === "haven" ? "range" : "topology"}</p>
               <p>
                 Drag a <b>Network</b> from the palette onto the canvas, then drop
                 subnets and hosts inside it.
               </p>
               <p className="rg-muted">
-                Or pick a {document.mode === "range" ? "GOAD lab" : "template"} from the top of the palette.
+                Or pick a {document.mode === "haven" ? "GOAD lab" : "template"} from the top of the palette.
               </p>
             </div>
           ) : null}
@@ -1582,7 +1582,7 @@ function Editor() {
           document={document}
           readOnly={readOnly}
           kindLabels={kindLabels}
-          provider={document.mode === "range" ? provider : undefined}
+          provider={document.mode === "haven" ? provider : undefined}
           findings={selection ? findingsFor(selection.id) : []}
           onOverlayChange={(id, overlay) =>
             setDocument((current) => updateOverlay(current, id, overlay))

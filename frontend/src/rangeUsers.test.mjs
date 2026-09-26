@@ -13,7 +13,7 @@ import {
 // test does not depend on the cwd it runs from.
 const HERE = dirname(fileURLToPath(import.meta.url));
 const schema = JSON.parse(
-  readFileSync(join(HERE, "../../src/redstackpro/schema/topology/0.5.0.json"), "utf8"));
+  readFileSync(join(HERE, "../../src/redstackpro/schema/topology/0.6.0.json"), "utf8"));
 const USER_SCHEMA = schema.$defs.overlay_domain.properties.users.items;
 const PRIVILEGES = new Set(USER_SCHEMA.properties.privilege.enum);
 const FLAWS = new Set(USER_SCHEMA.properties.flaws.items.enum);

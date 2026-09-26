@@ -1,6 +1,6 @@
 {
-  "schema_version": "0.5.0",
-  "mode": "range",
+  "schema_version": "0.6.0",
+  "mode": "haven",
   "name": "GOAD + Wazuh + WS01",
   "prefix": "cyb",
   "description": "GOAD-Light with the two official GOAD extensions that turn it into a detection lab: the wazuh extension installs a Wazuh agent on every Windows host (shown as each host's EDR), and the ws01 extension adds a hardened Windows 10 workstation joined to sevenkingdoms.local. WS01 is hardened, not weak: Defender ASR rules block LSASS credential theft and PsExec/WMI, LSASS runs as a Protected Process Light (RunAsPPL), and PowerShell is constrained, so it ships with no planted vulnerabilities. The dedicated Wazuh manager is drawn as a standalone SIEM box on the subnet, and a jumpbox operates the range. Recreated natively on the Defense canvas and deployed by redStackPRO's own Terraform and Ansible, not imported or wrapped; a nod to the GOAD project. A read-only template.",

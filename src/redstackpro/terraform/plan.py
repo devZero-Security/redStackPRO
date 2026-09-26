@@ -136,7 +136,7 @@ class TerraformPlan:
     # -- range / AD selection
 
     def is_range(self):
-        return self.topology.get("mode") == "range"
+        return self.topology.get("mode") == "haven"
 
     @property
     def admin_account(self):

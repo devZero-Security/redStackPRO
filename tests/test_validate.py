@@ -128,7 +128,7 @@ def test_rng009_user_flaw_declared_as_host_vuln_warns():
     warns rather than silently planting nothing. It stays valid: a warning, not
     an error. See F-dual-modeling."""
     topology = {
-        "schema_version": "0.4.0", "mode": "range", "name": "T", "prefix": "cyb",
+        "schema_version": "0.6.0", "mode": "haven", "name": "T", "prefix": "cyb",
         "nodes": [
             {"id": "net01", "kind": "network", "overlay": {"cidr": "192.168.0.0/16"}},
             {"id": "sub01", "kind": "segment",
@@ -322,7 +322,7 @@ def _two_networks(cidr_a="10.10.0.0/16", cidr_b="10.20.0.0/16"):
     that NET002 and LOG001 are the interesting findings; other rules may also
     fire, so the tests check membership rather than the full set."""
     return {
-        "schema_version": "0.4.0", "mode": "ops", "name": "t", "prefix": "rt",
+        "schema_version": "0.6.0", "mode": "artie", "name": "t", "prefix": "rt",
         "nodes": [
             {"id": "network-a", "kind": "network", "overlay": {"cidr": cidr_a}},
             {"id": "network-b", "kind": "network", "overlay": {"cidr": cidr_b}},
@@ -448,7 +448,7 @@ def _range():
     """A tiny valid range: one network, one subnet, one domain with a DC that
     joins it. Clean under the RNG rules, a base to break one at a time."""
     return {
-        "schema_version": "0.4.0", "mode": "range", "name": "r", "prefix": "cyb",
+        "schema_version": "0.6.0", "mode": "haven", "name": "r", "prefix": "cyb",
         "nodes": [
             {"id": "net01", "kind": "network", "overlay": {"cidr": "10.0.0.0/16"}},
             {"id": "sub01", "kind": "segment",
@@ -541,9 +541,9 @@ def test_rng001_member_joins_no_domain():
 
 
 def test_rng001_is_range_only():
-    # An ops document never runs the range rules, even with an unjoined host.
+    # An artie document never runs the range rules, even with an unjoined host.
     g = _range()
-    g["mode"] = "ops"
+    g["mode"] = "artie"
     g["nodes"].append({"id": "srv01", "kind": "srv", "overlay": {}})
     assert "RNG001" not in codes(g)
 
@@ -638,7 +638,7 @@ def test_the_range_templates_are_clean_of_range_errors():
     # Recursive: the GOAD range templates live in the goad/ subdirectory.
     for f in glob.glob(os.path.join(root, "frontend/public/**/*.json"), recursive=True):
         doc = json.loads(open(f).read())
-        if doc.get("mode") != "range":
+        if doc.get("mode") != "haven":
             continue
         errs = [c for c in errors(doc) if c.startswith("RNG")]
         assert errs == [], f"{os.path.basename(f)} has range errors: {errs}"
@@ -722,7 +722,7 @@ def test_every_shipped_redirector_example_demands_a_hostname_first():
     import glob
     import os
     seen = 0
-    for pattern in ("frontend/public/*.json", "src/redstackpro/schema/topology/examples/0.5.0/*.json"):
+    for pattern in ("frontend/public/*.json", "src/redstackpro/schema/topology/examples/0.6.0/*.json"):
         root = os.path.join(os.path.dirname(__file__), "..", pattern)
         for path in sorted(glob.glob(root)):
             name = os.path.basename(path)

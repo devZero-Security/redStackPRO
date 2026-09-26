@@ -17,7 +17,7 @@ from pathlib import Path
 from redstackpro.authoring import set_redirector_hostname
 
 ROOT = Path(__file__).resolve().parent.parent
-EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.5.0"
+EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.6.0"
 HOSTNAME = "cdn.redops.design"
 
 

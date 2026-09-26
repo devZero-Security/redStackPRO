@@ -63,7 +63,7 @@ class Topology(Base):
     org_id = Column(String(32), ForeignKey("orgs.id"), nullable=False)
     owner_id = Column(String(32), ForeignKey("users.id"), nullable=True)
     name = Column(String(200), nullable=False)
-    mode = Column(String(16), nullable=False, default="ops")
+    mode = Column(String(16), nullable=False, default="artie")
     visibility = Column(String(16), nullable=False, default="private")
     schema_version = Column(String(16), nullable=False)
     # Compare and swap. Single user does not mean single writer: two tabs, or

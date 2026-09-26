@@ -15,11 +15,11 @@ function document(file) {
   return JSON.parse(readFileSync(new URL(file + ".json", PUBLIC), "utf8"));
 }
 
-const ranges = templatesFor("range");
+const ranges = templatesFor("haven");
 
 // Every entry points at a document that is actually bundled. A template whose
 // file is missing is a button that fails when pressed.
-for (const t of [...ranges, ...templatesFor("ops")]) {
+for (const t of [...ranges, ...templatesFor("artie")]) {
   const doc = document(t.file);
   assert.ok(Array.isArray(doc.nodes) && doc.nodes.length,
             `${t.name} loads an empty document`);
@@ -80,7 +80,7 @@ for (const t of ranges) {
 // ------------------------------------------------------------------- grouping ---
 
 {
-  const groups = groupedTemplates("range");
+  const groups = groupedTemplates("haven");
   const goad = groups.find((g) => g.group === "GOAD");
   assert.ok(goad, "the GOAD family is not grouped");
   assert.equal(goad.templates.length, 8);

@@ -12,7 +12,7 @@ display:
   color: "#0ca678"
 
 modes:
-  - range
+  - haven
 
 derived:
   - name: private_address

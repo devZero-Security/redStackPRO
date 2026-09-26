@@ -30,7 +30,7 @@ class Registry:
             for r in yaml.safe_load((root / "roles.yaml").read_text())["roles"]
         }
 
-    def palette(self, mode="ops"):
+    def palette(self, mode="artie"):
         """What the canvas offers, grouped. The canvas reads this rather than
         hardcoding kinds, so pro can add kinds by dropping files in. See 0013.
 
@@ -38,7 +38,7 @@ class Registry:
         """
         groups = {}
         for kind, spec in self.kinds.items():
-            if mode not in spec.get("modes", ["ops"]):
+            if mode not in spec.get("modes", ["artie"]):
                 continue
             display = spec.get("display") or {}
             groups.setdefault(display.get("group", "other"), []).append({

@@ -44,7 +44,7 @@ backends declare fewer network capabilities (`src/redstackpro/schema/registry/pr
 | host firewall | per-VM firewall | proxmox has one, esxi has none (layer-2 VLAN isolation only) |
 
 - **Range access.** On cloud the jumpbox has an allocated (per-deploy, ephemeral)
-  public address, read from `RANGE-BRIEFING.md`. On on-prem there is no allocated
+  public address, read from `HAVEN-BRIEFING.md`. On on-prem there is no allocated
   external IP: reach the jumpbox over the operator's own network or VPN.
 - **Name resolution.** The two domains already go in `/etc/hosts` above, which is
   exactly what on-prem needs (`proxmox`, `esxi` have no managed private DNS). On a
@@ -91,7 +91,7 @@ The `ninja.hack` cast: `alice.johnson` is Hokage and **Domain Admin**;
 `rachel.philips`, `ava.brown`, `henry.martinez` are **Sanin**; `david.wilson`,
 `yara.yuhi`, `katherine.white`, `uma.johnson` are **Jonin**; `frank.umino` and
 `olivia.davis` are **Academy_Teacher**. Passwords are in the deploy's
-`RANGE-BRIEFING.md`, which is the source of truth for any given range.
+`HAVEN-BRIEFING.md`, which is the source of truth for any given range.
 
 ### 1. Confirm the template and the edge
 

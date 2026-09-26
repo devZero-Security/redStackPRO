@@ -11,8 +11,8 @@ display:
   color: "#868e96"
 
 modes:
-  - ops
-  - range
+  - artie
+  - haven
 
 derived:
   - name: subnet_id

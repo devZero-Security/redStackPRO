@@ -7,7 +7,7 @@ runs it there. This encodes the operational details that are otherwise easy to
 get wrong -- the jumpbox provisions itself over a local connection (a cloud VM
 cannot ssh to its own public address), a fresh cloud Windows box needs an
 authenticated win_ping before it is promoted, and the play is idempotent so it
-is retried to ride the WinRM/boot flap. See the RANGE-BRIEFING and 0022.
+is retried to ride the WinRM/boot flap. See the mode briefing and 0022.
 
 The script is generated (not static) because it bakes in the jumpbox's rendered
 name and the topology's mode, the same way the inventory and site.yml are derived.
@@ -190,7 +190,7 @@ def generate_deploy_script(topology, registry=None, provider=None):
     jumpbox = _jumpbox_name(ctx)
     if not jumpbox:
         return None
-    is_range = topology.get("mode") == "range"
+    is_range = topology.get("mode") == "haven"
 
     cloud_preflight = ""
     if provider == "gcp":
@@ -410,12 +410,12 @@ export REDSTACKPRO_LAB_PASSWORD
 
 say "fill inventory addresses from terraform output"
 "$PY" tf_inventory.py
-# Scan the whole ansible tree (and the range briefing), not a fixed pair of
-# subdirectories: an ops export has no ansible/vars, which made the old grep exit
-# non-zero on the missing path and skip the check entirely. Pipe to grep -q so
-# the result is decided by whether any file still holds a token, not by grep's
-# exit code over a path that may not exist.
-if grep -rl "<<tf:" ansible RANGE-BRIEFING.md 2>/dev/null | grep -q .; then
+# Scan the whole ansible tree (and the mode briefing, HAVEN-/ARTIE-BRIEFING.md),
+# not a fixed pair of subdirectories: an ops export has no ansible/vars, which made
+# the old grep exit non-zero on the missing path and skip the check entirely. Pipe
+# to grep -q so the result is decided by whether any file still holds a token, not
+# by grep's exit code over a path that may not exist.
+if grep -rl "<<tf:" ansible *-BRIEFING.md 2>/dev/null | grep -q .; then
   echo "unfilled address placeholders remain -- aborting"; exit 1
 fi
 

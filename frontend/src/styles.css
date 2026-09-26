@@ -31,7 +31,7 @@
 /* redStackPRO: dark, shades of red. The container accent is a muted red so the
    nested boxes read as red structure rather than competing with the host
    card colours; the host icons stay the only bright accents. */
-.rg-mode-ops {
+.rg-mode-artie {
   --bg: #1a1416;
   --panel: #21191c;
   --panel-2: #271e21;
@@ -45,7 +45,7 @@
 }
 
 /* Cyber Ranges: dark and cool, shades of blue. */
-.rg-mode-range {
+.rg-mode-haven {
   --bg: #12161b;
   --panel: #171d24;
   --panel-2: #1b222b;
@@ -1260,7 +1260,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 
 .rg-modal.is-chooser { width: 580px; max-width: 92vw; }
-.rg-modal.is-chooser.rg-mode-range { width: 720px; }
+.rg-modal.is-chooser.rg-mode-haven { width: 720px; }
 .rg-goad-grid { grid-template-columns: 1fr 1fr 1fr; }
 .rg-template-group { margin-top: 10px; }
 .rg-template-group-name { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }

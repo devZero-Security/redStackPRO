@@ -182,17 +182,17 @@ def test_every_kind_has_display_metadata(registry):
 
 
 def test_palette_groups_by_declared_group(registry):
-    palette = registry.palette("ops")
+    palette = registry.palette("artie")
     assert set(palette) == {
         "topology", "redirector", "teamservers", "management", "operator"}
     kinds = {e["kind"] for group in palette.values() for e in group}
     ops_kinds = {k for k, s in registry.kinds.items()
-                 if "ops" in s.get("modes", ["ops"])}
+                 if "artie" in s.get("modes", ["artie"])}
     assert kinds == ops_kinds
 
 
 def test_range_palette_carries_the_range_kinds(registry):
-    palette = registry.palette("range")
+    palette = registry.palette("haven")
     kinds = {e["kind"] for group in palette.values() for e in group}
     # the range-specific kinds, plus the shared containers
     assert {"domain", "dc", "srv", "wks", "fw"} <= kinds
@@ -206,8 +206,8 @@ def test_platform_account_is_one_name_per_canvas_by_mode():
     """The single platform account (P1.7): blueop on a defensive range, redop on
     an offensive ops platform, redop as the conservative default for an unset or
     unknown mode."""
-    assert platform_account("range") == "blueop"
-    assert platform_account("ops") == "redop"
+    assert platform_account("haven") == "blueop"
+    assert platform_account("artie") == "redop"
     assert platform_account(None) == "redop"
     assert platform_account("anything-else") == "redop"
 

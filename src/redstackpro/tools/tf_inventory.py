@@ -62,12 +62,11 @@ def main():
     unresolved = set()
     touched = 0
 
-    # The Ansible tree, plus the range briefing at the export root, which carries
-    # the same <<tf:...>> address tokens.
+    # The Ansible tree, plus the mode briefing at the export root, which carries
+    # the same <<tf:...>> address tokens. Named by mode (HAVEN-/ARTIE-BRIEFING.md),
+    # so it is found by the *-BRIEFING.md glob rather than a fixed name.
     paths = list(ansible_dir.rglob("*.yml"))
-    briefing = Path("RANGE-BRIEFING.md")
-    if briefing.is_file():
-        paths.append(briefing)
+    paths += sorted(Path(".").glob("*-BRIEFING.md"))
 
     for path in sorted(paths):
         original = path.read_text(encoding="utf-8")

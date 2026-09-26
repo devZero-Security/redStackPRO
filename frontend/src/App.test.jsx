@@ -29,7 +29,7 @@ const PALETTE = {
 // what comes back is what went in.
 const SAVED_DOCUMENT = {
   schema_version: "0.2.0",
-  mode: "ops",
+  mode: "artie",
   name: "Saved range",
   prefix: "red",
   nodes: [
@@ -50,7 +50,7 @@ const SAVED_DOCUMENT = {
 };
 
 const SUMMARY = {
-  id: "g1", name: "Saved range", mode: "ops", visibility: "private",
+  id: "g1", name: "Saved range", mode: "artie", visibility: "private",
   schema_version: "0.2.0", version: 3, owner_id: "u1",
   is_blueprint: false, editable: true,
 };

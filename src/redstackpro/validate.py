@@ -162,7 +162,7 @@ def nam001_id_matches_kind(ctx):
         return
     # Range naming (the cyb prefix and slug scheme) is deferred to custom range
     # authoring; the shipped GOAD templates keep their canonical names. See 0047.
-    if ctx.topology.get("mode") == "range":
+    if ctx.topology.get("mode") == "haven":
         return
     for node in ctx.nodes.values():
         spec = reg.kinds.get(node["kind"])
@@ -183,7 +183,7 @@ def nam002_two_digit_ordinal(ctx):
     reg = ctx.registry
     if reg is None:
         return
-    if ctx.topology.get("mode") == "range":
+    if ctx.topology.get("mode") == "haven":
         return
     for node in ctx.nodes.values():
         spec = reg.kinds.get(node["kind"])
@@ -201,7 +201,7 @@ def nam002_two_digit_ordinal(ctx):
 
 
 def nam003_netbios_length(ctx):
-    if ctx.topology.get("mode") == "range":
+    if ctx.topology.get("mode") == "haven":
         return
     for node in ctx.nodes.values():
         # A network or a segment never becomes a host, so it has no NetBIOS name
@@ -292,7 +292,7 @@ def end_endpoint_kinds(ctx):
 # ---------------------------------------------------------------- cardinality
 
 def car001_host_unattached(ctx):
-    if ctx.topology.get("mode") == "range":
+    if ctx.topology.get("mode") == "haven":
         return
     for n in ctx.hosts():
         if not ctx.segments_of(n["id"]):
@@ -462,7 +462,7 @@ def car008_ui_c2_needs_gui_operator(ctx):
 # ---------------------------------------------------------------- management
 
 def mgt001_unreachable_host(ctx):
-    if ctx.topology.get("mode") == "range":
+    if ctx.topology.get("mode") == "haven":
         return
     for n in ctx.hosts():
         if n["kind"] == "jumpbox":
@@ -798,7 +798,7 @@ def exp001_underexposed(ctx):
     # A range is an isolated lab: its jumpbox sits on a local subnet and is
     # reached through the provider, not a public address. The exposure rules are
     # an ops concept, so they do not apply to range mode.
-    if ctx.topology.get("mode") == "range":
+    if ctx.topology.get("mode") == "haven":
         return
     for n in ctx.hosts():
         if n["kind"] not in _MUST_EXPOSE:
@@ -850,7 +850,7 @@ def exp005_address_the_segment_forbids(ctx):
     than introduce.
     """
     # Range mode is an isolated lab; exposure is an ops concept. See exp001.
-    if ctx.topology.get("mode") == "range":
+    if ctx.topology.get("mode") == "haven":
         return
     for n in ctx.hosts():
         asked = (n.get("overlay") or {}).get("public_address")
@@ -997,7 +997,7 @@ _RANGE_MEMBERS = ("dc", "srv", "wks")
 def rng001_member_joins_no_domain(ctx):
     """A domain member with no joins edge. In an AD range a DC or member server
     that joins nothing is incomplete: it is drawn but part of no domain."""
-    if ctx.topology.get("mode") != "range":
+    if ctx.topology.get("mode") != "haven":
         return
     joined = {e["source"] for e in ctx.by_role.get("joins", [])}
     for n in ctx.of_kind(*_RANGE_MEMBERS):
@@ -1012,7 +1012,7 @@ def rng001_member_joins_no_domain(ctx):
 def rng002_domain_without_dc(ctx):
     """A domain that no domain controller joins. A domain needs a DC to exist;
     one with only member servers is not yet a working domain."""
-    if ctx.topology.get("mode") != "range":
+    if ctx.topology.get("mode") != "haven":
         return
     dc_domains = {e["target"] for e in ctx.by_role.get("joins", [])
                   if ctx.kind(e["source"]) == "dc"}
@@ -1028,7 +1028,7 @@ def rng002_domain_without_dc(ctx):
 def rng003_self_trust(ctx):
     """A trust from a domain to itself. A trust runs between two different
     domains; a self-trust is meaningless and would not provision."""
-    if ctx.topology.get("mode") != "range":
+    if ctx.topology.get("mode") != "haven":
         return
     for e in ctx.by_role.get("trusts", []):
         if e["source"] == e["target"]:
@@ -1055,7 +1055,7 @@ def rng009_user_flaw_as_host_vuln(ctx):
     no-op there and plants nothing; the technique must be set on a domain user's
     flaws instead. Caught as a warning because the run still succeeds, just
     without the attack the author intended. See PAI F-dual-modeling."""
-    if ctx.topology.get("mode") != "range":
+    if ctx.topology.get("mode") != "haven":
         return
     for n in ctx.hosts():
         declared = set(ctx.overlay(n["id"], "vulns") or [])
@@ -1074,7 +1074,7 @@ def rng005_domain_without_admin(ctx):
     """A domain that has user accounts but none with a domain-admin privilege.
     A lab domain needs at least one privileged account as the escalation target;
     a population with no admin has no top of the ladder to reach."""
-    if ctx.topology.get("mode") != "range":
+    if ctx.topology.get("mode") != "haven":
         return
     for n in ctx.of_kind("domain"):
         users = ctx.overlay(n["id"], "users") or []
@@ -1092,7 +1092,7 @@ def rng005_domain_without_admin(ctx):
 def rng006_duplicate_domain_fqdn(ctx):
     """Two domains that share an fqdn. They cannot both stand up; this is a
     compile blocker, not a warning, because the run would fail on the second."""
-    if ctx.topology.get("mode") != "range":
+    if ctx.topology.get("mode") != "haven":
         return
     seen = {}
     for n in ctx.of_kind("domain"):
@@ -1112,7 +1112,7 @@ def rng006_duplicate_domain_fqdn(ctx):
 def rng007_duplicate_username(ctx):
     """Two users in one domain with the same username. A sAMAccountName is unique
     within a domain, so the second account cannot be created."""
-    if ctx.topology.get("mode") != "range":
+    if ctx.topology.get("mode") != "haven":
         return
     for n in ctx.of_kind("domain"):
         seen = {}
@@ -1132,7 +1132,7 @@ def rng007_duplicate_username(ctx):
 def rng004_siem_without_product(ctx):
     """A SIEM box with no telemetry product set. The product decides what the
     box collects, so an unset one is an incomplete appliance."""
-    if ctx.topology.get("mode") != "range":
+    if ctx.topology.get("mode") != "haven":
         return
     for n in ctx.of_kind("siem"):
         if not ctx.overlay(n["id"], "product"):
@@ -1148,7 +1148,7 @@ def rng008_multiple_siem(ctx):
     box the range has, one agent per product, so different products (a Wazuh box
     and an ELK box) coexist fine. Two boxes of the same product are ambiguous:
     the agents can only target one, so the second box would receive nothing."""
-    if ctx.topology.get("mode") != "range":
+    if ctx.topology.get("mode") != "haven":
         return
     by_product = {}
     for s in ctx.of_kind("siem"):

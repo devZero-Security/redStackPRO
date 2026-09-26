@@ -1,6 +1,6 @@
 {
-  "schema_version": "0.5.0",
-  "mode": "range",
+  "schema_version": "0.6.0",
+  "mode": "haven",
   "name": "GOAD",
   "prefix": "cyb",
   "description": "GOAD: the full Game of Active Directory. Three domains across two forests, sevenkingdoms.local with its child north.sevenkingdoms.local, and essos.local, on five machines on 192.168.56.0/24, with a parent-child trust and a cross-forest trust. Recreated natively on the Defense canvas and deployed by redStackPRO's own Terraform and Ansible, not imported or wrapped; a nod to the GOAD project. A read-only template.",

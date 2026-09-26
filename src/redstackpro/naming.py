@@ -25,12 +25,12 @@ NETBIOS_LIMIT = 15
 def platform_account(mode):
     """The single platform account every host in a canvas shares: the Linux
     admin + SSH identity + Guacamole login. One name per canvas, chosen by mode:
-    ``blueop`` for a defensive range (mode == "range"), ``redop`` for an
+    ``blueop`` for a defensive range (mode == "haven"), ``redop`` for an
     offensive ops platform (every other mode). This collapses the former
     rtadmin (infra admin) / operator (Guac login) / mortiz (persona) split into
     one identity that reads sensibly on both canvases. Windows range hosts keep
     Administrator; this is the Linux/connection account. See ADR 0056 / P1.7."""
-    return "blueop" if mode == "range" else "redop"
+    return "blueop" if mode == "haven" else "redop"
 
 _TRAILING_DIGITS = re.compile(r"(\d+)$")
 

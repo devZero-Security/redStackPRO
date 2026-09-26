@@ -135,8 +135,8 @@ def test_the_artwork_stays_small():
 
 def _redirector_topology():
     return {
-        "schema_version": "0.4.0",
-        "mode": "ops",
+        "schema_version": "0.6.0",
+        "mode": "artie",
         "name": "art",
         "prefix": "red",
         "nodes": [

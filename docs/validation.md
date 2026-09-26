@@ -1,4 +1,4 @@
-# Validator rules, schema 0.5.0, ops mode
+# Validator rules, schema 0.6.0, artie mode
 
 JSON Schema covers document shape only. Everything below is topology semantics and
 belongs in the topology layer validator, not in the compiler. Every rule carries a
@@ -241,7 +241,7 @@ than the ordering logic.
 
 ## Range model
 
-These fire only in range mode (`mode: range`); the ops rules above are gated
+These fire only in haven mode (`mode: haven`); the artie rules above are gated
 off there, since a lab jumpbox on a local subnet is correct and the `cyb` naming
 scheme is deferred for templates. See 0047. The shipped GOAD templates are clean
 of all four.

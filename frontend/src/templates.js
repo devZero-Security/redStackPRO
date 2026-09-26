@@ -3,7 +3,7 @@
 // templates open editable (starting points you customize); range templates open
 // read-only (the GOAD family). See 0047. Each file is a document under public/.
 export const TEMPLATES = {
-  ops: [
+  artie: [
     {
       file: "redstack",
       name: "redStack",
@@ -35,7 +35,7 @@ export const TEMPLATES = {
         "Two front doors that do not share a fate: Apache fronting Sliver for long haul, Nginx fronting Mythic for interactive, each redirector on its own peered network.",
     },
   ],
-  range: [
+  haven: [
     {
       file: "goad/goad",
       name: "GOAD",
@@ -186,7 +186,7 @@ export function templateFor(file) {
 }
 
 // The templates for a canvas mode. Anything that is not the range canvas is
-// treated as Red Infra, so an undefined mode falls back to the ops library.
+// treated as Red Infra, so an undefined mode falls back to the artie library.
 export function templatesFor(mode) {
-  return TEMPLATES[mode === "range" ? "range" : "ops"];
+  return TEMPLATES[mode === "haven" ? "haven" : "artie"];
 }
