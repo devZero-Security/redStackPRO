@@ -34,6 +34,27 @@
     - /etc/openvpn/server/pki
     - /etc/openvpn/server/clients
 
+# OpenVPN's default `remote-cert-tls server` on the client requires the server
+# certificate to carry Key Usage plus Extended Key Usage serverAuth; a bare
+# `openssl x509 -req` signs without either, and the client rejects it with
+# VERIFY KU ERROR. These extension files give the signer the right usages.
+- name: Write the certificate extension files
+  ansible.builtin.copy:
+    dest: "{{ item.dest }}"
+    mode: "0644"
+    content: "{{ item.content }}"
+  loop:
+    - dest: /etc/openvpn/server/server-ext.cnf
+      content: |
+        keyUsage = digitalSignature, keyEncipherment
+        extendedKeyUsage = serverAuth
+    - dest: /etc/openvpn/server/client-ext.cnf
+      content: |
+        keyUsage = digitalSignature
+        extendedKeyUsage = clientAuth
+  loop_control:
+    label: "{{ item.dest }}"
+
 - name: Generate the server key
   ansible.builtin.command:
     cmd: openssl genrsa -out /etc/openvpn/server/pki/server.key 2048
@@ -57,6 +78,7 @@
       -CAkey {{ redstackpro_ca_dir }}/ca.key
       -CAserial {{ redstackpro_ca_dir }}/ca.srl
       -days {{ redstackpro_ca_days }} -sha256
+      -extfile /etc/openvpn/server/server-ext.cnf
       -out /etc/openvpn/server/pki/server.crt
     creates: /etc/openvpn/server/pki/server.crt
 
@@ -117,6 +139,7 @@
       -CAkey {{ redstackpro_ca_dir }}/ca.key
       -CAserial {{ redstackpro_ca_dir }}/ca.srl
       -days {{ redstackpro_ca_days }} -sha256
+      -extfile /etc/openvpn/server/client-ext.cnf
       -out /etc/openvpn/server/clients/{{ item.handle }}.crt
     creates: /etc/openvpn/server/clients/{{ item.handle }}.crt
   loop: "{{ redstackpro_effective_operators | default([]) }}"

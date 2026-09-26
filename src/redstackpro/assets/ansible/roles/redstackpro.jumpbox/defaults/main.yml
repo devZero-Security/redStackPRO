@@ -86,6 +86,11 @@ redstackpro_openvpn_port: 1194
 redstackpro_openvpn_protocol: udp
 redstackpro_openvpn_subnet: 10.98.0.0
 redstackpro_openvpn_netmask: 255.255.255.0
+# Networks the server pushes to clients so their tunnel routes the range, in
+# "network netmask" form. Default covers the 10.0.0.0/8 carve (0046), matching
+# the WireGuard allowed_ips default.
+redstackpro_openvpn_routes:
+  - "10.0.0.0 255.0.0.0"
 
 # The portal. Authentication is a PostgreSQL database (ADR 0056): named accounts
 # and per-user TOTP both need writable user records, which the old read-only

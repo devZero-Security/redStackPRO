@@ -16,6 +16,13 @@ server {{ redstackpro_openvpn_subnet }} {{ redstackpro_openvpn_netmask }}
 topology subnet
 keepalive 10 120
 
+# Push the range networks so an operator's tunnel routes them (the WireGuard
+# equivalent is the client's AllowedIPs). Without this the tunnel comes up but
+# reaches nothing behind the jumpbox.
+{% for route in redstackpro_openvpn_routes %}
+push "route {{ route }}"
+{% endfor %}
+
 cipher AES-256-GCM
 auth SHA256
 tls-version-min 1.2

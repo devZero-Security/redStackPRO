@@ -142,7 +142,8 @@ add_openvpn() {
   openssl genrsa -out "$OVPN_CLIENTS/$handle.key" 2048
   openssl req -new -key "$OVPN_CLIENTS/$handle.key" -subj "/CN=$handle" -out "$OVPN_CLIENTS/$handle.csr"
   openssl x509 -req -in "$OVPN_CLIENTS/$handle.csr" -CA "$CA_DIR/ca.crt" -CAkey "$CA_DIR/ca.key" \
-    -CAserial "$CA_DIR/ca.srl" -days "$CA_DAYS" -sha256 -out "$OVPN_CLIENTS/$handle.crt"
+    -CAserial "$CA_DIR/ca.srl" -days "$CA_DAYS" -sha256 \
+    -extfile /etc/openvpn/server/client-ext.cnf -out "$OVPN_CLIENTS/$handle.crt"
   umask 177
   { cat <<EOF
 # $handle OpenVPN client config
