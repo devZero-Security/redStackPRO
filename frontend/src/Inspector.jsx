@@ -1081,6 +1081,14 @@ export function Inspector({
         />
       ) : null}
 
+      {node.kind === "jumpbox" && document?.mode === "artie" && !readOnly ? (
+        <p className="rg-hint">
+          This jumpbox can front a team. Set <code>access_mode</code> to
+          wireguard or openvpn and add operators below: each gets a portal login
+          and a personal VPN credential generated on the jumpbox at deploy.
+        </p>
+      ) : null}
+
       {overlaySchema
         ? Object.entries(overlaySchema.properties || {})
             .filter(([, spec]) => spec["x-redstackpro-source"] !== "derived")
