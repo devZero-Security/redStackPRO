@@ -63,7 +63,17 @@
           "guacamole",
           "wireguard"
         ],
-        "certificate_authority": true
+        "certificate_authority": true,
+        "access_mode": "wireguard",
+        "operators": [
+          {
+            "handle": "alice",
+            "role": "lead"
+          },
+          {
+            "handle": "bob"
+          }
+        ]
       }
     },
     {

@@ -441,6 +441,64 @@ function DomainAcls({ node, onChange }) {
   );
 }
 
+// The operator roster on an artie jumpbox: the people who reach the range. Each
+// becomes a portal account and, on a VPN access mode, gets a personal VPN
+// credential generated on the jumpbox at apply. Reuses the acls row styling. See
+// vpn-multiuser-spec.
+function Operators({ node, onChange }) {
+  const operators = (node.overlay || {}).operators || [];
+  const [handle, setHandle] = useState("");
+  const [role, setRole] = useState("");
+
+  const set = (next) =>
+    onChange({ ...(node.overlay || {}), operators: next.length ? next : undefined });
+  const add = () => {
+    const h = handle.trim().toLowerCase();
+    if (!h || operators.some((o) => (o.handle || "").toLowerCase() === h)) return;
+    set([...operators, role.trim() ? { handle: h, role: role.trim() } : { handle: h }]);
+    setHandle("");
+    setRole("");
+  };
+
+  return (
+    <div className="rg-acls">
+      <h3>Operators{operators.length ? ` (${operators.length})` : ""}</h3>
+      <p className="rg-hint">
+        The people who reach this range. Each gets a portal account and, on a VPN
+        access mode, a personal VPN credential generated on the jumpbox. Handles are
+        lowercase and unique.
+      </p>
+      {operators.length ? (
+        <div className="rg-acls-list">
+          {operators.map((o, i) => (
+            <div key={i} className="rg-acl-row">
+              <span className="rg-acl-pair">
+                <span className="rg-acl-p" title={o.handle}>{o.handle}</span>
+                {o.role ? (
+                  <span className="rg-acl-right" title={o.role}>{o.role}</span>
+                ) : null}
+              </span>
+              <button
+                type="button"
+                className="rg-user-del"
+                title="Remove operator"
+                onClick={() => set(operators.filter((_, j) => j !== i))}
+              >
+                &times;
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <div className="rg-acls-add">
+        <input value={handle} placeholder="handle" onChange={(e) => setHandle(e.target.value)} />
+        <input value={role} placeholder="role (optional)" onChange={(e) => setRole(e.target.value)} />
+        <button type="button" onClick={add} disabled={!handle.trim()}>Add</button>
+      </div>
+    </div>
+  );
+}
+
 // The range host kinds that join a domain. Standalone range boxes (jumpbox,
 // SIEM, appliance) sit on a subnet but do not join a domain, so they get the
 // subnet control but not the domain one.
@@ -1062,6 +1120,14 @@ export function Inspector({
               ) : name === "acls" ? (
                 readOnly ? null : (
                   <DomainAcls
+                    key={name}
+                    node={node}
+                    onChange={(overlay) => onOverlayChange(node.id, overlay)}
+                  />
+                )
+              ) : name === "operators" ? (
+                readOnly ? null : (
+                  <Operators
                     key={name}
                     node={node}
                     onChange={(overlay) => onOverlayChange(node.id, overlay)}
