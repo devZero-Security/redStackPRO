@@ -772,6 +772,24 @@ class AnsiblePlan:
             if not fqdn:
                 continue
             users = overlay.get("users", []) or []
+            # A user's privilege names a built-in group the directory must actually
+            # grant: domain_admin -> Domain Admins, enterprise_admin -> Enterprise
+            # Admins (plus Domain Admins of the root it sits in). The dc role honours
+            # a user's `groups`, not `privilege`, so fold the mapped group in here, or
+            # a "domain admin" lands only in whatever groups the template also listed
+            # and is not actually privileged. Built-in groups already exist, so the dc
+            # role skips them on creation and missing_behaviour: ignore covers a group
+            # absent in this domain.
+            _priv_groups = {
+                "domain_admin": ["Domain Admins"],
+                "enterprise_admin": ["Enterprise Admins", "Domain Admins"],
+            }
+            users = [
+                dict(u, groups=sorted(set((u.get("groups") or [])
+                                          + _priv_groups[u["privilege"]])))
+                if u.get("privilege") in _priv_groups else u
+                for u in users
+            ]
             groups = {g for u in users for g in (u.get("groups") or [])}
             # Group-in-group nesting (e.g. Dragons -> QueenProtector -> Domain
             # Admins). Every group named as a nesting parent or child must exist,

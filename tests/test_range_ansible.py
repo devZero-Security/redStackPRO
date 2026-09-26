@@ -21,6 +21,8 @@ GOAD_FULL = json.loads(
     (ROOT / "frontend/public/goad/goad.json").read_text(encoding="utf-8"))
 DRACARYS = json.loads(
     (ROOT / "frontend/public/goad/dracarys.json").read_text(encoding="utf-8"))
+HARBOR = json.loads(
+    (ROOT / "frontend/public/harbor.json").read_text(encoding="utf-8"))
 HOST_VULNS_IMPLEMENTED = yaml.safe_load(
     (ROOT / "src/redstackpro/assets/ansible/roles/redstackpro.host_vulns"
             "/defaults/main.yml").read_text(encoding="utf-8")
@@ -53,6 +55,25 @@ def test_local_admin_users_are_added_to_member_administrators():
     # The DC is not a member server and carries no local-admin injection.
     balerion = yaml.safe_load(files["ansible/host_vars/cyb-balerion.yml"])
     assert "redstackpro_srv_local_admins" not in balerion
+
+
+def test_privilege_maps_to_the_built_in_admin_group():
+    """A user's privilege names the built-in group the directory must actually
+    grant: domain_admin -> Domain Admins, enterprise_admin -> Enterprise Admins.
+    The dc role honours a user's `groups`, not the `privilege` field, so the
+    compiler folds the mapped group in. harbor relies on this: eric.vance (child
+    DA) and roland.hale (forest EA) carry only the privilege and no explicit group,
+    so without the mapping they would deploy unprivileged and the chain would
+    dead-end. A plain user gets no privileged group."""
+    files = generate(HARBOR)
+    freight = yaml.safe_load(files["ansible/vars/domains/freight.harbor.corp.yml"])
+    eric = next(u for u in freight["users"] if u["username"] == "eric.vance")
+    assert "Domain Admins" in eric["groups"]
+    dana = next(u for u in freight["users"] if u["username"] == "dana.brooks")
+    assert "Domain Admins" not in (dana.get("groups") or [])
+    harbor = yaml.safe_load(files["ansible/vars/domains/harbor.corp.yml"])
+    roland = next(u for u in harbor["users"] if u["username"] == "roland.hale")
+    assert "Enterprise Admins" in roland["groups"]
 
 
 def test_endpoint_telemetry_toggle_reaches_the_host():
