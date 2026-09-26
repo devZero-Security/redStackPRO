@@ -8,6 +8,27 @@ from shipped import EXAMPLES, example  # noqa: F401  (EXAMPLES is re-exported)
 ROOT = Path(__file__).resolve().parent.parent
 
 
+# -- node selection helpers
+# Select a node by what it is, not by a hardcoded id: renumber rewrites ids, so a
+# test that pins "sliv-ts01" breaks the moment a fixture is regenerated.
+
+def node_of_kind(doc, kind):
+    """The first node of `kind` in document order, or None."""
+    return next((n for n in doc.get("nodes", []) if n.get("kind") == kind), None)
+
+
+def ts_ref(doc, c2=None):
+    """The teamserver node: the first one, or the first whose overlay c2 matches
+    when c2 is given. None when there is none. So a test says ts_ref(doc,
+    "sliver") instead of pinning an id."""
+    for n in doc.get("nodes", []):
+        if n.get("kind") != "teamserver":
+            continue
+        if c2 is None or (n.get("overlay") or {}).get("c2") == c2:
+            return n
+    return None
+
+
 @pytest.fixture
 def minimal():
     return example("minimal.json")

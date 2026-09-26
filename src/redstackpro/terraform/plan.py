@@ -43,6 +43,12 @@ C2_CONTROL_PORTS = {
     "mythic": [7443],    # Mythic web UI
     "sliver": [31337],   # Sliver multiplayer operator listener
     "adaptix": [4321],   # AdaptixC2 teamserver operator endpoint
+    # cobalt_strike is intentionally absent. It is licensed and operator-supplied,
+    # so the role prepares the host and stands up no team server (see
+    # c2-cobalt_strike.yml); the operator runs it themselves and drives it with
+    # their own CS client rather than an in-range operator box. There is no
+    # redStackPRO service to open 50050 for. `none` is absent for the same reason:
+    # it stands up no teamserver either. See P2.
 }
 
 
