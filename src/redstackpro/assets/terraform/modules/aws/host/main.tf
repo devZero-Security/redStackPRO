@@ -58,7 +58,10 @@ resource "aws_instance" "this" {
   # over WinRM with the lab password rather than SSH, so it takes no key pair.
   key_name                    = var.windows ? null : var.key_name
   vpc_security_group_ids      = [aws_security_group.this.id]
-  associate_public_ip_address = var.public_address
+  # A host with no Elastic IP still needs egress. On a NAT-routed segment the NAT
+  # handles it; on an internet-exposure (IGW-routed) segment there is no NAT, so an
+  # address-less host takes an auto-assigned public IP for egress, the redStack way.
+  associate_public_ip_address = var.public_address || var.auto_public_ip
 
   # Each box self-provisions at boot: a Windows host creates the operator account,
   # sets the shared lab password, and enables RDP; a Linux host creates the admin account,

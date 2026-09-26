@@ -346,6 +346,13 @@ def _main(plan):
         network = plan.ctx.network_of_segment(segment)
         owner, pattern = image_for(plan, node)
         takes_public = plan.takes_public_address(node)
+        seg_ov = plan.ctx.nodes[segment].get("overlay", {})
+        # An address-less host on an internet-exposure (IGW-routed) segment has no
+        # NAT to reach, so it takes an auto-assigned public IP for egress, the way
+        # redStack does. Egress only: no Elastic IP, SG locks inbound. See 0021.
+        auto_public_ip = (not takes_public
+                          and seg_ov.get("exposure") == "internet"
+                          and seg_ov.get("egress") == "allowed")
         # An addressed host goes in the network's public subnet, not its segment's.
         # AWS gives a subnet ONE route table: the segment's points at the NAT
         # gateway for the internal hosts, and an addressed host sharing it cannot
@@ -372,6 +379,7 @@ def _main(plan):
             # all, and egresses through the NAT gateway. Matches the GCP model.
             # See 0021.
             ("public_address", "true" if takes_public else "false"),
+            ("auto_public_ip", "true" if auto_public_ip else "false"),
             ("key_name", "aws_key_pair.redstackpro.key_name"),
             # The single platform account (redop for ops, blueop for a range);
             # cloud-init creates it and authorizes the keys for it. See P1.7.

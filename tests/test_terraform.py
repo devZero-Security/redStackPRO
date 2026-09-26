@@ -664,6 +664,27 @@ def test_aws_gives_a_stable_ip_only_to_the_hosts_reached_from_outside(redstack):
         assert mods[ref(node["id"])]["elastic_ip"] is expected, node["id"]
 
 
+def test_aws_gives_an_egress_ip_to_an_addressless_host_on_an_internet_segment():
+    """redStack pattern: an address-less host on an internet-exposure (IGW-routed)
+    segment has no NAT to reach, so it takes an auto-assigned public IP for egress,
+    with the security group still locking inbound. Without it the operator has no
+    route out and cannot even apt update, which stranded the Kali operator on AWS.
+    See 0021."""
+    import json
+    topo = json.loads((ROOT / "frontend/public/minimal-c2.json").read_text())
+    for n in topo["nodes"]:
+        if n["kind"] == "redirector":
+            n.setdefault("overlay", {})["hostname"] = "cdn.redteam.test"
+    mods = _modules_for(topo, provider="aws")
+    # The operator sits on the internet-exposure mgmt segment with no Elastic IP,
+    # so it needs an auto-assigned public IP purely for egress.
+    assert mods["red_kali_op01"]["public_address"] is False
+    assert mods["red_kali_op01"]["auto_public_ip"] is True
+    # The teamserver sits on a local, NAT-routed segment: private, egress via NAT.
+    assert mods["red_myth_ts01"]["public_address"] is False
+    assert mods["red_myth_ts01"]["auto_public_ip"] is False
+
+
 def test_aws_skips_the_gateway_when_nothing_needs_it(redstack):
     """A NAT gateway bills by the hour, so it is not created speculatively.
 

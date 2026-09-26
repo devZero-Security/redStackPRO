@@ -54,6 +54,12 @@ variable "public_address" {
   default     = false
 }
 
+variable "auto_public_ip" {
+  description = "Give an address-less host on an internet-exposure (IGW-routed) segment an auto-assigned public IP for egress only, the way redStack does. No Elastic IP, and the security group still locks inbound. Without it such a host has no route out (an IGW is useless to an address-less instance and the segment has no NAT). See 0021."
+  type        = bool
+  default     = false
+}
+
 variable "key_name" {
   description = "Key pair the export created from ssh_public_key. Never generated here."
   type        = string
