@@ -91,6 +91,11 @@ redstackpro_openvpn_netmask: 255.255.255.0
 # the WireGuard allowed_ips default.
 redstackpro_openvpn_routes:
   - "10.0.0.0 255.0.0.0"
+# Tunnel MTU and TCP MSS clamp. A cloud VPC MTU is often 1460 (GCP), below the
+# 1500 tun default, which blackholes large packets over the tunnel; 1400 fits with
+# room for OpenVPN overhead, and mssfix keeps TCP inside it. Safe on AWS too.
+redstackpro_openvpn_tun_mtu: 1400
+redstackpro_openvpn_mssfix: 1300
 
 # The portal. Authentication is a PostgreSQL database (ADR 0056): named accounts
 # and per-user TOTP both need writable user records, which the old read-only
