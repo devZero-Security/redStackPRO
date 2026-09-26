@@ -19,8 +19,8 @@ from redstackpro import Registry
 
 # Resolved from the package (schema ships as package data), not the CWD.
 _SCHEMA_ROOT = Path(__file__).resolve().parents[1] / "schema" / "topology"
-SCHEMA = _SCHEMA_ROOT / "0.4.0.json"
-EXAMPLES = _SCHEMA_ROOT / "examples" / "0.4.0"
+SCHEMA = _SCHEMA_ROOT / "0.5.0.json"
+EXAMPLES = _SCHEMA_ROOT / "examples" / "0.5.0"
 
 
 def sanity(reg):

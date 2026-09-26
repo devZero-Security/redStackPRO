@@ -26,7 +26,7 @@ pytestmark = pytest.mark.skipif(
     reason="REDSTACKPRO_TEST_DATABASE_URL is not set to a non-sqlite database")
 
 ROOT = Path(__file__).resolve().parent.parent
-EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.4.0"
+EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.5.0"
 V1 = "/api/v1"
 
 

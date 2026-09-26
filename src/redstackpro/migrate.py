@@ -11,7 +11,7 @@ Migrations never guess. If a document cannot be moved forward without inventing
 information, they raise.
 """
 
-LATEST = "0.4.0"
+LATEST = "0.5.0"
 
 # What a host gets when it says nothing. A jumpbox and a redirector are what
 # something outside is meant to reach; nothing else is. See 0021.
@@ -129,10 +129,23 @@ def _0_3_0_to_0_4_0(doc, prefix=None):
     return out
 
 
+def _0_4_0_to_0_5_0(doc, prefix=None):
+    """desktop lands on overlay_operator, and nothing existing has to move.
+
+    desktop is an additive optional boolean (default false); a 0.4.0 document that
+    omits it means exactly what a 0.5.0 document that omits it means. There is
+    nothing to transform, so the version bump is the whole migration. See CAR008.
+    """
+    out = dict(doc)
+    out["schema_version"] = "0.5.0"
+    return out
+
+
 MIGRATIONS = {
     "0.1.0": ("0.2.0", _0_1_0_to_0_2_0),
     "0.2.0": ("0.3.0", _0_2_0_to_0_3_0),
     "0.3.0": ("0.4.0", _0_3_0_to_0_4_0),
+    "0.4.0": ("0.5.0", _0_4_0_to_0_5_0),
 }
 
 

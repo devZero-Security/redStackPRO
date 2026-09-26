@@ -1,41 +1,29 @@
 {
   "schema_version": "0.5.0",
   "mode": "ops",
-  "name": "Split horizon C2",
+  "name": "redStack default blueprint",
   "prefix": "red",
-  "description": "Two front doors that do not share a fate, each serving the backends it was chosen for. A long haul Apache redirector fronts a Sliver teamserver for the slow beacons that have to survive weeks, and a separate Nginx redirector on its own network fronts Mythic and Adaptix for the interactive work, each on its own URI prefix. Each redirector sits in its own peered network, so burning the interactive front door costs you the interactive sessions and nothing else, and the long haul chain never appears in the same blast radius. Every front door and every teamserver ships to one collector, because the whole point of splitting the tiers is being able to tell which one is still alive. A Kali box and a Windows operator box sit behind the jumpbox, which is the only public host and manages all three networks.",
-  "auto_stop": {
-    "enabled": true,
-    "after_hours": 8,
-    "timezone": "UTC"
-  },
+  "description": "The redStack topology: an Apache redirector in its own network, peered to the main range, routing three C2 backends on separate URI prefixes. The main range holds the teamservers in their own subnet, and one internal subnet holding the Guacamole jumpbox, the Kali and Windows operator boxes, and a log collector. That one subnet is redStack's shape: the jumpbox holds a public address, everyone behind it is internal only and reaches out through it. The redirector sits in a separate peered network so the internet facing tier is its own blast radius. A log collector is included because a blueprint should be the recommended shape rather than a transcription; redStack itself has none. The URI prefixes and the gating header are placeholders, not redStack's values.",
   "nodes": [
     {
       "id": "main-net01",
       "kind": "network",
       "overlay": {
-        "cidr": "10.40.0.0/16"
+        "cidr": "10.30.0.0/16"
       }
     },
     {
-      "id": "long-net01",
+      "id": "rdir-net01",
       "kind": "network",
       "overlay": {
-        "cidr": "10.41.0.0/16"
-      }
-    },
-    {
-      "id": "intr-net01",
-      "kind": "network",
-      "overlay": {
-        "cidr": "10.42.0.0/16"
+        "cidr": "10.31.0.0/16"
       }
     },
     {
       "id": "mgmt-sub01",
       "kind": "segment",
       "overlay": {
-        "cidr": "10.40.0.0/24",
+        "cidr": "10.30.0.0/24",
         "egress": "allowed",
         "exposure": "internet",
         "tier": "management"
@@ -45,7 +33,7 @@
       "id": "ops-sub01",
       "kind": "segment",
       "overlay": {
-        "cidr": "10.40.10.0/24",
+        "cidr": "10.30.10.0/24",
         "egress": "allowed",
         "exposure": "local",
         "tier": "management"
@@ -55,27 +43,17 @@
       "id": "c2-sub01",
       "kind": "segment",
       "overlay": {
-        "cidr": "10.40.20.0/24",
+        "cidr": "10.30.20.0/24",
         "egress": "allowed",
         "exposure": "local",
         "tier": "c2"
       }
     },
     {
-      "id": "long-sub01",
+      "id": "rdir-sub01",
       "kind": "segment",
       "overlay": {
-        "cidr": "10.41.10.0/24",
-        "egress": "allowed",
-        "exposure": "internet",
-        "tier": "redirector"
-      }
-    },
-    {
-      "id": "intr-sub01",
-      "kind": "segment",
-      "overlay": {
-        "cidr": "10.42.10.0/24",
+        "cidr": "10.31.10.0/24",
         "egress": "allowed",
         "exposure": "internet",
         "tier": "redirector"
@@ -87,13 +65,14 @@
       "overlay": {
         "services": [
           "ssh",
-          "guacamole"
+          "guacamole",
+          "wireguard"
         ],
         "certificate_authority": true
       }
     },
     {
-      "id": "apa-rd01",
+      "id": "apache-rd01",
       "kind": "redirector",
       "overlay": {
         "server": "apache",
@@ -109,19 +88,10 @@
       }
     },
     {
-      "id": "ngx-rd02",
-      "kind": "redirector",
+      "id": "myth-ts01",
+      "kind": "teamserver",
       "overlay": {
-        "server": "nginx",
-        "tls": {
-          "cert_source": "letsencrypt"
-        },
-        "gating": {
-          "header_name": "X-Correlation-Id",
-          "header_value": "",
-          "redirect_rules": true,
-          "decoy": "maintenance"
-        }
+        "c2": "mythic"
       }
     },
     {
@@ -132,10 +102,10 @@
       }
     },
     {
-      "id": "myth-ts02",
+      "id": "adpx-ts01",
       "kind": "teamserver",
       "overlay": {
-        "c2": "mythic"
+        "c2": "adaptix"
       }
     },
     {
@@ -146,13 +116,6 @@
         "shipper": "filebeat",
         "ingest_port": 5044,
         "tls": true
-      }
-    },
-    {
-      "id": "adpx-ts03",
-      "kind": "teamserver",
-      "overlay": {
-        "c2": "adaptix"
       }
     },
     {
@@ -190,16 +153,10 @@
       "target": "main-net01"
     },
     {
-      "id": "e-long-sub01-long-net01-attached",
+      "id": "e-rdir-sub01-rdir-net01-attached",
       "role": "attached",
-      "source": "long-sub01",
-      "target": "long-net01"
-    },
-    {
-      "id": "e-intr-sub01-intr-net01-attached",
-      "role": "attached",
-      "source": "intr-sub01",
-      "target": "intr-net01"
+      "source": "rdir-sub01",
+      "target": "rdir-net01"
     },
     {
       "id": "e-jump-bx01-mgmt-sub01-attached",
@@ -208,16 +165,16 @@
       "target": "mgmt-sub01"
     },
     {
-      "id": "e-apa-rd01-long-sub01-attached",
+      "id": "e-apache-rd01-rdir-sub01-attached",
       "role": "attached",
-      "source": "apa-rd01",
-      "target": "long-sub01"
+      "source": "apache-rd01",
+      "target": "rdir-sub01"
     },
     {
-      "id": "e-ngx-rd02-intr-sub01-attached",
+      "id": "e-myth-ts01-c2-sub01-attached",
       "role": "attached",
-      "source": "ngx-rd02",
-      "target": "intr-sub01"
+      "source": "myth-ts01",
+      "target": "c2-sub01"
     },
     {
       "id": "e-sliv-ts01-c2-sub01-attached",
@@ -226,9 +183,9 @@
       "target": "c2-sub01"
     },
     {
-      "id": "e-myth-ts02-c2-sub01-attached",
+      "id": "e-adpx-ts01-c2-sub01-attached",
       "role": "attached",
-      "source": "myth-ts02",
+      "source": "adpx-ts01",
       "target": "c2-sub01"
     },
     {
@@ -236,12 +193,6 @@
       "role": "attached",
       "source": "open-log01",
       "target": "ops-sub01"
-    },
-    {
-      "id": "e-adpx-ts03-c2-sub01-attached",
-      "role": "attached",
-      "source": "adpx-ts03",
-      "target": "c2-sub01"
     },
     {
       "id": "e-kali-op01-ops-sub01-attached",
@@ -256,21 +207,25 @@
       "target": "ops-sub01"
     },
     {
-      "id": "e-main-net01-long-net01-peers",
+      "id": "e-main-net01-rdir-net01-peers",
       "role": "peers",
       "source": "main-net01",
-      "target": "long-net01"
+      "target": "rdir-net01"
     },
     {
-      "id": "e-main-net01-intr-net01-peers",
-      "role": "peers",
-      "source": "main-net01",
-      "target": "intr-net01"
-    },
-    {
-      "id": "e-apa-rd01-sliv-ts01-fronts",
+      "id": "e-apache-rd01-myth-ts01-fronts",
       "role": "fronts",
-      "source": "apa-rd01",
+      "source": "apache-rd01",
+      "target": "myth-ts01",
+      "protocol": "https",
+      "listen_port": 443,
+      "upstream_port": 443,
+      "uri_prefix": "/api/v1"
+    },
+    {
+      "id": "e-apache-rd01-sliv-ts01-fronts",
+      "role": "fronts",
+      "source": "apache-rd01",
       "target": "sliv-ts01",
       "protocol": "https",
       "listen_port": 443,
@@ -278,41 +233,25 @@
       "uri_prefix": "/cdn/assets"
     },
     {
-      "id": "e-ngx-rd02-myth-ts02-fronts",
+      "id": "e-apache-rd01-adpx-ts01-fronts",
       "role": "fronts",
-      "source": "ngx-rd02",
-      "target": "myth-ts02",
+      "source": "apache-rd01",
+      "target": "adpx-ts01",
       "protocol": "https",
       "listen_port": 443,
       "upstream_port": 443,
-      "uri_prefix": "/api/v1"
+      "uri_prefix": "/updates"
     },
     {
-      "id": "e-ngx-rd02-adpx-ts03-fronts",
-      "role": "fronts",
-      "source": "ngx-rd02",
-      "target": "adpx-ts03",
-      "protocol": "https",
-      "listen_port": 443,
-      "upstream_port": 443,
-      "uri_prefix": "/system/check"
-    },
-    {
-      "id": "e-adpx-ts03-open-log01-logs-to",
+      "id": "e-apache-rd01-open-log01-logs-to",
       "role": "logs_to",
-      "source": "adpx-ts03",
+      "source": "apache-rd01",
       "target": "open-log01"
     },
     {
-      "id": "e-apa-rd01-open-log01-logs-to",
+      "id": "e-myth-ts01-open-log01-logs-to",
       "role": "logs_to",
-      "source": "apa-rd01",
-      "target": "open-log01"
-    },
-    {
-      "id": "e-ngx-rd02-open-log01-logs-to",
-      "role": "logs_to",
-      "source": "ngx-rd02",
+      "source": "myth-ts01",
       "target": "open-log01"
     },
     {
@@ -322,9 +261,9 @@
       "target": "open-log01"
     },
     {
-      "id": "e-myth-ts02-open-log01-logs-to",
+      "id": "e-adpx-ts01-open-log01-logs-to",
       "role": "logs_to",
-      "source": "myth-ts02",
+      "source": "adpx-ts01",
       "target": "open-log01"
     },
     {
@@ -334,16 +273,10 @@
       "target": "main-net01"
     },
     {
-      "id": "e-jump-bx01-long-net01-manages",
+      "id": "e-jump-bx01-rdir-net01-manages",
       "role": "manages",
       "source": "jump-bx01",
-      "target": "long-net01"
-    },
-    {
-      "id": "e-jump-bx01-intr-net01-manages",
-      "role": "manages",
-      "source": "jump-bx01",
-      "target": "intr-net01"
+      "target": "rdir-net01"
     }
   ]
 }

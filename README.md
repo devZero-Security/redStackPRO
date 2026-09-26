@@ -254,7 +254,7 @@ All of them run locally except the Ansible ones, which need a Linux control node
 The rest run against a compiled export rather than against the generator,
 because a working directory a person unzips and runs is the thing being claimed:
 
-    redstackpro compile src/redstackpro/schema/topology/examples/0.4.0/redstack.json --hostname <name> -o export
+    redstackpro compile src/redstackpro/schema/topology/examples/0.5.0/redstack.json --hostname <name> -o export
     terraform -chdir=export/terraform fmt -check -recursive
     terraform -chdir=export/terraform validate
     ansible-playbook -i export/ansible/inventory.yml export/ansible/site.yml --syntax-check

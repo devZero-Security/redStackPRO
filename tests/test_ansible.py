@@ -22,7 +22,7 @@ def test_every_decoy_enum_value_has_a_site():
     its home page or 404 would deploy a broken one. The base template renders
     every page, so it must exist too.
     """
-    schema = json.loads((ROOT / "src/redstackpro/schema/topology/0.4.0.json").read_text())
+    schema = json.loads((ROOT / "src/redstackpro/schema/topology/0.5.0.json").read_text())
     decoy = schema["$defs"]["overlay_redirector"]["properties"]["gating"][
         "properties"
     ]["decoy"]["enum"]

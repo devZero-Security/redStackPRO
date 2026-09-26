@@ -18,7 +18,7 @@ from shipped import example
 from sqlalchemy import select
 
 ROOT = Path(__file__).resolve().parent.parent
-EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.4.0"
+EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.5.0"
 V1 = "/api/v1"
 
 
@@ -68,7 +68,7 @@ def test_create_and_read(client, document):
     assert body["visibility"] == "private"
 
     got = client.get(V1 + "/topologies/" + body["id"]).json()
-    assert got["document"]["schema_version"] == "0.4.0"
+    assert got["document"]["schema_version"] == "0.5.0"
 
 
 def test_document_without_schema_version_is_rejected(client):

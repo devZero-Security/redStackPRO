@@ -722,7 +722,7 @@ def test_every_shipped_redirector_example_demands_a_hostname_first():
     import glob
     import os
     seen = 0
-    for pattern in ("frontend/public/*.json", "src/redstackpro/schema/topology/examples/0.4.0/*.json"):
+    for pattern in ("frontend/public/*.json", "src/redstackpro/schema/topology/examples/0.5.0/*.json"):
         root = os.path.join(os.path.dirname(__file__), "..", pattern)
         for path in sorted(glob.glob(root)):
             name = os.path.basename(path)

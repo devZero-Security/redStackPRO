@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://redstackpro.dev/schema/topology/0.4.0.json",
+  "$id": "https://redstackpro.dev/schema/topology/0.5.0.json",
   "title": "redStackPRO topology",
   "description": "Provider-agnostic topology document. No provider vocabulary appears at this layer. Derived overlay fields and per-kind requirements live in the node kind registry, not in this document. Version 0.1.0 covers ops mode only.",
   "type": "object",
@@ -15,7 +15,7 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "0.4.0",
+      "const": "0.5.0",
       "description": "Pinned. One schema file per version. Migrations move documents between versions."
     },
     "mode": {
@@ -752,6 +752,12 @@
         "public_address": {
           "$ref": "#/$defs/public_address",
           "default": false
+        },
+        "desktop": {
+          "type": "boolean",
+          "default": false,
+          "x-redstackpro-source": "user",
+          "description": "Installs a desktop environment and xrdp so this operator can be driven over a Guacamole RDP tile instead of SSH. Satisfies CAR008's GUI requirement for a web-UI C2 without needing a Windows operator."
         }
       }
     },

@@ -1,0 +1,392 @@
+{
+  "schema_version": "0.5.0",
+  "mode": "ops",
+  "name": "Parallel chains, separate networks",
+  "description": "Two independent C2 chains in separate routing domains so burning one does not burn the other. Each chain carries its own jumpbox and collector, because a shared management network would be a shared blast radius and because 0.1.0 has no transport between routing domains. Substituted for the GOAD example in schema.md because range node kinds are not defined in 0.1.0.",
+  "nodes": [
+    {
+      "id": "main-net01",
+      "kind": "network",
+      "overlay": {
+        "cidr": "10.40.0.0/16"
+      }
+    },
+    {
+      "id": "main-net02",
+      "kind": "network",
+      "overlay": {
+        "cidr": "10.41.0.0/16"
+      }
+    },
+    {
+      "id": "main-net03",
+      "kind": "network",
+      "overlay": {
+        "cidr": "10.42.0.0/16"
+      }
+    },
+    {
+      "id": "mgmt-sub01",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.40.0.0/24",
+        "egress": "allowed",
+        "exposure": "internet",
+        "tier": "management"
+      }
+    },
+    {
+      "id": "rdir-sub01",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.41.10.0/24",
+        "egress": "allowed",
+        "exposure": "internet",
+        "tier": "redirector"
+      }
+    },
+    {
+      "id": "c2-sub01",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.41.20.0/24",
+        "egress": "allowed",
+        "exposure": "local",
+        "tier": "c2"
+      }
+    },
+    {
+      "id": "rdir-sub02",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.42.10.0/24",
+        "egress": "allowed",
+        "exposure": "internet",
+        "tier": "redirector"
+      }
+    },
+    {
+      "id": "c2-sub02",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.42.20.0/24",
+        "egress": "allowed",
+        "exposure": "local",
+        "tier": "c2"
+      }
+    },
+    {
+      "id": "jump-bx01",
+      "kind": "jumpbox",
+      "overlay": {
+        "services": [
+          "ssh",
+          "guacamole",
+          "wireguard"
+        ],
+        "certificate_authority": true
+      }
+    },
+    {
+      "id": "nginx-rd01",
+      "kind": "redirector",
+      "overlay": {
+        "server": "nginx",
+        "tls": {
+          "cert_source": "letsencrypt"
+        },
+        "gating": {
+          "header_name": "X-Request-Id",
+          "header_value": "",
+          "redirect_rules": true,
+          "decoy": "cdn"
+        }
+      }
+    },
+    {
+      "id": "myth-ts01",
+      "kind": "teamserver",
+      "overlay": {
+        "c2": "mythic"
+      }
+    },
+    {
+      "id": "apache-rd01",
+      "kind": "redirector",
+      "overlay": {
+        "server": "apache",
+        "tls": {
+          "cert_source": "letsencrypt"
+        },
+        "gating": {
+          "header_name": "X-Request-Id",
+          "header_value": "",
+          "redirect_rules": true,
+          "decoy": "cdn"
+        }
+      }
+    },
+    {
+      "id": "sliv-ts01",
+      "kind": "teamserver",
+      "overlay": {
+        "c2": "sliver"
+      }
+    },
+    {
+      "id": "mgmt-sub02",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.41.0.0/24",
+        "egress": "allowed",
+        "exposure": "internet",
+        "tier": "management"
+      }
+    },
+    {
+      "id": "mgmt-sub03",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.41.30.0/24",
+        "egress": "allowed",
+        "exposure": "local",
+        "tier": "collector"
+      }
+    },
+    {
+      "id": "jump-bx02",
+      "kind": "jumpbox",
+      "overlay": {
+        "services": [
+          "ssh",
+          "guacamole"
+        ],
+        "certificate_authority": true
+      }
+    },
+    {
+      "id": "open-log01",
+      "kind": "collector",
+      "overlay": {
+        "sink": "opensearch",
+        "shipper": "filebeat",
+        "ingest_port": 5044,
+        "tls": true
+      }
+    },
+    {
+      "id": "mgmt-sub04",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.42.0.0/24",
+        "egress": "allowed",
+        "exposure": "internet",
+        "tier": "management"
+      }
+    },
+    {
+      "id": "mgmt-sub05",
+      "kind": "segment",
+      "overlay": {
+        "cidr": "10.42.30.0/24",
+        "egress": "allowed",
+        "exposure": "local",
+        "tier": "collector"
+      }
+    },
+    {
+      "id": "jump-bx03",
+      "kind": "jumpbox",
+      "overlay": {
+        "services": [
+          "ssh",
+          "guacamole"
+        ],
+        "certificate_authority": true
+      }
+    },
+    {
+      "id": "open-log02",
+      "kind": "collector",
+      "overlay": {
+        "sink": "opensearch",
+        "shipper": "filebeat",
+        "ingest_port": 5044,
+        "tls": true
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-mgmt-sub01-main-net01-attached",
+      "role": "attached",
+      "source": "mgmt-sub01",
+      "target": "main-net01"
+    },
+    {
+      "id": "e-rdir-sub01-main-net02-attached",
+      "role": "attached",
+      "source": "rdir-sub01",
+      "target": "main-net02"
+    },
+    {
+      "id": "e-c2-sub01-main-net02-attached",
+      "role": "attached",
+      "source": "c2-sub01",
+      "target": "main-net02"
+    },
+    {
+      "id": "e-rdir-sub02-main-net03-attached",
+      "role": "attached",
+      "source": "rdir-sub02",
+      "target": "main-net03"
+    },
+    {
+      "id": "e-c2-sub02-main-net03-attached",
+      "role": "attached",
+      "source": "c2-sub02",
+      "target": "main-net03"
+    },
+    {
+      "id": "e-jump-bx01-mgmt-sub01-attached",
+      "role": "attached",
+      "source": "jump-bx01",
+      "target": "mgmt-sub01"
+    },
+    {
+      "id": "e-nginx-rd01-rdir-sub01-attached",
+      "role": "attached",
+      "source": "nginx-rd01",
+      "target": "rdir-sub01"
+    },
+    {
+      "id": "e-myth-ts01-c2-sub01-attached",
+      "role": "attached",
+      "source": "myth-ts01",
+      "target": "c2-sub01"
+    },
+    {
+      "id": "e-apache-rd01-rdir-sub02-attached",
+      "role": "attached",
+      "source": "apache-rd01",
+      "target": "rdir-sub02"
+    },
+    {
+      "id": "e-sliv-ts01-c2-sub02-attached",
+      "role": "attached",
+      "source": "sliv-ts01",
+      "target": "c2-sub02"
+    },
+    {
+      "id": "e-nginx-rd01-myth-ts01-fronts",
+      "role": "fronts",
+      "source": "nginx-rd01",
+      "target": "myth-ts01",
+      "protocol": "https",
+      "listen_port": 443,
+      "upstream_port": 443,
+      "uri_prefix": "/cdn/assets"
+    },
+    {
+      "id": "e-apache-rd01-sliv-ts01-fronts",
+      "role": "fronts",
+      "source": "apache-rd01",
+      "target": "sliv-ts01",
+      "protocol": "https",
+      "listen_port": 443,
+      "upstream_port": 443,
+      "uri_prefix": "/updates"
+    },
+    {
+      "id": "e-nginx-rd01-open-log01-logs-to",
+      "role": "logs_to",
+      "source": "nginx-rd01",
+      "target": "open-log01"
+    },
+    {
+      "id": "e-myth-ts01-open-log01-logs-to",
+      "role": "logs_to",
+      "source": "myth-ts01",
+      "target": "open-log01"
+    },
+    {
+      "id": "e-apache-rd01-open-log02-logs-to",
+      "role": "logs_to",
+      "source": "apache-rd01",
+      "target": "open-log02"
+    },
+    {
+      "id": "e-sliv-ts01-open-log02-logs-to",
+      "role": "logs_to",
+      "source": "sliv-ts01",
+      "target": "open-log02"
+    },
+    {
+      "id": "e-jump-bx01-main-net01-manages",
+      "role": "manages",
+      "source": "jump-bx01",
+      "target": "main-net01"
+    },
+    {
+      "id": "e-mgmt-sub02-main-net02-attached",
+      "role": "attached",
+      "source": "mgmt-sub02",
+      "target": "main-net02"
+    },
+    {
+      "id": "e-mgmt-sub03-main-net02-attached",
+      "role": "attached",
+      "source": "mgmt-sub03",
+      "target": "main-net02"
+    },
+    {
+      "id": "e-jump-bx02-mgmt-sub02-attached",
+      "role": "attached",
+      "source": "jump-bx02",
+      "target": "mgmt-sub02"
+    },
+    {
+      "id": "e-open-log01-mgmt-sub03-attached",
+      "role": "attached",
+      "source": "open-log01",
+      "target": "mgmt-sub03"
+    },
+    {
+      "id": "e-jump-bx02-main-net02-manages",
+      "role": "manages",
+      "source": "jump-bx02",
+      "target": "main-net02"
+    },
+    {
+      "id": "e-mgmt-sub04-main-net03-attached",
+      "role": "attached",
+      "source": "mgmt-sub04",
+      "target": "main-net03"
+    },
+    {
+      "id": "e-mgmt-sub05-main-net03-attached",
+      "role": "attached",
+      "source": "mgmt-sub05",
+      "target": "main-net03"
+    },
+    {
+      "id": "e-jump-bx03-mgmt-sub04-attached",
+      "role": "attached",
+      "source": "jump-bx03",
+      "target": "mgmt-sub04"
+    },
+    {
+      "id": "e-open-log02-mgmt-sub05-attached",
+      "role": "attached",
+      "source": "open-log02",
+      "target": "mgmt-sub05"
+    },
+    {
+      "id": "e-jump-bx03-main-net03-manages",
+      "role": "manages",
+      "source": "jump-bx03",
+      "target": "main-net03"
+    }
+  ],
+  "prefix": "red"
+}

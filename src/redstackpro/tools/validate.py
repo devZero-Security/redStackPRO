@@ -20,7 +20,7 @@ from . import _report
 # Resolved from the package: the shipped examples travel with the install, so the
 # default run no longer depends on the CWD being the repo root.
 EXAMPLES = str(Path(__file__).resolve().parents[1]
-               / "schema" / "topology" / "examples" / "0.4.0" / "*.json")
+               / "schema" / "topology" / "examples" / "0.5.0" / "*.json")
 
 
 def configure(ap):

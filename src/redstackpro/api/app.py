@@ -111,7 +111,7 @@ def create_app(database_url=None, principal=None):
 
     app = FastAPI(
         title="redStackPRO",
-        version="0.4.0",
+        version="0.5.0",
         description=(
             "Composition layer for red team infrastructure and cyber ranges. "
             "Build a topology from nodes and edges, get back a complete working "

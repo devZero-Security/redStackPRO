@@ -1,4 +1,4 @@
-# Validator rules, schema 0.4.0, ops mode
+# Validator rules, schema 0.5.0, ops mode
 
 JSON Schema covers document shape only. Everything below is topology semantics and
 belongs in the topology layer validator, not in the compiler. Every rule carries a
@@ -287,4 +287,4 @@ now rather than surfacing as a failure mid-run.
   is gone. See the amendment in 0007.
 - Whether `manages` may target an individual host, for the per-host exception
   case. Currently a validator relaxation with no schema change.
-- Instantiation parameters for per-operator templates. Not in 0.4.0.
+- Instantiation parameters for per-operator templates. Not in 0.5.0.

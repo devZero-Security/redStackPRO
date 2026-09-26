@@ -1,12 +1,12 @@
 # Topology schema
 
-Status: written. Version 0.4.0 covers `ops` mode. 0.1.0, 0.2.0, and 0.3.0 and
-their examples stay in the repo as migration fixtures.
+Status: written. Version 0.5.0 covers `ops` mode. 0.1.0, 0.2.0, 0.3.0, and 0.4.0
+and their examples stay in the repo as migration fixtures.
 
 The schema is the artifact, not this file.
 
-- `src/redstackpro/schema/topology/0.4.0.json` is the document schema
-- `src/redstackpro/schema/topology/examples/0.4.0/` holds four worked examples that
+- `src/redstackpro/schema/topology/0.5.0.json` is the document schema
+- `src/redstackpro/schema/topology/examples/0.5.0/` holds four worked examples that
   double as test fixtures
 - `docs/validation.md` holds the rules JSON Schema cannot express
 - Decision 0007 is why the model is shaped the way it is, 0021 is why exposure is
@@ -94,7 +94,7 @@ sit on a subnet rather than joining a domain. Range semantics are checked by the
 
 **Instantiation parameters.** Per-operator templates mean the same topology spun up N
 times without CIDR, hostname, or domain collisions. A topology-level variables block.
-Not in 0.4.0. See 0012.
+Not in 0.5.0. See 0012.
 
 ## Roadmap
 
@@ -108,6 +108,11 @@ Anticipated, not decided. None of these is an ADR yet.
   the `peered` example and the seeded redStack blueprint now run two networks, with
   redStack isolating its redirector in a network of its own peered to the main
   range
+- `desktop` landed in 0.5.0: an optional boolean on `overlay_operator` that
+  installs a desktop plus xrdp so a Kali operator can be driven over a Guacamole
+  RDP tile, which satisfies CAR008's GUI requirement for a web-UI C2 without a
+  Windows operator. Additive and default false, so the migration from 0.4.0 is a
+  version bump and nothing else
 - `tunnel` as a standalone role if range mode produces a pivot host case where
   the transport is the entire relationship
 - Mixed-provider compilation, reading the optional `provider` field on networks.

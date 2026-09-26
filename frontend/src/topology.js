@@ -528,7 +528,7 @@ export function updateEdge(document, id, patch) {
 export const MODE_PREFIX = { ops: "red", range: "cyb" };
 
 export const emptyDocument = (mode = "ops") => ({
-  schema_version: "0.4.0",
+  schema_version: "0.5.0",
   mode,
   name: "Untitled",
   prefix: MODE_PREFIX[mode] || "red",

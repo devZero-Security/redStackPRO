@@ -50,7 +50,7 @@ TAGS = [
 ]
 
 SCHEMA_PATH = (Path(__file__).resolve().parents[1]
-               / "schema/topology/0.4.0.json")
+               / "schema/topology/0.5.0.json")
 
 router = APIRouter()
 
