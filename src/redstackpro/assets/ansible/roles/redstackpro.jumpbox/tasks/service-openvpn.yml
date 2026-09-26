@@ -1,7 +1,9 @@
 ---
-# The alternative to wireguard, chosen in the services overlay. Both are server
-# side only for the same reason: client peers come from the topology once the peers
-# relation exists.
+# The OpenVPN access mode, the alternative to wireguard chosen in the overlay.
+# The server stands up either way; when the topology declared operators, each one
+# gets a client certificate issued by the jumpbox CA and a client .ovpn rendered
+# for the admin to hand out. Keys are generated here and never leave the jumpbox;
+# only the .ovpn is fetched and distributed. See vpn-multiuser-spec and 0001.
 #
 # The server certificate is issued by the jumpbox CA, so a topology that turns the
 # certificate authority off and asks for openvpn is a topology that has to supply
@@ -30,6 +32,7 @@
   loop:
     - /etc/openvpn/server
     - /etc/openvpn/server/pki
+    - /etc/openvpn/server/clients
 
 - name: Generate the server key
   ansible.builtin.command:
@@ -74,3 +77,100 @@
     name: "openvpn-server@redstackpro"
     state: started
     enabled: true
+
+# -- per-operator client certificates and configs
+
+- name: Create the client config output directory
+  ansible.builtin.file:
+    path: "{{ redstackpro_vpn_client_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0700"
+
+- name: Generate a client key for each operator
+  ansible.builtin.command:
+    cmd: openssl genrsa -out /etc/openvpn/server/clients/{{ item.handle }}.key 2048
+    creates: /etc/openvpn/server/clients/{{ item.handle }}.key
+  loop: "{{ redstackpro_jumpbox_operators | default([]) }}"
+  loop_control:
+    label: "{{ item.handle }}"
+
+- name: Request a client certificate for each operator
+  ansible.builtin.command:
+    cmd: >
+      openssl req -new
+      -key /etc/openvpn/server/clients/{{ item.handle }}.key
+      -subj "/CN={{ item.handle }}"
+      -out /etc/openvpn/server/clients/{{ item.handle }}.csr
+    creates: /etc/openvpn/server/clients/{{ item.handle }}.csr
+  loop: "{{ redstackpro_jumpbox_operators | default([]) }}"
+  loop_control:
+    label: "{{ item.handle }}"
+
+- name: Sign each client certificate with the jumpbox CA
+  ansible.builtin.command:
+    cmd: >
+      openssl x509 -req
+      -in /etc/openvpn/server/clients/{{ item.handle }}.csr
+      -CA {{ redstackpro_ca_dir }}/ca.crt
+      -CAkey {{ redstackpro_ca_dir }}/ca.key
+      -CAserial {{ redstackpro_ca_dir }}/ca.srl
+      -days {{ redstackpro_ca_days }} -sha256
+      -out /etc/openvpn/server/clients/{{ item.handle }}.crt
+    creates: /etc/openvpn/server/clients/{{ item.handle }}.crt
+  loop: "{{ redstackpro_jumpbox_operators | default([]) }}"
+  loop_control:
+    label: "{{ item.handle }}"
+
+- name: Read the CA certificate
+  ansible.builtin.slurp:
+    src: "{{ redstackpro_ca_dir }}/ca.crt"
+  register: redstackpro_ovpn_ca
+  when: (redstackpro_jumpbox_operators | default([])) | length > 0
+
+- name: Read each operator certificate
+  ansible.builtin.slurp:
+    src: /etc/openvpn/server/clients/{{ item.handle }}.crt
+  loop: "{{ redstackpro_jumpbox_operators | default([]) }}"
+  loop_control:
+    label: "{{ item.handle }}"
+  register: redstackpro_ovpn_client_certs
+
+- name: Read each operator key
+  ansible.builtin.slurp:
+    src: /etc/openvpn/server/clients/{{ item.handle }}.key
+  loop: "{{ redstackpro_jumpbox_operators | default([]) }}"
+  loop_control:
+    label: "{{ item.handle }}"
+  register: redstackpro_ovpn_client_keys
+
+- name: Assemble the per-operator client facts
+  ansible.builtin.set_fact:
+    redstackpro_ovpn_clients: >-
+      {{ (redstackpro_ovpn_clients | default([])) + [{
+        'handle': item.item.handle,
+        'certificate': (item.content | b64decode | trim),
+        'private_key': (redstackpro_ovpn_client_keys.results[idx].content | b64decode | trim)}] }}
+  loop: "{{ redstackpro_ovpn_client_certs.results | default([]) }}"
+  loop_control:
+    index_var: idx
+    label: "{{ item.item.handle }}"
+
+- name: Render each operator client config
+  ansible.builtin.template:
+    src: client-ovpn.j2
+    dest: "{{ redstackpro_vpn_client_dir }}/{{ item.handle }}.ovpn"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"
+  loop: "{{ redstackpro_ovpn_clients | default([]) }}"
+  loop_control:
+    label: "{{ item.handle }}"
+
+- name: Say where the client configs are
+  ansible.builtin.debug:
+    msg: >-
+      OpenVPN is up on {{ redstackpro_openvpn_protocol }}/{{ redstackpro_openvpn_port }}
+      with {{ redstackpro_ovpn_clients | default([]) | length }} operator config(s) in
+      {{ redstackpro_vpn_client_dir }}; hand each operator their own .ovpn.

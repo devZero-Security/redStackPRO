@@ -1,9 +1,10 @@
 {{ ansible_managed | comment }}
-# Server side only. Client certificates are issued from the same CA once the
-# peers relation exists.
+# The server. Client certificates for the declared operators are issued from the
+# same CA in service-openvpn.yml. The protocol follows the overlay (udp by
+# default, tcp for a restrictive network), matching the port Terraform opened.
 
 port {{ redstackpro_openvpn_port }}
-proto udp
+proto {{ redstackpro_openvpn_protocol }}
 dev tun
 
 ca {{ redstackpro_ca_dir }}/ca.crt
