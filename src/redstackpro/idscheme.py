@@ -42,7 +42,6 @@ SUBTYPE = {
         "mythic": "myth",
         "sliver": "sliv",
         "adaptix": "adpx",
-        "cobalt_strike": "cs",
     }),
     "operator": ("os", {
         "windows": "win",

@@ -24,7 +24,7 @@ from redstackpro.tools.check_roles import BRANCHES
 
 ROOT = Path(__file__).resolve().parent.parent
 
-_SCHEMA = ROOT / "src/redstackpro/schema/topology/0.5.0.json"
+_SCHEMA = ROOT / "src/redstackpro/schema/topology/0.6.0.json"
 _TEAMSERVER_TASKS = (ROOT / "src/redstackpro/assets/ansible/roles"
                      / "redstackpro.teamserver/tasks")
 
@@ -33,13 +33,10 @@ _TEAMSERVER_TASKS = (ROOT / "src/redstackpro/assets/ansible/roles"
 NO_SLUG = {"none"}
 
 # Values that legitimately open no operator control-plane firewall rule:
-#   none          stands up no team server, so there is nothing to reach.
-#   cobalt_strike is licensed and operator-supplied. The role prepares the host
-#                 and stops (c2-cobalt_strike.yml); the operator runs the team
-#                 server themselves and drives it with their own CS client, not an
-#                 in-range operator box. redStackPRO stands up no CS service, so it
-#                 opens no control port for one. See P2.
-NO_CONTROL_PORT = {"none", "cobalt_strike"}
+#   none stands up no team server. It is the plain Debian catchall for a custom,
+#        operator-supplied C2 (OC2 and the like, plus any C2 kept for the roadmap
+#        such as Cobalt Strike), so there is nothing in range to open a rule for.
+NO_CONTROL_PORT = {"none"}
 
 
 def _schema_enum():

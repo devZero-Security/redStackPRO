@@ -46,7 +46,7 @@ BRANCHES = {
     "service-": ["ssh", "guacamole", "wireguard", "openvpn"],
     "sink-": ["opensearch", "elasticsearch", "splunk"],
     "os-": ["kali", "debian", "windows"],
-    "c2-": ["mythic", "sliver", "adaptix", "cobalt_strike", "none"],
+    "c2-": ["mythic", "sliver", "adaptix", "none"],
 }
 
 

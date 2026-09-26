@@ -43,12 +43,11 @@ C2_CONTROL_PORTS = {
     "mythic": [7443],    # Mythic web UI
     "sliver": [31337],   # Sliver multiplayer operator listener
     "adaptix": [4321],   # AdaptixC2 teamserver operator endpoint
-    # cobalt_strike is intentionally absent. It is licensed and operator-supplied,
-    # so the role prepares the host and stands up no team server (see
-    # c2-cobalt_strike.yml); the operator runs it themselves and drives it with
-    # their own CS client rather than an in-range operator box. There is no
-    # redStackPRO service to open 50050 for. `none` is absent for the same reason:
-    # it stands up no teamserver either. See P2.
+    # `none` is intentionally absent: it stands up no team server. It is the plain
+    # Debian catchall for a custom, operator-supplied C2 (OC2 and the like, plus any
+    # C2 kept for the roadmap such as Cobalt Strike), which the operator installs and
+    # drives themselves rather than through an in-range operator box, so there is no
+    # redStackPRO service to open a control port for. See P2.
 }
 
 # The VPN listen port per access mode, used when the jumpbox overlay leaves
