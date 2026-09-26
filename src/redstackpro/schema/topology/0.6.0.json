@@ -32,7 +32,7 @@
     "prefix": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9]{0,7}$",
-      "description": "Instance prefix, composed with every node id to form the rendered name. red-myth-ts01 is prefix red and id myth-ts01. Defaults to red and the person can change it. Per graph rather than per node, because rendering the same template for several operators is a change to one field. Kept short: prefix plus id must fit the 15 character NetBIOS limit."
+      "description": "Instance prefix, composed with every node id to form the rendered name. art-myth-ts01 is prefix art and id myth-ts01. Defaults to art for artie and hvn for haven, and the person can change it. Per graph rather than per node, because rendering the same template for several operators is a change to one field. Kept short: prefix plus id must fit the 15 character NetBIOS limit."
     },
     "description": {
       "type": "string"

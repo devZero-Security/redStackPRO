@@ -524,14 +524,14 @@ export function updateEdge(document, id, patch) {
   };
 }
 
-// The default prefix per canvas: redStackPRO names run red-, Cyber Ranges cyb-.
-export const MODE_PREFIX = { artie: "red", haven: "cyb" };
+// The default prefix per canvas: ARTIE names run art-, HAVEN ranges hvn-.
+export const MODE_PREFIX = { artie: "art", haven: "hvn" };
 
 export const emptyDocument = (mode = "artie") => ({
   schema_version: "0.6.0",
   mode,
   name: "Untitled",
-  prefix: MODE_PREFIX[mode] || "red",
+  prefix: MODE_PREFIX[mode] || "art",
   nodes: [],
   edges: [],
 });

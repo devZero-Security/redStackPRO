@@ -21,7 +21,8 @@ class Context:
     def __init__(self, topology, registry=None):
         self.topology = topology
         self.registry = registry
-        self.prefix = topology.get("prefix", "red")
+        self.prefix = topology.get("prefix") or (
+            "hvn" if topology.get("mode") == "haven" else "art")
         self.nodes = {n["id"]: n for n in topology.get("nodes", [])}
         self.edges = list(topology.get("edges", []))
 
