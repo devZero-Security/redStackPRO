@@ -51,6 +51,11 @@ C2_CONTROL_PORTS = {
     # it stands up no teamserver either. See P2.
 }
 
+# The VPN listen port per access mode, used when the jumpbox overlay leaves
+# vpn_port unset. WireGuard is udp only; OpenVPN takes udp or tcp. See
+# vpn-multiuser-spec.
+VPN_DEFAULT_PORT = {"wireguard": 51820, "openvpn": 1194}
+
 
 class TerraformPlan:
     def __init__(self, topology, registry=None, provider="gcp", region=None):
@@ -326,6 +331,27 @@ class TerraformPlan:
 
     def operators(self):
         return [h for h in self.hosts() if self.ctx.kind(h["id"]) == "operator"]
+
+    def vpn_access(self, jumpbox):
+        """The VPN listener for this jumpbox, or None when access is the public
+        portal. Returns (mode, port, protocol).
+
+        Only meaningful on an artie topology: a haven range ignores the fields and
+        keeps the public portal, so this returns None there. In a VPN mode the
+        jumpbox exposes only its VPN port and management (ssh plus the Guacamole
+        portal) rides the tunnel rather than the public 22/443. WireGuard is udp
+        only; OpenVPN takes udp or tcp. The port defaults per mode when unset. See
+        vpn-multiuser-spec.
+        """
+        if self.is_range():
+            return None
+        ov = jumpbox.get("overlay") or {}
+        mode = ov.get("access_mode", "public")
+        if mode not in VPN_DEFAULT_PORT:
+            return None
+        protocol = "udp" if mode == "wireguard" else ov.get("vpn_protocol", "udp")
+        port = ov.get("vpn_port") or VPN_DEFAULT_PORT[mode]
+        return (mode, port, protocol)
 
     def primary_segment(self, node):
         segments = self.ctx.segments_of(node["id"])

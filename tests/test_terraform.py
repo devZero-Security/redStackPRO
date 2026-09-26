@@ -524,6 +524,77 @@ def test_parallel_chains_rules_land_in_the_right_networks(parallel_chains):
     assert "module.red_main_net03.self_link" in text
 
 
+# -- multi-user VPN access (artie): the jumpbox VPN listen port
+#
+# In a VPN access mode the jumpbox exposes only its VPN listen port to the
+# operators and management (ssh plus the Guacamole portal) rides the tunnel, so
+# the public 22/443 rules are gone. In public mode nothing changes. See
+# vpn-multiuser-spec and plan.vpn_access.
+
+def _vpn_jumpbox(redstack, **access):
+    """A deepcopy of the artie fixture with VPN access fields on its jumpbox.
+    Built inline so no shipped template is touched."""
+    doc = json.loads(json.dumps(redstack))
+    for node in doc["nodes"]:
+        if node["kind"] == "jumpbox":
+            node.setdefault("overlay", {}).update(access)
+    return doc
+
+
+@pytest.mark.parametrize("provider", ["gcp", "aws"])
+def test_wireguard_jumpbox_opens_the_vpn_port_and_closes_public_management(
+        redstack, provider):
+    """A wireguard jumpbox opens its listen port (default 51820/udp) to the
+    operator ranges and drops the public ssh and Guacamole rules, because
+    management rides the tunnel."""
+    doc = _vpn_jumpbox(redstack, access_mode="wireguard")
+    rules = (firewall_rules if provider == "gcp" else aws_rules)(doc)
+    vpn = rules["vpn_in_red_jump_bx01"]
+    if provider == "gcp":
+        assert vpn["allow"][0]["protocol"] == "udp"
+        assert vpn["allow"][0]["ports"] == ["51820"]
+        assert vpn["source_ranges"] == "${var.operator_source_ranges}"
+        assert vpn["target_tags"] == ["red-jump-bx01"]
+    else:
+        assert vpn["ip_protocol"] == "udp"
+        assert vpn["from_port"] == 51820 and vpn["to_port"] == 51820
+        assert vpn["for_each"] == "${toset(var.operator_source_ranges)}"
+    assert "mgmt_in_red_jump_bx01" not in rules   # ssh rides the tunnel
+    assert "guac_in_red_jump_bx01" not in rules    # the portal rides the tunnel
+
+
+@pytest.mark.parametrize("provider", ["gcp", "aws"])
+def test_openvpn_tcp_custom_port_jumpbox_opens_that_tcp_port(redstack, provider):
+    """OpenVPN takes tcp and a custom port (e.g. 5124 for a restrictive network),
+    so the rule follows vpn_protocol and vpn_port rather than the defaults."""
+    doc = _vpn_jumpbox(redstack, access_mode="openvpn",
+                       vpn_protocol="tcp", vpn_port=5124)
+    rules = (firewall_rules if provider == "gcp" else aws_rules)(doc)
+    vpn = rules["vpn_in_red_jump_bx01"]
+    if provider == "gcp":
+        assert vpn["allow"][0]["protocol"] == "tcp"
+        assert vpn["allow"][0]["ports"] == ["5124"]
+    else:
+        assert vpn["ip_protocol"] == "tcp"
+        assert vpn["from_port"] == 5124 and vpn["to_port"] == 5124
+    assert "mgmt_in_red_jump_bx01" not in rules
+    assert "guac_in_red_jump_bx01" not in rules
+
+
+@pytest.mark.parametrize("provider", ["gcp", "aws"])
+def test_public_jumpbox_keeps_ssh_and_portal_and_opens_no_vpn(redstack, provider):
+    """The default (access_mode absent, public) is unchanged: ssh on 22 and the
+    Guacamole portal on 443, no VPN listener."""
+    rules = (firewall_rules if provider == "gcp" else aws_rules)(redstack)
+    assert "vpn_in_red_jump_bx01" not in rules
+    if provider == "gcp":
+        assert rules["mgmt_in_red_jump_bx01"]["allow"][0]["ports"] == ["22"]
+        assert rules["guac_in_red_jump_bx01"]["allow"][0]["ports"] == ["443"]
+    else:
+        assert rules["mgmt_in_red_jump_bx01"]["from_port"] == 22
+        assert rules["guac_in_red_jump_bx01"]["from_port"] == 443
+
+
 # -- outputs
 
 def test_addresses_output_covers_every_host(redstack):

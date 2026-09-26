@@ -815,24 +815,42 @@ def _firewall(plan):
     for edge in ctx.by_role.get("manages", []):
         jump = edge["source"]
 
-        name = "mgmt_in_%s" % plan.ref(jump)
-        if name not in seen:
-            seen.add(name)
-            lines += [""] + _ingress(
-                name, plan.ref(jump), "tcp", 22,
-                source_expr="var.operator_source_ranges",
-                comment="operator access to %s" % ctx.name(jump))
+        # In a VPN access mode (artie only) the jumpbox exposes only its VPN
+        # listen port to the operators, and ssh plus the Guacamole portal ride the
+        # tunnel rather than the public internet. In public mode (the default, and
+        # every haven range) 22 and 443 are opened as before. The jumpbox keeps its
+        # stable public IP either way, since it is the VPN endpoint. See
+        # vpn-multiuser-spec.
+        vpn = plan.vpn_access(ctx.nodes[jump])
+        if vpn:
+            mode, port, protocol = vpn
+            name = "vpn_in_%s" % plan.ref(jump)
+            if name not in seen:
+                seen.add(name)
+                lines += [""] + _ingress(
+                    name, plan.ref(jump), protocol, port,
+                    source_expr="var.operator_source_ranges",
+                    comment="operator %s VPN access to %s (management rides the "
+                            "tunnel)" % (mode, ctx.name(jump)))
+        else:
+            name = "mgmt_in_%s" % plan.ref(jump)
+            if name not in seen:
+                seen.add(name)
+                lines += [""] + _ingress(
+                    name, plan.ref(jump), "tcp", 22,
+                    source_expr="var.operator_source_ranges",
+                    comment="operator access to %s" % ctx.name(jump))
 
-        # The Guacamole portal runs on the jumpbox over HTTPS, so the operator
-        # reaches it on 443 from the same ranges that get ssh.
-        name = "guac_in_%s" % plan.ref(jump)
-        if name not in seen:
-            seen.add(name)
-            lines += [""] + _ingress(
-                name, plan.ref(jump), "tcp", 443,
-                source_expr="var.operator_source_ranges",
-                comment="operator access to the Guacamole portal on %s"
-                        % ctx.name(jump))
+            # The Guacamole portal runs on the jumpbox over HTTPS, so the operator
+            # reaches it on 443 from the same ranges that get ssh.
+            name = "guac_in_%s" % plan.ref(jump)
+            if name not in seen:
+                seen.add(name)
+                lines += [""] + _ingress(
+                    name, plan.ref(jump), "tcp", 443,
+                    source_expr="var.operator_source_ranges",
+                    comment="operator access to the Guacamole portal on %s"
+                            % ctx.name(jump))
 
         # The jumpbox is the range's initial-access foothold: it sits on the
         # range segment and must receive traffic range hosts initiate back to it
