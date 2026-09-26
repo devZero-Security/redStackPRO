@@ -542,11 +542,12 @@ def _vpn_jumpbox(redstack, **access):
 
 
 @pytest.mark.parametrize("provider", ["gcp", "aws"])
-def test_wireguard_jumpbox_opens_the_vpn_port_and_closes_public_management(
+def test_wireguard_jumpbox_opens_the_vpn_port_keeps_ssh_and_drops_the_portal(
         redstack, provider):
     """A wireguard jumpbox opens its listen port (default 51820/udp) to the
-    operator ranges and drops the public ssh and Guacamole rules, because
-    management rides the tunnel."""
+    operator ranges and keeps public ssh (the admin deploys and manages over it,
+    and the tunnel is stood up over that ssh), but drops the public Guacamole rule
+    because the portal is reached over the tunnel."""
     doc = _vpn_jumpbox(redstack, access_mode="wireguard")
     rules = (firewall_rules if provider == "gcp" else aws_rules)(doc)
     vpn = rules["vpn_in_red_jump_bx01"]
@@ -555,11 +556,12 @@ def test_wireguard_jumpbox_opens_the_vpn_port_and_closes_public_management(
         assert vpn["allow"][0]["ports"] == ["51820"]
         assert vpn["source_ranges"] == "${var.operator_source_ranges}"
         assert vpn["target_tags"] == ["red-jump-bx01"]
+        assert rules["mgmt_in_red_jump_bx01"]["allow"][0]["ports"] == ["22"]
     else:
         assert vpn["ip_protocol"] == "udp"
         assert vpn["from_port"] == 51820 and vpn["to_port"] == 51820
         assert vpn["for_each"] == "${toset(var.operator_source_ranges)}"
-    assert "mgmt_in_red_jump_bx01" not in rules   # ssh rides the tunnel
+        assert rules["mgmt_in_red_jump_bx01"]["from_port"] == 22
     assert "guac_in_red_jump_bx01" not in rules    # the portal rides the tunnel
 
 
@@ -574,11 +576,12 @@ def test_openvpn_tcp_custom_port_jumpbox_opens_that_tcp_port(redstack, provider)
     if provider == "gcp":
         assert vpn["allow"][0]["protocol"] == "tcp"
         assert vpn["allow"][0]["ports"] == ["5124"]
+        assert rules["mgmt_in_red_jump_bx01"]["allow"][0]["ports"] == ["22"]
     else:
         assert vpn["ip_protocol"] == "tcp"
         assert vpn["from_port"] == 5124 and vpn["to_port"] == 5124
-    assert "mgmt_in_red_jump_bx01" not in rules
-    assert "guac_in_red_jump_bx01" not in rules
+        assert rules["mgmt_in_red_jump_bx01"]["from_port"] == 22
+    assert "guac_in_red_jump_bx01" not in rules   # ssh stays, the portal rides the tunnel
 
 
 @pytest.mark.parametrize("provider", ["gcp", "aws"])

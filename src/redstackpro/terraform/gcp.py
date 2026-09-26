@@ -678,12 +678,23 @@ def _firewall(plan):
         if not net:
             continue
 
-        # In a VPN access mode (artie only) the jumpbox exposes only its VPN
-        # listen port to the operators, and ssh plus the Guacamole portal ride the
-        # tunnel rather than the public internet. In public mode (the default, and
-        # every haven range) 22 and 443 are opened as before. The jumpbox keeps its
+        # ssh (22) is always open to operator_source_ranges: the admin deploys and
+        # manages over it, and a VPN access mode cannot replace it because the
+        # tunnel is stood up over this very ssh (the first deploy has no tunnel
+        # yet). In a VPN access mode (artie only) the jumpbox also opens its VPN
+        # listen port, and the Guacamole portal is NOT exposed publicly: operators
+        # reach it over the tunnel instead. In public mode (the default, and every
+        # haven range) the portal is opened on 443 as before. The jumpbox keeps its
         # stable public IP either way, since it is the VPN endpoint. Mirrors the AWS
         # backend. See vpn-multiuser-spec.
+        name = "mgmt_in_%s" % plan.ref(jump)
+        if name not in seen:
+            seen.add(name)
+            lines += [""] + _rule(
+                name, plan.ref(net), "INGRESS", "tcp", [22], [plan.tag(jump)],
+                source_expr="var.operator_source_ranges",
+                comment="operator access to %s" % ctx.name(jump))
+
         vpn = plan.vpn_access(ctx.nodes[jump])
         if vpn:
             mode, port, protocol = vpn
@@ -694,17 +705,9 @@ def _firewall(plan):
                     name, plan.ref(net), "INGRESS", protocol, [str(port)],
                     [plan.tag(jump)],
                     source_expr="var.operator_source_ranges",
-                    comment="operator %s VPN access to %s (management rides the "
+                    comment="operator %s VPN access to %s (the portal rides the "
                             "tunnel)" % (mode, ctx.name(jump)))
         else:
-            name = "mgmt_in_%s" % plan.ref(jump)
-            if name not in seen:
-                seen.add(name)
-                lines += [""] + _rule(
-                    name, plan.ref(net), "INGRESS", "tcp", [22], [plan.tag(jump)],
-                    source_expr="var.operator_source_ranges",
-                    comment="operator access to %s" % ctx.name(jump))
-
             # The Guacamole portal runs on the jumpbox over HTTPS in every mode (a
             # defense range and an offense topology alike), so the operator reaches
             # it on 443 from the same ranges that get ssh -- not only for ranges.
