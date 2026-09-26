@@ -24,7 +24,11 @@ MIGRATIONS = Path(__file__).resolve().parent / "migrations"
 def _config(url):
     cfg = Config()
     cfg.set_main_option("script_location", str(MIGRATIONS))
-    cfg.set_main_option("sqlalchemy.url", url)
+    # A url is literal data, not a configparser template. It can carry a percent
+    # (a percent-encoded windows sqlite path, or a password) and Python 3.14
+    # configparser rejects a bare % on set. Double it so BasicInterpolation
+    # restores the original url when env.py reads it back.
+    cfg.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
     return cfg
 
 

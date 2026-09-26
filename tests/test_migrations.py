@@ -14,11 +14,21 @@ from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 
 from redstackpro.api import db
-from redstackpro.api.migrate_db import upgrade_to_head
+from redstackpro.api.migrate_db import _config, upgrade_to_head
 
 
 def _sqlite_url():
     return "sqlite+pysqlite:///" + tempfile.mktemp(suffix=".db")
+
+
+def test_config_preserves_percent_in_url():
+    """A url can carry a percent (a percent-encoded windows sqlite path or a db
+    password). Python 3.14 configparser rejects a bare % on set, so _config must
+    hand the original url straight back. This guards a real startup upgrade, not
+    just the test path."""
+    url = "postgresql+psycopg://u:p%40ss@h:5432/d"
+    cfg = _config(url)
+    assert cfg.get_main_option("sqlalchemy.url") == url
 
 
 def test_migrations_leave_nothing_for_autogenerate():

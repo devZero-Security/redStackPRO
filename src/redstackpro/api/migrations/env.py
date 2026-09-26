@@ -24,7 +24,10 @@ config = context.config
 # environment variable make_engine reads.
 url = (config.get_main_option("sqlalchemy.url")
        or os.environ.get("REDSTACKPRO_DATABASE_URL", db.DEFAULT_URL))
-config.set_main_option("sqlalchemy.url", url)
+# Double a percent so configparser does not read it as an interpolation token
+# (a url can carry one: a percent-encoded path or password). Python 3.14
+# configparser validates % on set. get_section / get_main_option restore it.
+config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
 
 target_metadata = db.Base.metadata
 
