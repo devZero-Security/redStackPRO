@@ -54,8 +54,8 @@ to end: a topology compiles to Terraform and Ansible, and the export deploys.
 | Provider | State |
 | -------- | ----- |
 | GCP, AWS | Supported and tested end to end, for both target ranges and attack infrastructure. |
-| Azure | On the roadmap. Needs a peering module for the attack side. |
-| Proxmox, ESXi | On the roadmap. Neither can allocate a public address on its own, so redirector reachability depends on a network redStackPRO does not control. |
+| Azure | Preview. Public addressing works; private DNS and peering are not built yet. |
+| Proxmox, ESXi | On the roadmap, not yet supported. Neither can allocate a public address on its own, so redirector reachability would depend on a network redStackPRO does not control. |
 
 ---
 
@@ -98,8 +98,8 @@ Python 3.11 or newer, and Node 24 for the canvas.
     redstackpro serve                            # http://127.0.0.1:8000
     cd frontend && npm install && npm run dev
 
-`redstackpro serve --port 8787` moves the API. Point the canvas dev server at it
-with `REDSTACKPRO_API=http://127.0.0.1:8787`.
+`redstackpro serve --port 8787` moves the API to a different port. Point the
+canvas dev server at it with `REDSTACKPRO_API=http://127.0.0.1:8787`.
 
 Open it, load a template from the library, choose your cloud in the toolbar
 provider selector (GCP or AWS), press Compile, then Download. You get a zip of the
@@ -115,12 +115,23 @@ The command line defaults to GCP. Pass `--provider aws` for AWS.
 That writes about **200 files**: Terraform for the cloud, Ansible for everything
 that happens on the boxes, a `deploy.sh`, and a `RANGE-BRIEFING.md` telling you the
 credentials and what is planted where. `goad-light` is a two-domain Active
-Directory range: `sevenkingdoms` and `north` across a forest trust, two domain
-controllers and a member server, plus a jumpbox.
+Directory range: `sevenkingdoms` and its child `north`, a parent-child trust in
+one forest, two domain controllers and a member server, plus a jumpbox.
+
+**Before you begin:** you need Terraform and the AWS CLI or gcloud CLI installed,
+and your own cloud account with credentials configured. redStackPRO generates the
+code; it installs none of that for you. See the wiki
+[Getting Started](https://github.com/devZero-Security/redStackPRO/wiki/Getting-Started)
+for the full checklist.
 
 To deploy it, fill in `export/terraform/terraform.tfvars` and run:
 
     cd export && bash deploy.sh
+
+On Windows, run `.\deploy.ps1` instead: `bash deploy.sh` at a PowerShell prompt
+launches WSL, a different filesystem with different credentials. See the wiki
+[Deploying a Range](https://github.com/devZero-Security/redStackPRO/wiki/Deploying-a-Range)
+for detail.
 
 `deploy.sh` applies the Terraform and then provisions from the range's own
 jumpbox, because the managed hosts sit on a private subnet nothing else can
@@ -148,8 +159,8 @@ infrastructure running and billing.
 
 All of this is per region, along with the key pair name. The full quota table, the
 increase commands, and the pre-deploy checklist are in the wiki:
-[Providers](https://github.com/devzero-security/redStackPRO/wiki/Providers) and
-[Deploying a Range](https://github.com/devzero-security/redStackPRO/wiki/Deploying-a-Range).
+[Providers](https://github.com/devZero-Security/redStackPRO/wiki/Providers) and
+[Deploying a Range](https://github.com/devZero-Security/redStackPRO/wiki/Deploying-a-Range).
 
 ---
 
@@ -197,11 +208,11 @@ target ranges on the same canvas.
 
 ## 📚 Docs
 
-- `docs/architecture.md`
-- `docs/schema.md`
-- `docs/validation.md`
-- `docs/solutions/`
-- `src/redstackpro/schema/topology/`
+- [docs/architecture.md](docs/architecture.md)
+- [docs/schema.md](docs/schema.md)
+- [docs/validation.md](docs/validation.md)
+- [docs/solutions/](docs/solutions/)
+- [src/redstackpro/schema/topology/](src/redstackpro/schema/topology/)
 
 ---
 
@@ -249,12 +260,12 @@ because a working directory a person unzips and runs is the thing being claimed:
     ansible-playbook -i export/ansible/inventory.yml export/ansible/site.yml --syntax-check
     python -m redstackpro.tools.check_roles export/ansible
 
-`--hostname` is not a flag to work around a broken example. Every shipped example
-carrying a redirector arrives one field short on purpose: a redirector is the one
-host that answers to the internet by name, a domain has to be registered and
-pointed at the box by a human, and nothing can invent one. The validator says so
-(RDR001) and the compiler refuses. Pass any domain you control and the tools
-fill it the way you would in the canvas inspector before pressing Compile.
+`--hostname` fills in the one field nothing else can invent: a redirector is the
+host that answers to the internet by name, and a domain has to be registered and
+pointed at it by a human. Every shipped example carrying a redirector ships one
+field short on purpose, the validator says so (RDR001), and the compiler refuses
+without it. Pass any domain you control, the same way you would in the canvas
+inspector before pressing Compile.
 
 `check_roles.py` exists because a syntax check never opens a file reached by
 `include_tasks` with a templated name, which is every branch the roles have.
