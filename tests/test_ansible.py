@@ -1118,3 +1118,61 @@ def test_the_mythic_unpin_runs_after_every_install_that_regenerates_the_compose(
                       "Install the Mythic logging container",
                       "Start the Mythic logging container"):
         assert names.index(installer) < unpin, (installer, names[unpin])
+
+
+# -- multi-user VPN access wiring (vpn-multiuser-spec)
+# access_mode is the single field an operator sets; the compiler turns it into the
+# concrete VPN service task and pins the listen port so Ansible and Terraform agree.
+
+def _jumpbox_overlay(doc, drop_services=False, **overlay):
+    """A copy of the fixture with overlay fields on its jumpbox, and optionally
+    the services list stripped back so the add-the-service path is exercised."""
+    doc = json.loads(json.dumps(doc))
+    for n in doc["nodes"]:
+        if n["kind"] == "jumpbox":
+            ov = n.setdefault("overlay", {})
+            if drop_services:
+                ov["services"] = ["ssh", "guacamole"]
+            ov.update(overlay)
+    return doc
+
+
+def _jumpbox_vars(doc):
+    out = files(doc)
+    (path,) = [p for p in out
+               if p.startswith("ansible/host_vars/") and "jump" in p]
+    return load(out, path)
+
+
+def test_wireguard_access_mode_adds_the_service_and_carries_the_operators(redstack):
+    """Setting access_mode wireguard adds the wireguard service to the jumpbox
+    task list even when the overlay omitted it, and the operator roster reaches
+    Ansible for per-user peer generation. No vpn_port means the role default, so
+    the port var is not pinned."""
+    doc = _jumpbox_overlay(
+        redstack, drop_services=True, access_mode="wireguard",
+        operators=[{"handle": "alice"}, {"handle": "bob", "role": "lead"}])
+    v = _jumpbox_vars(doc)
+    assert "wireguard" in v["redstackpro_jumpbox_services"]
+    assert [o["handle"] for o in v["redstackpro_jumpbox_operators"]] == ["alice", "bob"]
+    assert "redstackpro_wireguard_port" not in v
+
+
+def test_openvpn_access_mode_pins_the_custom_port_and_protocol(redstack):
+    """OpenVPN on a custom tcp port pins both, so the listener Ansible writes
+    matches the port Terraform opened."""
+    doc = _jumpbox_overlay(redstack, drop_services=True, access_mode="openvpn",
+                           vpn_protocol="tcp", vpn_port=5124)
+    v = _jumpbox_vars(doc)
+    assert "openvpn" in v["redstackpro_jumpbox_services"]
+    assert v["redstackpro_openvpn_port"] == 5124
+    assert v["redstackpro_openvpn_protocol"] == "tcp"
+
+
+def test_public_jumpbox_gets_no_vpn_wiring(redstack):
+    """With access_mode absent (public), the compiler pins nothing: the role
+    keeps its default ports and no openvpn protocol override appears."""
+    v = _jumpbox_vars(redstack)
+    assert "redstackpro_wireguard_port" not in v
+    assert "redstackpro_openvpn_port" not in v
+    assert "redstackpro_openvpn_protocol" not in v

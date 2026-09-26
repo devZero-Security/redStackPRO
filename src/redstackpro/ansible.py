@@ -383,6 +383,15 @@ class AnsiblePlan:
                     if isinstance(value, list) else value)
             vars_.update(self._overlay_vars(node))
 
+            # Multi-user VPN access. access_mode is the single field an operator
+            # sets; from it the compiler adds the VPN service to the jumpbox's task
+            # list and pins the listen port so Ansible and Terraform agree on it.
+            # Per-operator peers and client credentials are generated at apply from
+            # redstackpro_jumpbox_operators, which the overlay already emitted. See
+            # vpn-multiuser-spec and plan.vpn_access.
+            if node["kind"] == "jumpbox":
+                self._jumpbox_vpn_vars(node, vars_)
+
             # The jumpbox also creates each assumed-breach domain user as a local
             # admin: the foothold is a jumpbox local admin AND a low-priv domain
             # member (the dc role seeds the domain side). Note the local account
@@ -870,6 +879,35 @@ class AnsiblePlan:
         return ("public_address"
                 if self.ctx.exposure(node_id) == "internet"
                 else "private_address")
+
+    def _jumpbox_vpn_vars(self, node, vars_):
+        """Bridge the jumpbox access_mode to what the role provisions. The
+        overlay already carried access_mode, vpn_port, vpn_protocol and operators
+        through _overlay_vars; this turns access_mode into the concrete VPN
+        service task and pins the port the role listens on, so the value Terraform
+        opens (plan.vpn_access) and the value Ansible binds are the same one.
+
+        Left to public mode this does nothing. A haven range ignores the fields
+        and keeps the public portal (VPN002), but the compiler honors them
+        wherever they are set rather than second-guessing the mode, the same way
+        plan.vpn_access does. The default port lives in the role, so vpn_port is
+        emitted only when the overlay pins a non-default one."""
+        ov = node.get("overlay", {}) or {}
+        mode = ov.get("access_mode", "public")
+        if mode not in ("wireguard", "openvpn"):
+            return
+        services = list(vars_.get("redstackpro_jumpbox_services") or [])
+        if mode not in services:
+            services.append(mode)
+            vars_["redstackpro_jumpbox_services"] = services
+        port = ov.get("vpn_port")
+        if mode == "wireguard":
+            if port:
+                vars_["redstackpro_wireguard_port"] = port
+        else:
+            if port:
+                vars_["redstackpro_openvpn_port"] = port
+            vars_["redstackpro_openvpn_protocol"] = ov.get("vpn_protocol", "udp")
 
     def _overlay_vars(self, node):
         """Overlay values the roles need, namespaced so they cannot collide.
