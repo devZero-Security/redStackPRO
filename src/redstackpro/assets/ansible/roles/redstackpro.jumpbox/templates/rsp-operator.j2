@@ -64,9 +64,12 @@ SQL
 
 guac_remove() {
   local handle="$1"
+  # SQL over stdin, not psql -c: the :'h' variable is only interpolated for input
+  # read from a file or stdin, so -c sends the literal ":'h'" and the server errors.
   docker exec -i -e PGPASSWORD="$(cat "$DB_PW_FILE")" "$DB_CONTAINER" \
-    psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -v h="$handle" \
-    -c "DELETE FROM guacamole_entity WHERE name = :'h' AND type = 'USER';"
+    psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -v h="$handle" <<'SQL'
+DELETE FROM guacamole_entity WHERE name = :'h' AND type = 'USER';
+SQL
 }
 
 # The next free tunnel host number for a WireGuard peer: one past the highest in
