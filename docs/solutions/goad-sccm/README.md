@@ -9,6 +9,11 @@ mayfly's part 0x0 is lab installation with Vagrant and VirtualBox. redStackPRO
 replaces it entirely: the lab is compiled from the canvas and deployed with one
 `deploy.sh`, so this series starts at recon.
 
+> **Status: authored and broader than the mayfly source, the live pass is not yet
+> complete.** The steps are reconstructed from the Misconfiguration Manager taxonomy and
+> the redStackPRO roles that build the lab; the end-to-end verification against a live
+> deploy is still owed. Verify on a deploy before relying on it.
+
 ## Methodology
 
 Same external red team framing as the [GOAD series](../goad/README.md), and the same

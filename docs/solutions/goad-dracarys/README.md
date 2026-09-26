@@ -7,6 +7,11 @@ documents the intended chain against redStackPRO's faithful recreation of the
 lab, reconstructed from the upstream `ad/DRACARYS` definition and the redStackPRO
 roles that reproduce it. See [[dracarys-fidelity-gap]].
 
+> **Status: authored from the upstream lab definition, not fully live-verified.** The
+> chain below follows the intended DRACARYS path; parts of the edge set (the KeePass
+> vault, the WriteSPN step, the bots) are recreated in the roles but not all confirmed
+> on a live deploy. Verify on a deploy before relying on it.
+
 ## Methodology
 
 Same external red-team framing as the [GOAD series](../goad/README.md), see
