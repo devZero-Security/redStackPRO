@@ -76,6 +76,18 @@ def test_privilege_maps_to_the_built_in_admin_group():
     assert "Enterprise Admins" in roland["groups"]
 
 
+def test_a_workstation_grants_patient_zero_rdp():
+    """A workstation is the usual patient-zero landing host, and its portal tile
+    signs in as the assumed-breach user. The compiler emits redstackpro_srv_rdp_users
+    for the landing host of either kind, but only the srv role consumed it, so a
+    patient zero on a workstation was refused RDP (dana.brooks on harbor's fr-wks01
+    hit exactly this live). The wks role must apply it too. See range-access-model."""
+    wks = (ROOT / "src/redstackpro/assets/ansible/roles/redstackpro.wks"
+           "/tasks/main.yml").read_text(encoding="utf-8")
+    assert "redstackpro_srv_rdp_users" in wks
+    assert "Remote Desktop Users" in wks
+
+
 def test_endpoint_telemetry_toggle_reaches_the_host():
     """A host with endpoint_telemetry set gets redstackpro_endpoint_telemetry so
     the host_vulns role installs Sysmon + command-line auditing; a host without it
