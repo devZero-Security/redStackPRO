@@ -69,10 +69,21 @@ redstackpro_jumpbox_fail2ban_world_ranges:
   - 0.0.0.0/0
   - ::/0
 
+# The VPN client configs the operators receive. Written to a directory the
+# platform account owns so the admin fetches them over their own ssh session and
+# hands each operator their own; the peer keys under /etc/wireguard stay root-only.
+redstackpro_vpn_client_dir: "{{ redstackpro_jumpbox_root }}/vpn"
+
+# WireGuard. The server holds .1 of the tunnel /24 and operator peers count up
+# from .2. allowed_ips is what an operator's tunnel routes: the default carve is
+# 10.0.0.0/8 (0046), which covers every range subnet and the tunnel itself.
 redstackpro_wireguard_port: 51820
-redstackpro_wireguard_address: 10.99.0.1/24
+redstackpro_wireguard_subnet: "10.99.0"
+redstackpro_wireguard_address: "{{ redstackpro_wireguard_subnet }}.1/24"
+redstackpro_wireguard_allowed_ips: "10.0.0.0/8"
 
 redstackpro_openvpn_port: 1194
+redstackpro_openvpn_protocol: udp
 redstackpro_openvpn_subnet: 10.98.0.0
 redstackpro_openvpn_netmask: 255.255.255.0
 

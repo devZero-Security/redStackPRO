@@ -1,7 +1,9 @@
 ---
-# The server side only. Client peers are added from the topology once the peers
-# relation exists; until then a peer is appended by hand or by wg set. See
-# schema.md, which records peers as unbuilt.
+# The WireGuard access mode. The server stands up either way; when the topology
+# declared operators (redstackpro_jumpbox_operators), each one gets a key pair, a
+# peer on the server, and a client config rendered for the admin to hand out. The
+# keys are generated here and never leave the jumpbox; only the client config is
+# fetched and distributed. See vpn-multiuser-spec and 0001.
 
 - name: Install wireguard
   ansible.builtin.apt:
@@ -10,10 +12,24 @@
       - wireguard-tools
     state: present
 
-- name: Create the wireguard directory
+- name: Create the wireguard directories
   ansible.builtin.file:
-    path: /etc/wireguard
+    path: "{{ item }}"
     state: directory
+    mode: "0700"
+  loop:
+    - /etc/wireguard
+    - /etc/wireguard/clients
+
+# The distributable output. Owned by the platform account so the admin can fetch
+# each config over their own ssh session without sudo; the peer keys under
+# /etc/wireguard stay root-only.
+- name: Create the client config output directory
+  ansible.builtin.file:
+    path: "{{ redstackpro_vpn_client_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: "0700"
 
 - name: Generate the server private key
@@ -31,6 +47,54 @@
     src: /etc/wireguard/server.key
   register: redstackpro_wg_key
 
+- name: Read the server public key
+  ansible.builtin.slurp:
+    src: /etc/wireguard/server.pub
+  register: redstackpro_wg_server_pub
+
+- name: Generate a key pair for each operator
+  ansible.builtin.shell:
+    cmd: >-
+      umask 077 &&
+      wg genkey | tee /etc/wireguard/clients/{{ item.handle }}.key |
+      wg pubkey > /etc/wireguard/clients/{{ item.handle }}.pub
+    creates: /etc/wireguard/clients/{{ item.handle }}.key
+  loop: "{{ redstackpro_jumpbox_operators | default([]) }}"
+  loop_control:
+    label: "{{ item.handle }}"
+
+- name: Read each operator public key
+  ansible.builtin.slurp:
+    src: /etc/wireguard/clients/{{ item.handle }}.pub
+  loop: "{{ redstackpro_jumpbox_operators | default([]) }}"
+  loop_control:
+    label: "{{ item.handle }}"
+  register: redstackpro_wg_client_pubs
+
+- name: Read each operator private key
+  ansible.builtin.slurp:
+    src: /etc/wireguard/clients/{{ item.handle }}.key
+  loop: "{{ redstackpro_jumpbox_operators | default([]) }}"
+  loop_control:
+    label: "{{ item.handle }}"
+  register: redstackpro_wg_client_keys
+
+# One flat list the interface template and the client-config loop both read, so
+# the peer address on the server and the address in the operator's own config are
+# computed once. Peers start at .2 because the server holds .1.
+- name: Assemble the per-operator client facts
+  ansible.builtin.set_fact:
+    redstackpro_wg_clients: >-
+      {{ (redstackpro_wg_clients | default([])) + [{
+        'handle': item.item.handle,
+        'address': redstackpro_wireguard_subnet ~ '.' ~ (idx + 2),
+        'public_key': (redstackpro_wg_client_pubs.results[idx].content | b64decode | trim),
+        'private_key': (item.content | b64decode | trim)}] }}
+  loop: "{{ redstackpro_wg_client_keys.results | default([]) }}"
+  loop_control:
+    index_var: idx
+    label: "{{ item.item.handle }}"
+
 - name: Write the interface configuration
   ansible.builtin.template:
     src: wg0.conf.j2
@@ -38,15 +102,26 @@
     mode: "0600"
   notify: Restart wireguard
 
+- name: Render each operator client config
+  ansible.builtin.template:
+    src: client-wg.conf.j2
+    dest: "{{ redstackpro_vpn_client_dir }}/{{ item.handle }}.conf"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"
+  loop: "{{ redstackpro_wg_clients | default([]) }}"
+  loop_control:
+    label: "{{ item.handle }}"
+
 - name: Start the tunnel
   ansible.builtin.service:
     name: "wg-quick@wg0"
     state: started
     enabled: true
 
-- name: Say where the server public key is
+- name: Say where the client configs are
   ansible.builtin.debug:
     msg: >-
-      WireGuard is up on port {{ redstackpro_wireguard_port }}. The server public
-      key is in /etc/wireguard/server.pub. Peers are not generated from the
-      topology yet, so add operator peers with wg set.
+      WireGuard is up on port {{ redstackpro_wireguard_port }} with
+      {{ redstackpro_wg_clients | default([]) | length }} operator peer(s). Client
+      configs are in {{ redstackpro_vpn_client_dir }}; hand each operator their own.

@@ -1,0 +1,14 @@
+{{ ansible_managed | comment }}
+# One operator's WireGuard client config, generated on the jumpbox. Import it into
+# a WireGuard client (wg-quick up, or the desktop app). The endpoint is the
+# jumpbox public address, which tf_inventory resolved into ansible_host.
+
+[Interface]
+PrivateKey = {{ item.private_key }}
+Address = {{ item.address }}/32
+
+[Peer]
+PublicKey = {{ redstackpro_wg_server_pub.content | b64decode | trim }}
+Endpoint = {{ ansible_host }}:{{ redstackpro_wireguard_port }}
+AllowedIPs = {{ redstackpro_wireguard_allowed_ips }}
+PersistentKeepalive = 25

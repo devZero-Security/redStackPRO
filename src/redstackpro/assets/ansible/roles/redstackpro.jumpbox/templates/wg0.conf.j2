@@ -1,5 +1,6 @@
 {{ ansible_managed | comment }}
-# Server side only. Peers are appended by hand until the peers relation exists.
+# The server side, plus one [Peer] per declared operator. Peer keys and addresses
+# come from redstackpro_wg_clients, assembled in service-wireguard.yml.
 
 [Interface]
 Address = {{ redstackpro_wireguard_address }}
@@ -11,3 +12,10 @@ SaveConfig = false
 # boundary itself is enforced in the generated firewall rules, not here.
 PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o {{ ansible_default_ipv4.interface }} -j MASQUERADE
 PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o {{ ansible_default_ipv4.interface }} -j MASQUERADE
+{% for client in redstackpro_wg_clients | default([]) %}
+
+# {{ client.handle }}
+[Peer]
+PublicKey = {{ client.public_key }}
+AllowedIPs = {{ client.address }}/32
+{% endfor %}
