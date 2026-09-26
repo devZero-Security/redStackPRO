@@ -340,3 +340,35 @@ def test_a_missing_key_says_how_to_make_one(staged):
     assert done.returncode == 1
     assert "ssh-keygen -t ed25519 -f keys/id_ed25519" in done.stdout, done.stdout
     assert "ssh_public_key" in done.stdout
+
+
+# -- the deployment log (issue-triage artifact)
+
+def test_the_deploy_tees_a_scrubbed_log_and_points_a_failure_at_the_tracker(script):
+    """Every deploy writes one timestamped log under logs/, so a user who hits a
+    failed or broken deploy has a single artifact to attach to a GitHub issue. It
+    is scrubbed of private keys and secret assignments before it is shared, and a
+    failed run prints where the log is and where to raise the issue."""
+    # One consolidated log, redirected so terraform and the provision both land in it.
+    assert 'LOG="logs/deploy-' in script
+    assert 'tee -a "$LOG"' in script
+    # A header for triage: version and provider.
+    assert "redStackPRO deploy log" in script
+    assert "version:   0.9.0" in script
+    assert "provider:  gcp" in script
+    # Scrubbed on exit: private keys and secret assignments do not reach the file.
+    assert "redacted private key" in script
+    assert "trap finish EXIT" in script
+    # A failure names the log and the issue tracker.
+    assert "issues/new/choose" in script
+
+
+def test_a_topology_with_no_jumpbox_has_no_deploy_script_to_log():
+    """The log lives in deploy.sh, which only exists when there is a jumpbox to
+    stage through, so the two appear and disappear together."""
+    from shipped import example
+    doc = example("redstack.json")
+    doc["nodes"] = [n for n in doc["nodes"] if n["kind"] != "jumpbox"]
+    doc["edges"] = [e for e in doc["edges"]
+                    if not (e["source"].startswith("jump") or e["target"].startswith("jump"))]
+    assert generate_deploy_script(doc, Registry()) is None

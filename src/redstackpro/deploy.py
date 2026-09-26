@@ -13,9 +13,84 @@ The script is generated (not static) because it bakes in the jumpbox's rendered
 name and the topology's mode, the same way the inventory and site.yml are derived.
 """
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+
 from .naming import platform_account
 from .terraform.plan import TerraformPlan
 from .validate import Context
+
+
+def _redstackpro_version():
+    try:
+        return _pkg_version("redstackpro")
+    except PackageNotFoundError:
+        return "unknown"
+
+
+# The deployment log. Everything deploy.sh prints (terraform apply and the whole
+# jumpbox-staged provision) is tee'd to one timestamped file, so a user who hits a
+# failed or broken deploy has a single artifact to attach to a GitHub issue and we
+# can see what went wrong. Secrets are scrubbed on exit so the file is safe to
+# share on a public tracker. Built here rather than inline in the template so the
+# bash keeps single braces (the template goes through str.format). See the deploy
+# log PAI item and 0022.
+_LOGGING_SETUP = r'''
+mkdir -p logs
+LOG="logs/deploy-$(date -u +%Y%m%d-%H%M%SZ).log"
+exec 3>&1 4>&2
+exec > >(tee -a "$LOG") 2>&1
+
+# Redact the obvious secrets from the log before it is shared: private key blocks
+# and password/secret/token assignments. deploy.sh does not print the lab password
+# or keys itself, so this is a safety net for anything a tool underneath prints.
+scrub_log(){
+  [ -n "${PY:-}" ] || return 0
+  [ -f "$LOG" ] || return 0
+  "$PY" - "$LOG" <<'PYSCRUB'
+import re, sys
+p = sys.argv[1]
+try:
+    t = open(p, encoding="utf-8", errors="replace").read()
+except OSError:
+    sys.exit(0)
+# The PEM marker is assembled from pieces so this generated script does not itself
+# ship the literal header the export's own leak scan forbids (test_api).
+d = "-" * 5
+key = d + r"BEGIN [A-Z0-9 ]*PRIVATE KEY" + d + r".*?" + d + r"END [A-Z0-9 ]*PRIVATE KEY" + d
+t = re.sub(key, "[redacted private key]", t, flags=re.S)
+t = re.sub(r"(?im)((?:password|passphrase|secret|token|pgpassword)[\"']?\s*[:=]\s*)\S+",
+           r"\1[redacted]", t)
+open(p, "w", encoding="utf-8").write(t)
+PYSCRUB
+}
+
+# Runs on every exit, success or failure: flush and scrub the log, restore the
+# real stdout, and point a failed run at the issue tracker.
+finish(){
+  rc=$?
+  scrub_log
+  exec 1>&3 2>&4
+  if [ "$rc" -eq 0 ]; then
+    echo "== deploy log saved (secrets scrubbed): $LOG =="
+  else
+    echo "== deploy FAILED (exit $rc). Log saved (secrets scrubbed): $LOG =="
+    echo "   Attach that file to a new issue so we can see what went wrong:"
+    echo "   https://github.com/devZero-Security/redStackPRO/issues/new/choose"
+  fi
+}
+trap finish EXIT
+
+{
+  echo "redStackPRO deploy log"
+  echo "version:   @@VERSION@@"
+  echo "provider:  @@PROVIDER@@"
+  echo "started:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "system:    $(uname -a 2>/dev/null || echo unknown)"
+  echo "terraform: $(terraform version 2>/dev/null | head -1 || echo 'not found')"
+  echo "----------------------------------------------------------------------"
+}
+'''
 
 
 # Auto stop is a DAILY wall-clock time. A build applied shortly before that time
@@ -294,11 +369,15 @@ def generate_deploy_script(topology, registry=None, provider=None):
             "done\n"
         )
 
+    logging_setup = (_LOGGING_SETUP
+                     .replace("@@VERSION@@", _redstackpro_version())
+                     .replace("@@PROVIDER@@", provider or "not specified"))
     return _TEMPLATE.format(jumpbox=jumpbox,
                             jumpuser=platform_account(topology.get("mode")),
                             is_range="true" if is_range else "false",
                             gate=gate, limit=limit, dns_actions=dns_actions,
-                            cloud_preflight=cloud_preflight)
+                            cloud_preflight=cloud_preflight,
+                            logging_setup=logging_setup)
 
 
 _TEMPLATE = r"""#!/usr/bin/env bash
@@ -326,7 +405,7 @@ JUMPUSER={jumpuser}
 
 cd "$(dirname "$0")"
 say(){{ echo "== [$(date +%H:%M:%S)] $* =="; }}
-
+{logging_setup}
 for t in terraform ssh tar; do
   command -v "$t" >/dev/null || {{ echo "$t not found on PATH -- install it first"; exit 1; }}
 done

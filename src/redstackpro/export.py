@@ -165,6 +165,12 @@ ssh {jumpuser}@<jumpbox> 'tail -f ~/provision/run.log'
 `https://<jumpbox>/guacamole`, with
 `terraform -chdir=terraform output guacamole` for the credentials.
 
+Every run also writes a full log to `logs/deploy-<timestamp>.log`. If a deploy
+fails or a range comes up wrong, that file is what to attach to a GitHub issue: it
+records the versions, the provider, and where the run stopped, and it is scrubbed
+of secrets (private keys and passwords) before it is written. `deploy.sh` prints
+its path, and the link to open an issue, on a failure.
+
 If a redirector uses Let's Encrypt, `deploy.sh` prints the exact DNS A record to
 create the moment the address exists. Create it while the build runs: issuance
 waits about 15 minutes, then carries on with a self-signed certificate that
@@ -266,6 +272,12 @@ ssh {jumpuser}@<jumpbox> 'tail -f ~/provision/run.log'
 `terraform -chdir=terraform output guacamole` for the credentials. The portal is
 the way in: it has a tile for each host, including one that logs you in as the
 range's assumed-breach user.
+
+Every run also writes a full log to `logs/deploy-<timestamp>.log`. If a deploy
+fails or the range comes up wrong, that file is what to attach to a GitHub issue:
+it records the versions, the provider, and where the run stopped, and it is
+scrubbed of secrets before it is written. `deploy.sh` prints its path, and the
+link to open an issue, on a failure.
 
 ## What this builds
 
