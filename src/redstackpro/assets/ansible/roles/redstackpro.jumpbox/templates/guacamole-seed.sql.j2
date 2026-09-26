@@ -40,15 +40,18 @@ DELETE FROM guacamole_entity WHERE name = 'guacadmin' AND type = 'USER';
 -- their own passwords and access levels are an Enterprise concern (ADR 0056);
 -- the base tier is a single shared admin login.
 -- ---------------------------------------------------------------- accounts
-{% for admin in admins %}
--- {{ admin }}{{ ' (break-glass)' if admin == breakglass else '' }}
-INSERT INTO guacamole_entity (name, type) VALUES ('{{ admin }}', 'USER')
+{# Create a portal user if absent and set its password once from :'labpw'. A
+   re-run leaves an existing account's password and TOTP alone, the writable
+   state the database exists to keep. Both the admins and the per-operator
+   accounts are seeded through this, so the two never drift. #}
+{% macro account(name) %}
+INSERT INTO guacamole_entity (name, type) VALUES ('{{ name }}', 'USER')
   ON CONFLICT (name, type) DO NOTHING;
 
 INSERT INTO guacamole_user (entity_id, password_salt, password_hash, password_date)
 SELECT e.entity_id, gen_random_bytes(32), '\x00', now()
   FROM guacamole_entity e
- WHERE e.name = '{{ admin }}' AND e.type = 'USER'
+ WHERE e.name = '{{ name }}' AND e.type = 'USER'
    AND NOT EXISTS (SELECT 1 FROM guacamole_user u WHERE u.entity_id = e.entity_id);
 
 -- Set the hash from the salt just generated. Separate statement so it can read
@@ -60,9 +63,12 @@ UPDATE guacamole_user u
          'sha256')
   FROM guacamole_entity e
  WHERE u.entity_id = e.entity_id
-   AND e.name = '{{ admin }}' AND e.type = 'USER'
+   AND e.name = '{{ name }}' AND e.type = 'USER'
    AND u.password_hash = '\x00';
-
+{% endmacro %}
+{% for admin in admins %}
+-- {{ admin }}{{ ' (break-glass)' if admin == breakglass else '' }}
+{{ account(admin) }}
 -- Full admin. Every system permission so the account can manage users and
 -- connections from the portal UI (create the personal accounts ADR 0056
 -- describes, enable TOTP on them).
@@ -74,6 +80,18 @@ SELECT e.entity_id, p
                     'ADMINISTER']::guacamole_system_permission_type[]) AS p
  WHERE e.name = '{{ admin }}' AND e.type = 'USER'
 ON CONFLICT DO NOTHING;
+{% endfor %}
+
+-- Per-operator accounts (the artie multi-user roster). Each declared operator
+-- gets its own portal login on the shared lab password; per-user passwords are
+-- an Enterprise concern (ADR 0056). No system permissions: an operator drives
+-- the range, it does not administer the portal. The connection grant below is
+-- by USER, so these accounts pick up every tile without a per-account grant.
+{% for op in redstackpro_jumpbox_operators | default([]) %}
+{%   if op.handle not in admins %}
+-- operator {{ op.handle }}{{ ' (' ~ op.role ~ ')' if op.role is defined else '' }}
+{{ account(op.handle) }}
+{%   endif %}
 {% endfor %}
 
 -- ------------------------------------------------------------- connections
