@@ -83,10 +83,10 @@
       }
     },
     {
-      "id": "myth-ts01",
+      "id": "sliver-ts01",
       "kind": "teamserver",
       "overlay": {
-        "c2": "mythic"
+        "c2": "sliver"
       }
     },
     {
@@ -129,9 +129,9 @@
       "target": "rdir-sub01"
     },
     {
-      "id": "e-myth-ts01-c2-sub01-attached",
+      "id": "e-sliver-ts01-c2-sub01-attached",
       "role": "attached",
-      "source": "myth-ts01",
+      "source": "sliver-ts01",
       "target": "c2-sub01"
     },
     {
@@ -147,10 +147,10 @@
       "target": "rdir-net01"
     },
     {
-      "id": "e-apache-rd01-myth-ts01-fronts",
+      "id": "e-apache-rd01-sliver-ts01-fronts",
       "role": "fronts",
       "source": "apache-rd01",
-      "target": "myth-ts01",
+      "target": "sliver-ts01",
       "protocol": "https",
       "listen_port": 443,
       "upstream_port": 443,
