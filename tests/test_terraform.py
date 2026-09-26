@@ -671,7 +671,7 @@ def test_aws_gives_an_egress_ip_to_an_addressless_host_on_an_internet_segment():
     route out and cannot even apt update, which stranded the Kali operator on AWS.
     See 0021."""
     import json
-    topo = json.loads((ROOT / "frontend/public/minimal-c2.json").read_text())
+    topo = json.loads((ROOT / "frontend/public/minimalc2-cli.json").read_text())
     for n in topo["nodes"]:
         if n["kind"] == "redirector":
             n.setdefault("overlay", {})["hostname"] = "cdn.redteam.test"

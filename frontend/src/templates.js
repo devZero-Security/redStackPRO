@@ -11,10 +11,10 @@ export const TEMPLATES = {
         "The recommended blueprint: three C2 backends behind an isolated Apache redirector, teamservers and operators behind a jumpbox.",
     },
     {
-      file: "minimal-c2",
-      name: "Minimal C2",
+      file: "minimalc2-cli",
+      name: "MinimalC2-CLI",
       blurb:
-        "The smallest usable stack: one teamserver, one redirector, one jumpbox, one operator. A starting point to grow from.",
+        "The smallest usable stack: a Sliver teamserver driven over SSH from the Kali operator, behind one redirector, with one jumpbox. A starting point to grow from.",
     },
     {
       file: "rollover",

@@ -1,9 +1,9 @@
 {
   "schema_version": "0.4.0",
   "mode": "ops",
-  "name": "Minimal C2",
+  "name": "MinimalC2-CLI",
   "prefix": "red",
-  "description": "The smallest usable redStack: one Mythic teamserver behind a single Apache redirector, reached through a Guacamole jumpbox with one Kali operator box. The redirector sits in its own peered network so the internet facing tier is its own blast radius, the same isolation redStack uses, trimmed to a single C2 backend with no log collector and no second operator. A starting point to grow from.",
+  "description": "The smallest usable redStack: one Sliver teamserver, headless with no web UI, driven from the Kali operator over SSH, behind a single Apache redirector, reached through a Guacamole jumpbox. The redirector sits in its own peered network so the internet facing tier is its own blast radius, the same isolation redStack uses, trimmed to a single C2 backend with no log collector and no second operator. A starting point to grow from.",
   "auto_stop": {
     "enabled": true,
     "after_hours": 8,
@@ -83,7 +83,7 @@
       }
     },
     {
-      "id": "sliver-ts01",
+      "id": "c2-ts01",
       "kind": "teamserver",
       "overlay": {
         "c2": "sliver"
@@ -129,9 +129,9 @@
       "target": "rdir-sub01"
     },
     {
-      "id": "e-sliver-ts01-c2-sub01-attached",
+      "id": "e-c2-ts01-c2-sub01-attached",
       "role": "attached",
-      "source": "sliver-ts01",
+      "source": "c2-ts01",
       "target": "c2-sub01"
     },
     {
@@ -147,10 +147,10 @@
       "target": "rdir-net01"
     },
     {
-      "id": "e-apache-rd01-sliver-ts01-fronts",
+      "id": "e-apache-rd01-c2-ts01-fronts",
       "role": "fronts",
       "source": "apache-rd01",
-      "target": "sliver-ts01",
+      "target": "c2-ts01",
       "protocol": "https",
       "listen_port": 443,
       "upstream_port": 443,
