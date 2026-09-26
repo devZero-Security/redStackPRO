@@ -425,6 +425,28 @@ def time_provider(plan):
     }"""
 
 
+def operator_source_ranges_check():
+    """A Terraform check block that warns when management ingress is left wide open.
+
+    operator_source_ranges is a tfvars value, not a topology field, so the topology
+    validator never sees it: left at the default 0.0.0.0/0 it opens the jumpbox ssh
+    (22) and the Guacamole portal (443) to the whole internet. A failed check
+    assertion warns, it does not fail the apply, so this is a non-blocking nudge at
+    deploy time. required_version >= 1.5 on both backends, so check blocks exist.
+    Emitted once per generated main.tf; the name is fixed, so callers add it once.
+    """
+    return [
+        "",
+        '# Non-blocking: warns (does not fail) when management ingress is wide open.',
+        'check "operator_source_ranges_is_narrowed" {',
+        "  assert {",
+        '    condition     = !contains(var.operator_source_ranges, "0.0.0.0/0")',
+        '    error_message = "operator_source_ranges is 0.0.0.0/0, so ssh and the Guacamole portal are open to the whole internet. Narrow it in terraform.tfvars to the addresses operators connect from."',
+        "  }",
+        "}",
+    ]
+
+
 def align(pairs, indent="  "):
     """Argument lines with the equals signs lined up.
 

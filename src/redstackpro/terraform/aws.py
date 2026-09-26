@@ -13,7 +13,8 @@ That is the provider abstraction leaking, and 0015 says it leaks here.
 """
 
 from .plan import (  # noqa: F401  GenerationError re-exported
-    GenerationError, align, operator_hosts_hcl, time_provider)
+    GenerationError, align, operator_hosts_hcl,
+    operator_source_ranges_check, time_provider)
 
 # AMI owners and name patterns rather than ids, because an id is per region and
 # the region is a variable. The module resolves them with a data source.
@@ -264,6 +265,7 @@ def _main(plan):
         "  lab_password = var.lab_password != \"\" ? var.lab_password : random_password.lab.result",
         "}",
     ]
+    lines += operator_source_ranges_check()
 
     for node in plan.networks():
         nid = node["id"]

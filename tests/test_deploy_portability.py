@@ -102,6 +102,18 @@ def _remote_block(script, marker):
     return "\n".join(body)
 
 
+def test_a_wide_open_operator_source_ranges_warns_before_apply(script):
+    """operator_source_ranges left at 0.0.0.0/0 opens the jumpbox ssh and the
+    Guacamole portal to the whole internet. It is a tfvars value, not a topology
+    field, so the topology validator never sees it and the warning lives here. It is
+    non-blocking: it warns and continues, and it warns before terraform apply."""
+    code = _code(script)
+    assert "operator_source_ranges" in code
+    warn = "WARNING: operator_source_ranges is 0.0.0.0/0"
+    assert warn in script
+    assert script.index(warn) < script.index('say "terraform apply"')
+
+
 def test_the_deploy_does_not_need_rsync(script):
     """Not on Windows, and not installable there: chocolatey and winget both have
     no rsync package at all. Requiring it made the export un-launchable rather

@@ -390,7 +390,13 @@ SSH="ssh -i $KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
   exit 1
 }}
 
-{cloud_preflight}say "terraform apply"
+{cloud_preflight}# Non-blocking: warn if management ingress is left open to the whole internet.
+# operator_source_ranges is a tfvars value the topology validator never sees, so
+# the check happens here, at apply time. It warns and continues, never aborts.
+if grep -Eq 'operator_source_ranges[[:space:]]*=[[:space:]]*\[[[:space:]]*"0\.0\.0\.0/0"' terraform/terraform.tfvars 2>/dev/null; then
+  echo "WARNING: operator_source_ranges is 0.0.0.0/0 (ssh and the portal are open to the whole internet). Narrow it in terraform/terraform.tfvars."
+fi
+say "terraform apply"
 terraform -chdir=terraform init -input=false -upgrade >/dev/null
 terraform -chdir=terraform apply -auto-approve -input=false
 

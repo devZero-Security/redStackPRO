@@ -6,7 +6,8 @@ per host firewall object. The AWS backend does. See 0015.
 """
 
 from .plan import (  # noqa: F401  GenerationError re-exported
-    GenerationError, align, operator_hosts_hcl, time_provider)
+    GenerationError, align, operator_hosts_hcl,
+    operator_source_ranges_check, time_provider)
 
 # Kali has no GCP public image, and converting a booted Debian at provision
 # time is unreliable: apt refuses the kali-linux-headless dependency tree on a
@@ -222,6 +223,7 @@ def _main(plan):
         "# One module block per node. Inter module references resolve at apply",
         "# time on your machine, because redStackPRO never runs Terraform. See 0001.",
     ]
+    lines += operator_source_ranges_check()
 
     is_range = plan.is_range()
     # Guacamole runs on the jumpbox in every mode (a defense range and an offense
