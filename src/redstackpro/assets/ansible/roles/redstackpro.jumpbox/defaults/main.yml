@@ -80,7 +80,7 @@ redstackpro_openvpn_netmask: 255.255.255.0
 # and per-user TOTP both need writable user records, which the old read-only
 # file provider could not hold. The connection list is still derived from the
 # inventory -- it is seeded as SQL now instead of a rendered XML file.
-redstackpro_guacamole_version: "1.5.5"
+redstackpro_guacamole_version: "1.6.0"
 redstackpro_guacamole_http_port: 8080
 # The database behind the portal. Loopback-only like guacd and the web app; the
 # password is generated on this host at first run and never leaves it or enters
