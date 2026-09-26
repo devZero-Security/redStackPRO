@@ -729,6 +729,92 @@ def boot001_wireguard_bootstrap(ctx):
             name=self_name(ctx, n))
 
 
+# ---------------------------------------------------------------- vpn access
+
+# The multi-user VPN access layer: how operators reach an artie range and who
+# they are. Fields live on the jumpbox overlay (access_mode, vpn_port,
+# vpn_protocol, operators). See vpn-multiuser-spec.
+
+def _jumpbox_access(node):
+    ov = node.get("overlay") or {}
+    return (ov.get("access_mode", "public"),
+            ov.get("vpn_protocol", "udp"),
+            ov.get("operators") or [])
+
+
+def vpn001_wireguard_tcp(ctx):
+    """WireGuard runs over udp only, so access_mode wireguard with vpn_protocol
+    tcp names a listener that cannot exist. An error: the export would render an
+    unreachable tunnel. OpenVPN is the mode that takes tcp."""
+    for n in ctx.of_kind("jumpbox"):
+        mode, proto, _ = _jumpbox_access(n)
+        if mode == "wireguard" and proto == "tcp":
+            yield finding(
+                "VPN001", "error", [n["id"]],
+                "{name} sets access_mode wireguard with vpn_protocol tcp, but "
+                "WireGuard is udp only.",
+                remedy="Set vpn_protocol udp, or use access_mode openvpn for tcp.",
+                name=self_name(ctx, n))
+
+
+def vpn002_vpn_access_is_artie_only(ctx):
+    """A VPN access mode and the operator roster are artie concepts: the attack
+    canvas fronts a team over a tunnel, while a haven range keeps the public
+    portal. A warning, since the fields do no harm on haven, they are ignored."""
+    if ctx.topology.get("mode") != "haven":
+        return
+    for n in ctx.of_kind("jumpbox"):
+        mode, _, operators = _jumpbox_access(n)
+        if mode in ("wireguard", "openvpn") or operators:
+            yield finding(
+                "VPN002", "warning", [n["id"]],
+                "{name} declares VPN access or an operator roster, which are artie "
+                "features. A haven range keeps the public portal, so these are "
+                "ignored here.",
+                remedy="Move the multi-user VPN access to an artie topology, or "
+                       "clear these fields.",
+                name=self_name(ctx, n))
+
+
+def vpn003_vpn_without_operators(ctx):
+    """A VPN access mode with no operators declared. The tunnel stands up, but
+    only the shared break-glass admin holds a credential, so no per-user access
+    is provisioned. A warning: a valid single-admin range, just probably not what
+    a team meant to build. Haven is already covered by VPN002."""
+    if ctx.topology.get("mode") == "haven":
+        return
+    for n in ctx.of_kind("jumpbox"):
+        mode, _, operators = _jumpbox_access(n)
+        if mode in ("wireguard", "openvpn") and not operators:
+            yield finding(
+                "VPN003", "warning", [n["id"]],
+                "{name} enables {mode} access but declares no operators, so only "
+                "the shared break-glass admin will have a credential.",
+                remedy="Add operators to provision a per-user account and VPN "
+                       "credential for each, or leave as is for single-admin access.",
+                name=self_name(ctx, n), mode=mode)
+
+
+def vpn004_duplicate_operator_handle(ctx):
+    """Two operators sharing a handle. The handle keys the portal account and the
+    VPN credential, so a duplicate collides at apply and the second account cannot
+    be created. An error, the same shape as RNG007 for domain usernames."""
+    for n in ctx.of_kind("jumpbox"):
+        _, _, operators = _jumpbox_access(n)
+        seen = {}
+        for op in operators:
+            handle = (op.get("handle") or "").lower()
+            if handle:
+                seen[handle] = seen.get(handle, 0) + 1
+        dupes = sorted(h for h, c in seen.items() if c > 1)
+        if dupes:
+            yield finding(
+                "VPN004", "error", [n["id"]],
+                "{name} has duplicate operator handles: {dupes}.",
+                remedy="A handle is one per operator; rename or remove the copies.",
+                name=self_name(ctx, n), dupes=", ".join(dupes))
+
+
 # ---------------------------------------------------------------- peering
 
 def peer001_self_peer(ctx):
@@ -1227,6 +1313,10 @@ RULES = [
     net004_internal_ip_outside_segment,
     net005_duplicate_internal_ip,
     boot001_wireguard_bootstrap,
+    vpn001_wireguard_tcp,
+    vpn002_vpn_access_is_artie_only,
+    vpn003_vpn_without_operators,
+    vpn004_duplicate_operator_handle,
     peer001_self_peer,
     peer002_duplicate_peer,
     peer003_cidr_overlap,

@@ -741,3 +741,97 @@ def test_every_shipped_redirector_example_demands_a_hostname_first():
                     node.setdefault("overlay", {})["hostname"] = "cdn.redops.design"
             assert not errors(topology), name
     assert seen, "no shipped example carries a redirector"
+
+
+# -- multi-user VPN access (artie)
+
+def _topology_schema():
+    import os
+    path = os.path.join(os.path.dirname(__file__), "..",
+                        "src/redstackpro/schema/topology/0.6.0.json")
+    return json.loads(open(path, encoding="utf-8").read())
+
+
+def _jumpbox(doc):
+    return next(n for n in doc["nodes"] if n["kind"] == "jumpbox")
+
+
+def test_vpn_fields_validate_on_an_artie_jumpbox(minimal):
+    """The new fields are legal on an artie jumpbox: schema shape and topology
+    semantics both clean. Two operators, wireguard on its default udp."""
+    import jsonschema
+    jb = _jumpbox(minimal)
+    jb["overlay"]["access_mode"] = "wireguard"
+    jb["overlay"]["vpn_port"] = 51820
+    jb["overlay"]["vpn_protocol"] = "udp"
+    jb["overlay"]["operators"] = [
+        {"handle": "mike", "role": "lead"},
+        {"handle": "alice"},
+    ]
+    jsonschema.Draft202012Validator(_topology_schema()).validate(minimal)
+    assert is_valid(minimal)
+    assert not {c for c in codes(minimal) if c.startswith("VPN")}
+
+
+def test_vpn001_wireguard_tcp_is_an_error(minimal):
+    """WireGuard is udp only. OpenVPN takes tcp fine."""
+    jb = _jumpbox(minimal)
+    jb["overlay"]["access_mode"] = "wireguard"
+    jb["overlay"]["vpn_protocol"] = "tcp"
+    jb["overlay"]["operators"] = [{"handle": "mike"}]
+    assert "VPN001" in errors(minimal)
+    jb["overlay"]["access_mode"] = "openvpn"
+    assert "VPN001" not in codes(minimal)
+
+
+def test_vpn002_vpn_access_on_haven_warns():
+    """The VPN access layer is an artie feature; declared on a haven range it is
+    ignored, so it warns rather than errors."""
+    g = _range()
+    g["nodes"].append({"id": "jump-bx01", "kind": "jumpbox", "overlay": {
+        "services": ["ssh"], "access_mode": "wireguard",
+        "operators": [{"handle": "mike"}]}})
+    g["edges"].append({"id": "ej", "role": "attached",
+                       "source": "jump-bx01", "target": "sub01"})
+    assert "VPN002" in codes(g)
+    assert "VPN002" not in errors(g), "artie-only fields on haven are a warning"
+
+
+def test_vpn003_vpn_without_operators_warns(minimal):
+    """A VPN mode with an empty roster leaves only the break-glass admin. Non
+    blocking, and cleared by declaring an operator."""
+    jb = _jumpbox(minimal)
+    jb["overlay"]["access_mode"] = "openvpn"
+    assert "VPN003" in codes(minimal)
+    assert "VPN003" not in errors(minimal), "single-admin access is a warning"
+    jb["overlay"]["operators"] = [{"handle": "mike"}]
+    assert "VPN003" not in codes(minimal)
+
+
+def test_vpn004_duplicate_operator_handle_is_an_error(minimal):
+    """The handle keys the portal account and the VPN credential, so a duplicate
+    collides at apply. uniqueItems on the array does not catch it, since the two
+    entries differ by role, so the rule is what enforces it."""
+    jb = _jumpbox(minimal)
+    jb["overlay"]["access_mode"] = "wireguard"
+    jb["overlay"]["operators"] = [
+        {"handle": "mike"}, {"handle": "mike", "role": "lead"}]
+    assert "VPN004" in errors(minimal)
+    jb["overlay"]["operators"][1]["handle"] = "alice"
+    assert "VPN004" not in codes(minimal)
+
+
+def test_shipped_examples_have_no_vpn_findings():
+    """Templates omit the new fields, so they must stay clean of the VPN rules.
+    This step makes the fields legal, it does not add them to any template."""
+    import glob
+    import os
+    for pattern in ("frontend/public/**/*.json",
+                    "src/redstackpro/schema/topology/examples/0.6.0/*.json"):
+        root = os.path.join(os.path.dirname(__file__), "..", pattern)
+        for path in sorted(glob.glob(root, recursive=True)):
+            topology = json.loads(open(path, encoding="utf-8").read())
+            if "nodes" not in topology:
+                continue
+            assert not {c for c in codes(topology) if c.startswith("VPN")}, \
+                os.path.basename(path)

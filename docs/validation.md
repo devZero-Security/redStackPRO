@@ -153,6 +153,31 @@ Names are composed from the topology `prefix` and the node `id`, never stored. S
   condition is satisfiable and the constraint falls on the generated play order
   rather than on the topology.
 
+## VPN access
+
+The multi-user VPN access layer, an artie concept: how operators reach the range
+and who they are. The fields live on the jumpbox overlay: `access_mode`
+(`public`, `wireguard`, `openvpn`), `vpn_port`, `vpn_protocol` (`udp`, `tcp`),
+and `operators` (a roster of `{handle, role?}`). Credentials are generated at
+apply, never in the export. See vpn-multiuser-spec.
+
+- `VPN001` error. A jumpbox with `access_mode: wireguard` and
+  `vpn_protocol: tcp`. WireGuard runs over udp only, so this names a listener
+  that cannot exist and the export would render an unreachable tunnel. Use
+  `access_mode: openvpn` for tcp.
+- `VPN002` warning. A haven jumpbox that declares a VPN `access_mode` or a
+  non-empty `operators` roster. The VPN access layer and the operator roster are
+  artie features; a haven range keeps the public portal, so the fields are
+  ignored there. A warning rather than an error, since they do no harm.
+- `VPN003` warning, artie only. A jumpbox on a VPN `access_mode` with no
+  `operators` declared. The tunnel stands up, but only the shared break-glass
+  admin holds a credential, so no per-user access is provisioned. A valid
+  single-admin range, just probably not what a team meant to build.
+- `VPN004` error. Two `operators` on one jumpbox sharing a `handle`. The handle
+  keys the portal account and the VPN credential, so a duplicate collides at
+  apply and the second account cannot be created. The same shape as `RNG007` for
+  domain usernames.
+
 ## Peering
 
 A `peers` edge joins two networks so hosts in one can reach hosts in the other on

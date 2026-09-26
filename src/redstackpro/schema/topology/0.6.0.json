@@ -730,6 +730,54 @@
           "type": "boolean",
           "x-redstackpro-source": "user",
           "description": "Install the foothold's offensive toolchain (impacket, certipy, coercer, netexec, bloodhound-python, hashcat). Defaults to true on a RANGE jumpbox, which is the documented assumed-breach foothold the solution runs from, and false on an ops bastion, where the tooling belongs on the operator box instead. Opens no ports. Each tool gets its own python environment, because coercer and certipy require different impacket versions. See PZ-2."
+        },
+        "access_mode": {
+          "enum": [
+            "public",
+            "wireguard",
+            "openvpn"
+          ],
+          "default": "public",
+          "x-redstackpro-source": "user",
+          "description": "How operators reach the range. public is the shared portal on the jumpbox public address, the behaviour to date. wireguard or openvpn instead puts operators on a VPN tunnel, and each declared operator gets a personal credential generated at apply. The VPN access layer is an artie concept; set on a haven range the validator warns (VPN002)."
+        },
+        "vpn_port": {
+          "$ref": "#/$defs/port",
+          "x-redstackpro-source": "user",
+          "description": "The VPN listen port. Optional: absent takes the per-mode default at apply, 51820 for wireguard and 1194 for openvpn. Set it to move openvpn onto a port a restrictive network lets out, e.g. 443."
+        },
+        "vpn_protocol": {
+          "enum": [
+            "udp",
+            "tcp"
+          ],
+          "default": "udp",
+          "x-redstackpro-source": "user",
+          "description": "Transport for the VPN listener. WireGuard is udp only, so tcp with access_mode wireguard is rejected (VPN001). OpenVPN takes either; tcp trades throughput for reach through networks that block udp."
+        },
+        "operators": {
+          "type": "array",
+          "uniqueItems": true,
+          "x-redstackpro-source": "user",
+          "description": "The human operators on this range, one entry per person. Each becomes its own portal account and, on a VPN access_mode, its own VPN credential, generated at apply. Empty or absent leaves the single shared break-glass admin as the only account. Distinct from the operator NODE kind, which is the Kali box: these are people, not machines. Handles are unique per range (VPN004).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "handle"
+            ],
+            "properties": {
+              "handle": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$",
+                "description": "The operator's login handle, lowercase. Keys the portal account and the VPN credential, so it is unique within the range."
+              },
+              "role": {
+                "type": "string",
+                "description": "Optional free-form label for the operator, e.g. lead or trainee. Advisory only for now."
+              }
+            }
+          }
         }
       }
     },

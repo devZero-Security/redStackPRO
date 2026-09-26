@@ -61,6 +61,10 @@ export const FAMILIES = {
     label: "Range model",
     blurb: "Whether domains, controllers and members form a coherent AD range.",
   },
+  VPN: {
+    label: "VPN access",
+    blurb: "Whether the multi-user VPN access mode and operator roster are coherent.",
+  },
 };
 
 // Codes are three letters then three digits. Anything else is a code from a
