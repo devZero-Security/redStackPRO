@@ -6,6 +6,14 @@ redstackpro_operator_os: debian
 redstackpro_operator_user: operator
 redstackpro_operator_root: /opt/redstackpro
 
+# desktop.yml runs only when this is true (set from overlay_operator.desktop via
+# _overlay_vars). Off by default: same reasoning as the headless metapackage below.
+redstackpro_operator_desktop: false
+redstackpro_operator_desktop_packages:
+  - kali-desktop-xfce
+  - xrdp
+  - firefox-esr
+
 # Kali ships its tooling in metapackages. headless is the default because an
 # operator box reached over ssh or through the portal has no use for a desktop,
 # and the desktop metapackages are several gigabytes.

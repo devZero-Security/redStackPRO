@@ -156,3 +156,10 @@
 
 - name: Install the pinned offensive toolchain
   ansible.builtin.include_tasks: toolchain.yml
+
+# Plain boolean when, not a templated filename: check_roles.py BRANCHES only
+# validates templated includes, so a desktop{{ x }}.yml pattern here would need
+# an entry there. Keep it a flat boolean if this ever grows options.
+- name: Install the GUI desktop for a desktop-mode Kali operator
+  ansible.builtin.include_tasks: desktop.yml
+  when: redstackpro_operator_desktop | default(false)

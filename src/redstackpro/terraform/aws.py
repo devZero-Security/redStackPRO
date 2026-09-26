@@ -477,6 +477,10 @@ def _main(plan):
         # default 30 GB cannot hold it. Give an Exchange host a bigger disk.
         if "exchange" in (node.get("overlay", {}).get("services") or []):
             pairs.append(("disk_size_gb", "120"))
+        elif plan.is_gui_operator(node):
+            # xfce plus xrdp on top of the Kali metapackage needs headroom the
+            # module's default does not have.
+            pairs.append(("disk_size_gb", "50"))
         # A range locking this host to a specific address (GOAD's canonical
         # octets, see 0055); omitted lets AWS assign one from the subnet's
         # range, the unchanged default.
@@ -856,9 +860,10 @@ def _firewall(plan):
         for host in managed:
             base = "mgmt_out_%s_%s" % (plan.ref(jump), plan.ref(host["id"]))
             # A Windows host is reached over WinRM (22 opens nothing on it), and
-            # guacd on the jumpbox also needs 3389 to render its RDP tile. See 0019.
+            # guacd on the jumpbox also needs 3389 to render its RDP tile, for a
+            # Windows host or a desktop-mode Kali operator alike. See 0019.
             rules = [(base, plan.management_port(host))]
-            if plan.is_windows(host):
+            if plan.is_windows(host) or plan.is_gui_operator(host):
                 rules.append((base + "_rdp", 3389))
             for name, port in rules:
                 if name in seen:

@@ -17,6 +17,12 @@ export const TEMPLATES = {
         "The smallest usable stack: a Sliver teamserver driven over SSH from the Kali operator, behind one redirector, with one jumpbox. A starting point to grow from.",
     },
     {
+      file: "minimalc2-gui",
+      name: "MinimalC2-GUI",
+      blurb:
+        "A Mythic teamserver driven from a browser on a GUI-mode Kali operator reached over a Guac RDP tile, behind one redirector: the smallest UI-driven C2 stack.",
+    },
+    {
       file: "rollover",
       name: "Redirector rollover",
       blurb:

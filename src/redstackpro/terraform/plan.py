@@ -125,6 +125,14 @@ class TerraformPlan:
             return os.startswith("windows")
         return node["kind"] in AD_HOST_KINDS
 
+    def is_gui_operator(self, node):
+        """A Kali (or other non-Windows) operator with desktop:true: xrdp over a
+        Guacamole RDP tile instead of SSH. Still Ansible-managed over 22, so this
+        is intentionally separate from is_windows -- folding it in would route
+        this host over WinRM, which a GUI Kali box has no listener for."""
+        return (node["kind"] == "operator"
+                and bool((node.get("overlay") or {}).get("desktop")))
+
     # -- range / AD selection
 
     def is_range(self):

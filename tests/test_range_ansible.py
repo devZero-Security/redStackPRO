@@ -10,6 +10,7 @@ goad-native-recreation.
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
 from redstackpro.ansible import generate
@@ -177,6 +178,51 @@ def test_the_seed_sql_is_safe_and_idempotent():
     assert "digest(" in seed and "upper(encode(" in seed
     # pgcrypto is not on by default in the stock image.
     assert "CREATE EXTENSION IF NOT EXISTS pgcrypto" in seed
+
+
+def _render_guac_seed(hostvars):
+    """Render the real template with a fabricated inventory, StrictUndefined so a
+    missing var fails loud rather than falling through to the wrong branch.
+    Jinja is a test convenience here; Ansible renders this in production."""
+    jinja2 = pytest.importorskip("jinja2")
+    env = jinja2.Environment(
+        loader=jinja2.FileSystemLoader(str(JUMPBOX_ROLE / "templates")),
+        autoescape=False,
+        undefined=jinja2.StrictUndefined,
+    )
+    return env.get_template("guacamole-seed.sql.j2").render(
+        ansible_managed="test",
+        redstackpro_guac_operator="redop",
+        redstackpro_guac_password="labpw",
+        redstackpro_jumpbox_user="redop",
+        redstackpro_guac_ssh_key="fake-key",
+        inventory_hostname="red-jump-bx01",
+        groups={"all": ["red-jump-bx01"] + list(hostvars)},
+        hostvars=hostvars,
+    )
+
+
+def test_a_desktop_kali_operator_gets_an_rdp_tile_not_ssh():
+    """The rdp-vs-ssh branch used to gate on psrp or operator_os == windows, which
+    left a desktop:true Kali operator on the ssh branch with no way to reach its
+    xrdp session. See CAR008 and overlay_operator.desktop."""
+    seed = _render_guac_seed({
+        "red-kali-op01": {
+            "ansible_host": "10.20.0.5",
+            "redstackpro_operator_os": "kali",
+            "redstackpro_operator_desktop": True,
+        },
+        "red-ssh-op01": {
+            "ansible_host": "10.20.0.6",
+            "redstackpro_operator_os": "kali",
+        },
+    })
+    assert "-- red-kali-op01 (rdp)" in seed
+    assert "-- red-ssh-op01 (ssh)" in seed
+    # The rdp tile for the GUI operator, not just any rdp tile in the file.
+    gui_tile = seed.split("-- red-kali-op01 (rdp)")[1].split("-- red-ssh-op01")[0]
+    assert "'rdp'" in gui_tile
+    assert "'3389'" in gui_tile
 
 
 def test_patient_zero_gets_a_portal_tile_on_one_landing_host():

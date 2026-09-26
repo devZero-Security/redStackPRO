@@ -54,6 +54,11 @@ Names are composed from the topology `prefix` and the node `id`, never stored. S
   redStack's own shape. Worth noting only because it concentrates blast radius:
   losing that host cuts every chain behind it.
 - `CAR007` warning. A teamserver with no `fronts` edge. It has no inbound path.
+- `CAR008` warning. A teamserver running a web-UI C2 (Mythic, Adaptix) with no
+  operator that can open the UI. A plain Kali operator is SSH only, so the
+  topology needs a Windows operator or a Kali operator with `desktop: true`
+  (xrdp over a Guacamole RDP tile), or it should run a headless C2 such as
+  Sliver instead.
 
 ## Fronting
 

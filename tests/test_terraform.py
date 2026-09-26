@@ -2,6 +2,7 @@
 the part that exists nowhere else, so it carries most of the tests.
 """
 
+import json
 import re
 import io
 from pathlib import Path
@@ -9,6 +10,7 @@ from pathlib import Path
 import hcl2
 import pytest
 
+from redstackpro.authoring import set_redirector_hostname
 from redstackpro.terraform import GenerationError, generate
 from redstackpro.terraform import aws as aws_images
 
@@ -400,6 +402,39 @@ def test_a_windows_host_gets_winrm_not_ssh(redstack):
     rdp = rules["mgmt_out_red_jump_bx01_3389"]
     assert rdp["target_tags"] == ["red-win-op01"]
     assert rdp["source_tags"] == ["red-jump-bx01"]
+
+
+def _minimalc2_gui():
+    """The GUI template: a desktop:true Kali operator, no Windows operator at
+    all. Ships one field short like every redirector-bearing example (RDR001),
+    so the hostname is filled the same way the CLI and CI do."""
+    doc = json.loads(
+        (ROOT / "frontend/public/minimalc2-gui.json").read_text(encoding="utf-8"))
+    return set_redirector_hostname(doc, "cdn.redteam.test")
+
+
+def test_gcp_gui_operator_opens_3389_and_gets_a_bigger_disk():
+    """A desktop:true Kali operator is still reached over ssh/ansible (22), but
+    guacd also needs 3389 for its RDP tile, and xfce+xrdp on top of the Kali
+    metapackage needs more than the module's 30 GB default. See is_gui_operator
+    and CAR008."""
+    doc = _minimalc2_gui()
+    mods = modules(doc)
+    op = mods["red_kali_op01"]
+    assert op["disk_size_gb"] == 50
+    rules = firewall_rules(doc)
+    assert "red-kali-op01" in rules["mgmt_out_red_jump_bx01_22"]["target_tags"]
+    assert "red-kali-op01" in rules["mgmt_out_red_jump_bx01_3389"]["target_tags"]
+
+
+def test_aws_gui_operator_opens_3389_and_gets_a_bigger_disk():
+    doc = _minimalc2_gui()
+    mods = aws_modules(doc)
+    op = mods["red_kali_op01"]
+    assert op["disk_size_gb"] == 50
+    rules = aws_rules(doc)
+    assert rules["mgmt_out_red_jump_bx01_red_kali_op01"]["from_port"] == 22
+    assert rules["mgmt_out_red_jump_bx01_red_kali_op01_rdp"]["from_port"] == 3389
 
 
 def test_offense_jumpbox_opens_the_guacamole_portal(redstack):

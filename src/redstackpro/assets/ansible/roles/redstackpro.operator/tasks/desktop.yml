@@ -1,0 +1,43 @@
+---
+# GUI mode for a Kali operator: xfce plus xrdp, so the operator is driven from a
+# browser over a Guacamole RDP tile instead of SSH. No new account or password:
+# the platform account is already chpasswd'd to the lab password and
+# PasswordAuthentication is enabled by the boot script whenever a jumpbox exists,
+# so the RDP tile authenticates as that same account. See CAR008.
+
+- name: Install the desktop and xrdp packages
+  ansible.builtin.apt:
+    name: "{{ redstackpro_operator_desktop_packages }}"
+    state: present
+    dpkg_options: force-confdef,force-confold
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Point xrdp sessions at XFCE
+  ansible.builtin.copy:
+    dest: /etc/xrdp/startwm.sh
+    content: |
+      #!/bin/sh
+      exec startxfce4
+    mode: "0755"
+
+- name: Enable and start xrdp
+  ansible.builtin.systemd:
+    name: xrdp
+    enabled: true
+    state: started
+
+- name: Enable and start xrdp-sesman
+  ansible.builtin.systemd:
+    name: xrdp-sesman
+    enabled: true
+    state: started
+
+# systemd reporting "active" is not evidence xrdp is actually listening; see
+# test_services_prove_they_started. This is a local check for the port, not the
+# live xrdp/guacd/NLA handshake, which is the piece still owed on a real deploy.
+- name: Confirm xrdp is actually listening
+  ansible.builtin.wait_for:
+    port: 3389
+    host: 127.0.0.1
+    timeout: 30

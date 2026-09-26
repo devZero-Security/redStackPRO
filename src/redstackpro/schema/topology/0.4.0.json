@@ -752,6 +752,12 @@
         "public_address": {
           "$ref": "#/$defs/public_address",
           "default": false
+        },
+        "desktop": {
+          "type": "boolean",
+          "default": false,
+          "x-redstackpro-source": "user",
+          "description": "Installs a desktop environment and xrdp so this operator can be driven over a Guacamole RDP tile instead of SSH. Satisfies CAR008's GUI requirement for a web-UI C2 without needing a Windows operator."
         }
       }
     },

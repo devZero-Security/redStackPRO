@@ -94,7 +94,8 @@ SELECT connection_id, '{{ key }}', '{{ value }}'
 {% for host in groups['all'] | sort if host != inventory_hostname %}
 {%   set vars = hostvars[host] %}
 {%   if (vars.ansible_connection is defined and vars.ansible_connection == 'psrp')
-        or (vars.redstackpro_operator_os is defined and vars.redstackpro_operator_os == 'windows') %}
+        or (vars.redstackpro_operator_os is defined and vars.redstackpro_operator_os == 'windows')
+        or (vars.redstackpro_operator_desktop | default(false)) %}
 -- {{ host }} (rdp)
 {{ conn(host, 'rdp') }}
 {{ param(host, 'hostname', vars.ansible_host) }}

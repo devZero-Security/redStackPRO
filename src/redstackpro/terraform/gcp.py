@@ -398,6 +398,10 @@ def _main(plan):
             pairs.append(("disk_size_gb", "120"))
         elif plan.is_windows(node):
             pairs.append(("disk_size_gb", "64"))
+        elif plan.is_gui_operator(node):
+            # xfce plus xrdp on top of the Kali metapackage needs headroom the
+            # module's 30 GB default does not have.
+            pairs.append(("disk_size_gb", "50"))
         if stop:
             pairs.append(
                 ("resource_policies",
@@ -727,9 +731,10 @@ def _firewall(plan):
         by_port = {}
         for host in same:
             by_port.setdefault(plan.management_port(host), []).append(host)
-            # guacd runs on the jumpbox and its RDP tile reaches a Windows box on
-            # 3389, so the portal needs that path in addition to the ansible port.
-            if plan.is_windows(host):
+            # guacd runs on the jumpbox and its RDP tile reaches a Windows box, or
+            # a desktop-mode Kali operator, on 3389, so the portal needs that path
+            # in addition to the ansible port.
+            if plan.is_windows(host) or plan.is_gui_operator(host):
                 by_port.setdefault(3389, []).append(host)
         for port, targets in sorted(by_port.items()):
             name = "mgmt_out_%s_%s" % (plan.ref(jump), port)
@@ -750,8 +755,9 @@ def _firewall(plan):
         for host in cross:
             xby.setdefault((network_of(host["id"]), plan.management_port(host)),
                            []).append(host)
-            # guacd's RDP tile also needs 3389 to a Windows box across the peering.
-            if plan.is_windows(host):
+            # guacd's RDP tile also needs 3389 to a Windows box, or a desktop-mode
+            # Kali operator, across the peering.
+            if plan.is_windows(host) or plan.is_gui_operator(host):
                 xby.setdefault((network_of(host["id"]), 3389), []).append(host)
         jcidr = source_cidr(jump)
         for (hnet, port), targets in sorted(

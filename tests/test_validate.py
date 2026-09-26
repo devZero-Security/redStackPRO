@@ -111,6 +111,18 @@ def test_car008_ui_c2_without_gui_operator_warns(redstack):
     assert is_valid(redstack), "a UI C2 without a GUI operator is a warning, not an error"
 
 
+def test_car008_desktop_kali_operator_satisfies_ui_c2(redstack):
+    # Swap the Windows operator for a desktop:true Kali operator: CAR008's escape
+    # is the ability to open the UI, not the OS, so this should stay clean.
+    win_ops = [n for n in redstack["nodes"]
+               if n["kind"] == "operator" and (n.get("overlay") or {}).get("os") == "windows"]
+    assert win_ops, "fixture should ship a Windows operator"
+    for n in win_ops:
+        n["overlay"] = {"os": "kali", "desktop": True}
+    assert "CAR008" not in codes(redstack)
+    assert is_valid(redstack)
+
+
 def test_rng009_user_flaw_declared_as_host_vuln_warns():
     """Kerberoasting on a host is a no-op (it is a user flaw), so the compiler
     warns rather than silently planting nothing. It stays valid: a warning, not
