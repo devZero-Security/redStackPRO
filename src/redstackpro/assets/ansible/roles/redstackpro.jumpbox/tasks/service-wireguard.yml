@@ -21,16 +21,12 @@
     - /etc/wireguard
     - /etc/wireguard/clients
 
-# The distributable output. Owned by the platform account so the admin can fetch
-# each config over their own ssh session without sudo; the peer keys under
-# /etc/wireguard stay root-only.
-- name: Create the client config output directory
-  ansible.builtin.file:
-    path: "{{ redstackpro_vpn_client_dir }}"
-    state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: "0700"
+# The durable roster (seeds operators.json, loads redstackpro_effective_operators,
+# installs rsp-operator, creates the client output dir). A live-added peer is in
+# operators.json, so reading it back is what makes an operator survive a reconverge
+# even though wg0.conf is regenerated. See vpn-roster.yml.
+- name: Establish the durable operator roster
+  ansible.builtin.include_tasks: vpn-roster.yml
 
 - name: Generate the server private key
   ansible.builtin.shell:
@@ -59,14 +55,14 @@
       wg genkey | tee /etc/wireguard/clients/{{ item.handle }}.key |
       wg pubkey > /etc/wireguard/clients/{{ item.handle }}.pub
     creates: /etc/wireguard/clients/{{ item.handle }}.key
-  loop: "{{ redstackpro_jumpbox_operators | default([]) }}"
+  loop: "{{ redstackpro_effective_operators | default([]) }}"
   loop_control:
     label: "{{ item.handle }}"
 
 - name: Read each operator public key
   ansible.builtin.slurp:
     src: /etc/wireguard/clients/{{ item.handle }}.pub
-  loop: "{{ redstackpro_jumpbox_operators | default([]) }}"
+  loop: "{{ redstackpro_effective_operators | default([]) }}"
   loop_control:
     label: "{{ item.handle }}"
   register: redstackpro_wg_client_pubs
@@ -74,7 +70,7 @@
 - name: Read each operator private key
   ansible.builtin.slurp:
     src: /etc/wireguard/clients/{{ item.handle }}.key
-  loop: "{{ redstackpro_jumpbox_operators | default([]) }}"
+  loop: "{{ redstackpro_effective_operators | default([]) }}"
   loop_control:
     label: "{{ item.handle }}"
   register: redstackpro_wg_client_keys

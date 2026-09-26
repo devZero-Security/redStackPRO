@@ -80,19 +80,19 @@
 
 # -- per-operator client certificates and configs
 
-- name: Create the client config output directory
-  ansible.builtin.file:
-    path: "{{ redstackpro_vpn_client_dir }}"
-    state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: "0700"
+# The durable roster (seeds operators.json, loads redstackpro_effective_operators,
+# installs rsp-operator, creates the client output dir). An OpenVPN client survives
+# a reconverge on its own (any CA-signed cert connects), so here the roster mainly
+# keeps operators.json and rsp-operator in step with the wireguard mode. See
+# vpn-roster.yml.
+- name: Establish the durable operator roster
+  ansible.builtin.include_tasks: vpn-roster.yml
 
 - name: Generate a client key for each operator
   ansible.builtin.command:
     cmd: openssl genrsa -out /etc/openvpn/server/clients/{{ item.handle }}.key 2048
     creates: /etc/openvpn/server/clients/{{ item.handle }}.key
-  loop: "{{ redstackpro_jumpbox_operators | default([]) }}"
+  loop: "{{ redstackpro_effective_operators | default([]) }}"
   loop_control:
     label: "{{ item.handle }}"
 
@@ -104,7 +104,7 @@
       -subj "/CN={{ item.handle }}"
       -out /etc/openvpn/server/clients/{{ item.handle }}.csr
     creates: /etc/openvpn/server/clients/{{ item.handle }}.csr
-  loop: "{{ redstackpro_jumpbox_operators | default([]) }}"
+  loop: "{{ redstackpro_effective_operators | default([]) }}"
   loop_control:
     label: "{{ item.handle }}"
 
@@ -119,7 +119,7 @@
       -days {{ redstackpro_ca_days }} -sha256
       -out /etc/openvpn/server/clients/{{ item.handle }}.crt
     creates: /etc/openvpn/server/clients/{{ item.handle }}.crt
-  loop: "{{ redstackpro_jumpbox_operators | default([]) }}"
+  loop: "{{ redstackpro_effective_operators | default([]) }}"
   loop_control:
     label: "{{ item.handle }}"
 
@@ -127,12 +127,12 @@
   ansible.builtin.slurp:
     src: "{{ redstackpro_ca_dir }}/ca.crt"
   register: redstackpro_ovpn_ca
-  when: (redstackpro_jumpbox_operators | default([])) | length > 0
+  when: (redstackpro_effective_operators | default([])) | length > 0
 
 - name: Read each operator certificate
   ansible.builtin.slurp:
     src: /etc/openvpn/server/clients/{{ item.handle }}.crt
-  loop: "{{ redstackpro_jumpbox_operators | default([]) }}"
+  loop: "{{ redstackpro_effective_operators | default([]) }}"
   loop_control:
     label: "{{ item.handle }}"
   register: redstackpro_ovpn_client_certs
@@ -140,7 +140,7 @@
 - name: Read each operator key
   ansible.builtin.slurp:
     src: /etc/openvpn/server/clients/{{ item.handle }}.key
-  loop: "{{ redstackpro_jumpbox_operators | default([]) }}"
+  loop: "{{ redstackpro_effective_operators | default([]) }}"
   loop_control:
     label: "{{ item.handle }}"
   register: redstackpro_ovpn_client_keys

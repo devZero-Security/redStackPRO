@@ -1,0 +1,46 @@
+---
+# The durable operator roster, shared by the wireguard and openvpn access modes.
+# The topology roster seeds operators.json on the first deploy; after that the
+# rsp-operator tool edits it for live add/remove, and a reconverge reads it back,
+# so an operator added on the box survives the next apply rather than being wiped
+# when wg0.conf is regenerated. OpenVPN and the Guacamole accounts already survive
+# a reconverge on their own (any CA-signed cert connects; the portal seed never
+# deletes a user), so the roster's job is mainly WireGuard's peer list. See
+# vpn-multiuser-spec.
+
+- name: Create the client config output directory
+  ansible.builtin.file:
+    path: "{{ redstackpro_vpn_client_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0700"
+
+- name: Check for a durable operator roster
+  ansible.builtin.stat:
+    path: "{{ redstackpro_vpn_client_dir }}/operators.json"
+  register: redstackpro_operator_state
+
+- name: Seed the durable roster from the topology on first deploy
+  ansible.builtin.copy:
+    content: "{{ redstackpro_jumpbox_operators | default([]) | to_nice_json }}\n"
+    dest: "{{ redstackpro_vpn_client_dir }}/operators.json"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0640"
+  when: not redstackpro_operator_state.stat.exists
+
+- name: Load the durable operator roster
+  ansible.builtin.slurp:
+    src: "{{ redstackpro_vpn_client_dir }}/operators.json"
+  register: redstackpro_operator_roster_raw
+
+- name: Establish the effective operator roster
+  ansible.builtin.set_fact:
+    redstackpro_effective_operators: "{{ redstackpro_operator_roster_raw.content | b64decode | from_json }}"
+
+- name: Install the rsp-operator management tool
+  ansible.builtin.template:
+    src: rsp-operator.j2
+    dest: /usr/local/sbin/rsp-operator
+    mode: "0755"

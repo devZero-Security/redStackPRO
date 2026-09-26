@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+{{ ansible_managed | comment }}
+# Live add / remove / list of operators on a running artie jumpbox, with durable
+# state so a change made here survives the next ansible reconverge. The deploy
+# seeds the roster from the topology; use this afterwards to onboard or offboard a
+# teammate without a redeploy. Run as root (sudo rsp-operator ...).
+#
+#   rsp-operator add <handle> [role]   generate a VPN credential + portal account
+#   rsp-operator remove <handle>       revoke them
+#   rsp-operator list                  show the roster and the live peers
+#
+# The access mode is detected from what the deploy stood up. See vpn-multiuser-spec.
+
+set -euo pipefail
+
+CLIENT_DIR="{{ redstackpro_vpn_client_dir }}"
+STATE="$CLIENT_DIR/operators.json"
+PUBLIC_ADDR="{{ ansible_host }}"
+
+WG_SUBNET="{{ redstackpro_wireguard_subnet }}"
+WG_PORT="{{ redstackpro_wireguard_port }}"
+WG_ALLOWED="{{ redstackpro_wireguard_allowed_ips }}"
+WG_CLIENTS="/etc/wireguard/clients"
+WG_CONF="/etc/wireguard/wg0.conf"
+
+CA_DIR="{{ redstackpro_ca_dir }}"
+CA_DAYS="{{ redstackpro_ca_days }}"
+OVPN_PORT="{{ redstackpro_openvpn_port }}"
+OVPN_PROTO="{{ redstackpro_openvpn_protocol }}"
+OVPN_CLIENTS="/etc/openvpn/server/clients"
+
+DB_CONTAINER="redstackpro-guac-db"
+DB_USER="{{ redstackpro_guacamole_db_user }}"
+DB_NAME="{{ redstackpro_guacamole_db_name }}"
+DB_PW_FILE="{{ redstackpro_guacamole_db_password_file }}"
+
+die() { echo "rsp-operator: $*" >&2; exit 1; }
+[ "$(id -u)" -eq 0 ] || die "run as root (sudo rsp-operator ...)"
+[ -f "$WG_CONF" ] && MODE=wireguard || { [ -d "$OVPN_CLIENTS" ] && MODE=openvpn || die "no VPN access mode is configured on this jumpbox"; }
+[ -f "$STATE" ] || echo "[]" > "$STATE"
+
+valid_handle() { [[ "$1" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || die "handle must be lowercase letters, digits, - or _"; }
+in_roster() { jq -e --arg h "$1" 'any(.[]; .handle == $h)' "$STATE" >/dev/null 2>&1; }
+
+# Insert or delete a portal account in the Guacamole database. Mirrors the seed's
+# account creation (entity + salted sha256 hash), minus system permissions, and
+# grants the operator READ on every existing connection.
+guac_add() {
+  local handle="$1" pw="$2"
+  docker exec -i -e PGPASSWORD="$(cat "$DB_PW_FILE")" "$DB_CONTAINER" \
+    psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -v labpw="$pw" -v h="$handle" <<'SQL'
+INSERT INTO guacamole_entity (name, type) VALUES (:'h', 'USER') ON CONFLICT (name, type) DO NOTHING;
+INSERT INTO guacamole_user (entity_id, password_salt, password_hash, password_date)
+SELECT e.entity_id, gen_random_bytes(32), '\x00', now() FROM guacamole_entity e
+ WHERE e.name = :'h' AND e.type = 'USER'
+   AND NOT EXISTS (SELECT 1 FROM guacamole_user u WHERE u.entity_id = e.entity_id);
+UPDATE guacamole_user u SET password_hash = digest(convert_to(:'labpw' || upper(encode(u.password_salt, 'hex')), 'UTF8'), 'sha256')
+  FROM guacamole_entity e WHERE u.entity_id = e.entity_id AND e.name = :'h' AND e.type = 'USER' AND u.password_hash = '\x00';
+INSERT INTO guacamole_connection_permission (entity_id, connection_id, permission)
+SELECT e.entity_id, c.connection_id, 'READ' FROM guacamole_entity e CROSS JOIN guacamole_connection c
+ WHERE e.name = :'h' AND e.type = 'USER' ON CONFLICT DO NOTHING;
+SQL
+}
+
+guac_remove() {
+  local handle="$1"
+  docker exec -i -e PGPASSWORD="$(cat "$DB_PW_FILE")" "$DB_CONTAINER" \
+    psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -v h="$handle" \
+    -c "DELETE FROM guacamole_entity WHERE name = :'h' AND type = 'USER';"
+}
+
+# The next free tunnel host number for a WireGuard peer: one past the highest in
+# use, starting at 2 because the server holds .1. Reuses no gaps, which keeps a
+# revoked address from landing on a new operator.
+wg_next_octet() {
+  local max
+  max=$(grep -oE "AllowedIPs = ${WG_SUBNET//./\\.}\.[0-9]+/32" "$WG_CONF" 2>/dev/null \
+        | grep -oE '[0-9]+/32' | cut -d/ -f1 | sort -n | tail -1)
+  echo $(( ${max:-1} + 1 ))
+}
+
+add_wireguard() {
+  local handle="$1" octet addr priv pub
+  umask 077
+  wg genkey | tee "$WG_CLIENTS/$handle.key" | wg pubkey > "$WG_CLIENTS/$handle.pub"
+  priv=$(cat "$WG_CLIENTS/$handle.key"); pub=$(cat "$WG_CLIENTS/$handle.pub")
+  octet=$(wg_next_octet); addr="$WG_SUBNET.$octet"
+  wg set wg0 peer "$pub" allowed-ips "$addr/32"
+  printf '\n# %s\n[Peer]\nPublicKey = %s\nAllowedIPs = %s/32\n' "$handle" "$pub" "$addr" >> "$WG_CONF"
+  umask 177
+  cat > "$CLIENT_DIR/$handle.conf" <<EOF
+# $handle WireGuard client config
+[Interface]
+PrivateKey = $priv
+Address = $addr/32
+
+[Peer]
+PublicKey = $(cat /etc/wireguard/server.pub)
+Endpoint = $PUBLIC_ADDR:$WG_PORT
+AllowedIPs = $WG_ALLOWED
+PersistentKeepalive = 25
+EOF
+  chown "$SUDO_USER:$SUDO_USER" "$CLIENT_DIR/$handle.conf" 2>/dev/null || true
+  echo "$CLIENT_DIR/$handle.conf"
+}
+
+remove_wireguard() {
+  local handle="$1" pub
+  if [ -f "$WG_CLIENTS/$handle.pub" ]; then
+    pub=$(cat "$WG_CLIENTS/$handle.pub")
+    wg set wg0 peer "$pub" remove 2>/dev/null || true
+  fi
+  # Drop the peer block (the "# handle" line and the [Peer] stanza under it).
+  python3 - "$WG_CONF" "$handle" <<'PY'
+import sys
+path, handle = sys.argv[1], sys.argv[2]
+lines = open(path).read().splitlines()
+out, skip = [], False
+for line in lines:
+    if line.strip() == "# " + handle:
+        skip = True
+        continue
+    if skip:
+        if line.strip() == "" or line.startswith("#") or line.startswith("["):
+            skip = False if line.strip() != "" else skip
+            if line.strip() == "":
+                continue
+        if skip and (line.startswith("PublicKey") or line.startswith("AllowedIPs") or line == "[Peer]"):
+            continue
+    out.append(line)
+open(path, "w").write("\n".join(out) + "\n")
+PY
+  rm -f "$WG_CLIENTS/$handle.key" "$WG_CLIENTS/$handle.pub" "$CLIENT_DIR/$handle.conf"
+}
+
+add_openvpn() {
+  local handle="$1"
+  umask 077
+  openssl genrsa -out "$OVPN_CLIENTS/$handle.key" 2048
+  openssl req -new -key "$OVPN_CLIENTS/$handle.key" -subj "/CN=$handle" -out "$OVPN_CLIENTS/$handle.csr"
+  openssl x509 -req -in "$OVPN_CLIENTS/$handle.csr" -CA "$CA_DIR/ca.crt" -CAkey "$CA_DIR/ca.key" \
+    -CAserial "$CA_DIR/ca.srl" -days "$CA_DAYS" -sha256 -out "$OVPN_CLIENTS/$handle.crt"
+  umask 177
+  { cat <<EOF
+# $handle OpenVPN client config
+client
+dev tun
+proto $OVPN_PROTO
+remote $PUBLIC_ADDR $OVPN_PORT
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+cipher AES-256-GCM
+auth SHA256
+tls-version-min 1.2
+verb 3
+<ca>
+$(cat "$CA_DIR/ca.crt")
+</ca>
+<cert>
+$(cat "$OVPN_CLIENTS/$handle.crt")
+</cert>
+<key>
+$(cat "$OVPN_CLIENTS/$handle.key")
+</key>
+EOF
+  } > "$CLIENT_DIR/$handle.ovpn"
+  chown "$SUDO_USER:$SUDO_USER" "$CLIENT_DIR/$handle.ovpn" 2>/dev/null || true
+  echo "$CLIENT_DIR/$handle.ovpn"
+}
+
+remove_openvpn() {
+  local handle="$1"
+  # The certificate stays valid until it expires; a CRL is future work (PZ note).
+  rm -f "$OVPN_CLIENTS/$handle.key" "$OVPN_CLIENTS/$handle.csr" \
+        "$OVPN_CLIENTS/$handle.crt" "$CLIENT_DIR/$handle.ovpn"
+}
+
+cmd_add() {
+  local handle="${1:-}" role="${2:-}"; [ -n "$handle" ] || die "usage: rsp-operator add <handle> [role]"
+  valid_handle "$handle"
+  in_roster "$handle" && die "$handle is already on the roster"
+  local pw cred; pw=$(openssl rand -base64 12)
+  if [ "$MODE" = wireguard ]; then cred=$(add_wireguard "$handle"); else cred=$(add_openvpn "$handle"); fi
+  guac_add "$handle" "$pw"
+  local tmp; tmp=$(mktemp)
+  jq --arg h "$handle" --arg r "$role" '. + [ if $r == "" then {handle:$h} else {handle:$h, role:$r} end ]' "$STATE" > "$tmp" && mv "$tmp" "$STATE"
+  echo "added $handle"
+  echo "  portal account: $handle / $pw"
+  echo "  VPN credential: $cred"
+  echo "  VPN endpoint:   $PUBLIC_ADDR ($MODE)"
+}
+
+cmd_remove() {
+  local handle="${1:-}"; [ -n "$handle" ] || die "usage: rsp-operator remove <handle>"
+  in_roster "$handle" || die "$handle is not on the roster"
+  if [ "$MODE" = wireguard ]; then remove_wireguard "$handle"; else remove_openvpn "$handle"; fi
+  guac_remove "$handle"
+  local tmp; tmp=$(mktemp)
+  jq --arg h "$handle" 'map(select(.handle != $h))' "$STATE" > "$tmp" && mv "$tmp" "$STATE"
+  echo "removed $handle"
+}
+
+cmd_list() {
+  echo "access mode: $MODE   endpoint: $PUBLIC_ADDR"
+  echo "roster ($STATE):"; jq -r '.[] | "  " + .handle + (if .role then " (" + .role + ")" else "" end)' "$STATE"
+  if [ "$MODE" = wireguard ]; then echo "live peers:"; wg show wg0 peers 2>/dev/null | sed 's/^/  /'; fi
+}
+
+case "${1:-}" in
+  add)    shift; cmd_add "$@" ;;
+  remove) shift; cmd_remove "$@" ;;
+  list)   shift; cmd_list "$@" ;;
+  *) die "usage: rsp-operator {add <handle> [role] | remove <handle> | list}" ;;
+esac
