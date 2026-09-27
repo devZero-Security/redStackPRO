@@ -129,11 +129,38 @@ credentials and what is planted where. `goad-light` is a two-domain Active
 Directory range: `sevenkingdoms` and its child `north`, a parent-child trust in
 one forest, two domain controllers and a member server, plus a jumpbox.
 
-**Before you begin:** you need Terraform and the AWS CLI or gcloud CLI installed,
-and your own cloud account with credentials configured. redStackPRO generates the
-code; it installs none of that for you. See the wiki
-[Getting Started](https://github.com/devZero-Security/redStackPRO/wiki/Getting-Started)
-for the full checklist.
+> [!IMPORTANT]
+> **Two things before you deploy.** Your cloud identity needs permission to
+> create the resources the export builds (VPCs or networks, subnets, security
+> groups or firewall rules, instances, elastic or static IPs), and your machine
+> needs `terraform`, `ssh`, `tar`, and Python 3.8 or newer. redStackPRO generates
+> the code and installs none of that for you; Ansible installs itself on the
+> jumpbox.
+>
+> New to the AWS CLI or gcloud? Quick setup for whichever you target:
+>
+> **AWS**
+>
+>     aws configure
+>     aws sts get-caller-identity
+>
+> Attach the `AmazonEC2FullAccess` managed policy to the IAM user or role you
+> configure.
+>
+> **GCP**
+>
+>     gcloud auth login
+>     gcloud auth application-default login
+>     gcloud config set project <project-id>
+>     gcloud services enable compute.googleapis.com --project <project-id>
+>
+> Grant your account `roles/compute.admin` on the project.
+>
+> Full permission tables, install links, and the GCP vCPU quota note
+> (`CPUS_ALL_REGIONS`, default 32 per project) are in the wiki
+> [Cloud Prerequisites](https://github.com/devZero-Security/redStackPRO/wiki/Cloud-Prerequisites).
+> See [Getting Started](https://github.com/devZero-Security/redStackPRO/wiki/Getting-Started)
+> for the full checklist.
 
 To deploy it, fill in `export/terraform/terraform.tfvars` and run:
 
