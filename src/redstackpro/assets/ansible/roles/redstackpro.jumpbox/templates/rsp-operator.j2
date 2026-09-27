@@ -40,11 +40,14 @@ die() { echo "rsp-operator: $*" >&2; exit 1; }
 [ -f "$STATE" ] || echo "[]" > "$STATE"
 
 # Matches the compile-time gate (VPN005) so a live add accepts exactly what the
-# canvas does: lowercase alnum plus . _ - , starting alnum, at most 32 chars.
-valid_handle() { [[ "$1" =~ ^[a-z0-9][a-z0-9._-]*$ && ${#1} -le 32 ]] || die "handle must be lowercase letters, digits, dot, underscore or hyphen, at most 32 chars"; }
-# role is free-form but lands in the roster, the briefing and the guac seed, so
-# hold it to a single line, no pipe, at most 64 chars (matches VPN006).
-valid_role() { case "$1" in *"|"*) die "role must not contain a pipe character" ;; esac; [[ "$1" != *$'\n'* && "$1" != *$'\r'* ]] || die "role must be a single line"; [ "${#1}" -le 64 ] || die "role must be at most 64 chars"; }
+# canvas does: lowercase alnum plus . _ - , starting alnum, at most 32 chars. The
+# max length is enforced in the regex quantifier, not a bash length expansion, whose
+# brace-hash sequence a jinja template reads as a comment open and fails to render on.
+valid_handle() { [[ "$1" =~ ^[a-z0-9][a-z0-9._-]{0,31}$ ]] || die "handle must be lowercase letters, digits, dot, underscore or hyphen, at most 32 chars"; }
+# role is free-form but lands in the roster, the briefing and the guac seed, so hold
+# it to a single line, no pipe, at most 64 chars (matches VPN006). Length is in the
+# regex, not a bash length expansion, for the same jinja-render reason as valid_handle.
+valid_role() { case "$1" in *"|"*) die "role must not contain a pipe character" ;; esac; [[ "$1" != *$'\n'* && "$1" != *$'\r'* ]] || die "role must be a single line"; [[ "$1" =~ ^.{1,64}$ ]] || die "role must be at most 64 chars"; }
 in_roster() { jq -e --arg h "$1" 'any(.[]; .handle == $h)' "$STATE" >/dev/null 2>&1; }
 
 # Insert or delete a portal account in the Guacamole database. Mirrors the seed's
