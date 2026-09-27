@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "npm run test:pure && npm run test:render",
-    "test:pure": "node src/topology.test.mjs && node src/idscheme.test.mjs && node src/cidr.test.mjs && node src/route.test.mjs && node src/export.test.mjs && node src/session.test.mjs && node src/align.test.mjs && node src/waypoints.test.mjs && node src/profiles.test.mjs && node src/diagnostics.test.mjs && node src/extensions.test.mjs && node src/presets.test.mjs && node src/rangeUsers.test.mjs && node src/vulns.test.mjs && node src/hardening.test.mjs && node src/providers.test.mjs && node src/deployTarget.test.mjs && node src/findingFamilies.test.mjs && node src/templates.test.mjs",
+    "test:pure": "node src/topology.test.mjs && node src/idscheme.test.mjs && node src/cidr.test.mjs && node src/route.test.mjs && node src/export.test.mjs && node src/session.test.mjs && node src/align.test.mjs && node src/waypoints.test.mjs && node src/profiles.test.mjs && node src/diagnostics.test.mjs && node src/extensions.test.mjs && node src/presets.test.mjs && node src/rangeUsers.test.mjs && node src/vulns.test.mjs && node src/hardening.test.mjs && node src/providers.test.mjs && node src/deployTarget.test.mjs && node src/findingFamilies.test.mjs && node src/templates.test.mjs && node src/history.test.mjs",
     "test:render": "vitest run"
   },
   "dependencies": {

@@ -62,6 +62,7 @@ import {
   updateOverlay,
 } from "./topology.js";
 import { presetsFor } from "./presets.js";
+import { useHistory } from "./useHistory.js";
 
 function useDebounced(value, delay) {
   const [settled, setSettled] = useState(value);
@@ -81,7 +82,12 @@ function newIdempotencyKey() {
 }
 
 function Editor() {
-  const [document, setDocument] = useState(() => emptyDocument());
+  // Undo/redo lives over the document alone. See history.js and useHistory.js:
+  // a discrete edit pushes a step, a drag/resize/waypoint gesture coalesces
+  // into one step, and a template load, a topology open, or a save resets or
+  // clears the stacks rather than becoming an undoable step.
+  const history = useHistory(() => emptyDocument());
+  const document = history.document;
 
   // Saved state. The backend has no active topology concept: which topology is open
   // is a client concern carried by the URL, because the platform never deploys
@@ -189,11 +195,13 @@ function Editor() {
     const moved = Object.keys(renamed);
     if (moved.length === 0) return;
     record("retitle", renamed);
-    setDocument(next);
+    // Rides along with whatever edit triggered it rather than its own undo
+    // step: undoing the edit that caused the rename should undo the rename too.
+    history.amend(() => next);
     setSelection((sel) =>
       sel?.type === "node" && renamed[sel.id] ? { ...sel, id: renamed[sel.id] } : sel
     );
-  }, [document]);
+  }, [document, history]);
 
   // Ctrl+Shift+D copies the diagnostics from anywhere, so a report can be grabbed
   // even when the canvas is misbehaving.
@@ -290,7 +298,9 @@ function Editor() {
         // Only a document that never had any gets arranged, and that layout is
         // deterministic, so what is on screen is what a reload reproduces.
         const doc = layoutIfNeeded(body.document);
-        setDocument(doc);
+        // Opening a topology is a session boundary, not an edit: undo has
+        // nothing to say about whatever was open before.
+        history.reset(doc);
         setSaved(doc);
         setDomainsText((doc.domains || []).join(", "));
         setTopology(body.topology);
@@ -303,7 +313,7 @@ function Editor() {
         setStatus(error.message);
       }
     },
-    [flow, pushUrl]
+    [flow, pushUrl, history]
   );
 
   const confirmDiscard = useCallback(() => {
@@ -315,7 +325,7 @@ function Editor() {
 
   const resetToEmpty = useCallback((mode = "artie") => {
     const doc = emptyDocument(mode);
-    setDocument(doc);
+    history.reset(doc); // a new topology is a session boundary, not an undo step
     setSaved(doc);
     setDomainsText("");
     setTopology(null);
@@ -323,7 +333,7 @@ function Editor() {
     setConflict(null);
     setStatus("");
     setTemplateView(false); // a fresh topology is editable; a range template sets this true on load
-  }, []);
+  }, [history]);
 
   // New opens the canvas chooser; picking a canvas starts a fresh topology in that
   // mode. The mode is fixed at creation, so this never converts the open topology.
@@ -380,7 +390,9 @@ function Editor() {
       setSaving(true);
       try {
         const summary = await create(doc, doc.name);
-        setDocument(doc);
+        // A fork is a save under a new identity, not an edit: it starts its
+        // own undo history rather than carrying over the one before it.
+        history.reset(doc);
         adopt(summary, doc);
         refreshTopologies();
         setStatus(`Kept your version as ${summary.name}. You own it, and it is private.`);
@@ -390,7 +402,7 @@ function Editor() {
         setSaving(false);
       }
     },
-    [adopt, create, document, refreshTopologies]
+    [adopt, create, document, refreshTopologies, history]
   );
 
   const save = useCallback(async () => {
@@ -415,10 +427,12 @@ function Editor() {
           name: document.name,
         });
         adopt(summary, document);
+        history.clear(); // a save is not something undo reaches back past
         setStatus(`Saved version ${summary.version}. Nothing was deployed.`);
       } else {
         const summary = await create(document, document.name);
         adopt(summary, document);
+        history.clear();
         setStatus(`Saved version ${summary.version}. Nothing was deployed.`);
       }
       refreshTopologies();
@@ -428,7 +442,7 @@ function Editor() {
     } finally {
       setSaving(false);
     }
-  }, [adopt, blocked, create, document, fork, topology, refreshTopologies]);
+  }, [adopt, blocked, create, document, fork, topology, refreshTopologies, history]);
 
   const duplicate = useCallback(async () => {
     if (!topology) return;
@@ -516,10 +530,11 @@ function Editor() {
       setTopology((current) =>
         current && current.id === id ? { ...current, is_blueprint: true } : current
       );
+      history.clear(); // a server-side flag flip, not an in-canvas edit
       refreshTopologies();
       setStatus("Published as a blueprint. Anyone can clone it.");
     },
-    [refreshTopologies]
+    [refreshTopologies, history]
   );
 
   const unpublishTopology = useCallback(
@@ -528,10 +543,11 @@ function Editor() {
       setTopology((current) =>
         current && current.id === id ? { ...current, is_blueprint: false } : current
       );
+      history.clear();
       refreshTopologies();
       setStatus("Unpublished. It is back in your topologies list.");
     },
-    [refreshTopologies]
+    [refreshTopologies, history]
   );
 
   const reloadOverMine = useCallback(async () => {
@@ -595,6 +611,36 @@ function Editor() {
     return () => window.removeEventListener("keydown", onKey);
   }, [save]);
 
+  // Ctrl+Z undoes, Ctrl+Shift+Z and Ctrl+Y redo. `document` here is the canvas
+  // document (the state variable shadows the global), so the real DOM lives on
+  // `window.document`; that is what is checked for a focused text field, since
+  // typing in one should get the browser's own text undo, not the canvas's.
+  useEffect(() => {
+    const isEditable = (el) => {
+      if (!el) return false;
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return true;
+      return Boolean(el.isContentEditable);
+    };
+    const onKey = (event) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      if (isEditable(window.document.activeElement)) return;
+      const redo = key === "y" || (key === "z" && event.shiftKey);
+      if (redo) {
+        if (!history.canRedo) return;
+        event.preventDefault();
+        history.redo();
+      } else {
+        if (!history.canUndo) return;
+        event.preventDefault();
+        history.undo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [history]);
+
   // Validation runs against the API on every settled change, so what the canvas
   // shows and what the compiler will refuse are the same rules. Debounced,
   // because a drag produces a change per frame.
@@ -631,19 +677,22 @@ function Editor() {
   // identity that changed every render would defeat the cache below.
   const requestDelete = useCallback((target) => {
     record("delete", { type: target.type, id: target.id });
-    setDocument((current) =>
+    history.mutate((current) =>
       target.type === "edge"
         ? removeEdge(current, target.id)
         : removeNode(current, target.id)
     );
     setSelection((current) => (current?.id === target.id ? null : current));
-  }, []);
+  }, [history]);
 
   // Resizing a container writes its new geometry straight to the document. Width
   // and height are floored by the resize frame at the box's contents, so this
   // never crops a child; position moves only when a top or left edge is dragged.
+  // Fires on every pointer-move frame of the drag, so it is a gesture: the
+  // first frame pushes a step, every frame after amends it until the pointer
+  // is released, and one undo reverts the whole resize.
   const resizeNode = useCallback((id, box) => {
-    setDocument((current) => ({
+    history.gesture("resize", (current) => ({
       ...current,
       nodes: current.nodes.map((n) =>
         n.id === id
@@ -651,7 +700,7 @@ function Editor() {
           : n
       ),
     }));
-  }, []);
+  }, [history]);
 
   // Apply a themed cover profile to a redirector: fill its hostname, gating
   // header, and decoy, and re-roll the URI prefix on every fronts edge it serves
@@ -659,7 +708,7 @@ function Editor() {
   // redirector read convincingly as one kind of site. See profiles.js.
   const applyCover = useCallback((id, themeKey) => {
     record("apply-cover", { redirector: id, theme: themeKey });
-    setDocument((current) => {
+    history.mutate((current) => {
       const cover = coverFor(themeKey, undefined, current.domains || []);
       const nodes = current.nodes.map((n) =>
         n.id === id
@@ -690,24 +739,26 @@ function Editor() {
       });
       return { ...current, nodes, edges };
     });
-  }, []);
+  }, [history]);
 
   // Editing the operator's own domains: keep the raw text for the field, and
   // mirror the parsed list to document.domains so it saves with the topology.
+  // Coalesced by key, so a person typing a domain does not get a history step
+  // per keystroke; a pause starts a fresh step.
   const changeDomains = useCallback((text) => {
     setDomainsText(text);
     const list = text
       .split(",")
       .map((d) => d.trim().toLowerCase())
       .filter(Boolean);
-    setDocument((current) => ({ ...current, domains: list }));
-  }, []);
+    history.coalesce("domains", (current) => ({ ...current, domains: list }));
+  }, [history]);
 
   // Re-roll one fronts edge's URI prefix, themed by its redirector's decoy, and
   // kept clear of the prefixes its siblings already use.
   const randomizeUri = useCallback((edgeId) => {
     record("randomize-uri", { edge: edgeId });
-    setDocument((current) => {
+    history.mutate((current) => {
       const edge = current.edges.find((e) => e.id === edgeId);
       if (!edge) return current;
       const source = current.nodes.find((n) => n.id === edge.source);
@@ -722,7 +773,7 @@ function Editor() {
         edges: current.edges.map((e) => (e.id === edgeId ? { ...e, uri_prefix: uri } : e)),
       };
     });
-  }, []);
+  }, [history]);
 
   // The base conversion depends only on the document and the palette, so it does
   // not rerun when findings arrive every third of a second. That is what used to
@@ -777,21 +828,28 @@ function Editor() {
   // Routing a line by hand. The bend points live on the edge in the document, so
   // they save and reload with the topology; each edit works on that edge's own list,
   // so dragging one bend never touches another line or the edge's endpoints.
-  const editWaypoints = useCallback((edgeId, fn) => {
-    setDocument((current) => ({
+  // `continuous` marks a drag's per-frame calls (dropping a bend, then moving
+  // it) so they gesture-coalesce into one undo step instead of one per frame;
+  // removing or clearing a bend is a single click and pushes its own step.
+  const editWaypoints = useCallback((edgeId, fn, { continuous } = {}) => {
+    const apply = (current) => ({
       ...current,
       edges: current.edges.map((e) =>
         e.id === edgeId ? { ...e, waypoints: fn(e.waypoints || []) } : e
       ),
-    }));
-  }, []);
+    });
+    if (continuous) history.gesture("waypoint", apply);
+    else history.mutate(apply);
+  }, [history]);
   const round = (point) => ({ x: Math.round(point.x), y: Math.round(point.y) });
   const moveWaypointAt = useCallback(
-    (edgeId, index, point) => editWaypoints(edgeId, (list) => moveWaypoint(list, index, round(point))),
+    (edgeId, index, point) =>
+      editWaypoints(edgeId, (list) => moveWaypoint(list, index, round(point)), { continuous: true }),
     [editWaypoints]
   );
   const insertWaypointAt = useCallback(
-    (edgeId, index, point) => editWaypoints(edgeId, (list) => insertWaypoint(list, index, round(point))),
+    (edgeId, index, point) =>
+      editWaypoints(edgeId, (list) => insertWaypoint(list, index, round(point)), { continuous: true }),
     [editWaypoints]
   );
   const removeWaypointAt = useCallback(
@@ -931,7 +989,12 @@ function Editor() {
 
   const onNodesChange = useCallback((changes) => {
     snapToGuides(changes);
-    setDocument((current) => {
+    const hasPosition = changes.some((c) => c.type === "position" && c.position);
+    const hasRemoval = changes.some((c) => c.type === "remove");
+    // A plain click is a "select" change, neither of these, and never touches
+    // the document; skip it rather than open (and instantly close) a gesture.
+    if (!hasPosition && !hasRemoval) return;
+    const apply = (current) => {
       let next = current;
       for (const change of changes) {
         if (change.type === "position" && change.position) {
@@ -949,18 +1012,22 @@ function Editor() {
         if (change.type === "remove") next = removeNode(next, change.id);
       }
       return next;
-    });
-  }, [snapToGuides]);
+    };
+    // A move fires on every frame of the drag, so it gesture-coalesces into
+    // one undo step; a removal (Backspace, multi-select delete) is discrete.
+    if (hasRemoval) history.mutate(apply);
+    else history.gesture("node-move", apply);
+  }, [snapToGuides, history]);
 
   const onEdgesChange = useCallback((changes) => {
-    setDocument((current) => {
+    history.mutate((current) => {
       let next = current;
       for (const change of changes) {
         if (change.type === "remove") next = removeEdge(next, change.id);
       }
       return next;
     });
-  }, []);
+  }, [history]);
 
   // The role follows from what the line connects, so the canvas never asks.
   // Dragging a line's end onto another node moves it there, the Visio gesture.
@@ -968,7 +1035,7 @@ function Editor() {
   // so, rather than the canvas silently refusing the drag.
   const onReconnect = useCallback((oldEdge, conn) => {
     if (!conn.source || !conn.target) return;
-    setDocument((current) => ({
+    history.mutate((current) => ({
       ...current,
       edges: current.edges.map((e) =>
         e.id === oldEdge.id
@@ -976,13 +1043,13 @@ function Editor() {
           : e
       ),
     }));
-  }, []);
+  }, [history]);
 
   // Adding a connection from the inspector, for people who would rather pick the
   // other end from a list than drag a line. The role is inferred from the two
   // kinds when left unset, the same as drawing it.
   const onAddEdge = useCallback((source, target, role) => {
-    setDocument((current) => {
+    history.mutate((current) => {
       const kinds = Object.fromEntries(current.nodes.map((n) => [n.id, n.kind]));
       const r = role || inferRole(kinds[source], kinds[target]);
       if (!r) {
@@ -997,24 +1064,24 @@ function Editor() {
           : {};
       return addEdge(current, source, target, r, extra);
     });
-  }, []);
+  }, [history]);
 
   // Range authoring without drawing lines: pick a host's domain or subnet from
   // the inspector and the joins or attached edge is rewritten in one step. See
   // setJoin and setParent.
   const onJoinDomain = useCallback((hostId, domainId) => {
     record("join-domain", { host: hostId, domain: domainId });
-    setDocument((current) => setJoin(current, hostId, domainId));
-  }, []);
+    history.mutate((current) => setJoin(current, hostId, domainId));
+  }, [history]);
 
   const onPlaceSubnet = useCallback((hostId, subnetId) => {
     record("place-subnet", { host: hostId, subnet: subnetId });
-    setDocument((current) => setParent(current, hostId, subnetId));
-  }, []);
+    history.mutate((current) => setParent(current, hostId, subnetId));
+  }, [history]);
 
   const onConnect = useCallback(
     ({ source, target }) => {
-      setDocument((current) => {
+      history.mutate((current) => {
         const kinds = Object.fromEntries(current.nodes.map((n) => [n.id, n.kind]));
         const role = inferRole(kinds[source], kinds[target]);
         if (!role) {
@@ -1031,7 +1098,7 @@ function Editor() {
         return addEdge(current, source, target, role, extra);
       });
     },
-    []
+    [history]
   );
 
   // Dropping a node inside a container is the attachment edge.
@@ -1068,14 +1135,19 @@ function Editor() {
       setBinHot(false);
       if (droppedOnBin) {
         record("delete-bin", { node: dragged.id });
-        setDocument((current) => removeNode(current, dragged.id));
+        // Still the same drag gesture the position changes already opened
+        // (or, if the drop landed before any change fired, opens it here).
+        history.gesture("node-move", (current) => removeNode(current, dragged.id));
         return;
       }
       const point = flow.screenToFlowPosition({
         x: _event.clientX,
         y: _event.clientY,
       });
-      setDocument((current) => {
+      // The tail of the same drag gesture: reparenting and the final rounded
+      // position amend the step the drag already pushed, rather than adding
+      // a second one for the drop.
+      history.gesture("node-move", (current) => {
         const kinds = Object.fromEntries(current.nodes.map((n) => [n.id, n.kind]));
         // A subnet nests into a network, a host into a subnet. A network nests
         // into nothing. A range host nests into a domain first: a domain box
@@ -1144,12 +1216,12 @@ function Editor() {
         };
       });
     },
-    [flow, overBin]
+    [flow, overBin, history]
   );
 
   const addFromPalette = useCallback(
     (entry, position) => {
-      setDocument((current) => {
+      history.mutate((current) => {
         const spot =
           position ||
           (() => {
@@ -1165,13 +1237,13 @@ function Editor() {
         return addNode(current, entry, spot);
       });
     },
-    [document]
+    [history]
   );
 
   // A range starter dropped from the palette: same staggered placement as a bare
   // kind, but the node arrives with the preset's filled overlay. See presets.js.
   const addPreset = useCallback((preset, position) => {
-    setDocument((current) => {
+    history.mutate((current) => {
       const spot =
         position ||
         (() => {
@@ -1185,7 +1257,7 @@ function Editor() {
       record("add-node", { kind: preset.kind, preset: preset.key, at: spot });
       return addHostPreset(current, preset, spot);
     });
-  }, []);
+  }, [history]);
 
   const onDrop = useCallback(
     (event) => {
@@ -1217,7 +1289,9 @@ function Editor() {
     // rather than being re-derived on the next retitle pass. See 0043.
     pinned.current.delete(oldId);
     pinned.current.add(newId);
-    setDocument((current) => ({
+    // Coalesced: the id field fires on every keystroke, and a pause between
+    // bursts of typing starts a fresh undo step.
+    history.coalesce("rename", (current) => ({
       ...current,
       nodes: current.nodes.map((n) => (n.id === oldId ? { ...n, id: newId, pinned: true } : n)),
       edges: current.edges.map((e) => ({
@@ -1227,7 +1301,7 @@ function Editor() {
       })),
     }));
     setSelection({ type: "node", id: newId });
-  }, []);
+  }, [history]);
 
   const download = useCallback(async () => {
     setBusy(true);
@@ -1267,7 +1341,9 @@ function Editor() {
       }
       const doc = layoutIfNeeded(await response.json());
       record("load-template", { url, nodes: doc.nodes.length });
-      setDocument(doc);
+      // A loaded template is a session boundary, not an edit to undo back
+      // through.
+      history.reset(doc);
       // A GOAD range loads locked so the baseline stays intact while you explore
       // it; unlock (or add an extension) to customise. Ops templates open
       // editable. See 0047 and 0051.
@@ -1286,7 +1362,7 @@ function Editor() {
       pushUrl(null);
       setTimeout(() => flow.fitView({ padding: 0.15, duration: 300 }), 60);
     },
-    [confirmDiscard, flow, pushUrl]
+    [confirmDiscard, flow, pushUrl, history]
   );
 
 
@@ -1295,12 +1371,12 @@ function Editor() {
   const toggleExtension = useCallback((key, on) => {
     // Re-run the layout after the change so a newly added box lands in place
     // instead of overlapping whatever it was dropped on.
-    setDocument((current) =>
+    history.mutate((current) =>
       autoLayout(on ? applyExtension(current, key) : removeExtension(current, key)));
     setTemplateView(false);
     setStatus(on ? `Added the ${key} extension.` : `Removed the ${key} extension.`);
     setTimeout(() => flow.fitView({ padding: 0.15, duration: 300 }), 60);
-  }, [flow]);
+  }, [flow, history]);
 
   // Tidy re-applies the deterministic tier hierarchy, the same clean top to
   // bottom arrangement a topology loads with. It used to run ELK, which did its own
@@ -1311,14 +1387,14 @@ function Editor() {
   // in the present tense, years after it was taken out, and the button's own
   // tooltip promised an exposure axis that has never existed. Both are gone.
   const tidy = useCallback(() => {
-    setDocument((current) => {
+    history.mutate((current) => {
       const next = autoLayout(current);
       record("tidy", { nodes: next.nodes.length });
       return next;
     });
     setStatus("");
     setTimeout(() => flow.fitView({ padding: 0.15, duration: 300 }), 60);
-  }, [flow]);
+  }, [flow, history]);
 
   const errors = findings.filter((f) => f.severity === "error");
   const warnings = findings.filter((f) => f.severity === "warning");
@@ -1363,7 +1439,7 @@ function Editor() {
           aria-label="Topology name"
           value={document.name}
           onChange={(e) =>
-            setDocument((current) => ({ ...current, name: e.target.value }))
+            history.coalesce("name", (current) => ({ ...current, name: e.target.value }))
           }
         />
         <label className="rg-prefix">
@@ -1372,7 +1448,7 @@ function Editor() {
             value={document.prefix}
             size={6}
             onChange={(e) =>
-              setDocument((current) => ({ ...current, prefix: e.target.value }))
+              history.coalesce("prefix", (current) => ({ ...current, prefix: e.target.value }))
             }
           />
         </label>
@@ -1404,6 +1480,22 @@ function Editor() {
         </span>
         <button onClick={save} disabled={saving || busy} title={blocked || "Ctrl+S"}>
           {saving ? "Saving" : saveMode(topology) === "fork" ? "Save a copy" : "Save"}
+        </button>
+        <button
+          type="button"
+          onClick={() => history.undo()}
+          disabled={!history.canUndo}
+          title={history.canUndo ? "Undo (Ctrl+Z)" : "Nothing to undo"}
+        >
+          Undo
+        </button>
+        <button
+          type="button"
+          onClick={() => history.redo()}
+          disabled={!history.canRedo}
+          title={history.canRedo ? "Redo (Ctrl+Shift+Z or Ctrl+Y)" : "Nothing to redo"}
+        >
+          Redo
         </button>
         <button onClick={() => setTemplatePickerOpen(true)}>Load template</button>
         {document.mode === "haven" ? (
@@ -1602,10 +1694,10 @@ function Editor() {
           provider={document.mode === "haven" ? provider : undefined}
           findings={selection ? findingsFor(selection.id) : []}
           onOverlayChange={(id, overlay) =>
-            setDocument((current) => updateOverlay(current, id, overlay))
+            history.coalesce(`overlay:${id}`, (current) => updateOverlay(current, id, overlay))
           }
           onEdgeChange={(id, patch) =>
-            setDocument((current) => updateEdge(current, id, patch))
+            history.coalesce(`edge:${id}`, (current) => updateEdge(current, id, patch))
           }
           onSelectEdge={selectEdge}
           onSelectNode={(id) => {
@@ -1631,7 +1723,7 @@ function Editor() {
           onAddEdge={onAddEdge}
           onRename={rename}
           onDelete={(target) => {
-            setDocument((current) =>
+            history.mutate((current) =>
               target.type === "edge"
                 ? removeEdge(current, target.id)
                 : removeNode(current, target.id)

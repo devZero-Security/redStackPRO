@@ -10,7 +10,7 @@
 
 import React from "react";
 import { describe, expect, test, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import App from "./App.jsx";
@@ -232,6 +232,96 @@ describe("fresh canvas", () => {
     await screen.findByRole("button", { name: "Save" });
     expect(screen.getByRole("button", { name: "Load template" })).toBeTruthy();
     expect(screen.queryByText("Start a topology")).toBeNull();
+  });
+});
+
+
+describe("undo and redo", () => {
+  test("undo and redo are disabled until there is something to undo", async () => {
+    fakeBackend();
+    render(<App />);
+    await screen.findByRole("button", { name: "Save" });
+
+    expect(screen.getByRole("button", { name: "Undo" }).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: "Redo" }).disabled).toBe(true);
+  });
+
+  test("deleting a node is undoable and redoable", async () => {
+    openUrl("?topology=g1");
+    fakeBackend();
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("art-myth-ts01");
+
+    // A plain click, not userEvent's full pointer sequence: a real mousedown
+    // hands the node to React Flow's own drag setup, which this jsdom has no
+    // layout engine for. All that is wanted here is the click that selects it.
+    fireEvent.click(screen.getByText("art-myth-ts01"));
+    await user.click(await screen.findByRole("button", { name: "Delete node" }));
+    expect(screen.queryByText("art-myth-ts01")).toBeNull();
+    expect(screen.getByRole("button", { name: "Undo" }).disabled).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(await screen.findByText("art-myth-ts01")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Redo" }).disabled).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "Redo" }));
+    await waitFor(() => expect(screen.queryByText("art-myth-ts01")).toBeNull());
+  });
+
+  test("typing a name coalesces into one undo step, via the toolbar button",
+    async () => {
+      openUrl("?topology=g1");
+      fakeBackend();
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByText("art-myth-ts01");
+
+      const nameInput = screen.getByLabelText("Topology name");
+      await user.type(nameInput, "!!!");
+      expect(nameInput.value).toBe("Saved range!!!");
+
+      await user.click(screen.getByRole("button", { name: "Undo" }));
+      // The whole typing burst coalesces into one step: one undo clears it all.
+      await waitFor(() => expect(nameInput.value).toBe("Saved range"));
+      expect(screen.getByRole("button", { name: "Undo" }).disabled).toBe(true);
+    });
+
+  test("Ctrl+Z is left to the browser while a field is focused, and works once it is not",
+    async () => {
+      openUrl("?topology=g1");
+      fakeBackend();
+      const user = userEvent.setup();
+      render(<App />);
+      await screen.findByText("art-myth-ts01");
+
+      const nameInput = screen.getByLabelText("Topology name");
+      await user.type(nameInput, "!");
+      expect(nameInput.value).toBe("Saved range!");
+
+      // Still focused in the field: the canvas leaves this to native text undo.
+      await user.keyboard("{Control>}z{/Control}");
+      expect(nameInput.value).toBe("Saved range!");
+
+      // Focus moves off the field: the same shortcut now reaches the canvas.
+      nameInput.blur();
+      await user.keyboard("{Control>}z{/Control}");
+      await waitFor(() => expect(nameInput.value).toBe("Saved range"));
+    });
+
+  test("opening a different topology resets the undo stack", async () => {
+    openUrl("?topology=g1");
+    fakeBackend();
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("art-myth-ts01");
+
+    await user.type(screen.getByLabelText("Topology name"), "!");
+    expect(screen.getByRole("button", { name: "Undo" }).disabled).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "New" }));
+    await screen.findByText(/Not saved/);
+    expect(screen.getByRole("button", { name: "Undo" }).disabled).toBe(true);
   });
 });
 
