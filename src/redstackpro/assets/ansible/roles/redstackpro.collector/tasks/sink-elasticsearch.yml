@@ -17,11 +17,15 @@
     filename: elastic-8x
     state: present
 
+# Pin to the declared version (see the logstash note in receiver.yml): the 8.x
+# channel floats to the newest 8.x otherwise. Elasticsearch debs use a plain
+# version, with no epoch.
 - name: Install elasticsearch
   ansible.builtin.apt:
-    name: elasticsearch
+    name: "elasticsearch={{ redstackpro_elasticsearch_version }}"
     state: present
     update_cache: true
+    allow_downgrade: true
 
 # Same shape as the opensearch sink: single node on loopback, security off
 # because it would generate an enrollment token and a password on first boot

@@ -17,11 +17,16 @@
     filename: elastic-8x
     state: present
 
+# Pin to the declared version so the receiver matches the pinned shippers
+# (filebeat/winlogbeat), instead of floating to the newest 8.x on every deploy and
+# drifting the pipeline against itself. Logstash debs carry an epoch and a debian
+# revision (1:<version>-1), unlike elasticsearch which is a plain version.
 - name: Install logstash
   ansible.builtin.apt:
-    name: logstash
+    name: "logstash=1:{{ redstackpro_logstash_version }}-1"
     state: present
     update_cache: true
+    allow_downgrade: true
 
 - name: Ensure the logstash jvm options drop-in directory exists
   ansible.builtin.file:
