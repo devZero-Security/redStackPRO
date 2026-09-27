@@ -221,8 +221,8 @@ export function ExportPanel({ document, provider }) {
         </li>
         <li>
           Put <code>keys/id_ed25519.pub</code> into{" "}
-          <code>terraform/terraform.tfvars</code> as <code>ssh_public_key</code>,
-          with the other values it asks for.
+          <code>deploy.tfvars</code> (in the export root) as{" "}
+          <code>ssh_public_key</code>, with the other values it asks for.
         </li>
         <li>
           Authenticate to {provider}, then in {PLATFORMS[platform].shell}:

@@ -117,8 +117,8 @@ Python 3.11 or newer, and Node 24 for the canvas.
 canvas dev server at it with `REDSTACKPRO_API=http://127.0.0.1:8787`.
 
 Open it, load a template from the library, choose your cloud in the toolbar
-provider selector (GCP or AWS), press Compile, then Download. You get a zip of the
-working directory described below.
+provider selector (GCP or AWS), open the Export tab (it compiles as you go), then
+Download. You get a zip of the working directory described below.
 
 **Or skip the canvas entirely** and compile a shipped template from the command
 line, same compiler, same output:
