@@ -7,7 +7,7 @@
 - name: Fetch the Wazuh installer
   become: true
   ansible.builtin.get_url:
-    url: https://packages.wazuh.com/4.9/wazuh-install.sh
+    url: https://packages.wazuh.com/4.14/wazuh-install.sh
     dest: /root/wazuh-install.sh
     mode: "0700"
 

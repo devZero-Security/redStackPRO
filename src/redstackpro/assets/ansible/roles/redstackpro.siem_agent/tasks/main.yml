@@ -12,7 +12,7 @@
   block:
     - name: Download the Wazuh agent
       ansible.windows.win_get_url:
-        url: https://packages.wazuh.com/4.x/windows/wazuh-agent-4.9.0-1.msi
+        url: https://packages.wazuh.com/4.x/windows/wazuh-agent-4.14.8-1.msi
         dest: C:\Windows\Temp\wazuh-agent.msi
 
     - name: Install and enrol the Wazuh agent
