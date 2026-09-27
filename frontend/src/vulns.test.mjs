@@ -5,7 +5,7 @@
 // wire it. See vulns.js and 0050.
 import assert from "node:assert";
 import { readFileSync, readdirSync } from "node:fs";
-import { VULN_CATALOG, VULN_GOAD, VULN_LABEL, VULN_PROVIDERS } from "./vulns.js";
+import { ACCOUNT_TECHNIQUE_IDS, VULN_CATALOG, VULN_GOAD, VULN_LABEL, VULN_PROVIDERS } from "./vulns.js";
 
 let passed = 0;
 const test = (name, fn) => { fn(); passed += 1; console.log("  ok", name); };
@@ -66,6 +66,22 @@ test("no shipped template references a vuln the catalog dropped", () => {
   }
   const orphans = [...used].filter((v) => !ids.has(v));
   assert.deepEqual(orphans, [], `templates reference vulns not in the catalog: ${orphans}`);
+});
+
+test("the account techniques are exactly the user: mapped ids", () => {
+  // kerberoasting, asreproasting, password_in_description, and weak_password
+  // are account flaws, not host tasks (see the Kerberos and Credentials group
+  // comments): the host VulnPicker plants them on a domain user instead of the
+  // host's own overlay.vulns. See rangeUsers.js.
+  const userMapped = items.filter((i) => typeof i.goad === "string" && i.goad.startsWith("user:"));
+  assert.deepEqual(
+    [...ACCOUNT_TECHNIQUE_IDS].sort(),
+    userMapped.map((i) => i.id).sort()
+  );
+  assert.deepEqual(
+    [...ACCOUNT_TECHNIQUE_IDS].sort(),
+    ["asreproasting", "kerberoasting", "password_in_description", "weak_password"]
+  );
 });
 
 console.log(`\n${passed} passed`);

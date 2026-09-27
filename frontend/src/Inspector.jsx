@@ -2,11 +2,12 @@ import React, { useState } from "react";
 import { FindingBadge } from "./FindingBadge.jsx";
 import { DRAWN_ROLES, isContainer, roleColor, roleDisplay } from "./topology.js";
 import { PROFILES } from "./profiles.js";
-import { VULN_CATALOG, VULN_PROVIDERS } from "./vulns.js";
+import { ACCOUNT_TECHNIQUE_IDS, VULN_CATALOG, VULN_PROVIDERS } from "./vulns.js";
 import { HARDENING_CATALOG } from "./hardening.js";
 import {
-  USER_ARCHETYPES, addUser, buildArchetype, generateUsers, recommendedUserCount,
-  removeUser, setUsers, updateUser,
+  USER_ARCHETYPES, accountTechniquePlanted, addUser, buildArchetype, generateUsers,
+  plantAccountTechnique, recommendedUserCount, removeAccountTechnique, removeUser,
+  setUsers, updateUser,
 } from "./rangeUsers.js";
 
 const PRIVILEGES = ["user", "local_admin", "domain_admin", "enterprise_admin"];
@@ -272,6 +273,14 @@ function HardeningPicker({ value, onChange, disabled }) {
   );
 }
 
+// The account techniques a host cannot carry itself (vulns.js
+// ACCOUNT_TECHNIQUE_IDS), pulled out of the catalog once so the picker below
+// renders them in their own group and skips them in every other one. Reuses
+// each item's label/blurb from VULN_CATALOG rather than repeating them.
+const ACCOUNT_TECHNIQUE_ITEMS = VULN_CATALOG.flatMap((g) => g.items).filter((item) =>
+  ACCOUNT_TECHNIQUE_IDS.has(item.id)
+);
+
 // The planted-vulnerability picker for a range host: a grouped checklist from
 // the GOAD-derived catalog. See vulns.js.
 //
@@ -281,9 +290,16 @@ function HardeningPicker({ value, onChange, disabled }) {
 // silently drops it for this one, so the checkbox stays checkable, just
 // visibly a no-op here. See redstackpro.ansible.VULN_PROVIDERS, kept in sync
 // with vulns.js by tests/test_vuln_providers_sync.py.
-function VulnPicker({ value, onChange, disabled, provider }) {
+//
+// Four ids (ACCOUNT_TECHNIQUE_ITEMS) are account flaws, not host tasks:
+// checking one plants a matching flawed user on the host's joined domain
+// instead of writing into the host's own overlay.vulns, so they get their own
+// group below rather than a checkbox that would otherwise no-op (RNG009). See
+// rangeUsers.js plantAccountTechnique.
+function VulnPicker({ value, onChange, disabled, provider, document, hostId, onOverlayChange }) {
   const set = value || [];
   const [collapsed, setCollapsed] = useState(() => initialCollapsed(VULN_CATALOG, set));
+  const [accountCollapsed, setAccountCollapsed] = useState(false);
   const toggle = (id) =>
     onChange(set.includes(id) ? set.filter((v) => v !== id) : [...set, id]);
   const toggleGroup = (key) =>
@@ -293,6 +309,19 @@ function VulnPicker({ value, onChange, disabled, provider }) {
       else next.add(key);
       return next;
     });
+
+  const domainId =
+    document?.edges.find((e) => e.role === "joins" && e.source === hostId)?.target;
+  const domainNode = domainId ? document?.nodes.find((n) => n.id === domainId) : undefined;
+
+  const toggleAccountTechnique = (id) => {
+    if (!domainNode) return;
+    const overlay = accountTechniquePlanted(domainNode, hostId, id)
+      ? removeAccountTechnique(domainNode, hostId, id)
+      : plantAccountTechnique(domainNode, hostId, id);
+    if (overlay) onOverlayChange?.(domainNode.id, overlay);
+  };
+
   return (
     <div className="rg-field">
       <span className="rg-field-label">
@@ -300,7 +329,9 @@ function VulnPicker({ value, onChange, disabled, provider }) {
       </span>
       <div className="rg-vulns">
         {VULN_CATALOG.map((group) => {
-          const selectedCount = group.items.filter((item) => set.includes(item.id)).length;
+          const items = group.items.filter((item) => !ACCOUNT_TECHNIQUE_IDS.has(item.id));
+          if (!items.length) return null;
+          const selectedCount = items.filter((item) => set.includes(item.id)).length;
           const isCollapsed = collapsed.has(group.group);
           return (
             <div key={group.group} className="rg-vuln-group">
@@ -320,7 +351,7 @@ function VulnPicker({ value, onChange, disabled, provider }) {
               </button>
               {isCollapsed
                 ? null
-                : group.items.map((item) => {
+                : items.map((item) => {
                     const restricted = VULN_PROVIDERS[item.id];
                     const unsupported =
                       restricted && provider && !restricted.includes(provider);
@@ -352,6 +383,46 @@ function VulnPicker({ value, onChange, disabled, provider }) {
             </div>
           );
         })}
+        <div className="rg-vuln-group rg-vuln-group-account">
+          <button
+            type="button"
+            className="rg-vuln-group-header"
+            aria-expanded={!accountCollapsed}
+            onClick={() => setAccountCollapsed((cur) => !cur)}
+          >
+            <span className="rg-vuln-group-caret" aria-hidden="true">
+              {accountCollapsed ? "▸" : "▾"}
+            </span>
+            <span className="rg-vuln-group-label">Account techniques (planted on a domain user)</span>
+          </button>
+          {accountCollapsed ? null : (
+            <>
+              {!domainNode ? (
+                <p className="rg-hint">
+                  Join this host to a domain to plant account techniques.
+                </p>
+              ) : null}
+              {ACCOUNT_TECHNIQUE_ITEMS.map((item) => {
+                const planted = accountTechniquePlanted(domainNode, hostId, item.id);
+                return (
+                  <label
+                    key={item.id}
+                    className={`rg-check${planted ? " is-selected" : ""}`}
+                    title={item.blurb || ""}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={planted}
+                      disabled={disabled || !domainNode}
+                      onChange={() => toggleAccountTechnique(item.id)}
+                    />
+                    {item.label}
+                  </label>
+                );
+              })}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1198,6 +1269,9 @@ export function Inspector({
                   value={(node.overlay || {}).vulns}
                   disabled={readOnly}
                   provider={provider}
+                  document={document}
+                  hostId={node.id}
+                  onOverlayChange={onOverlayChange}
                   onChange={(value) =>
                     onOverlayChange(node.id, { ...(node.overlay || {}), vulns: value })
                   }

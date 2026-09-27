@@ -199,3 +199,78 @@ export function removeUser(node, index) {
 export function setUsers(node, users) {
   return { ...node.overlay, users };
 }
+
+// -- account techniques planted on a domain user (host VulnPicker bridge)
+//
+// kerberoasting, asreproasting, password_in_description, and weak_password
+// (vulns.js ACCOUNT_TECHNIQUE_IDS) are account flaws, not host tasks: checking
+// one on a host used to write into overlay.vulns and no-op there (RNG009).
+// Instead the host's VulnPicker plants ONE domain user, on the host's joined
+// domain, carrying the matching flaws, so the technique actually runs.
+// Unchecking removes exactly that user. The marker lives in a `planted_by`
+// field on the user ("<hostId>:<technique>"), so the same host+technique pair
+// can be found and removed again without touching any other user on the
+// domain. See vulns.js and Inspector.jsx VulnPicker.
+
+const ACCOUNT_TECHNIQUE_FLAWS = {
+  kerberoasting: ["kerberoastable", "spn_set"],
+  asreproasting: ["asrep_roastable"],
+  password_in_description: ["password_in_description"],
+  weak_password: ["weak_password"],
+};
+
+// A readable base username per technique, so the planted account reads like a
+// real one rather than a raw technique id.
+const ACCOUNT_TECHNIQUE_USERNAME = {
+  kerberoasting: "svc.kerberoast",
+  asreproasting: "roastme",
+  password_in_description: "svc.helpdesk",
+  weak_password: "svc.backup",
+};
+
+const plantedByOf = (hostId, technique) => `${hostId}:${technique}`;
+
+// Whether a user marked for this host+technique already exists on the domain.
+// A missing domainNode (the host is not joined to any domain) is never
+// planted.
+export function accountTechniquePlanted(domainNode, hostId, technique) {
+  if (!domainNode) return false;
+  const marker = plantedByOf(hostId, technique);
+  return usersOf(domainNode).some((u) => u.planted_by === marker);
+}
+
+// Add the one domain user this technique needs, unique against the domain's
+// existing usernames. Returns the domain's updated overlay, or null when
+// there is no domain to plant on, the technique is unknown, or it is already
+// planted (idempotent: a caller does not need to check first).
+export function plantAccountTechnique(domainNode, hostId, technique) {
+  if (!domainNode) return null;
+  const flaws = ACCOUNT_TECHNIQUE_FLAWS[technique];
+  if (!flaws) return null;
+  if (accountTechniquePlanted(domainNode, hostId, technique)) return null;
+
+  const fqdn = (domainNode.overlay || {}).fqdn || "example.local";
+  const taken = new Set(usersOf(domainNode).map((u) => u.username));
+  const base = ACCOUNT_TECHNIQUE_USERNAME[technique] || technique;
+  let username = base;
+  let n = 1;
+  while (taken.has(username)) username = `${base}${(n += 1)}`;
+
+  return addUser(domainNode, {
+    username,
+    email: `${username}@${fqdn}`,
+    privilege: "user",
+    flaws,
+    planted_by: plantedByOf(hostId, technique),
+  });
+}
+
+// Remove the user marked for this host+technique, if any. Returns the
+// domain's updated overlay, or null when there is no domain or no such user.
+export function removeAccountTechnique(domainNode, hostId, technique) {
+  if (!domainNode) return null;
+  const marker = plantedByOf(hostId, technique);
+  const index = usersOf(domainNode).findIndex((u) => u.planted_by === marker);
+  if (index === -1) return null;
+  return removeUser(domainNode, index);
+}

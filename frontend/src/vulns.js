@@ -153,3 +153,16 @@ export const VULN_PROVIDERS = Object.fromEntries(
     .filter((i) => i.providers)
     .map((i) => [i.id, i.providers])
 );
+
+// The four ids that are really a domain-user flaw, not a host task (goad
+// "user:*" above): kerberoasting, asreproasting, password_in_description,
+// weak_password. Declaring one of these in a host's overlay.vulns is a no-op
+// (RNG009); the host VulnPicker plants a matching flawed user on the host's
+// joined domain instead. See rangeUsers.js plantAccountTechnique and
+// Inspector.jsx VulnPicker. Derived from the catalog rather than listed twice,
+// so it stays in sync if the catalog changes.
+export const ACCOUNT_TECHNIQUE_IDS = new Set(
+  VULN_CATALOG.flatMap((g) => g.items)
+    .filter((i) => typeof i.goad === "string" && i.goad.startsWith("user:"))
+    .map((i) => i.id)
+);

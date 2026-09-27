@@ -5,8 +5,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
-  USER_ARCHETYPES, addUser, buildArchetype, generateUsers, recommendedUserCount,
-  removeUser, seededRng, setUsers, updateUser,
+  USER_ARCHETYPES, accountTechniquePlanted, addUser, buildArchetype, generateUsers,
+  plantAccountTechnique, recommendedUserCount, removeAccountTechnique, removeUser,
+  seededRng, setUsers, updateUser,
 } from "./rangeUsers.js";
 
 // The schema lives in the package since ADR 0062, resolved from this file so the
@@ -115,6 +116,83 @@ test("archetype names are unique against existing users", () => {
   const first = buildArchetype("service", "sk.local", [], seededRng(5));
   const next = buildArchetype("service", "sk.local", [first], seededRng(5));
   assert.notEqual(next.username, first.username);
+});
+
+// -- account techniques planted on a domain user (VulnPicker bridge)
+
+test("planting kerberoasting adds a user marked planted_by with the mapped flaws", () => {
+  const domain = { overlay: { fqdn: "sk.local", users: [] } };
+  const overlay = plantAccountTechnique(domain, "srv01", "kerberoasting");
+  assert.equal(overlay.users.length, 1);
+  const u = overlay.users[0];
+  assert.deepEqual(u.flaws, ["kerberoastable", "spn_set"]);
+  assert.equal(u.planted_by, "srv01:kerberoasting");
+  assert.equal(u.email, `${u.username}@sk.local`);
+  // The username reads as a real account, not the raw technique id.
+  assert.notEqual(u.username, "kerberoasting");
+});
+
+test("every account technique maps to schema-valid flaws", () => {
+  const schema = JSON.parse(
+    readFileSync(join(HERE, "../../src/redstackpro/schema/topology/0.6.0.json"), "utf8"));
+  const flawEnum = new Set(
+    schema.$defs.overlay_domain.properties.users.items.properties.flaws.items.enum);
+  const domain = { overlay: { fqdn: "sk.local", users: [] } };
+  for (const technique of ["kerberoasting", "asreproasting", "password_in_description", "weak_password"]) {
+    const overlay = plantAccountTechnique(domain, "srv01", technique);
+    for (const f of overlay.users[0].flaws) assert.ok(flawEnum.has(f), `${technique} flaw ${f}`);
+  }
+});
+
+test("planted usernames are unique against the domain's existing users", () => {
+  let domain = { overlay: { fqdn: "sk.local", users: [{ username: "svc.kerberoast" }] } };
+  const overlay = plantAccountTechnique(domain, "srv01", "kerberoasting");
+  assert.notEqual(overlay.users[1].username, "svc.kerberoast");
+});
+
+test("accountTechniquePlanted reflects the marker, and unchecking removes exactly that user", () => {
+  let domain = { overlay: { fqdn: "sk.local", users: [] } };
+  domain = { overlay: plantAccountTechnique(domain, "srv01", "kerberoasting") };
+  // A second, unrelated user should survive the round trip.
+  domain = { overlay: addUser(domain, { username: "regular.user", privilege: "user" }) };
+
+  assert.equal(accountTechniquePlanted(domain, "srv01", "kerberoasting"), true);
+  assert.equal(accountTechniquePlanted(domain, "srv01", "asreproasting"), false);
+  assert.equal(accountTechniquePlanted(domain, "srv02", "kerberoasting"), false);
+
+  const after = removeAccountTechnique(domain, "srv01", "kerberoasting");
+  assert.equal(after.users.length, 1);
+  assert.equal(after.users[0].username, "regular.user");
+  domain = { overlay: after };
+  assert.equal(accountTechniquePlanted(domain, "srv01", "kerberoasting"), false);
+});
+
+test("planting is idempotent: checking an already-planted technique adds nothing", () => {
+  let domain = { overlay: { fqdn: "sk.local", users: [] } };
+  domain = { overlay: plantAccountTechnique(domain, "srv01", "kerberoasting") };
+  const again = plantAccountTechnique(domain, "srv01", "kerberoasting");
+  assert.equal(again, null);
+});
+
+test("a host with no joined domain cannot plant or remove, and reads as not planted", () => {
+  assert.equal(plantAccountTechnique(undefined, "srv01", "kerberoasting"), null);
+  assert.equal(removeAccountTechnique(undefined, "srv01", "kerberoasting"), null);
+  assert.equal(accountTechniquePlanted(undefined, "srv01", "kerberoasting"), false);
+});
+
+test("a normal host vuln keeps toggling into the host's own overlay.vulns", () => {
+  // Not an account technique: adding/removing it never touches any domain's
+  // users, it is a plain array edit on the host's own overlay, unchanged by
+  // this feature. Regression guard for the account-technique bridge above.
+  const host = { overlay: { vulns: [] } };
+  const toggle = (id) => {
+    const set = host.overlay.vulns;
+    host.overlay = { ...host.overlay, vulns: set.includes(id) ? set.filter((v) => v !== id) : [...set, id] };
+  };
+  toggle("smbv1");
+  assert.deepEqual(host.overlay.vulns, ["smbv1"]);
+  toggle("smbv1");
+  assert.deepEqual(host.overlay.vulns, []);
 });
 
 console.log(`\n${passed} passed`);

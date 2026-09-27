@@ -923,6 +923,10 @@
               "ou": {
                 "type": "string",
                 "description": "The OU (at the domain root) the user is placed in; default Users container."
+              },
+              "planted_by": {
+                "type": "string",
+                "description": "Canvas marker for a user auto-created by planting an account technique on a host (hostId:technique), so the canvas can find and remove it. Advisory; the compiler ignores it."
               }
             }
           }
