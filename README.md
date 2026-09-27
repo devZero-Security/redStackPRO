@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/license-MIT-3B9EFF" alt="MIT license">
   <img src="https://img.shields.io/badge/version-0.9.0-CF2127" alt="version 0.9.0">
   <img src="https://img.shields.io/badge/providers-GCP%20%7C%20AWS-3B9EFF" alt="providers GCP and AWS">
-  <img src="https://img.shields.io/badge/status-pre--release-A97BFF" alt="status pre-release">
+  <img src="https://img.shields.io/badge/status-prerelease%20beta-A97BFF" alt="status prerelease beta">
   <img src="https://img.shields.io/badge/exports-Terraform%20%2B%20Ansible-844FBA?logo=terraform&logoColor=white" alt="Terraform and Ansible">
 </p>
 
@@ -15,6 +15,11 @@
 > A web canvas where you build infrastructure as a topology, then export a
 > complete, runnable working directory of Terraform and Ansible. You run it from
 > your own machine. **redStackPRO never holds your cloud credentials.**
+
+> [!IMPORTANT]
+> **redStackPRO is in prerelease (beta).** The schema and features are still moving.
+> GCP and AWS are tested end to end; Azure, Proxmox, and ESXi are on the roadmap.
+> Expect rough edges, and pin to a released version if you need stability.
 
 redStackPRO puts attack infrastructure and target ranges on the same canvas.
 
