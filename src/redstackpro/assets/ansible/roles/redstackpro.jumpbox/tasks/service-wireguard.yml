@@ -28,6 +28,39 @@
 - name: Establish the durable operator roster
   ansible.builtin.include_tasks: vpn-roster.yml
 
+# Give each operator a stable tunnel address and persist it, so a remove plus a
+# reconverge does not renumber the survivors and break the client configs already
+# handed out. An address already in the roster is kept; a new operator takes the
+# next free one (highest in use plus one, starting at .2 since the server holds .1).
+- name: Assign and persist stable WireGuard addresses
+  ansible.builtin.set_fact:
+    redstackpro_wg_operators: >-
+      {{ (redstackpro_wg_operators | default([])) + [
+        item | combine({'wg_address': item.wg_address | default(
+          redstackpro_wireguard_subnet ~ '.' ~ ((
+            [1]
+            + (redstackpro_wg_operators | default([]) | selectattr('wg_address', 'defined')
+               | map(attribute='wg_address') | map('regex_replace', '^.*\.', '') | map('int') | list)
+            + (redstackpro_effective_operators | selectattr('wg_address', 'defined')
+               | map(attribute='wg_address') | map('regex_replace', '^.*\.', '') | map('int') | list)
+          ) | max + 1)
+        )}) ] }}
+  loop: "{{ redstackpro_effective_operators | default([]) }}"
+  loop_control:
+    label: "{{ item.handle }}"
+
+- name: Persist the assigned addresses back to the durable roster
+  ansible.builtin.copy:
+    content: "{{ redstackpro_wg_operators | default([]) | to_nice_json }}\n"
+    dest: "{{ redstackpro_vpn_client_dir }}/operators.json"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0640"
+
+- name: Use the address-enriched roster downstream
+  ansible.builtin.set_fact:
+    redstackpro_effective_operators: "{{ redstackpro_wg_operators | default([]) }}"
+
 - name: Generate the server private key
   ansible.builtin.shell:
     cmd: umask 077 && wg genkey > /etc/wireguard/server.key
@@ -77,13 +110,14 @@
 
 # One flat list the interface template and the client-config loop both read, so
 # the peer address on the server and the address in the operator's own config are
-# computed once. Peers start at .2 because the server holds .1.
+# computed once. The address is the persisted one from the roster, so it is stable
+# across a remove plus reconverge.
 - name: Assemble the per-operator client facts
   ansible.builtin.set_fact:
     redstackpro_wg_clients: >-
       {{ (redstackpro_wg_clients | default([])) + [{
         'handle': item.item.handle,
-        'address': redstackpro_wireguard_subnet ~ '.' ~ (idx + 2),
+        'address': item.item.wg_address,
         'public_key': (redstackpro_wg_client_pubs.results[idx].content | b64decode | trim),
         'private_key': (item.content | b64decode | trim)}] }}
   loop: "{{ redstackpro_wg_client_keys.results | default([]) }}"

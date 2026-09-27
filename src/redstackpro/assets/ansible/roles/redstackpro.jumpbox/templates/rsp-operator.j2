@@ -72,22 +72,21 @@ DELETE FROM guacamole_entity WHERE name = :'h' AND type = 'USER';
 SQL
 }
 
-# The next free tunnel host number for a WireGuard peer: one past the highest in
-# use, starting at 2 because the server holds .1. Reuses no gaps, which keeps a
-# revoked address from landing on a new operator.
+# The next free tunnel host number for a WireGuard peer, read from the persisted
+# roster so it matches what a reconverge would assign: one past the highest
+# wg_address in use, starting at 2 because the server holds .1. Monotonic, so a
+# removed address is never handed back out.
 wg_next_octet() {
   local max
-  max=$(grep -oE "AllowedIPs = ${WG_SUBNET//./\\.}\.[0-9]+/32" "$WG_CONF" 2>/dev/null \
-        | grep -oE '[0-9]+/32' | cut -d/ -f1 | sort -n | tail -1)
+  max=$(jq -r '([.[] | .wg_address // empty | split(".")[-1] | tonumber] + [1]) | max' "$STATE" 2>/dev/null)
   echo $(( ${max:-1} + 1 ))
 }
 
 add_wireguard() {
-  local handle="$1" octet addr priv pub
+  local handle="$1" addr="$2" priv pub
   umask 077
   wg genkey | tee "$WG_CLIENTS/$handle.key" | wg pubkey > "$WG_CLIENTS/$handle.pub"
   priv=$(cat "$WG_CLIENTS/$handle.key"); pub=$(cat "$WG_CLIENTS/$handle.pub")
-  octet=$(wg_next_octet); addr="$WG_SUBNET.$octet"
   wg set wg0 peer "$pub" allowed-ips "$addr/32"
   printf '\n# %s\n[Peer]\nPublicKey = %s\nAllowedIPs = %s/32\n' "$handle" "$pub" "$addr" >> "$WG_CONF"
   umask 177
@@ -192,11 +191,20 @@ cmd_add() {
   local handle="${1:-}" role="${2:-}"; [ -n "$handle" ] || die "usage: rsp-operator add <handle> [role]"
   valid_handle "$handle"
   in_roster "$handle" && die "$handle is already on the roster"
-  local pw cred; pw=$(openssl rand -base64 12)
-  if [ "$MODE" = wireguard ]; then cred=$(add_wireguard "$handle"); else cred=$(add_openvpn "$handle"); fi
+  local pw cred addr=""; pw=$(openssl rand -base64 12)
+  if [ "$MODE" = wireguard ]; then
+    addr="$WG_SUBNET.$(wg_next_octet)"
+    cred=$(add_wireguard "$handle" "$addr")
+  else
+    cred=$(add_openvpn "$handle")
+  fi
   guac_add "$handle" "$pw"
+  # Persist wg_address for WireGuard so the address is stable across a reconverge.
   local tmp; tmp=$(mktemp)
-  jq --arg h "$handle" --arg r "$role" '. + [ if $r == "" then {handle:$h} else {handle:$h, role:$r} end ]' "$STATE" > "$tmp" && mv "$tmp" "$STATE"
+  jq --arg h "$handle" --arg r "$role" --arg a "$addr" \
+    '. + [ {handle:$h}
+           + (if $r != "" then {role:$r} else {} end)
+           + (if $a != "" then {wg_address:$a} else {} end) ]' "$STATE" > "$tmp" && mv "$tmp" "$STATE"
   echo "added $handle"
   echo "  portal account: $handle / $pw"
   echo "  VPN credential: $cred"
