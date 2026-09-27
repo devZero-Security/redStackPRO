@@ -1150,8 +1150,9 @@ export function Inspector({
           onChange={(e) => onRename(node.id, e.target.value)}
         />
         <span className="rg-field-help">
-          Purpose, then the kind tag and a two digit ordinal: myth-ts01. Left as
-          is, it tracks what the node holds; rename it and it stays put.
+          Lowercase kebab: a purpose slug, the kind tag, and a two digit
+          ordinal, e.g. main-net01. Left as is, it tracks what the node
+          holds; rename it and it stays put.
         </span>
       </label>
 

@@ -447,7 +447,7 @@
         "internal_ip": {
           "$ref": "#/$defs/ipv4",
           "x-redstackpro-source": "user",
-          "description": "A pinned private address inside this host's segment cidr. Absent means the provider assigns one at apply time. See overlay_range_host and 0055."
+          "description": "A pinned private address inside this host's segment. Absent lets the provider assign one at apply time."
         }
       }
     },
@@ -714,7 +714,7 @@
           ],
           "default": "ssh",
           "x-redstackpro-source": "user",
-          "description": "How this jumpbox reaches the hosts it manages. When wireguard, the compiler expands peers from the set of hosts reached by manages edges rather than from drawn edges. Bootstrap is direct or ProxyJump on private addresses, because Ansible cannot configure WireGuard over WireGuard."
+          "description": "How this jumpbox reaches the hosts it manages, once configured. Initial bootstrap always goes over direct SSH or ProxyJump, since WireGuard cannot configure itself."
         },
         "public_address": {
           "$ref": "#/$defs/public_address",
@@ -723,12 +723,12 @@
         "internal_ip": {
           "$ref": "#/$defs/ipv4",
           "x-redstackpro-source": "user",
-          "description": "A pinned private address inside this host's segment cidr. Absent means the provider assigns one at apply time. See overlay_range_host and 0055."
+          "description": "A pinned private address inside this host's segment. Absent lets the provider assign one at apply time."
         },
         "offensive_toolkit": {
           "type": "boolean",
           "x-redstackpro-source": "user",
-          "description": "Install the foothold's offensive toolchain (impacket, certipy, coercer, netexec, bloodhound-python, hashcat). Defaults to true on a RANGE jumpbox, which is the documented assumed-breach foothold the solution runs from, and false on an ops bastion, where the tooling belongs on the operator box instead. Opens no ports. Each tool gets its own python environment, because coercer and certipy require different impacket versions. See PZ-2."
+          "description": "Installs the foothold toolchain (impacket, certipy, coercer, netexec, bloodhound-python, hashcat). On by default for a range jumpbox, off for an ops bastion, where the tooling lives on the operator box instead. Opens no ports."
         },
         "access_mode": {
           "enum": [
@@ -738,12 +738,12 @@
           ],
           "default": "public",
           "x-redstackpro-source": "user",
-          "description": "How operators reach the range. public is the shared portal on the jumpbox public address, the behaviour to date. wireguard or openvpn instead puts operators on a VPN tunnel, and each declared operator gets a personal credential generated at apply. The VPN access layer is an artie concept; set on a haven range the validator warns (VPN002)."
+          "description": "How operators reach this box. public is the shared portal on the public address. wireguard or openvpn instead puts each operator on a personal VPN credential generated at apply. VPN access is an artie concept; setting it on a haven range triggers a validator warning."
         },
         "vpn_port": {
           "$ref": "#/$defs/port",
           "x-redstackpro-source": "user",
-          "description": "The VPN listen port. Optional: absent takes the per-mode default at apply, 51820 for wireguard and 1194 for openvpn. Set it to move openvpn onto a port a restrictive network lets out, e.g. 443."
+          "description": "The VPN listen port. Defaults to 51820 for wireguard and 1194 for openvpn; set it to use a different port, e.g. 443 through a restrictive network."
         },
         "vpn_protocol": {
           "enum": [
@@ -752,7 +752,7 @@
           ],
           "default": "udp",
           "x-redstackpro-source": "user",
-          "description": "Transport for the VPN listener. WireGuard is udp only, so tcp with access_mode wireguard is rejected (VPN001). OpenVPN takes either; tcp trades throughput for reach through networks that block udp."
+          "description": "Transport for the VPN listener. wireguard is udp only; openvpn takes either, trading throughput for reach through networks that block udp."
         },
         "operators": {
           "type": "array",
@@ -807,7 +807,7 @@
           "type": "boolean",
           "default": false,
           "x-redstackpro-source": "user",
-          "description": "Installs a desktop environment and xrdp so this operator can be driven over a Guacamole RDP tile instead of SSH. Satisfies CAR008's GUI requirement for a web-UI C2 without needing a Windows operator."
+          "description": "Installs a desktop environment and xrdp so this operator can be driven over a Guacamole RDP tile instead of SSH, for a web UI C2 without a Windows operator."
         }
       }
     },
@@ -1058,19 +1058,19 @@
             "sentinelone"
           ],
           "x-redstackpro-source": "user",
-          "description": "Endpoint detection running on this host, for evasion practice. defender, elastic and wazuh deploy for real; the commercial ones are labels for now."
+          "description": "Endpoint detection and response running on this host. defender, elastic, and wazuh deploy for real; the rest are labels for now."
         },
         "defender_enabled": {
           "type": "boolean",
           "default": false,
           "x-redstackpro-source": "user",
-          "description": "Keep Defender real-time protection on for this host. Off by default, for GOAD parity, so lab tooling runs unhindered. Windows hosts only."
+          "description": "Keep Windows Defender real-time protection on for this host. Off by default. Windows hosts only."
         },
         "endpoint_telemetry": {
           "type": "boolean",
           "default": false,
           "x-redstackpro-source": "user",
-          "description": "Install Sysmon and turn on command-line (4688) and directory-service (5136) auditing, so a SIEM-monitored host emits the events most detections need. Off by default. Windows hosts only."
+          "description": "Installs Sysmon and turns on command-line and directory-service auditing, so a SIEM-monitored host emits the events detections need. Off by default, Windows hosts only."
         },
         "vulns": {
           "type": "array",
@@ -1103,7 +1103,7 @@
         "notes": {
           "type": "string",
           "x-redstackpro-source": "user",
-          "description": "Free-form provenance for this host, e.g. Ludus roles that were imported but not mapped to a redStackPRO field. Carried so nothing an importer could not model is silently dropped."
+          "description": "Free-form notes for this host, for anything not covered by another field."
         },
         "public_address": {
           "$ref": "#/$defs/public_address",
@@ -1112,11 +1112,11 @@
         "internal_ip": {
           "$ref": "#/$defs/ipv4",
           "x-redstackpro-source": "user",
-          "description": "A pinned private address inside this host's segment cidr, e.g. 192.168.56.10. Absent means the provider assigns one at apply time (the default, unchanged behaviour). Set when a range must be deterministic -- GOAD's own canonical octets, so a solution can hardcode an address instead of re-discovering it every deploy. NET004/NET005 catch an address outside the segment or reused by another host in it. See 0055."
+          "description": "A pinned private address inside this host's segment, e.g. 192.168.56.10. Absent lets the provider assign one at apply time. Set it when the deploy needs a fixed, predictable address."
         },
         "vulns_vars": {
           "type": "object",
-          "description": "Per-vuln parameters for this host's declared vulns (e.g. a writable_share path, an ESC7 CA manager, delegation targets).",
+          "description": "Per-vuln parameters for this host's declared vulns, e.g. a file share path or a delegation target.",
           "additionalProperties": true
         },
         "sudo_groups": {
