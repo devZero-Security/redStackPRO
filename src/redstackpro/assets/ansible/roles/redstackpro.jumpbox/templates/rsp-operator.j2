@@ -113,25 +113,31 @@ remove_wireguard() {
     pub=$(cat "$WG_CLIENTS/$handle.pub")
     wg set wg0 peer "$pub" remove 2>/dev/null || true
   fi
-  # Drop the peer block (the "# handle" line and the [Peer] stanza under it).
+  # Drop the peer block (the "# handle" line and the [Peer] stanza under it) from
+  # the config, so wg-quick does not re-add the revoked key on the next reboot or
+  # reconverge. Skip runs from the "# handle" comment through the stanza's key
+  # lines, and ends at the next comment, the next non-Peer section, or a blank.
   python3 - "$WG_CONF" "$handle" <<'PY'
 import sys
 path, handle = sys.argv[1], sys.argv[2]
 lines = open(path).read().splitlines()
 out, skip = [], False
 for line in lines:
-    if line.strip() == "# " + handle:
+    s = line.strip()
+    if s == "# " + handle:
         skip = True
         continue
     if skip:
-        if line.strip() == "" or line.startswith("#") or line.startswith("["):
-            skip = False if line.strip() != "" else skip
-            if line.strip() == "":
-                continue
-        if skip and (line.startswith("PublicKey") or line.startswith("AllowedIPs") or line == "[Peer]"):
+        if s.startswith("#") or (s.startswith("[") and s != "[Peer]"):
+            skip = False
+            out.append(line)
             continue
+        if s == "":
+            skip = False
+            continue
+        continue  # inside the stanza: [Peer] and its key lines
     out.append(line)
-open(path, "w").write("\n".join(out) + "\n")
+open(path, "w").write("\n".join(out).rstrip("\n") + "\n")
 PY
   rm -f "$WG_CLIENTS/$handle.key" "$WG_CLIENTS/$handle.pub" "$CLIENT_DIR/$handle.conf"
 }
