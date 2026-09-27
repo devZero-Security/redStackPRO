@@ -658,12 +658,17 @@ if [ -z "$INSTANCES" ] || [ "$INSTANCES" = "null" ]; then
   echo "no redstackpro_instances output found -- has terraform applied yet?"
   exit 1
 fi
+# Target the deploy's own project, read from deploy.tfvars, so gcloud does not
+# silently act on the caller's default project when it differs. Empty falls back.
+PROJECT="$(grep -E '^[[:space:]]*project[[:space:]]*=' deploy.tfvars 2>/dev/null | head -1 | sed -E 's/[^=]*=[[:space:]]*"?([^"]*)"?.*/\1/')"
+PROJ_ARG=""
+[ -n "$PROJECT" ] && PROJ_ARG="--project $PROJECT"
 if [ "$cmd" = "status" ]; then
   RSP_ANY=0
   while IFS=' ' read -r name zone; do
     [ -n "$name" ] || continue
     RSP_ANY=1
-    gcloud compute instances describe "$name" --zone "$zone" \
+    gcloud compute instances describe "$name" --zone "$zone" $PROJ_ARG \
       --format='table(name,status,networkInterfaces[0].accessConfigs[0].natIP)'
   done < <(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
 for v in json.load(sys.stdin).values():
@@ -677,7 +682,7 @@ else
   while IFS=' ' read -r zone names; do
     [ -n "$zone" ] || continue
     RSP_ANY=1
-    gcloud compute instances "$cmd" $names --zone "$zone"
+    gcloud compute instances "$cmd" $names --zone "$zone" $PROJ_ARG
   done < <(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
 z={}
 for v in json.load(sys.stdin).values():
