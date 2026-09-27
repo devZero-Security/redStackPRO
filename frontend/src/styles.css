@@ -235,6 +235,13 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 .rg-body { display: flex; flex: 1; min-height: 0; }
 
+/* Drawer scaffolding. On desktop the left wrapper is transparent (display:contents
+   keeps the palette a direct flex child, so layout is unchanged) and the toggles and
+   backdrop are hidden. The drawer behavior lives in the max-width:1100px query. */
+.rg-drawer-left { display: contents; }
+.rg-drawer-toggle { display: none; }
+.rg-drawer-backdrop { display: none; }
+
 .rg-panel {
   width: 250px;
   background: var(--panel);
@@ -1574,9 +1581,9 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-loading { animation: rg-loading-pulse 1.2s ease-in-out infinite; }
 
 /* responsive
-   The layout has fixed panel widths and a single-row toolbar. These breakpoints
-   are pure CSS graceful degradation (no JS drawer): wrap the toolbar, then shrink
-   the side panels so the canvas keeps usable room on a laptop or split window. */
+   The layout has fixed panel widths and a single-row toolbar. The toolbar wraps first,
+   then below 1100px the side panels become overlay drawers so the canvas keeps the full
+   width on a laptop or split window. */
 
 /* Toolbar wraps before its controls get pushed off-screen. */
 @media (max-width: 1300px) {
@@ -1584,12 +1591,66 @@ button:disabled { opacity: 0.5; cursor: default; }
   .rg-name { min-width: 140px; }
 }
 
-/* Narrow laptop or split window: side panels shrink with min()/vw so the canvas
-   is not squeezed out, and the wide export panel is capped to the viewport. */
+/* Narrow: palette and right panel slide in as overlay drawers over the canvas, driven
+   by JS drawer state (.is-open). The canvas keeps full width because the drawers are
+   out of flow (absolute). Backdrop sits between canvas and the open drawer. */
 @media (max-width: 1100px) {
-  .rg-panel { width: min(220px, 30vw); }
-  .rg-inspector { width: min(280px, 34vw); }
-  .rg-right { width: min(280px, 36vw); }
-  .rg-right.is-wide { width: min(620px, 60vw); }
-  .rg-tree { width: min(190px, 40%); }
+  .rg-body { position: relative; }
+
+  .rg-drawer-left,
+  .rg-right {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 30;
+    background: var(--panel);
+    box-shadow: 0 0 24px rgba(0, 0, 0, 0.5);
+    overflow-y: auto;
+    transition: transform 0.2s ease;
+  }
+
+  .rg-drawer-left {
+    display: block;
+    left: 0;
+    width: min(300px, 85vw);
+    transform: translateX(-100%);
+  }
+  .rg-drawer-left.is-open { transform: translateX(0); }
+  /* Inner panel fills the drawer width instead of its fixed desktop width. */
+  .rg-drawer-left .rg-panel { width: 100%; height: auto; border-right: none; }
+
+  .rg-right {
+    right: 0;
+    width: min(360px, 90vw);
+    transform: translateX(100%);
+  }
+  .rg-right.is-wide { width: min(560px, 95vw); }
+  .rg-right.is-open { transform: translateX(0); }
+
+  /* Full-area dim behind the open drawer. */
+  .rg-drawer-backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    background: rgba(0, 0, 0, 0.45);
+  }
+
+  /* Edge tabs that open each drawer. */
+  .rg-drawer-toggle {
+    display: block;
+    position: absolute;
+    top: 12px;
+    z-index: 25;
+    padding: 8px 6px;
+    font-size: var(--fs-1);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    writing-mode: vertical-rl;
+  }
+  .rg-drawer-toggle.is-left { left: 0; border-left: none; border-radius: 0 6px 6px 0; }
+  .rg-drawer-toggle.is-right { right: 0; border-right: none; border-radius: 6px 0 0 6px; }
 }

@@ -132,6 +132,8 @@ function Editor() {
   // The export panel is the point of the product, so it is a peer of the
   // inspector rather than something buried behind a download button.
   const [panel, setPanel] = useState("inspector");
+  // Which side drawer is open on narrow screens (null on desktop, CSS ignores it there).
+  const [drawer, setDrawer] = useState(null);
   const [busy, setBusy] = useState(false);
   // The alignment guides shown while a node is dragged, or null at rest.
   const [guides, setGuides] = useState(null);
@@ -1562,6 +1564,27 @@ function Editor() {
       </header>
 
       <div className="rg-body">
+        <button
+          className="rg-drawer-toggle is-left"
+          type="button"
+          aria-label="Toggle palette"
+          onClick={() => setDrawer(drawer === "left" ? null : "left")}
+        >
+          Palette
+        </button>
+        <button
+          className="rg-drawer-toggle is-right"
+          type="button"
+          aria-label="Toggle inspector"
+          onClick={() => setDrawer(drawer === "right" ? null : "right")}
+        >
+          Inspector
+        </button>
+        {drawer ? (
+          <div className="rg-drawer-backdrop" onClick={() => setDrawer(null)} />
+        ) : null}
+
+        <div className={`rg-drawer-left ${drawer === "left" ? "is-open" : ""}`}>
         {readOnly ? (
           <aside className="rg-panel rg-palette rg-readonly-note">
             <h2>Palette</h2>
@@ -1591,6 +1614,7 @@ function Editor() {
             onLoadLab={(file) => loadDocFromUrl(`/${file}.json`)}
           />
         )}
+        </div>
 
         <div
           className="rg-canvas"
@@ -1645,10 +1669,12 @@ function Editor() {
             onNodeClick={(_e, node) => {
               setSelection({ type: "node", id: node.id });
               setPanel("inspector");
+              setDrawer("right");
             }}
             onEdgeClick={(_e, edge) => {
               setSelection({ type: "edge", id: edge.id });
               setPanel("inspector");
+              setDrawer("right");
             }}
             onEdgeDoubleClick={(_e, edge) => clearWaypoints(edge.id)}
             onPaneClick={() => setSelection(null)}
@@ -1719,7 +1745,7 @@ function Editor() {
           ) : null}
         </div>
 
-        <div className={`rg-right ${panel === "export" ? "is-wide" : ""}`}>
+        <div className={`rg-right ${panel === "export" ? "is-wide" : ""} ${drawer === "right" ? "is-open" : ""}`}>
           <div className="rg-tabs">
             <button
               className={panel === "inspector" ? "is-active" : ""}
