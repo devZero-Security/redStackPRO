@@ -201,3 +201,27 @@ def test_readme_hints_are_provider_specific(redstack, registry):
     # The Kali Marketplace subscription is an aws-only precondition.
     assert "Marketplace" in aws
     assert "Marketplace" not in gcp
+
+
+# -- range.sh / range.ps1 (status, start, stop, teardown)
+
+def test_range_scripts_ship_alongside_the_deploy(redstack, registry):
+    """Only meaningful once something has been deployed through a jumpbox,
+    exactly like deploy.sh/deploy.ps1, and they ship or vanish together."""
+    files = compile_topology(redstack, registry=registry, provider="gcp")
+    assert "range.sh" in files
+    assert "range.ps1" in files
+
+
+def test_range_script_is_provider_correct(redstack, registry):
+    aws = compile_topology(redstack, registry=registry, provider="aws")["range.sh"]
+    gcp = compile_topology(redstack, registry=registry, provider="gcp")["range.sh"]
+    assert "aws ec2 start-instances" in aws and "gcloud" not in aws
+    assert "gcloud compute instances start" in gcp and "aws ec2" not in gcp
+
+
+def test_deployment_guide_documents_managing_the_range(redstack, registry):
+    guide = compile_topology(redstack, registry=registry, provider="gcp")["DEPLOYMENT-GUIDE.md"]
+    assert "range.ps1" in guide
+    assert "range.sh" in guide
+    assert "teardown" in guide

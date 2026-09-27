@@ -616,6 +616,27 @@ def test_rollover_pool_is_an_output(rollover):
     assert "module.art_apache_rd02.public_address" in text
 
 
+def test_instances_output_carries_what_each_providers_cli_needs(redstack):
+    """range.sh (status/start/stop) has to address exactly this range's own
+    hosts, not the whole account or project, so the root output carries the one
+    identifier each provider's CLI takes: an instance id for aws, a name plus
+    its zone for gcp."""
+    aws_text = files(redstack, provider="aws")["terraform/outputs.tf"]
+    assert "redstackpro_instances" in aws_text
+    for node in redstack["nodes"]:
+        if node["kind"] in ("network", "segment"):
+            continue
+        assert '"art-%s"' % node["id"] in aws_text.split("redstackpro_instances", 1)[1]
+    assert "instance_id = module.art_jump_bx01.instance_id" in aws_text
+    assert "name = module.art_jump_bx01.name" not in aws_text
+
+    gcp_text = files(redstack, provider="gcp")["terraform/outputs.tf"]
+    assert "redstackpro_instances" in gcp_text
+    assert "name = module.art_jump_bx01.name" in gcp_text
+    assert "zone = var.zone" in gcp_text
+    assert "instance_id" not in gcp_text
+
+
 # -- secrets
 
 def test_no_credentials_or_key_material(redstack):

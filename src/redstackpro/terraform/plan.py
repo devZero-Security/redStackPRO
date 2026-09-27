@@ -595,6 +595,30 @@ def outputs(plan):
         "}",
     ]
 
+    # Per-host identifiers for range.sh (status/start/stop), so those act on
+    # exactly this range's own instances and never the whole account or
+    # project. Only aws and gcp are wired: aws targets an instance by id, gcp
+    # by name plus zone, and every host module already exposes what its
+    # provider needs. See deploy.py generate_range_script.
+    if plan.provider in ("aws", "gcp"):
+        lines += [
+            "",
+            "# Consumed by range.sh (status/start/stop). Not the whole account",
+            "# or project, only this range's own hosts.",
+            'output "redstackpro_instances" {',
+            "  value = {",
+        ]
+        for node in plan.hosts():
+            ref = plan.ref(node["id"])
+            lines.append('    "%s" = {' % plan.tag(node["id"]))
+            if plan.provider == "aws":
+                lines.append("      instance_id = module.%s.instance_id" % ref)
+            else:
+                lines.append("      name = module.%s.name" % ref)
+                lines.append("      zone = var.zone")
+            lines.append("    }")
+        lines += ["  }", "}"]
+
     # Rollover pools. The topology knows which redirectors serve which teamserver;
     # the operator writes the C2 profile. See 0007.
     pools = {}

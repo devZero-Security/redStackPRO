@@ -12,7 +12,7 @@ under src/redstackpro/assets/ rather than at the repo root.
 from pathlib import Path
 
 from .ansible import generate as generate_ansible
-from .deploy import generate_deploy_script
+from .deploy import generate_deploy_script, generate_range_script
 from .naming import platform_account
 from .registry import Registry
 from .terraform import GenerationError
@@ -208,6 +208,33 @@ all; an early play signs that listener from the jumpbox authority and rebinds it
 That first connection is the one place validation is off, it needs no flag from
 you, and a re-run that finds the listener already signed does not repeat it.
 
+## Managing the deployment
+
+Once it is up, `range.ps1` (or `range.sh` from Git Bash, macOS, or Linux) checks
+on it and tears it down. Same wrapper pattern as the deploy: `.\\range.ps1` on
+Windows, `bash range.sh` everywhere else.
+
+```powershell
+.\\range.ps1 status
+.\\range.ps1 start
+.\\range.ps1 stop
+.\\range.ps1 teardown
+```
+
+```bash
+bash range.sh status
+bash range.sh start
+bash range.sh stop
+bash range.sh teardown
+```
+
+`status` prints the Guacamole portal URL and the state of every host. `start`
+and `stop` act on exactly this deployment's own instances, never the whole
+cloud account or project. `teardown` runs
+`terraform -chdir=terraform destroy -auto-approve` after copying `deploy.tfvars`
+into place, the same handoff the deploy uses; running that raw command
+yourself from `terraform/` works too, once `terraform.tfvars` is there.
+
 ## What redStackPRO did not do
 
 It did not run Terraform, hold a credential, or reach any environment. It
@@ -325,6 +352,33 @@ ssh-add keys/id_ed25519
 
 Working from the jumpbox itself avoids the proxy and the agent entirely.
 
+## Managing the range
+
+Once it is up, `range.ps1` (or `range.sh` from Git Bash, macOS, or Linux) checks
+on it and tears it down. Same wrapper pattern as the deploy: `.\\range.ps1` on
+Windows, `bash range.sh` everywhere else.
+
+```powershell
+.\\range.ps1 status
+.\\range.ps1 start
+.\\range.ps1 stop
+.\\range.ps1 teardown
+```
+
+```bash
+bash range.sh status
+bash range.sh start
+bash range.sh stop
+bash range.sh teardown
+```
+
+`status` prints the Guacamole portal URL and the state of every host. `start`
+and `stop` act on exactly this range's own instances, never the whole cloud
+account or project. `teardown` runs
+`terraform -chdir=terraform destroy -auto-approve` after copying `deploy.tfvars`
+into place, the same handoff the deploy uses; running that raw command yourself
+from `terraform/` works too, once `terraform.tfvars` is there.
+
 ## What redStackPRO did not do
 
 It did not run Terraform, hold a credential, or reach any environment. It
@@ -432,6 +486,14 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
         # for a direct terraform run.
         if "terraform/terraform.tfvars" in files:
             files["deploy.tfvars"] = files.pop("terraform/terraform.tfvars")
+        # Managing what deploy.sh stood up: status, start, stop, teardown.
+        # Ships alongside deploy.sh/.ps1 under the same condition, a jumpbox to
+        # act through, and never without it. See deploy.py generate_range_script.
+        range_script = generate_range_script(document, registry, provider=provider)
+        if range_script:
+            files["range.sh"] = range_script
+            from .deploy import RANGE_PS1
+            files["range.ps1"] = RANGE_PS1
     files["DEPLOYMENT-GUIDE.md"] = (RANGE_README if is_range else README).format(
         name=document.get("name", "redStackPRO export"),
         provider=provider,
