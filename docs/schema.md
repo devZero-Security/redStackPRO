@@ -61,7 +61,7 @@ guard between two files that would otherwise diverge.
 
 ## Range model
 
-Haven mode (`mode: haven`, ADR 0047) is the Cyber Ranges canvas. A `domain` is a
+Haven mode (`mode: haven`) is the Cyber Ranges canvas. A `domain` is a
 container node the way a segment is; a host joins it with a `joins` edge and
 nests inside its box. Domains link to each other with a `trusts` edge carrying
 `direction`, `trust_type` (`parent_child`, `tree_root`, `external`, `forest`),

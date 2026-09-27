@@ -16,7 +16,7 @@ mayfly runs this from a Kali sitting on the `192.168.56.0/24` lab LAN. We run it
 
 The table below is the **canonical full-GOAD** topology. Internal range IPs are
 deterministic (redStack pins each core host's last octet via the `internal_ip`
-field to GOAD's canonical scheme per P1.6 / ADR 0055, so a fresh deploy
+field to GOAD's canonical scheme per P1.6, so a fresh deploy
 reproduces them) and safe to publish as-is. **Public addresses are
 per-deploy and cloud-ephemeral** - the jumpbox and redirector get a fresh IP
 each apply, so re-fetch them from your own deploy (see the

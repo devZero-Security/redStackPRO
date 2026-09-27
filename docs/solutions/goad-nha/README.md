@@ -11,7 +11,7 @@ template object**, not as a vuln id, so a scan for `esc*` ids does not see it. A
 the authored [part 6](../goad/part-06-adcs.md) names essos hosts in every step, so
 a filter that keeps a step when the lab has the host it names drops the whole page
 here. Steps filter by the host they name, not by the capability they need - the
-known limit recorded in ADR 0058, of which this is the concrete instance.
+known limit, of which this is the concrete instance.
 
 > **Status: authored from the lab's own template and the roles that plant it, not
 > yet run against a live range.** Every fact below was read out of

@@ -42,7 +42,7 @@ variety, not difficulty or host count.
 
 ## Which labs get a full solution
 
-Every range now has an authored solution folder (ADR 0061). Some follow an
+Every range now has an authored solution folder. Some follow an
 upstream write-up; the rest are hand-authored from the lab's own template and
 carry an "authored, not yet run live" banner until a live pass covers them. The
 coverage pages in this folder stay as the technique and detection checklists the
