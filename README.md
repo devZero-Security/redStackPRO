@@ -21,7 +21,9 @@
 > GCP and AWS are tested end to end; Azure, Proxmox, and ESXi are on the roadmap.
 > Expect rough edges, and pin to a released version if you need stability.
 
-redStackPRO puts attack infrastructure and target ranges on the same canvas.
+redStackPRO puts attack infrastructure and target ranges on the same canvas. The two
+canvas modes are **ARTIE** (attack infrastructure) and **HAVEN** (defense ranges); the
+export names its hand-off `ARTIE-BRIEFING.md` or `HAVEN-BRIEFING.md` to match.
 
 Split horizon C2, attack infrastructure: two front doors that do not share a fate,
 Apache fronting Sliver and Nginx fronting Mythic, each redirector on its own peered
