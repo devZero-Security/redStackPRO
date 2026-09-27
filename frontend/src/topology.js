@@ -45,6 +45,12 @@ function managesSummary(targetIds, byId) {
 
 export const isContainer = (kind) => CONTAINERS.includes(kind);
 
+// A range host nests one level deeper than any other kind: it joins a domain
+// (or stands alone in a subnet), where everything else attaches straight to
+// its container. The canvas drag handler needs this to know a domain is a
+// valid drop target for one of these and not for a jumpbox or a SIEM box.
+export const isRangeHost = (kind) => RANGE_HOSTS.includes(kind);
+
 // Roles that are drawn as lines. Attachment is nesting, so it is not here.
 // Peering is drawn, network to network, so two peered networks read as joined
 // rather than as two boxes that happen to sit near each other. `manages` is not

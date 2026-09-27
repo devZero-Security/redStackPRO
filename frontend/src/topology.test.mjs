@@ -3,7 +3,7 @@
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import {
-  addEdge, addHostPreset, addNode, applyPositions, inferRole, removeNode,
+  addEdge, addHostPreset, addNode, applyPositions, inferRole, isRangeHost, removeNode,
   setJoin, setParent, toFlow,
 } from "./topology.js";
 import { HOST_PRESETS } from "./presets.js";
@@ -268,6 +268,44 @@ test("placing a host on a subnet re-nests it there", () => {
   const attached = placed.edges.filter((e) => e.role === "attached" && e.source === "wazuh");
   assert.equal(attached.length, 1);
   assert.equal(attached[0].target, "sub01");
+});
+
+test("isRangeHost picks out the domain-joinable kinds", () => {
+  // dc/srv/wks/fw can join a domain; the jumpbox and the standalone Linux
+  // appliances (SIEM, Guacamole) only ever attach to a subnet. The canvas drag
+  // handler leans on this to know a domain box is a valid drop target for one
+  // and not the other.
+  assert.ok(isRangeHost("wks"));
+  assert.ok(isRangeHost("dc"));
+  assert.ok(!isRangeHost("jumpbox"));
+  assert.ok(!isRangeHost("siem"));
+  assert.ok(!isRangeHost("domain"));
+});
+
+test("a host dropped into a domain keeps one joins edge and one attached edge, not two", () => {
+  // This is what the canvas drag handler does when a host is dropped inside a
+  // domain box: join the domain, then attach to that domain's own subnet, so a
+  // fresh drag never leaves a stray edge behind (the bug this guards is a host
+  // ending up attached to the subnet AND joined to the domain with mismatched
+  // containers, which reads on screen as the node jumping to the bottom of the
+  // domain box because its stored position was computed against the wrong
+  // parent). See App.jsx onNodeDragStop.
+  const range = JSON.parse(readFileSync("public/goad/goad-wazuh.json", "utf8"));
+  // ws01 ships as a standalone host on sub01, joined to no domain.
+  const domainParent = toFlow(range, palette).nodes.find((n) => n.id === "sevenkingdoms").parentId;
+  const moved = setParent(setJoin(range, "ws01", "sevenkingdoms"), "ws01", domainParent);
+
+  const joins = moved.edges.filter((e) => e.role === "joins" && e.source === "ws01");
+  const attached = moved.edges.filter((e) => e.role === "attached" && e.source === "ws01");
+  assert.equal(joins.length, 1);
+  assert.equal(joins[0].target, "sevenkingdoms");
+  assert.equal(attached.length, 1);
+  assert.equal(attached[0].target, domainParent);
+
+  // toFlow renders the host inside the domain, which is what makes the drop
+  // point and the stored (parent-relative) position line up.
+  const { nodes } = toFlow(moved, palette);
+  assert.equal(nodes.find((n) => n.id === "ws01").parentId, "sevenkingdoms");
 });
 
 console.log(`\n${passed} passed`);

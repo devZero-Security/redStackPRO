@@ -51,6 +51,7 @@ import {
   emptyDocument,
   inferRole,
   isContainer,
+  isRangeHost,
   legendItems,
   removeEdge,
   removeNode,
@@ -1077,23 +1078,33 @@ function Editor() {
       setDocument((current) => {
         const kinds = Object.fromEntries(current.nodes.map((n) => [n.id, n.kind]));
         // A subnet nests into a network, a host into a subnet. A network nests
-        // into nothing.
+        // into nothing. A range host nests into a domain first: a domain box
+        // sits inside its subnet, so the subnet's own box also covers the same
+        // point, and a plain "look for a subnet" search would always match the
+        // subnet and never the domain drawn on top of it. Trying domain first is
+        // what lets a host dropped inside a domain box land in the domain.
         if (kinds[dragged.id] === "network") return current;
-        const wants = kinds[dragged.id] === "segment" ? "network" : "segment";
-        const container = flow
-          .getNodes()
-          .filter((n) => n.id !== dragged.id && kinds[n.id] === wants)
-          .find((n) => {
-            const origin = flow.getNode(n.id)?.positionAbsolute || n.position;
-            const width = n.width || n.style?.width || 0;
-            const height = n.height || n.style?.height || 0;
-            return (
-              point.x >= origin.x &&
-              point.x <= origin.x + width &&
-              point.y >= origin.y &&
-              point.y <= origin.y + height
-            );
-          });
+        const rangeHost = current.mode === "haven" && isRangeHost(kinds[dragged.id]);
+        const wantsKinds =
+          kinds[dragged.id] === "segment" ? ["network"] : rangeHost ? ["domain", "segment"] : ["segment"];
+        let container;
+        for (const wants of wantsKinds) {
+          container = flow
+            .getNodes()
+            .filter((n) => n.id !== dragged.id && kinds[n.id] === wants)
+            .find((n) => {
+              const origin = flow.getNode(n.id)?.positionAbsolute || n.position;
+              const width = n.width || n.style?.width || 0;
+              const height = n.height || n.style?.height || 0;
+              return (
+                point.x >= origin.x &&
+                point.x <= origin.x + width &&
+                point.y >= origin.y &&
+                point.y <= origin.y + height
+              );
+            });
+          if (container) break;
+        }
 
         // React Flow stores a child's position relative to its parent. The
         // dragged node's position was absolute (or relative to a former parent);
@@ -1111,10 +1122,23 @@ function Editor() {
           y: Math.round(abs.y - parentAbs.y),
         };
         record(container ? "nest" : "unnest", { node: dragged.id, into: container?.id, position });
-        const reparented = setParent(current, dragged.id, container?.id);
+
+        let next;
+        if (rangeHost) {
+          // A domain member carries two edges: joins the domain it renders
+          // inside, attached to the subnet that holds it (toFlow infers a
+          // domain's own subnet from a member's attached edge, see topology.js).
+          // Dropped inside a domain box both point there; dropped loose in the
+          // subnet the domain membership clears and only the attachment remains.
+          const domain = container && kinds[container.id] === "domain" ? container : null;
+          const subnetId = domain ? flow.getNode(domain.id)?.parentId : container?.id;
+          next = setParent(setJoin(current, dragged.id, domain?.id), dragged.id, subnetId);
+        } else {
+          next = setParent(current, dragged.id, container?.id);
+        }
         return {
-          ...reparented,
-          nodes: reparented.nodes.map((n) =>
+          ...next,
+          nodes: next.nodes.map((n) =>
             n.id === dragged.id ? { ...n, position } : n
           ),
         };
