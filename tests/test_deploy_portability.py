@@ -500,9 +500,10 @@ def test_aws_targets_instances_by_id():
 def test_gcp_targets_instances_by_name_and_zone():
     gcp = generate_manage_script(example("redstack.json"), Registry(), provider="gcp")
     assert "redstackpro_instances" in gcp
-    assert "gcloud compute instances start" in gcp
-    assert "gcloud compute instances stop" in gcp
-    assert "gcloud compute instances describe" in gcp
+    # status describes each instance; start/stop batch a zone's instances into a
+    # single call ("$cmd" is start or stop) instead of one blocking call each.
+    assert 'gcloud compute instances describe "$name" --zone "$zone"' in gcp
+    assert 'gcloud compute instances "$cmd" $names --zone "$zone"' in gcp
     assert "aws ec2" not in gcp
 
 

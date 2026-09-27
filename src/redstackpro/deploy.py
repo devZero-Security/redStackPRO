@@ -658,20 +658,34 @@ if [ -z "$INSTANCES" ] || [ "$INSTANCES" = "null" ]; then
   echo "no redstackpro_instances output found -- has terraform applied yet?"
   exit 1
 fi
-RSP_ANY=0
-while IFS=' ' read -r name zone; do
-  [ -n "$name" ] || continue
-  RSP_ANY=1
-  case "$cmd" in
-    status) gcloud compute instances describe "$name" --zone "$zone" \
-              --format='table(name,status,networkInterfaces[0].accessConfigs[0].natIP)' ;;
-    start)  gcloud compute instances start "$name" --zone "$zone" ;;
-    stop)   gcloud compute instances stop "$name" --zone "$zone" ;;
-  esac
-done < <(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
+if [ "$cmd" = "status" ]; then
+  RSP_ANY=0
+  while IFS=' ' read -r name zone; do
+    [ -n "$name" ] || continue
+    RSP_ANY=1
+    gcloud compute instances describe "$name" --zone "$zone" \
+      --format='table(name,status,networkInterfaces[0].accessConfigs[0].natIP)'
+  done < <(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
 for v in json.load(sys.stdin).values():
     print(v['name'], v['zone'])")
-[ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
+  [ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
+else
+  # start/stop: one gcloud call per zone acts on all that zone's instances at
+  # once, instead of a blocking call per instance (a multi-VM range was slow
+  # that way). --zone is required and a topology can span zones, so group first.
+  RSP_ANY=0
+  while IFS=' ' read -r zone names; do
+    [ -n "$zone" ] || continue
+    RSP_ANY=1
+    gcloud compute instances "$cmd" $names --zone "$zone"
+  done < <(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
+z={}
+for v in json.load(sys.stdin).values():
+    z.setdefault(v['zone'], []).append(v['name'])
+for zone, names in z.items():
+    print(zone, ' '.join(names))")
+  [ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
+fi
 ''',
 }
 

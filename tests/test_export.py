@@ -217,7 +217,19 @@ def test_manage_script_is_provider_correct(redstack, registry):
     aws = compile_topology(redstack, registry=registry, provider="aws")["manage.sh"]
     gcp = compile_topology(redstack, registry=registry, provider="gcp")["manage.sh"]
     assert "aws ec2 start-instances" in aws and "gcloud" not in aws
-    assert "gcloud compute instances start" in gcp and "aws ec2" not in gcp
+    assert "gcloud compute instances" in gcp and "aws ec2" not in gcp
+
+
+def test_compile_region_flows_into_the_tfvars(redstack, registry):
+    """The compile --region override (and a document region) must reach the
+    generated deploy.tfvars, not just the variables.tf default, or the user edits
+    a region the deploy ignores."""
+    files = compile_topology(
+        redstack, registry=registry, provider="gcp", region="us-central1"
+    )
+    tfvars = files["deploy.tfvars"]
+    assert '"us-central1"' in tfvars
+    assert '"us-central1-a"' in tfvars
 
 
 def test_deployment_guide_documents_managing_the_range(redstack, registry):
