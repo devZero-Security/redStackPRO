@@ -41,6 +41,7 @@ const SCHEMA = {
             },
           },
         },
+        acls: { type: "array", "x-redstackpro-source": "user", items: {} },
       },
     },
   },
@@ -176,5 +177,87 @@ describe("account techniques on the host vuln picker", () => {
     // No domain user was created for a plain host vuln.
     expect(domain.getByText("Users")).toBeTruthy();
     expect(domain.queryByText(/^\d+ flaws?$/)).toBeNull();
+  });
+});
+
+// A locked haven template (readOnly, before "Unlock to edit") must still show
+// the planted domain users and ACL edges: that is the content a person wants
+// to preview before deciding to unlock. Only vulns/hardening stayed visible
+// before this change; users/acls used to be omitted outright when readOnly.
+describe("users and acls on a locked (readOnly) domain", () => {
+  function lockedDomainDocument() {
+    return {
+      schema_version: "0.6.0",
+      mode: "haven",
+      prefix: "hv",
+      nodes: [
+        {
+          id: "dc01",
+          kind: "domain",
+          overlay: {
+            fqdn: "sk.local",
+            users: [{ username: "j.smith", privilege: "domain_admin", flaws: ["weak_password"] }],
+            acls: [{ principal: "j.smith", target: "Domain Admins", right: "GenericAll" }],
+          },
+        },
+      ],
+      edges: [],
+    };
+  }
+
+  test("users list renders read-only: visible, no add form, no delete, controls disabled", () => {
+    const document = lockedDomainDocument();
+    render(
+      <Inspector
+        schema={SCHEMA}
+        selection={{ type: "node", id: "dc01" }}
+        document={document}
+        findings={[]}
+        onOverlayChange={() => {}}
+        onRename={() => {}}
+        onDelete={() => {}}
+        kindLabels={{}}
+        readOnly
+      />
+    );
+
+    // The planted account is visible, not hidden.
+    expect(screen.getByText("Users (1)")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "j.smith" })).toBeTruthy();
+
+    // Nothing that mutates the list is offered.
+    expect(screen.queryByPlaceholderText("username, e.g. j.smith")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Populate random" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove user" })).toBeNull();
+
+    // The privilege select is present but disabled.
+    const priv = screen.getByDisplayValue("domain admin");
+    expect(priv.disabled).toBe(true);
+  });
+
+  test("acls list renders read-only: visible, no add row, no delete", () => {
+    const document = lockedDomainDocument();
+    render(
+      <Inspector
+        schema={SCHEMA}
+        selection={{ type: "node", id: "dc01" }}
+        document={document}
+        findings={[]}
+        onOverlayChange={() => {}}
+        onRename={() => {}}
+        onDelete={() => {}}
+        kindLabels={{}}
+        readOnly
+      />
+    );
+
+    expect(screen.getByText("Access rights (1)")).toBeTruthy();
+    const acls = within(screen.getByText("Access rights (1)").closest(".rg-acls"));
+    expect(acls.getByText("j.smith")).toBeTruthy();
+    expect(acls.getByText("Domain Admins")).toBeTruthy();
+
+    expect(acls.queryByPlaceholderText("principal")).toBeNull();
+    expect(acls.queryByPlaceholderText("target")).toBeNull();
+    expect(acls.queryByRole("button", { name: "Remove right" })).toBeNull();
   });
 });

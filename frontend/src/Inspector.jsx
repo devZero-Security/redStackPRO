@@ -31,7 +31,7 @@ const FLAW_LABELS = {
 // Populate to fill the domain with a realistic population so a lab has bodies to
 // hunt through, not just the accounts an attack path needs. The count Populate
 // adds scales with the range's size. See rangeUsers.js and 0049.
-function DomainUsers({ node, rangeHostCount, flawOptions = [], onChange }) {
+function DomainUsers({ node, rangeHostCount, flawOptions = [], onChange, readOnly }) {
   const users = (node.overlay || {}).users || [];
   const fqdn = (node.overlay || {}).fqdn || "example.local";
   const [name, setName] = useState("");
@@ -65,22 +65,26 @@ function DomainUsers({ node, rangeHostCount, flawOptions = [], onChange }) {
         Accounts on this domain. Populate fills it with a realistic set sized to
         the range; add your own for the accounts an attack path turns on.
       </p>
-      <div className="rg-users-actions">
-        <button type="button" onClick={populate}>Populate random</button>
-        {users.length ? (
-          <button type="button" className="rg-danger-text" onClick={() => onChange(setUsers(node, []))}>
-            Clear
-          </button>
-        ) : null}
-      </div>
-      <div className="rg-users-archetypes">
-        <span className="rg-field-label">add a class</span>
-        {USER_ARCHETYPES.map((a) => (
-          <button key={a.id} type="button" title={a.blurb} onClick={() => addArchetype(a.id)}>
-            + {a.label}
-          </button>
-        ))}
-      </div>
+      {readOnly ? null : (
+        <div className="rg-users-actions">
+          <button type="button" onClick={populate}>Populate random</button>
+          {users.length ? (
+            <button type="button" className="rg-danger-text" onClick={() => onChange(setUsers(node, []))}>
+              Clear
+            </button>
+          ) : null}
+        </div>
+      )}
+      {readOnly ? null : (
+        <div className="rg-users-archetypes">
+          <span className="rg-field-label">add a class</span>
+          {USER_ARCHETYPES.map((a) => (
+            <button key={a.id} type="button" title={a.blurb} onClick={() => addArchetype(a.id)}>
+              + {a.label}
+            </button>
+          ))}
+        </div>
+      )}
       {users.length ? (
         <div className="rg-users-list">
           {users.map((u, i) => (
@@ -97,6 +101,7 @@ function DomainUsers({ node, rangeHostCount, flawOptions = [], onChange }) {
                 <select
                   className={`rg-user-priv is-${u.privilege || "user"}`}
                   value={u.privilege || "user"}
+                  disabled={readOnly}
                   onChange={(e) => onChange(updateUser(node, i, { privilege: e.target.value }))}
                 >
                   {PRIVILEGES.map((p) => (
@@ -113,14 +118,16 @@ function DomainUsers({ node, rangeHostCount, flawOptions = [], onChange }) {
                     breach
                   </span>
                 ) : null}
-                <button
-                  type="button"
-                  className="rg-user-del"
-                  title="Remove user"
-                  onClick={() => onChange(removeUser(node, i))}
-                >
-                  &times;
-                </button>
+                {readOnly ? null : (
+                  <button
+                    type="button"
+                    className="rg-user-del"
+                    title="Remove user"
+                    onClick={() => onChange(removeUser(node, i))}
+                  >
+                    &times;
+                  </button>
+                )}
               </div>
               {open === i ? (
                 <div className="rg-user-detail">
@@ -128,6 +135,7 @@ function DomainUsers({ node, rangeHostCount, flawOptions = [], onChange }) {
                     <span className="rg-field-label">email</span>
                     <input
                       value={u.email || ""}
+                      disabled={readOnly}
                       onChange={(e) => onChange(updateUser(node, i, { email: e.target.value || undefined }))}
                     />
                   </label>
@@ -136,6 +144,7 @@ function DomainUsers({ node, rangeHostCount, flawOptions = [], onChange }) {
                     <input
                       value={(u.groups || []).join(", ")}
                       placeholder="IT, Domain Admins"
+                      disabled={readOnly}
                       onChange={(e) =>
                         onChange(updateUser(node, i, {
                           groups: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
@@ -151,6 +160,7 @@ function DomainUsers({ node, rangeHostCount, flawOptions = [], onChange }) {
                           <input
                             type="checkbox"
                             checked={(u.flaws || []).includes(flaw)}
+                            disabled={readOnly}
                             onChange={() => toggleFlaw(i, flaw)}
                           />
                           {FLAW_LABELS[flaw] || flaw}
@@ -165,6 +175,7 @@ function DomainUsers({ node, rangeHostCount, flawOptions = [], onChange }) {
                     <input
                       type="checkbox"
                       checked={!!u.assumed_breach}
+                      disabled={readOnly}
                       onChange={(e) =>
                         onChange(updateUser(node, i, { assumed_breach: e.target.checked || undefined }))
                       }
@@ -177,15 +188,17 @@ function DomainUsers({ node, rangeHostCount, flawOptions = [], onChange }) {
           ))}
         </div>
       ) : null}
-      <div className="rg-users-add">
-        <input
-          value={name}
-          placeholder="username, e.g. j.smith"
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && add()}
-        />
-        <button type="button" onClick={add} disabled={!name.trim()}>Add</button>
-      </div>
+      {readOnly ? null : (
+        <div className="rg-users-add">
+          <input
+            value={name}
+            placeholder="username, e.g. j.smith"
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && add()}
+          />
+          <button type="button" onClick={add} disabled={!name.trim()}>Add</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -529,7 +542,7 @@ function prettyRight(right) {
 // attack graph the users and groups sit inside, the same acls GOAD carries and
 // BloodHound walks. Listed and editable here, since a right runs between two
 // principals rather than being a property of one node. See 0052.
-function DomainAcls({ node, onChange }) {
+function DomainAcls({ node, onChange, readOnly }) {
   const acls = (node.overlay || {}).acls || [];
   const [principal, setPrincipal] = useState("");
   const [target, setTarget] = useState("");
@@ -560,30 +573,34 @@ function DomainAcls({ node, onChange }) {
                 <span className="rg-acl-t" title={a.target}>{a.target}</span>
               </span>
               <span className="rg-acl-right" title={a.right}>{prettyRight(a.right)}</span>
-              <button
-                type="button"
-                className="rg-user-del"
-                title="Remove right"
-                onClick={() => set(acls.filter((_, j) => j !== i))}
-              >
-                &times;
-              </button>
+              {readOnly ? null : (
+                <button
+                  type="button"
+                  className="rg-user-del"
+                  title="Remove right"
+                  onClick={() => set(acls.filter((_, j) => j !== i))}
+                >
+                  &times;
+                </button>
+              )}
             </div>
           ))}
         </div>
       ) : null}
       {/* Reading order matches the sentence the row makes: principal, target,
           then the right that connects them, then Add. */}
-      <div className="rg-acls-add">
-        <input value={principal} placeholder="principal" onChange={(e) => setPrincipal(e.target.value)} />
-        <input value={target} placeholder="target" onChange={(e) => setTarget(e.target.value)} />
-        <select value={right} onChange={(e) => setRight(e.target.value)}>
-          {["GenericAll", "GenericWrite", "WriteDacl", "WriteOwner", "ForceChangePassword", "AddMember"].map((r) => (
-            <option key={r} value={r}>{r}</option>
-          ))}
-        </select>
-        <button type="button" onClick={add} disabled={!principal.trim() || !target.trim()}>Add</button>
-      </div>
+      {readOnly ? null : (
+        <div className="rg-acls-add">
+          <input value={principal} placeholder="principal" onChange={(e) => setPrincipal(e.target.value)} />
+          <input value={target} placeholder="target" onChange={(e) => setTarget(e.target.value)} />
+          <select value={right} onChange={(e) => setRight(e.target.value)}>
+            {["GenericAll", "GenericWrite", "WriteDacl", "WriteOwner", "ForceChangePassword", "AddMember"].map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+          <button type="button" onClick={add} disabled={!principal.trim() || !target.trim()}>Add</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -598,7 +615,7 @@ function DomainAcls({ node, onChange }) {
 // to a single short line (VPN006), rather than letting a bad value through to fail
 // only at compile.
 const OPERATOR_HANDLE_RE = /^[a-z0-9][a-z0-9._-]*$/;
-function Operators({ node, onChange }) {
+function Operators({ node, onChange, readOnly }) {
   const operators = (node.overlay || {}).operators || [];
   const [handle, setHandle] = useState("");
   const [role, setRole] = useState("");
@@ -646,23 +663,27 @@ function Operators({ node, onChange }) {
                   <span className="rg-acl-right" title={o.role}>{o.role}</span>
                 ) : null}
               </span>
-              <button
-                type="button"
-                className="rg-user-del"
-                title="Remove operator"
-                onClick={() => set(operators.filter((_, j) => j !== i))}
-              >
-                &times;
-              </button>
+              {readOnly ? null : (
+                <button
+                  type="button"
+                  className="rg-user-del"
+                  title="Remove operator"
+                  onClick={() => set(operators.filter((_, j) => j !== i))}
+                >
+                  &times;
+                </button>
+              )}
             </div>
           ))}
         </div>
       ) : null}
-      <div className="rg-acls-add">
-        <input value={handle} placeholder="handle" onChange={(e) => setHandle(e.target.value)} />
-        <input value={role} placeholder="role (optional)" onChange={(e) => setRole(e.target.value)} />
-        <button type="button" onClick={add} disabled={!handle.trim()}>Add</button>
-      </div>
+      {readOnly ? null : (
+        <div className="rg-acls-add">
+          <input value={handle} placeholder="handle" onChange={(e) => setHandle(e.target.value)} />
+          <input value={role} placeholder="role (optional)" onChange={(e) => setRole(e.target.value)} />
+          <button type="button" onClick={add} disabled={!handle.trim()}>Add</button>
+        </div>
+      )}
       {err ? <p className="rg-hint rg-danger-text">{err}</p> : null}
     </div>
   );
@@ -1289,31 +1310,28 @@ export function Inspector({
                   }
                 />
               ) : name === "users" ? (
-                readOnly ? null : (
-                  <DomainUsers
-                    key={name}
-                    node={node}
-                    rangeHostCount={rangeHostCount}
-                    flawOptions={spec.items?.properties?.flaws?.items?.enum || []}
-                    onChange={(overlay) => onOverlayChange(node.id, overlay)}
-                  />
-                )
+                <DomainUsers
+                  key={name}
+                  node={node}
+                  rangeHostCount={rangeHostCount}
+                  flawOptions={spec.items?.properties?.flaws?.items?.enum || []}
+                  readOnly={readOnly}
+                  onChange={(overlay) => onOverlayChange(node.id, overlay)}
+                />
               ) : name === "acls" ? (
-                readOnly ? null : (
-                  <DomainAcls
-                    key={name}
-                    node={node}
-                    onChange={(overlay) => onOverlayChange(node.id, overlay)}
-                  />
-                )
+                <DomainAcls
+                  key={name}
+                  node={node}
+                  readOnly={readOnly}
+                  onChange={(overlay) => onOverlayChange(node.id, overlay)}
+                />
               ) : name === "operators" ? (
-                readOnly ? null : (
-                  <Operators
-                    key={name}
-                    node={node}
-                    onChange={(overlay) => onOverlayChange(node.id, overlay)}
-                  />
-                )
+                <Operators
+                  key={name}
+                  node={node}
+                  readOnly={readOnly}
+                  onChange={(overlay) => onOverlayChange(node.id, overlay)}
+                />
               ) : (
                 <Field
                   key={name}
