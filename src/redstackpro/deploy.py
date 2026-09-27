@@ -221,6 +221,13 @@ def _jumpbox_name(ctx):
     return None
 
 
+_AWS_TTL_IAM_NOTE = """# auto_stop creates an IAM role and policy for the shutdown schedule, the stack's
+# first IAM resources. A caller who cannot create roles fails there, on a resource
+# they did not add by hand, so say so before the apply rather than after.
+echo "note: this range has an auto-stop schedule; the AWS apply needs iam:CreateRole and iam:PutRolePolicy, or it fails creating the scheduler role. Grant those, or recompile without an auto_stop TTL."
+"""
+
+
 def generate_deploy_script(topology, registry=None, provider=None):
     """Return deploy.sh contents, or None when the topology has no jumpbox (there is
     nothing to stage a provision through).
@@ -256,6 +263,8 @@ def generate_deploy_script(topology, registry=None, provider=None):
             hour=stop["at_minute"] // 60,
             minute=stop["at_minute"] % 60,
         )
+        if provider == "aws":
+            cloud_preflight += _AWS_TTL_IAM_NOTE
 
     # The provision runner that lands on the jumpbox. Mode is baked in here rather
     # than branched at run time, so the emitted runner is straight-line.

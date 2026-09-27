@@ -507,6 +507,20 @@ def test_gcp_targets_instances_by_name_and_zone():
     assert "aws ec2" not in gcp
 
 
+def test_aws_auto_stop_warns_about_iam_before_apply():
+    """auto_stop's first resources are an IAM role + policy; a restricted caller
+    fails there on a resource they never added. deploy.sh says so up front on aws,
+    and only when a TTL is actually set."""
+    doc = example("redstack.json")
+    doc["auto_stop"] = {"enabled": True, "at": "02:00"}
+    aws = generate_deploy_script(doc, Registry(), provider="aws")
+    assert "iam:CreateRole" in aws
+    gcp = generate_deploy_script(doc, Registry(), provider="gcp")
+    assert "iam:CreateRole" not in gcp
+    no_ttl = generate_deploy_script(example("redstack.json"), Registry(), provider="aws")
+    assert "iam:CreateRole" not in no_ttl
+
+
 def test_an_untested_provider_still_gets_teardown_but_says_so_for_the_rest():
     """Only aws and gcp are wired for live status/start/stop. A provider without
     that support must not block the export or the teardown path, which is
