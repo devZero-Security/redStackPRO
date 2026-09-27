@@ -45,9 +45,12 @@ export function inspect(document) {
   if (!document || !Array.isArray(document.nodes)) {
     return ["document has no nodes array"];
   }
+  // A duplicate id is a validator finding (REF002), reported cleanly there as
+  // a name collision. It is not corruption on its own (no bad coordinate, no
+  // dangling edge), so it is tracked here only to keep the dangling-edge
+  // check below accurate, not flagged as a problem.
   const ids = new Set();
   for (const node of document.nodes) {
-    if (ids.has(node.id)) problems.push(`duplicate node id ${node.id}`);
     ids.add(node.id);
     const fields = [
       ["position.x", node.position?.x],

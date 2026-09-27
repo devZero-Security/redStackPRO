@@ -131,7 +131,6 @@ const openLibrary = async (user) => {
 
 beforeEach(() => {
   window.history.replaceState({}, "", "/");
-  window.confirm = () => true;
 });
 
 
@@ -180,6 +179,11 @@ describe("managing", () => {
     const row = within(dialog).getByText("Topology 1").closest("li");
     await user.click(within(row).getByRole("button", { name: "Delete" }));
 
+    // The styled confirm dialog gates the delete: nothing has happened yet.
+    const confirmDialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("Topology 1")).toBeTruthy();
+    await user.click(within(confirmDialog).getByRole("button", { name: "Delete" }));
+
     await waitFor(() =>
       expect(within(dialog).queryByText("Topology 1")).toBeNull());
     // The others are untouched.
@@ -187,7 +191,6 @@ describe("managing", () => {
   });
 
   test("a declined delete leaves the topology alone", async () => {
-    window.confirm = () => false;
     const backend = libraryBackend();
     const user = userEvent.setup();
     render(<App />);
@@ -196,7 +199,11 @@ describe("managing", () => {
     const row = (await within(dialog).findByText("Topology 1")).closest("li");
     await user.click(within(row).getByRole("button", { name: "Delete" }));
 
+    const confirmDialog = await screen.findByRole("alertdialog");
+    await user.click(within(confirmDialog).getByRole("button", { name: "Cancel" }));
+
     // No DELETE was sent and the row is still there.
+    expect(screen.queryByRole("alertdialog")).toBeNull();
     await waitFor(() => expect(within(dialog).getByText("Topology 1")).toBeTruthy());
     expect(backend.calls.some((c) => c.method === "DELETE")).toBe(false);
   });
@@ -215,6 +222,9 @@ describe("managing", () => {
 
       const row = (await within(yours).findByText("Topology 0")).closest("li");
       await user.click(within(row).getByRole("button", { name: "Publish" }));
+
+      const confirmDialog = await screen.findByRole("alertdialog");
+      await user.click(within(confirmDialog).getByRole("button", { name: "Publish" }));
 
       // Gone from your topologies, now a blueprint you own and can unpublish.
       await waitFor(() =>

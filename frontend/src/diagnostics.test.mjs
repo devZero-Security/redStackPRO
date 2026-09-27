@@ -29,8 +29,7 @@ import { history, inspect, record, snapshot } from "./diagnostics.js";
   assert.ok(inspect(doc).some((p) => p.includes("out of range")));
 }
 
-// A node with no position, an edge to a gone node, and a duplicate id are each
-// caught.
+// A node with no position and an edge to a gone node are each caught.
 {
   assert.ok(inspect({ nodes: [{ id: "a", kind: "host" }], edges: [] }).some((p) => p.includes("no position")));
   const orphan = {
@@ -38,14 +37,21 @@ import { history, inspect, record, snapshot } from "./diagnostics.js";
     edges: [{ id: "e", role: "fronts", source: "a", target: "ghost" }],
   };
   assert.ok(inspect(orphan).some((p) => p.includes("ghost")));
+}
+
+// A duplicate node id is a rename typo, not corruption: it is REF002's finding
+// to report, not the corruption banner's. inspect stays quiet about it (and
+// still resolves edges against whichever node shares the id, rather than
+// flagging a dangling edge on top of it).
+{
   const dup = {
     nodes: [
       { id: "a", kind: "host", position: { x: 0, y: 0 } },
       { id: "a", kind: "host", position: { x: 1, y: 1 } },
     ],
-    edges: [],
+    edges: [{ id: "e", role: "attached", source: "a", target: "a" }],
   };
-  assert.ok(inspect(dup).some((p) => p.includes("duplicate")));
+  assert.deepEqual(inspect(dup), []);
 }
 
 // A document with no nodes array is not drawable and says so rather than throwing.

@@ -21,6 +21,7 @@ import { ProviderPicker } from "./ProviderPicker.jsx";
 import { providersFor, resolveProvider, selectableProviders } from "./providers.js";
 import { Library } from "./Library.jsx";
 import { ConflictDialog } from "./Conflict.jsx";
+import { ConfirmDialog } from "./ConfirmDialog.jsx";
 import { TemplatePicker } from "./TemplatePicker.jsx";
 import { templateFor } from "./templates.js";
 import { Extensions } from "./Extensions.jsx";
@@ -103,6 +104,23 @@ function Editor() {
   const [conflict, setConflict] = useState(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const pendingCreate = useRef(null);
+
+  // A styled, awaitable stand-in for window.confirm. `confirm` opens the
+  // dialog and returns a Promise; the dialog's own buttons resolve it via
+  // resolveConfirm, so a caller does `if (!(await confirm({...}))) return;`
+  // exactly where it used to branch on window.confirm's boolean.
+  const [confirmState, setConfirmState] = useState(null);
+  const confirm = useCallback((options) => {
+    return new Promise((resolve) => {
+      setConfirmState({ ...options, resolve });
+    });
+  }, []);
+  const resolveConfirm = useCallback((value) => {
+    setConfirmState((current) => {
+      current?.resolve(value);
+      return null;
+    });
+  }, []);
 
   const [palette, setPalette] = useState({});
   const [schema, setSchema] = useState(null);
@@ -317,11 +335,14 @@ function Editor() {
   );
 
   const confirmDiscard = useCallback(() => {
-    if (!dirty) return true;
-    return window.confirm(
-      "This topology has unsaved changes. Leaving it discards them."
-    );
-  }, [dirty]);
+    if (!dirty) return Promise.resolve(true);
+    return confirm({
+      title: "Discard unsaved changes?",
+      message: "This topology has unsaved changes. Leaving it discards them.",
+      confirmLabel: "Discard",
+      danger: true,
+    });
+  }, [dirty, confirm]);
 
   const resetToEmpty = useCallback((mode = "artie") => {
     const doc = emptyDocument(mode);
@@ -341,8 +362,8 @@ function Editor() {
   // read-only templates for now.
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [extensionsOpen, setExtensionsOpen] = useState(false);
-  const newTopology = useCallback(() => {
-    if (!confirmDiscard()) return;
+  const newTopology = useCallback(async () => {
+    if (!(await confirmDiscard())) return;
     resetToEmpty(docRef.current.mode); // a fresh topology in the current canvas
     pushUrl(null);
   }, [confirmDiscard, resetToEmpty, pushUrl]);
@@ -350,9 +371,9 @@ function Editor() {
   // topology; switching starts a fresh one in that mode (a GOAD template is loaded
   // read-only from Load template, Cyber Ranges otherwise opens a custom range).
   const chooseMode = useCallback(
-    (mode) => {
+    async (mode) => {
       if (docRef.current.mode === mode) return;
-      if (!confirmDiscard()) return;
+      if (!(await confirmDiscard())) return;
       resetToEmpty(mode);
       pushUrl(null);
     },
@@ -360,9 +381,9 @@ function Editor() {
   );
 
   const pickTopology = useCallback(
-    (id) => {
+    async (id) => {
       if (id === topology?.id) return;
-      if (!confirmDiscard()) return;
+      if (!(await confirmDiscard())) return;
       openTopology(id);
     },
     [confirmDiscard, topology, openTopology]
@@ -448,9 +469,12 @@ function Editor() {
     if (!topology) return;
     if (
       dirty &&
-      !window.confirm(
-        "Duplicate copies the last saved revision. Your unsaved changes are not copied and stay here."
-      )
+      !(await confirm({
+        title: "Duplicate this topology?",
+        message:
+          "Duplicate copies the last saved revision. Your unsaved changes are not copied and stay here.",
+        confirmLabel: "Duplicate",
+      }))
     ) {
       return;
     }
@@ -462,7 +486,7 @@ function Editor() {
     } catch (error) {
       setStatus(error.message);
     }
-  }, [dirty, topology, openTopology, refreshTopologies]);
+  }, [dirty, topology, openTopology, refreshTopologies, confirm]);
 
   // ---------------------------------------------------------------- library
   //
@@ -473,7 +497,7 @@ function Editor() {
   const openFromLibrary = useCallback(
     async (id) => {
       if (id === topology?.id) return true;
-      if (!confirmDiscard()) return false;
+      if (!(await confirmDiscard())) return false;
       await openTopology(id);
       return true;
     },
@@ -482,7 +506,7 @@ function Editor() {
 
   const cloneBlueprint = useCallback(
     async (id) => {
-      if (!confirmDiscard()) return false;
+      if (!(await confirmDiscard())) return false;
       const summary = await api.cloneBlueprint(id);
       refreshTopologies();
       await openTopology(summary.id);
@@ -498,10 +522,19 @@ function Editor() {
   const removeTopology = useCallback(
     async (id) => {
       const isOpen = id === topology?.id;
-      const warning = isOpen
+      const message = isOpen
         ? "Delete the topology you have open? It and every revision are removed for good. This cannot be undone."
         : "Delete this topology? It and every revision are removed for good. This cannot be undone.";
-      if (!window.confirm(warning)) return;
+      if (
+        !(await confirm({
+          title: "Delete this topology?",
+          message,
+          confirmLabel: "Delete",
+          danger: true,
+        }))
+      ) {
+        return;
+      }
       await api.deleteTopology(id);
       if (isOpen) {
         resetToEmpty();
@@ -510,7 +543,7 @@ function Editor() {
       refreshTopologies();
       setStatus("Deleted. Nothing was deployed.");
     },
-    [topology, pushUrl, refreshTopologies, resetToEmpty]
+    [topology, pushUrl, refreshTopologies, resetToEmpty, confirm]
   );
 
   // Publishing flags the live topology rather than snapshotting it, so it leaves
@@ -519,10 +552,13 @@ function Editor() {
   const publishTopology = useCallback(
     async (id) => {
       if (
-        !window.confirm(
-          "Offer this topology as a blueprint? Anyone can clone it into their own copy. " +
-            "It stays yours and editable, but it leaves your topologies list for the blueprint library."
-        )
+        !(await confirm({
+          title: "Publish this topology?",
+          message:
+            "Offer this topology as a blueprint? Anyone can clone it into their own copy. " +
+            "It stays yours and editable, but it leaves your topologies list for the blueprint library.",
+          confirmLabel: "Publish",
+        }))
       ) {
         return;
       }
@@ -534,11 +570,22 @@ function Editor() {
       refreshTopologies();
       setStatus("Published as a blueprint. Anyone can clone it.");
     },
-    [refreshTopologies, history]
+    [refreshTopologies, history, confirm]
   );
 
   const unpublishTopology = useCallback(
     async (id) => {
+      if (
+        !(await confirm({
+          title: "Unpublish this topology?",
+          message:
+            "Unpublish this topology? It leaves the blueprint library and moves back into your " +
+            "topologies list. Anyone who already cloned it keeps their own copy.",
+          confirmLabel: "Unpublish",
+        }))
+      ) {
+        return;
+      }
       await api.unpublishBlueprint(id);
       setTopology((current) =>
         current && current.id === id ? { ...current, is_blueprint: false } : current
@@ -547,7 +594,7 @@ function Editor() {
       refreshTopologies();
       setStatus("Unpublished. It is back in your topologies list.");
     },
-    [refreshTopologies, history]
+    [refreshTopologies, history, confirm]
   );
 
   const reloadOverMine = useCallback(async () => {
@@ -570,10 +617,10 @@ function Editor() {
   // Back and forward move between topologies, because the URL is what says which
   // one is open. Declining the prompt puts the URL back.
   useEffect(() => {
-    const onPop = () => {
+    const onPop = async () => {
       const id = topologyIdFromUrl(window.location.search);
       if (id === (topology?.id || null)) return;
-      if (!confirmDiscard()) {
+      if (!(await confirmDiscard())) {
         window.history.pushState(
           { topology: topology?.id || null },
           "",
@@ -1333,7 +1380,7 @@ function Editor() {
   // it opens as unsaved work rather than replacing a stored topology.
   const loadDocFromUrl = useCallback(
     async (url) => {
-      if (!confirmDiscard()) return;
+      if (!(await confirmDiscard())) return;
       const response = await fetch(url);
       if (!response.ok) {
         setStatus("Nothing bundled there. Paste a document instead.");
@@ -1411,6 +1458,7 @@ function Editor() {
             role="tab"
             aria-selected={document.mode !== "haven"}
             className={`rg-mode-seg rg-mode-artie ${document.mode !== "haven" ? "is-active" : ""}`}
+            title="ARTIE: attack infrastructure (C2, redirectors, operators)"
             onClick={() => chooseMode("artie")}
           >
             ARTIE
@@ -1420,6 +1468,7 @@ function Editor() {
             role="tab"
             aria-selected={document.mode === "haven"}
             className={`rg-mode-seg rg-mode-haven ${document.mode === "haven" ? "is-active" : ""}`}
+            title="HAVEN: defense ranges (AD forests, hosts, SIEM)"
             onClick={() => chooseMode("haven")}
           >
             HAVEN
@@ -1442,11 +1491,15 @@ function Editor() {
             history.coalesce("name", (current) => ({ ...current, name: e.target.value }))
           }
         />
-        <label className="rg-prefix">
+        <label
+          className="rg-prefix"
+          title="Prepended to every host's name, e.g. art for ARTIE or hvn for HAVEN"
+        >
           prefix
           <input
             value={document.prefix}
             size={6}
+            title="Prepended to every host's name, e.g. art for ARTIE or hvn for HAVEN"
             onChange={(e) =>
               history.coalesce("prefix", (current) => ({ ...current, prefix: e.target.value }))
             }
@@ -1803,6 +1856,16 @@ function Editor() {
           readOnly={readOnly}
           onToggle={toggleExtension}
           onDismiss={() => setExtensionsOpen(false)}
+        />
+      ) : null}
+      {confirmState ? (
+        <ConfirmDialog
+          title={confirmState.title}
+          message={confirmState.message}
+          danger={confirmState.danger}
+          confirmLabel={confirmState.confirmLabel}
+          onConfirm={() => resolveConfirm(true)}
+          onCancel={() => resolveConfirm(false)}
         />
       ) : null}
     </div>

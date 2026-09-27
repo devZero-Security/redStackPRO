@@ -1260,6 +1260,10 @@ button:disabled { opacity: 0.5; cursor: default; }
   margin-top: 16px;
 }
 
+/* rg-danger elsewhere (Inspector) is a full-width text button; inside a modal's
+   action row it sits next to Cancel like any other button. */
+.rg-modal-actions .rg-danger { width: auto; margin-top: 0; color: var(--bg); background: var(--error); border-color: var(--error); }
+
 /* library
    Wider than a confirm, and it scrolls: a large account's topologies page in a row
    at a time rather than growing the modal past the viewport. */

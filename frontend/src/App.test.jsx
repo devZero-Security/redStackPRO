@@ -121,7 +121,6 @@ const postedTopologies = (calls) =>
 
 beforeEach(() => {
   openUrl("");
-  window.confirm = () => true;
 });
 
 
@@ -320,6 +319,8 @@ describe("undo and redo", () => {
     expect(screen.getByRole("button", { name: "Undo" }).disabled).toBe(false);
 
     await user.click(screen.getByRole("button", { name: "New" }));
+    // Unsaved changes, so the styled confirm dialog gates the discard.
+    await user.click(await screen.findByRole("button", { name: "Discard" }));
     await screen.findByText(/Not saved/);
     expect(screen.getByRole("button", { name: "Undo" }).disabled).toBe(true);
   });
