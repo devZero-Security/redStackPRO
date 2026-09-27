@@ -1019,9 +1019,9 @@
       "description": "Shared overlay for the range host kinds (dc, srv, wks, fw).",
       "properties": {
         "os": {
-          "type": "string",
+          "enum": ["windows_server_2019", "windows_server_2022", "windows_10", "windows_11", "linux"],
           "x-redstackpro-source": "user",
-          "description": "Operating system image, e.g. windows_server_2019."
+          "description": "Operating system image for this host. linux is a generic Debian box."
         },
         "hostname": {
           "type": "string",
