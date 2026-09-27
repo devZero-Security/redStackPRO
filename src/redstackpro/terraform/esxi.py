@@ -253,6 +253,7 @@ def _main(plan):
             "  length           = 20",
             "  special          = true",
             '  override_special = "!@#-_=+"',
+            '  min_special      = 1',
             "}",
             "",
             'resource "tls_private_key" "guacamole" {',

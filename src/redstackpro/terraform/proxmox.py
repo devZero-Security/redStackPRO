@@ -255,6 +255,7 @@ def _main(plan):
             "  length           = 20",
             "  special          = true",
             '  override_special = "!@#-_=+"',
+            '  min_special      = 1',
             "}",
             "",
             "# The jumpbox reaches every box for the Guacamole tiles with this key.",
