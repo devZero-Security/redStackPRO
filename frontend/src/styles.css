@@ -592,7 +592,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-user-breach { flex: none; font-size: 10px; font-weight: 600; color: #ffd43b; text-transform: uppercase; letter-spacing: 0.05em; }
 .rg-users-archetypes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 8px; }
 .rg-users-archetypes button { flex: none; padding: 3px 10px; font-size: var(--fs-2); }
-.rg-user-del { flex: none; border: none; background: none; color: var(--muted); cursor: pointer; font-size: var(--fs-4); line-height: 1; padding: 0 3px; }
+.rg-user-del { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; border: none; background: none; color: var(--muted); cursor: pointer; font-size: var(--fs-4); line-height: 1; padding: 0 3px; }
 .rg-user-del:hover { color: var(--danger-1); }
 .rg-users-add { display: flex; gap: 6px; }
 .rg-users-add input { flex: 1; min-width: 0; }
@@ -763,11 +763,12 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-check.is-provider-unsupported { color: var(--muted); }
 .rg-vuln-provider-note { color: var(--muted); font-style: italic; }
 /* Native checkboxes default to a near-invisible thin outline in the dark
-   theme. accent-color draws a clearly visible red check when ticked; the
-   explicit border/background give the unticked box a distinct medium-grey
-   presence instead of blending into the panel. */
-.rg-vulns .rg-check input[type="checkbox"] {
-  accent-color: var(--error);
+   theme. The explicit border/background give the unticked box a distinct
+   medium-grey presence in every inspector checklist; accent-color sets the
+   ticked color. Base applies to all pickers so they match; .rg-vulns and
+   .rg-hardening below change only the accent. */
+.rg-check input[type="checkbox"] {
+  accent-color: var(--accent);
   width: 13px;
   height: 13px;
   margin: 0;
@@ -775,6 +776,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   border-radius: 3px;
   background: var(--panel-2);
 }
+.rg-vulns .rg-check input[type="checkbox"] { accent-color: var(--error); }
 /* HardeningPicker reuses .rg-vulns; defensive hardening checks read blue, not
    offensive red. Equal specificity, so this must follow the rule above. */
 .rg-hardening .rg-check input[type="checkbox"] { accent-color: var(--accent); }
@@ -897,6 +899,11 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 .rg-summary-head h3 { margin: 0; font-size: var(--fs-4); color: var(--text); }
 .rg-summary-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
   background: none;
   border: none;
   color: var(--muted);
@@ -1329,6 +1336,10 @@ button:disabled { opacity: 0.5; cursor: default; }
   border-radius: 999px;
 }
 .rg-mode-seg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
   font-size: var(--fs-1);
   font-weight: 600;
   letter-spacing: 0.02em;
