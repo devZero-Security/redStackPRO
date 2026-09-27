@@ -9,9 +9,27 @@
   --text: #e6e8ea;
   --muted: #9aa0a6;
   --error: #e03131;
+  --error-text: #ff6b6b;
   --warning: #f59f00;
   --ok: #2f9e44;
-  --accent: #1c7ed6;
+  --accent: #1971c2;
+  --accent-artie-text: #d98b8b;
+  /* Semantic palette, former ad-hoc hex named by meaning. */
+  --info: #74c0fc;      /* domain, manages */
+  --good: #38d9a9;      /* edr, hardened */
+  --danger-1: #ff8787;  /* vulns, low-tier priv */
+  --danger-2: #ff6b6b;  /* elevated priv, hot bin (same as --error-text) */
+  --attn: #ffc078;      /* local-admin priv */
+  --guide: #ff2e88;     /* alignment guides */
+  /* Type scale, ad-hoc sizes collapsed onto these steps. */
+  --fs-1: 11px;
+  --fs-2: 12px;
+  --fs-3: 13px;
+  --fs-4: 15px;
+  --fs-5: 18px;
+  --lh-tight: 1.35;
+  --lh-base: 1.5;
+  --lh-loose: 1.6;
   /* Chrome tints, overridden per mode below. Host node colors come from the
      registry and are never themed; the background, panels, grid, and the
      shared network/subnet containers carry the red/blue identity. The
@@ -60,12 +78,15 @@
 
 * { box-sizing: border-box; }
 
+/* Global keyboard focus ring (none existed before). */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
 html, body, #root { height: 100%; margin: 0; }
 
 body {
   background: var(--bg);
   color: var(--text);
-  font: 13px/1.5 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  font: var(--fs-3)/var(--lh-base) ui-sans-serif, system-ui, "Segoe UI", sans-serif;
 }
 
 .rg-app { display: flex; flex-direction: column; height: 100%; }
@@ -81,7 +102,7 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
-.rg-brand { font-size: 15px; letter-spacing: -0.2px; }
+.rg-brand { font-size: var(--fs-4); letter-spacing: -0.2px; }
 .rg-brand b { font-weight: 700; }
 
 .rg-spacer { flex: 1; }
@@ -179,7 +200,7 @@ body {
 .rg-saved.is-dirty::before { content: "\2022 "; }
 
 .rg-count { font-variant-numeric: tabular-nums; color: var(--muted); }
-.rg-count.is-error { color: var(--error); }
+.rg-count.is-error { color: var(--error-text); }
 .rg-count.is-ok { color: var(--ok); }
 .rg-count.is-warning { color: var(--warning); }
 
@@ -196,8 +217,19 @@ button, select {
 button:hover { border-color: #4a4e56; }
 button:disabled { opacity: 0.5; cursor: default; }
 
-.rg-primary { background: var(--accent); border-color: var(--accent); }
-.rg-danger { color: var(--error); width: 100%; margin-top: 14px; }
+.rg-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* One danger BUTTON language, shared by .rg-danger (inspector, full width) and
+   .rg-modal-actions .rg-danger (modal row): outlined red at rest, solid red on
+   hover with white text (>=4.5:1). .rg-danger-text is the LINK variant. */
+.rg-danger {
+  color: var(--error-text);
+  background: transparent;
+  border-color: var(--error);
+  width: 100%;
+  margin-top: 14px;
+}
+.rg-danger:hover { background: #c92a2a; border-color: #c92a2a; color: #fff; }
 
 /* layout */
 
@@ -213,9 +245,9 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 .rg-inspector { border-right: none; border-left: 1px solid var(--line); width: 320px; }
 
-.rg-panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;
+.rg-panel h2 { font-size: var(--fs-2); text-transform: uppercase; letter-spacing: 0.06em;
   color: var(--muted); margin: 0 0 10px; }
-.rg-panel h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+.rg-panel h3 { font-size: var(--fs-1); text-transform: uppercase; letter-spacing: 0.06em;
   color: var(--muted); margin: 14px 0 6px; }
 
 .rg-canvas { flex: 1; min-width: 0; position: relative; background: var(--bg); }
@@ -233,7 +265,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 
 .rg-palette-label { flex: 1; }
-.rg-palette-abbrev { color: var(--muted); font-family: ui-monospace, monospace; font-size: 11px; }
+.rg-palette-abbrev { color: var(--muted); font-family: ui-monospace, monospace; font-size: var(--fs-1); }
 
 /* GOAD labs sit at the top of the palette, above the topology kinds: pick a lab
    to load it onto the canvas, then build on it. */
@@ -259,8 +291,8 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-palette-lab .rg-palette-label { flex: none; }
 .rg-palette-lab-blurb {
   font-weight: 400;
-  font-size: 11px;
-  line-height: 1.35;
+  font-size: var(--fs-1);
+  line-height: var(--lh-tight);
   color: var(--muted);
   white-space: normal;
 }
@@ -274,12 +306,12 @@ button:disabled { opacity: 0.5; cursor: default; }
   padding: 10px 18px; margin-bottom: 8px;
   border: 2px dashed var(--muted); border-radius: 10px;
   background: var(--panel); color: var(--muted);
-  font-size: 13px; font-weight: 600;
+  font-size: var(--fs-3); font-weight: 600;
   pointer-events: none; user-select: none;
   transition: border-color 0.1s, color 0.1s, background 0.1s;
 }
 .rg-bin.is-hot {
-  border-color: #ff6b6b; color: #ff8787;
+  border-color: var(--danger-2); color: var(--danger-1);
   background: rgba(255, 107, 107, 0.12);
 }
 
@@ -293,15 +325,15 @@ button:disabled { opacity: 0.5; cursor: default; }
   pointer-events: none;
   z-index: 4;
 }
-.rg-empty-hint p { margin: 0 0 6px; font-size: 13px; color: var(--text); }
-.rg-empty-title { font-size: 15px !important; font-weight: 600; }
-.rg-empty-hint .rg-muted { font-size: 12px; }
+.rg-empty-hint p { margin: 0 0 6px; font-size: var(--fs-3); color: var(--text); }
+.rg-empty-title { font-size: var(--fs-4) !important; font-weight: 600; }
+.rg-empty-hint .rg-muted { font-size: var(--fs-2); }
 
-.rg-hint { color: var(--muted); font-size: 12px; margin-top: 14px; }
+.rg-hint { color: var(--muted); font-size: var(--fs-2); margin-top: 14px; }
 
 .rg-readonly-note { width: 260px; padding: 16px 18px; }
 .rg-readonly-note h2 { color: var(--container-accent); }
-.rg-readonly-note p { font-size: 12.5px; line-height: 1.5; margin: 8px 0 0; }
+.rg-readonly-note p { font-size: var(--fs-2); line-height: var(--lh-base); margin: 8px 0 0; }
 
 /* nodes */
 
@@ -332,7 +364,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-node-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .rg-node-name {
   font-family: ui-monospace, monospace;
-  font-size: 12px;
+  font-size: var(--fs-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -349,7 +381,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 .rg-node-sub {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -374,26 +406,28 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 /* Domain membership: which AD domain a range host is joined to. */
 .rg-badge.is-domain {
-  color: #74c0fc;
+  color: var(--info);
   border-color: rgba(77, 171, 247, 0.5);
   background: rgba(77, 171, 247, 0.12);
 }
 /* EDR reads as the defensive side (teal), planted vulns as the offensive (red). */
 .rg-badge.is-edr {
-  color: #38d9a9;
+  color: var(--good);
   border-color: rgba(56, 217, 169, 0.5);
   background: rgba(56, 217, 169, 0.12);
 }
 .rg-badge.is-vuln {
-  color: #ff8787;
+  color: var(--danger-1);
   border-color: rgba(255, 135, 135, 0.5);
   background: rgba(255, 135, 135, 0.12);
   text-transform: none;
 }
+/* Hardened shares the defensive teal with EDR, so posture reads as one hue and
+   stays distinct from the domain badge. */
 .rg-badge.is-hardened {
-  color: #74c0fc;
-  border-color: rgba(116, 192, 252, 0.5);
-  background: rgba(116, 192, 252, 0.12);
+  color: var(--good);
+  border-color: rgba(56, 217, 169, 0.5);
+  background: rgba(56, 217, 169, 0.12);
   text-transform: none;
 }
 
@@ -443,7 +477,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 /* The name is the container's identity, so it never shrinks; the fqdn/meta
    takes the slack and ellipses, with the full text on hover. */
-.rg-container-name { font-family: ui-monospace, monospace; font-size: 12px; flex: 0 0 auto; }
+.rg-container-name { font-family: ui-monospace, monospace; font-size: var(--fs-2); flex: 0 0 auto; }
 .rg-container-type {
   font-size: 9px;
   text-transform: uppercase;
@@ -456,7 +490,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 .rg-container-meta {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-1);
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -503,7 +537,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   text-align: left;
   cursor: pointer;
 }
@@ -523,7 +557,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-cover-row { display: flex; gap: 6px; margin-top: 8px; }
 .rg-cover-row select { flex: 1; min-width: 0; }
 .rg-cover-row button { flex: none; padding: 4px 14px; }
-.rg-inline-btn { margin: 2px 0 8px; padding: 3px 10px; font-size: 11px; }
+.rg-inline-btn { margin: 2px 0 8px; padding: 3px 10px; font-size: var(--fs-1); }
 
 /* Range placement: pick a host's domain and subnet from menus instead of
    drawing a line. Mirrors the cover panel so the two read as the same kind of
@@ -544,22 +578,22 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-user-row { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 5px; }
 .rg-user-row:hover { background: rgba(255, 255, 255, 0.04); }
 .rg-user.is-open { background: rgba(255, 255, 255, 0.03); border-radius: 6px; }
-.rg-user-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; text-align: left; background: none; border: none; color: inherit; cursor: pointer; padding: 0; }
+.rg-user-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-2); text-align: left; background: none; border: none; color: inherit; cursor: pointer; padding: 0; }
 .rg-user-name:hover { text-decoration: underline; }
 .rg-user-detail { padding: 4px 6px 8px; display: flex; flex-direction: column; gap: 6px; }
 .rg-user-flaw-picks { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
-.rg-user-flaw-picks .rg-check { font-size: 11px; }
+.rg-user-flaw-picks .rg-check { font-size: var(--fs-1); }
 .rg-user-priv { flex: none; font-size: 10px; border-radius: 4px; padding: 1px 3px; }
 .rg-user-priv.is-user { color: var(--muted); }
-.rg-user-priv.is-local_admin { color: #ffc078; border-color: rgba(255, 192, 120, 0.5); }
-.rg-user-priv.is-domain_admin { color: #ff8787; border-color: rgba(255, 135, 135, 0.6); }
-.rg-user-priv.is-enterprise_admin { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.7); }
-.rg-user-flaws { flex: none; font-size: 10px; color: #ff8787; }
+.rg-user-priv.is-local_admin { color: var(--attn); border-color: rgba(255, 192, 120, 0.5); }
+.rg-user-priv.is-domain_admin { color: var(--danger-1); border-color: rgba(255, 135, 135, 0.6); }
+.rg-user-priv.is-enterprise_admin { color: var(--danger-2); border-color: rgba(255, 107, 107, 0.7); }
+.rg-user-flaws { flex: none; font-size: 10px; color: var(--danger-1); }
 .rg-user-breach { flex: none; font-size: 10px; font-weight: 600; color: #ffd43b; text-transform: uppercase; letter-spacing: 0.05em; }
 .rg-users-archetypes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 8px; }
-.rg-users-archetypes button { flex: none; padding: 3px 10px; font-size: 12px; }
-.rg-user-del { flex: none; border: none; background: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 3px; }
-.rg-user-del:hover { color: #ff8787; }
+.rg-users-archetypes button { flex: none; padding: 3px 10px; font-size: var(--fs-2); }
+.rg-user-del { flex: none; border: none; background: none; color: var(--muted); cursor: pointer; font-size: var(--fs-4); line-height: 1; padding: 0 3px; }
+.rg-user-del:hover { color: var(--danger-1); }
 .rg-users-add { display: flex; gap: 6px; }
 .rg-users-add input { flex: 1; min-width: 0; }
 .rg-users-add button { flex: none; padding: 4px 12px; }
@@ -586,7 +620,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   column-gap: 6px;
   padding: 4px 5px;
   border-radius: 5px;
-  font-size: 11px;
+  font-size: var(--fs-1);
 }
 .rg-acl-row:hover { background: rgba(255, 255, 255, 0.04); }
 .rg-acl-pair { grid-area: pair; display: flex; align-items: baseline; gap: 5px; min-width: 0; }
@@ -594,7 +628,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-acl-arrow { flex: none; color: var(--muted); }
 .rg-acl-right {
   grid-area: right;
-  color: #ff8787;
+  color: var(--danger-1);
   font-size: 9px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -624,17 +658,17 @@ button:disabled { opacity: 0.5; cursor: default; }
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   text-align: left;
   cursor: pointer;
 }
-.rg-manages-row:hover { border-color: #1c7ed6; }
+.rg-manages-row:hover { border-color: var(--accent); }
 .rg-manages-row-dot {
   width: 9px;
   height: 9px;
   border-radius: 2px;
   flex: none;
-  background: #1c7ed6;
+  background: var(--accent);
 }
 
 
@@ -645,9 +679,9 @@ button:disabled { opacity: 0.5; cursor: default; }
    beside the box. See the boolean branch in Inspector.jsx. */
 .rg-check-row { display: flex; align-items: center; gap: 7px; }
 .rg-check-row input[type="checkbox"] { flex: none; margin: 0; }
-.rg-field-label { color: var(--muted); font-size: 11px; text-transform: lowercase; }
+.rg-field-label { color: var(--muted); font-size: var(--fs-1); text-transform: lowercase; }
 .rg-required { color: var(--warning); margin-left: 6px; font-size: 10px; }
-.rg-field-help { color: #71767c; font-size: 11px; }
+.rg-field-help { color: var(--muted); font-size: var(--fs-1); }
 
 .rg-field input, .rg-field select {
   background: var(--panel-2);
@@ -659,10 +693,10 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 
 .rg-fieldset { border: 1px solid var(--line); border-radius: 6px; padding: 9px; margin: 0 0 12px; }
-.rg-fieldset legend { color: var(--muted); font-size: 11px; padding: 0 5px; }
+.rg-fieldset legend { color: var(--muted); font-size: var(--fs-1); padding: 0 5px; }
 
 .rg-checks { display: flex; flex-wrap: wrap; gap: 8px; }
-.rg-check { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+.rg-check { display: flex; align-items: center; gap: 4px; font-size: var(--fs-2); }
 
 .rg-vulns {
   max-height: 380px;
@@ -699,7 +733,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: #ff8787;
+  color: var(--danger-1);
 }
 /* The one-line summary under a hardening group heading. This is the text that
    replaced the schema description's run-on glossary, so it has to read as
@@ -741,6 +775,9 @@ button:disabled { opacity: 0.5; cursor: default; }
   border-radius: 3px;
   background: var(--panel-2);
 }
+/* HardeningPicker reuses .rg-vulns; defensive hardening checks read blue, not
+   offensive red. Equal specificity, so this must follow the rule above. */
+.rg-hardening .rg-check input[type="checkbox"] { accent-color: var(--accent); }
 
 .rg-kv { display: flex; justify-content: space-between; margin: 0 0 5px; }
 .rg-kv span:first-child { color: var(--muted); }
@@ -766,12 +803,12 @@ button:disabled { opacity: 0.5; cursor: default; }
   border-left: 2px solid var(--line);
   border-radius: 0;
   padding: 3px 9px;
-  font-size: 12px;
+  font-size: var(--fs-2);
 }
 
 .rg-finding.is-error { border-left-color: var(--error); }
 .rg-finding.is-warning { border-left-color: var(--warning); }
-.rg-finding code { color: var(--muted); margin-right: 7px; font-size: 11px; }
+.rg-finding code { color: var(--muted); margin-right: 7px; font-size: var(--fs-1); }
 
 /* The family word that leads a finding, in place of the raw code. A native
    title tooltip has no affordance of its own, so the dotted underline and the
@@ -780,7 +817,7 @@ button:disabled { opacity: 0.5; cursor: default; }
    the only other colour and it is easy to miss. */
 .rg-finding-family {
   margin-right: 7px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -788,7 +825,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   border-bottom: 1px dotted var(--line);
   cursor: help;
 }
-.rg-finding.is-error .rg-finding-family { color: var(--error); }
+.rg-finding.is-error .rg-finding-family { color: var(--error-text); }
 .rg-finding.is-warning .rg-finding-family { color: var(--warning); }
 /* A code this build has no word for. Shown verbatim and in the code voice, so
    it is obviously a literal rather than a label that reads oddly. */
@@ -797,7 +834,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   text-transform: none;
   letter-spacing: 0;
 }
-.rg-remedy { display: block; color: var(--muted); font-size: 11px; }
+.rg-remedy { display: block; color: var(--muted); font-size: var(--fs-1); }
 
 /* The range template family, folded into one row. Closed by default: eight of
    the nine range templates are the GOAD family, and a flat list of nine made
@@ -812,7 +849,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   border: 1px solid var(--line);
   border-radius: 4px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--fs-3);
   font-weight: 600;
   color: var(--text);
   list-style: none;
@@ -834,7 +871,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-lab-group-count {
   color: var(--muted);
   font-weight: 400;
-  font-size: 11px;
+  font-size: var(--fs-1);
 }
 /* Nested, so a lab reads as belonging to the family rather than sitting beside
    it. Harbor is ungrouped and keeps the outer indent, which is the point. */
@@ -858,30 +895,30 @@ button:disabled { opacity: 0.5; cursor: default; }
   justify-content: space-between;
   gap: 10px;
 }
-.rg-summary-head h3 { margin: 0; font-size: 14px; color: var(--text); }
+.rg-summary-head h3 { margin: 0; font-size: var(--fs-4); color: var(--text); }
 .rg-summary-close {
   background: none;
   border: none;
   color: var(--muted);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--fs-3);
   line-height: 1;
   padding: 2px 4px;
 }
 .rg-summary-close:hover { color: var(--text); }
 .rg-summary-shape {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--text);
 }
 .rg-summary-teaches {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--muted);
 }
 
 .rg-inline-findings { margin: 12px 0; }
-.rg-status { display: block; color: var(--muted); margin-top: 7px; font-size: 12px; }
+.rg-status { display: block; color: var(--muted); margin-top: 7px; font-size: var(--fs-2); }
 
 /* react flow overrides */
 
@@ -915,7 +952,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 7px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
 }
 .rg-legend-item { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
@@ -963,7 +1000,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   position: absolute;
   z-index: 5;
   pointer-events: none;
-  background: #ff2e88;
+  background: var(--guide);
   box-shadow: 0 0 2px rgba(255, 46, 136, 0.7);
 }
 .rg-guide-v { top: 0; height: 100%; width: 1px; }
@@ -987,7 +1024,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   border: 1px solid var(--warning, #f08c00);
   border-radius: 8px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
-  font-size: 12px;
+  font-size: var(--fs-2);
 }
 .rg-diag-text {
   color: #ffd8a8;
@@ -998,7 +1035,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-diag-banner button {
   flex: none;
   padding: 3px 10px;
-  font-size: 11px;
+  font-size: var(--fs-1);
 }
 
 /* The error boundary's recovery panel, shown in place of the canvas when a
@@ -1023,9 +1060,9 @@ button:disabled { opacity: 0.5; cursor: default; }
   display: block;
   width: 100%;
   padding: 1px 7px;
-  line-height: 1.5;
+  line-height: var(--lh-base);
   font-size: 10px;
-  color: #9dc7f0;
+  color: var(--info);
   background: rgba(28, 126, 214, 0.16);
   border: 1px solid rgba(28, 126, 214, 0.45);
   border-radius: 9px;
@@ -1038,7 +1075,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #4a9eea;
+  color: var(--info);
 }
 
 /* Bend handles on a selected line. A solid dot is a real waypoint you drag; a
@@ -1065,7 +1102,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-node-toolbar { display: flex; gap: 4px; }
 .rg-node-toolbar button {
   padding: 3px 9px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   background: var(--panel);
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
 }
@@ -1075,7 +1112,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-edge-label {
   position: absolute;
   z-index: 6;
-  font-size: 11px;
+  font-size: var(--fs-1);
   padding: 3px 9px;
   border: 1px solid var(--line);
   border-radius: 5px;
@@ -1123,11 +1160,11 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 .rg-export-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .rg-export-head h2 { margin: 0; }
-.rg-export-meta { color: var(--muted); font-size: 11px; flex: 1; }
+.rg-export-meta { color: var(--muted); font-size: var(--fs-1); flex: 1; }
 
 .rg-export-note {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-1);
   margin: 0 0 10px;
   padding: 6px 8px;
   border-left: 2px solid var(--ok);
@@ -1138,12 +1175,12 @@ button:disabled { opacity: 0.5; cursor: default; }
    what the file will be named after, and what the steps below it describe. */
 .rg-export-platform {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-1);
   display: flex;
   align-items: center;
   gap: 5px;
 }
-.rg-export-platform select { font-size: 11px; padding: 2px 4px; }
+.rg-export-platform select { font-size: var(--fs-1); padding: 2px 4px; }
 
 /* The three things to do after extracting. Short enough to read standing up;
    DEPLOYMENT-GUIDE.md in the download carries the long version. */
@@ -1151,8 +1188,8 @@ button:disabled { opacity: 0.5; cursor: default; }
   margin: 0 0 8px;
   padding-left: 18px;
   color: var(--muted);
-  font-size: 11px;
-  line-height: 1.6;
+  font-size: var(--fs-1);
+  line-height: var(--lh-loose);
 }
 /* A command to run, on its own line. Inline <code> stays inline, for the file
    and field names the steps mention in passing. */
@@ -1162,12 +1199,12 @@ button:disabled { opacity: 0.5; cursor: default; }
   padding: 4px 6px;
   background: var(--code-bg, rgba(127, 127, 127, 0.12));
   border-radius: 3px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   white-space: pre-wrap;
   word-break: break-all;
 }
 
-.rg-export-blocked { color: var(--error); font-size: 12px; }
+.rg-export-blocked { color: var(--error-text); font-size: var(--fs-2); }
 
 .rg-export-split { display: flex; flex: 1; gap: 8px; min-height: 0; }
 
@@ -1187,7 +1224,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   border: none;
   border-radius: 4px;
   padding: 2px 6px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-family: ui-monospace, monospace;
   white-space: nowrap;
   overflow: hidden;
@@ -1203,7 +1240,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 .rg-code-head {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-family: ui-monospace, monospace;
   padding: 0 0 5px;
   border-bottom: 1px solid var(--line);
@@ -1217,7 +1254,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   margin: 0;
   overflow: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
+  font-size: var(--fs-1);
   line-height: 1.55;
   color: #d4d7db;
   padding: 8px 0 0;
@@ -1249,7 +1286,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   max-width: 480px;
 }
 
-.rg-modal h2 { font-size: 14px; margin: 0 0 10px; }
+.rg-modal h2 { font-size: var(--fs-4); margin: 0 0 10px; }
 .rg-modal p { margin: 0 0 10px; }
 .rg-modal .rg-muted { color: var(--muted); }
 
@@ -1261,8 +1298,10 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 
 /* rg-danger elsewhere (Inspector) is a full-width text button; inside a modal's
-   action row it sits next to Cancel like any other button. */
-.rg-modal-actions .rg-danger { width: auto; margin-top: 0; color: var(--bg); background: var(--error); border-color: var(--error); }
+   action row it sits next to Cancel. Same danger BUTTON language (outlined red at
+   rest, solid red with white text on hover, inherited above), only the width and
+   top margin reset. */
+.rg-modal-actions .rg-danger { width: auto; margin-top: 0; }
 
 /* library
    Wider than a confirm, and it scrolls: a large account's topologies page in a row
@@ -1290,7 +1329,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   border-radius: 999px;
 }
 .rg-mode-seg {
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-weight: 600;
   letter-spacing: 0.02em;
   padding: 3px 11px;
@@ -1307,12 +1346,17 @@ button:disabled { opacity: 0.5; cursor: default; }
   border-color: var(--container-accent);
   background: var(--container-bg);
 }
+/* The active ARTIE label needs a stronger foreground: its container-accent
+   (muted red) is only ~3:1. HAVEN's blue already passes. The segment carries the
+   mode class directly (App.jsx), so this is a compound selector, not a
+   descendant. */
+.rg-mode-seg.rg-mode-artie.is-active { color: var(--accent-artie-text); }
 
 .rg-modal.is-chooser { width: 580px; max-width: 92vw; }
 .rg-modal.is-chooser.rg-mode-haven { width: 720px; }
 .rg-goad-grid { grid-template-columns: 1fr 1fr 1fr; }
 .rg-template-group { margin-top: 10px; }
-.rg-template-group-name { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.rg-template-group-name { margin: 0 0 6px; font-size: var(--fs-2); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 .rg-chooser-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1333,18 +1377,18 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-chooser-card:hover { background: var(--container-head); }
 .rg-chooser-name {
   font-family: ui-monospace, monospace;
-  font-size: 16px;
+  font-size: var(--fs-4);
   font-weight: 700;
   color: var(--container-accent);
 }
-.rg-chooser-prefix { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
-.rg-chooser-blurb { font-size: 12.5px; color: var(--text); opacity: 0.82; line-height: 1.45; }
+.rg-chooser-prefix { font-family: ui-monospace, monospace; font-size: var(--fs-2); color: var(--muted); }
+.rg-chooser-blurb { font-size: var(--fs-2); color: var(--text); opacity: 0.82; line-height: 1.45; }
 
 /* Ludus import modal */
 .rg-modal.rg-import { width: 640px; max-width: 92vw; }
 .rg-import p code {
   font-family: ui-monospace, monospace;
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   padding: 1px 4px;
   border-radius: 4px;
   background: var(--container-bg);
@@ -1353,12 +1397,12 @@ button:disabled { opacity: 0.5; cursor: default; }
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--muted);
   margin-bottom: 10px;
 }
 .rg-import-name input {
-  font-size: 13px;
+  font-size: var(--fs-3);
   padding: 6px 8px;
 }
 .rg-import-yaml {
@@ -1366,8 +1410,8 @@ button:disabled { opacity: 0.5; cursor: default; }
   min-height: 240px;
   resize: vertical;
   font-family: ui-monospace, monospace;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--fs-2);
+  line-height: var(--lh-base);
   padding: 10px;
   border-radius: 8px;
   border: 1px solid var(--container-accent);
@@ -1376,8 +1420,8 @@ button:disabled { opacity: 0.5; cursor: default; }
   box-sizing: border-box;
 }
 .rg-import-error {
-  color: var(--danger, #ff6b6b);
-  font-size: 12.5px;
+  color: var(--error-text);
+  font-size: var(--fs-2);
   margin: 8px 0 0;
 }
 .rg-import-actions {
@@ -1416,7 +1460,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-ext-body { display: flex; flex-direction: column; gap: 3px; }
 .rg-ext-title {
   font-weight: 700;
-  font-size: 13px;
+  font-size: var(--fs-3);
   color: var(--container-accent);
   display: flex;
   align-items: center;
@@ -1424,12 +1468,12 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 .rg-ext-hint {
   font-weight: 400;
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.rg-ext-blurb { font-size: 12.5px; color: var(--text); opacity: 0.82; line-height: 1.4; }
+.rg-ext-blurb { font-size: var(--fs-2); color: var(--text); opacity: 0.82; line-height: 1.4; }
 
 .rg-library-head {
   display: flex;
@@ -1441,21 +1485,21 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-library-head h2 { margin: 0; }
 
 .rg-library-error {
-  color: var(--error);
-  font-size: 12px;
+  color: var(--error-text);
+  font-size: var(--fs-2);
   margin: 0 0 10px;
 }
 
 .rg-library-section { margin-top: 14px; }
 .rg-library-section h3 {
-  font-size: 11px;
+  font-size: var(--fs-1);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
   margin: 0 0 8px;
 }
 
-.rg-library-sub { font-size: 11px; margin: -4px 0 8px; }
+.rg-library-sub { font-size: var(--fs-1); margin: -4px 0 8px; }
 
 .rg-library-list { list-style: none; margin: 0; padding: 0; }
 
@@ -1493,11 +1537,48 @@ button:disabled { opacity: 0.5; cursor: default; }
   max-width: 100%;
 }
 
-.rg-library-meta { color: var(--muted); font-size: 11px; }
+.rg-library-meta { color: var(--muted); font-size: var(--fs-1); }
 
 .rg-library-actions { display: flex; gap: 6px; flex: 0 0 auto; }
-.rg-library-actions button { padding: 4px 9px; font-size: 12px; }
+.rg-library-actions button { padding: 4px 9px; font-size: var(--fs-2); }
 
-.rg-danger-text { color: var(--error); }
+/* Danger LINK variant: text only, no button chrome, distinct from the danger
+   BUTTON (.rg-danger). Underlines on hover to read as a link. */
+.rg-danger-text {
+  color: var(--error-text);
+  background: none;
+  border: none;
+  padding: 0;
+}
+.rg-danger-text:hover { color: var(--error-text); text-decoration: underline; }
 
 .rg-library-more { margin-top: 10px; width: 100%; }
+
+/* A gentle opacity pulse for transient text ("Compiling", "Loading"). Applied by
+   a caller to an existing element; defined here only. */
+@keyframes rg-loading-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.rg-loading { animation: rg-loading-pulse 1.2s ease-in-out infinite; }
+
+/* responsive
+   The layout has fixed panel widths and a single-row toolbar. These breakpoints
+   are pure CSS graceful degradation (no JS drawer): wrap the toolbar, then shrink
+   the side panels so the canvas keeps usable room on a laptop or split window. */
+
+/* Toolbar wraps before its controls get pushed off-screen. */
+@media (max-width: 1300px) {
+  .rg-header { flex-wrap: wrap; }
+  .rg-name { min-width: 140px; }
+}
+
+/* Narrow laptop or split window: side panels shrink with min()/vw so the canvas
+   is not squeezed out, and the wide export panel is capped to the viewport. */
+@media (max-width: 1100px) {
+  .rg-panel { width: min(220px, 30vw); }
+  .rg-inspector { width: min(280px, 34vw); }
+  .rg-right { width: min(280px, 36vw); }
+  .rg-right.is-wide { width: min(620px, 60vw); }
+  .rg-tree { width: min(190px, 40%); }
+}
