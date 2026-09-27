@@ -70,7 +70,6 @@ export const OPS_PRESETS = [
   { key: "mythic", kind: "teamserver", label: "Mythic", abbrev: "mythic", icon: "tabler/outline/server-2", color: TEAMSERVER, blurb: "Mythic C2 teamserver", overlay: { c2: "mythic" } },
   { key: "sliver", kind: "teamserver", label: "Sliver", abbrev: "sliver", icon: "tabler/outline/server-2", color: TEAMSERVER, blurb: "Sliver C2 teamserver", overlay: { c2: "sliver" } },
   { key: "adaptix", kind: "teamserver", label: "Adaptix", abbrev: "adaptix", icon: "tabler/outline/server-2", color: TEAMSERVER, blurb: "Adaptix C2 teamserver", overlay: { c2: "adaptix" } },
-  { key: "cobalt_strike", kind: "teamserver", label: "Cobalt Strike", abbrev: "cs", icon: "tabler/outline/server-2", color: TEAMSERVER, blurb: "Cobalt Strike teamserver", overlay: { c2: "cobalt_strike" } },
   { key: "op_kali", kind: "operator", label: "Kali", abbrev: "kali", icon: "tabler/outline/terminal-2", color: OPERATOR, blurb: "Kali operator box", overlay: { os: "kali" } },
   { key: "op_windows", kind: "operator", label: "Windows", abbrev: "win", icon: "tabler/outline/device-desktop", color: OPERATOR, blurb: "Windows operator box", overlay: { os: "windows" } },
   { key: "op_debian", kind: "operator", label: "Debian", abbrev: "debian", icon: "tabler/outline/terminal-2", color: OPERATOR, blurb: "Debian operator box", overlay: { os: "debian" } },
