@@ -100,10 +100,9 @@ runs `terraform init` without assembling anything.
 
 The canvas covers `artie` mode and `haven` mode, generating for GCP and AWS, both
 supported and tested end to end for target ranges and attack infrastructure.
-Azure is a preview backend: public addressing works, but private DNS and
-peering are not built yet. Proxmox and ESXi are on the roadmap as on-prem
-targets; neither can allocate a public address on its own, so redirector
-reachability would depend on a network redStackPRO does not control.
+Azure, Proxmox, and ESXi are on the roadmap, not yet supported; neither Proxmox
+nor ESXi can allocate a public address on its own, so redirector reachability
+would depend on a network redStackPRO does not control.
 
 Haven mode ships as a rendered GOAD template with instantiation parameters;
 custom range authoring over the same providers is not built yet.

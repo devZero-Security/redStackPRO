@@ -51,9 +51,8 @@ backends declare fewer network capabilities (`src/redstackpro/schema/registry/pr
   cloud backend the range can also resolve through managed private DNS, but the
   static entries keep the commands identical, so use them either way.
 
-Azure is a preview backend: it allocates public addresses, but its private DNS
-and peering modules are not built yet (`azure.yaml`), so on azure treat name
-resolution as on-prem (static hosts entries) and expect no managed peering.
+Azure is on the roadmap and not yet supported, the same as Proxmox and ESXi;
+treat it as on-prem for now (static hosts entries, no managed peering).
 
 ## Topology - and why it makes this a cross-forest problem
 

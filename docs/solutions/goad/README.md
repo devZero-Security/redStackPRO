@@ -120,9 +120,8 @@ Two steps change in practice:
   operator's `/etc/hosts`, and the Windows hosts file where needed) from the
   internal IPs. Part 1 sets these up either way, so the commands stay identical.
 
-Azure is a preview backend: it allocates public addresses, but its private DNS
-and network peering modules are not built yet (`azure.yaml`), so on azure treat
-name resolution as on-prem (static hosts entries) and expect no managed peering.
+Azure is on the roadmap and not yet supported, the same as Proxmox and ESXi;
+treat it as on-prem for now (static hosts entries, no managed peering).
 
 ## Standing objectives
 

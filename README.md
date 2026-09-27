@@ -65,8 +65,7 @@ to end: a topology compiles to Terraform and Ansible, and the export deploys.
 | Provider | State |
 | -------- | ----- |
 | GCP, AWS | Supported and tested end to end, for both target ranges and attack infrastructure. |
-| Azure | Preview. Public addressing works; private DNS and peering are not built yet. |
-| Proxmox, ESXi | On the roadmap, not yet supported. Neither can allocate a public address on its own, so redirector reachability would depend on a network redStackPRO does not control. |
+| Azure, Proxmox, ESXi | On the roadmap, not yet supported. |
 
 ---
 

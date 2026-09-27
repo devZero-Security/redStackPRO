@@ -47,9 +47,8 @@ backends declare fewer network capabilities (`src/redstackpro/schema/registry/pr
   On on-prem there is no managed zone, so populate static hosts entries from the
   internal IPs. Static entries work on cloud too and keep the commands identical.
 
-Azure is a preview backend: it allocates public addresses, but its private DNS
-and peering modules are not built yet (`azure.yaml`), so on azure treat name
-resolution as on-prem (static hosts entries) and expect no managed peering.
+Azure is on the roadmap and not yet supported, the same as Proxmox and ESXi;
+treat it as on-prem for now (static hosts entries, no managed peering).
 
 ## Topology
 
