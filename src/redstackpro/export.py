@@ -88,7 +88,7 @@ ssh-keygen -t ed25519 -f keys\\id_ed25519 -N ''
 
 That writes two files: the private key `keys/id_ed25519` (leave it in `keys/`, the
 deploy finds it there) and the public key `keys/id_ed25519.pub` (step 2 puts its one
-line into `terraform.tfvars`). Already have a key? Point at it instead with
+line into `deploy.tfvars`). Already have a key? Point at it instead with
 `REDSTACKPRO_SSH_KEY=/path/to/key`.
 
 Get this right before the first apply. The public key is written into each host at
@@ -136,9 +136,10 @@ deploys the same way on all three.
 
 {make_a_key}
 
-## 2. Fill in `terraform/terraform.tfvars`
+## 2. Fill in `deploy.tfvars`
 
-Set: **{tfvars}**
+`deploy.tfvars` is in this folder, beside this guide. The deploy copies it into
+`terraform/` for you, so this is the only config file you edit. Set: **{tfvars}**
 
 - `ssh_public_key`: the one line in `keys/id_ed25519.pub`, the PUBLIC half from
   step 1. The PRIVATE half stays in `keys/` and is never pasted anywhere; the two
@@ -245,9 +246,10 @@ deploys the same way on all three.
 
 {make_a_key}
 
-## 2. Fill in `terraform/terraform.tfvars`
+## 2. Fill in `deploy.tfvars`
 
-Set: **{tfvars}**
+`deploy.tfvars` is in this folder, beside this guide. The deploy copies it into
+`terraform/` for you, so this is the only config file you edit. Set: **{tfvars}**
 
 - `ssh_public_key`: the one line in `keys/id_ed25519.pub`, the PUBLIC half from
   step 1. The PRIVATE half stays in `keys/` and is never pasted anywhere; the two
@@ -423,6 +425,13 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
         # a key in, and an empty directory does not survive a zip. A dotfile, not a
         # README: the export ships exactly one doc, DEPLOYMENT-GUIDE.md, at its root.
         files["keys/.keep"] = ""
+        # The config you edit lives at the export root as deploy.tfvars, not buried
+        # under terraform/. deploy.sh copies it into terraform/ at apply, where
+        # terraform auto-loads it for apply and destroy alike. Only moved when there
+        # is a deploy to run it; a no-jumpbox export keeps terraform/terraform.tfvars
+        # for a direct terraform run.
+        if "terraform/terraform.tfvars" in files:
+            files["deploy.tfvars"] = files.pop("terraform/terraform.tfvars")
     files["DEPLOYMENT-GUIDE.md"] = (RANGE_README if is_range else README).format(
         name=document.get("name", "redStackPRO export"),
         provider=provider,

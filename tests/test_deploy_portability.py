@@ -196,6 +196,27 @@ def test_the_export_ships_a_place_for_the_operators_key(tmp_path):
     assert "keys/.keep" in files
 
 
+def test_the_editable_tfvars_lives_at_the_root_and_deploy_copies_it():
+    """The config the operator edits ships at the export ROOT as deploy.tfvars, not
+    buried under terraform/, so it is not something to hunt for. deploy.sh copies it
+    into terraform/ at apply, where terraform auto-loads it for apply and destroy."""
+    files = compile_topology(example("redstack.json"), Registry(), provider="gcp")
+    assert "deploy.tfvars" in files
+    assert "terraform/terraform.tfvars" not in files
+    assert "ssh_public_key" in files["deploy.tfvars"]
+    assert "cp deploy.tfvars terraform/terraform.tfvars" in files["deploy.sh"]
+
+
+def test_a_no_jumpbox_export_keeps_terraform_tfvars_in_place():
+    """Without a jumpbox there is no deploy.sh to copy the root file, so the tfvars
+    stays under terraform/ for a direct terraform run."""
+    document = {"schema_version": "0.6.0", "mode": "artie", "name": "no jumpbox",
+                "nodes": [], "edges": []}
+    files = compile_topology(document, Registry(), provider="gcp")
+    assert "deploy.tfvars" not in files
+    assert "terraform/terraform.tfvars" in files
+
+
 def test_a_topology_with_no_jumpbox_gets_neither_wrapper_nor_keys():
     """Both only mean anything alongside a deploy, and a topology with no jumpbox
     has nothing to deploy through."""

@@ -412,9 +412,13 @@ SSH="ssh -i $KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
 {cloud_preflight}# Non-blocking: warn if management ingress is left open to the whole internet.
 # operator_source_ranges is a tfvars value the topology validator never sees, so
 # the check happens here, at apply time. It warns and continues, never aborts.
-if grep -Eq 'operator_source_ranges[[:space:]]*=[[:space:]]*\[[[:space:]]*"0\.0\.0\.0/0"' terraform/terraform.tfvars 2>/dev/null; then
-  echo "WARNING: operator_source_ranges is 0.0.0.0/0 (ssh and the portal are open to the whole internet). Narrow it in terraform/terraform.tfvars."
+if grep -Eq 'operator_source_ranges[[:space:]]*=[[:space:]]*\[[[:space:]]*"0\.0\.0\.0/0"' deploy.tfvars 2>/dev/null; then
+  echo "WARNING: operator_source_ranges is 0.0.0.0/0 (ssh and the portal are open to the whole internet). Narrow it in deploy.tfvars."
 fi
+# deploy.tfvars is the one config file you edit, here in the export root. Terraform
+# auto-loads terraform/terraform.tfvars, so copy it into place for apply and destroy.
+[ -f deploy.tfvars ] || {{ echo "deploy.tfvars not found next to this script. Fill it in first (see DEPLOYMENT-GUIDE.md)."; exit 1; }}
+cp deploy.tfvars terraform/terraform.tfvars
 say "terraform apply"
 terraform -chdir=terraform init -input=false -upgrade >/dev/null
 terraform -chdir=terraform apply -auto-approve -input=false
