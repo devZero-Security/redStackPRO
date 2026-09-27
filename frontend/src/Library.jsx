@@ -123,10 +123,14 @@ export function Library({
 
         <section className="rg-library-section">
           <h3>Your topologies</h3>
+          <p className="rg-muted rg-library-sub">
+            Your private saved topologies. Publish one to offer it as a blueprint
+            others can clone; delete removes it and all its revisions.
+          </p>
           {loading ? (
             <p className="rg-muted">Loading.</p>
           ) : topologies.length === 0 ? (
-            <p className="rg-muted">Nothing saved yet. Clone a blueprint to start.</p>
+            <p className="rg-muted">Nothing saved yet. Build a topology on the canvas and Save it.</p>
           ) : (
             <ul className="rg-library-list">
               {topologies.map((topology) => (
@@ -188,12 +192,13 @@ export function Library({
         <section className="rg-library-section">
           <h3>Blueprints</h3>
           <p className="rg-muted rg-library-sub">
-            Starters to clone. A clone is a private copy you own.
+            Published starters to clone. A clone is a private copy you own; the
+            blueprint itself stays read only.
           </p>
           {loading ? (
             <p className="rg-muted">Loading.</p>
           ) : blueprints.length === 0 ? (
-            <p className="rg-muted">No blueprints yet.</p>
+            <p className="rg-muted">No blueprints yet. Publish one of your topologies to add one here.</p>
           ) : (
             <ul className="rg-library-list">
               {blueprints.map((blueprint) => (

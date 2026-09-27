@@ -55,8 +55,8 @@ function libraryBackend({ topologyCount = 3 } = {}) {
   let topologies = Array.from({ length: topologyCount }, (_, i) =>
     summary({ id: `g${i}`, name: `Topology ${i}` }));
   let blueprints = [
-    summary({ id: "bp-sys", name: "redStack starter", owner_id: null,
-      is_blueprint: true, editable: false }),
+    summary({ id: "bp-sys", name: "Sample starter", owner_id: null,
+      is_blueprint: true, editable: false }),  // a system blueprint, none seeded by default now
   ];
   let nextClone = 100;
 
@@ -86,7 +86,7 @@ function libraryBackend({ topologyCount = 3 } = {}) {
 
     let match = url.match(/\/blueprints\/([^/?]+)\/clone$/);
     if (match && method === "POST") {
-      const clone = summary({ id: `c${nextClone++}`, name: "redStack starter (copy)" });
+      const clone = summary({ id: `c${nextClone++}`, name: "Sample starter (copy)" });
       topologies = [clone, ...topologies];
       return respond(201, clone);
     }
@@ -143,7 +143,7 @@ describe("browsing", () => {
 
     const dialog = await openLibrary(user);
     expect(await within(dialog).findByText("Topology 0")).toBeTruthy();
-    expect(within(dialog).getByText("redStack starter")).toBeTruthy();
+    expect(within(dialog).getByText("Sample starter")).toBeTruthy();
     expect(within(dialog).getByText("system starter")).toBeTruthy();
   });
 
@@ -154,7 +154,7 @@ describe("browsing", () => {
       render(<App />);
 
       const dialog = await openLibrary(user);
-      await within(dialog).findByText("redStack starter");
+      await within(dialog).findByText("Sample starter");
       await user.click(within(dialog).getByRole("button", { name: "Use this" }));
 
       // The clone POST happened, the canvas is on the cloned document, and the
