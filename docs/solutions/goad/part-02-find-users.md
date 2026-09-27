@@ -5,7 +5,7 @@ Reference: [mayfly - GOAD part 2](https://mayfly277.github.io/posts/GOADv2-pwnin
 mayfly hunts users and first credentials from a Kali on the lab LAN. We run the
 same enumeration **through the beacon's SOCKS proxy** (external POV,
 [methodology](README.md#governing-methodology-read-first)); hosts/IPs are in
-[part 1](part-01-recon.md#range-facts---read-your-range-briefingmd-first).
+[part 1](part-01-recon.md#range-facts---read-your-haven-briefingmd-first).
 
 > **Status legend:** ✅ PASS · ❌ fail · ⏳ not yet run · ➖ N/A.
 > **Result: Part 2 PASS** - every mayfly credential path resolves after the
