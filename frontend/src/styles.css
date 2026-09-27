@@ -674,16 +674,38 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 .rg-vuln-group { margin-bottom: 10px; }
 .rg-vuln-group:last-child { margin-bottom: 0; }
+/* The group heading is a real button so the collapse toggle stays reachable
+   from a keyboard and reads as interactive, not just a label. */
+.rg-vuln-group-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 2px 0 5px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rg-vuln-group-caret {
+  flex: none;
+  width: 9px;
+  font-size: 9px;
+  color: var(--muted);
+}
 .rg-vuln-group-label {
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: #ff8787;
-  margin: 2px 0 5px;
 }
 /* The one-line summary under a hardening group heading. This is the text that
    replaced the schema description's run-on glossary, so it has to read as
-   explanation rather than as another option. */
+   explanation rather than as another option. Stays visible even when the
+   group's items are collapsed, so a person can scan what a closed category
+   is about without opening it. */
 .rg-vuln-group-summary {
   font-size: 10px;
   color: var(--muted);
@@ -693,9 +715,32 @@ button:disabled { opacity: 0.5; cursor: default; }
    than wrap: a wrapped row put `asr` and `runasppl` on the same line as
    `lsa_protection` and lost the grouping the headings exist to create. */
 .rg-hardening .rg-vuln-group-label { color: var(--accent, #3b9eff); }
-.rg-vulns .rg-check { padding: 1px 0; }
+.rg-vulns .rg-check {
+  padding: 2px 4px;
+  margin: 0 -4px;
+  border-radius: 4px;
+}
+/* A selected vuln/hardening item gets a tint of the same red the danger
+   token (--error) uses elsewhere, so an applied item stands out even in a
+   long list. rgba here is that token's literal value: CSS custom properties
+   cannot be torn apart into r,g,b for a tint the way a preprocessor color
+   function could. */
+.rg-vulns .rg-check.is-selected { background: rgba(224, 49, 49, 0.16); }
 .rg-check.is-provider-unsupported { color: var(--muted); }
 .rg-vuln-provider-note { color: var(--muted); font-style: italic; }
+/* Native checkboxes default to a near-invisible thin outline in the dark
+   theme. accent-color draws a clearly visible red check when ticked; the
+   explicit border/background give the unticked box a distinct medium-grey
+   presence instead of blending into the panel. */
+.rg-vulns .rg-check input[type="checkbox"] {
+  accent-color: var(--error);
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  border: 1px solid var(--muted);
+  border-radius: 3px;
+  background: var(--panel-2);
+}
 
 .rg-kv { display: flex; justify-content: space-between; margin: 0 0 5px; }
 .rg-kv span:first-child { color: var(--muted); }

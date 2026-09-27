@@ -189,36 +189,84 @@ function DomainUsers({ node, rangeHostCount, flawOptions = [], onChange }) {
   );
 }
 
+// A group starts expanded only when one of its items is already selected, so
+// an applied category stays in view and an empty one stays out of the way.
+// Computed once at mount from the value the picker opens with; toggling a
+// group or an item afterward never fights the person by recomputing this.
+function initialCollapsed(catalog, selected) {
+  const collapsed = new Set();
+  for (const group of catalog) {
+    if (!group.items.some((item) => selected.includes(item.id))) {
+      collapsed.add(group.group);
+    }
+  }
+  return collapsed;
+}
+
 // The defensive-controls picker: the same grouped checklist as the vuln picker
 // above, over hardening.js. Each group states what that family buys you, which
 // is the job the schema description used to do in one run-on sentence.
 function HardeningPicker({ value, onChange, disabled }) {
   const set = value || [];
+  const [collapsed, setCollapsed] = useState(() => initialCollapsed(HARDENING_CATALOG, set));
   const toggle = (id) =>
     onChange(set.includes(id) ? set.filter((v) => v !== id) : [...set, id]);
+  const toggleGroup = (key) =>
+    setCollapsed((cur) => {
+      const next = new Set(cur);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   return (
     <div className="rg-field">
       <span className="rg-field-label">
         hardening{set.length ? ` (${set.length})` : ""}
       </span>
       <div className="rg-vulns rg-hardening">
-        {HARDENING_CATALOG.map((group) => (
-          <div key={group.group} className="rg-vuln-group">
-            <div className="rg-vuln-group-label">{group.group}</div>
-            <div className="rg-vuln-group-summary">{group.summary}</div>
-            {group.items.map((item) => (
-              <label key={item.id} className="rg-check" title={item.blurb}>
-                <input
-                  type="checkbox"
-                  checked={set.includes(item.id)}
-                  disabled={disabled}
-                  onChange={() => toggle(item.id)}
-                />
-                {item.label}
-              </label>
-            ))}
-          </div>
-        ))}
+        {HARDENING_CATALOG.map((group) => {
+          const selectedCount = group.items.filter((item) => set.includes(item.id)).length;
+          const isCollapsed = collapsed.has(group.group);
+          return (
+            <div key={group.group} className="rg-vuln-group">
+              <button
+                type="button"
+                className="rg-vuln-group-header"
+                aria-expanded={!isCollapsed}
+                onClick={() => toggleGroup(group.group)}
+              >
+                <span className="rg-vuln-group-caret" aria-hidden="true">
+                  {isCollapsed ? "▸" : "▾"}
+                </span>
+                <span className="rg-vuln-group-label">
+                  {group.group}
+                  {selectedCount ? ` (${selectedCount})` : ""}
+                </span>
+              </button>
+              <div className="rg-vuln-group-summary">{group.summary}</div>
+              {isCollapsed
+                ? null
+                : group.items.map((item) => {
+                    const isSelected = set.includes(item.id);
+                    return (
+                      <label
+                        key={item.id}
+                        className={`rg-check${isSelected ? " is-selected" : ""}`}
+                        title={item.blurb}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          disabled={disabled}
+                          onChange={() => toggle(item.id)}
+                        />
+                        {item.label}
+                      </label>
+                    );
+                  })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -235,47 +283,75 @@ function HardeningPicker({ value, onChange, disabled }) {
 // with vulns.js by tests/test_vuln_providers_sync.py.
 function VulnPicker({ value, onChange, disabled, provider }) {
   const set = value || [];
+  const [collapsed, setCollapsed] = useState(() => initialCollapsed(VULN_CATALOG, set));
   const toggle = (id) =>
     onChange(set.includes(id) ? set.filter((v) => v !== id) : [...set, id]);
+  const toggleGroup = (key) =>
+    setCollapsed((cur) => {
+      const next = new Set(cur);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   return (
     <div className="rg-field">
       <span className="rg-field-label">
         vulnerabilities{set.length ? ` (${set.length})` : ""}
       </span>
       <div className="rg-vulns">
-        {VULN_CATALOG.map((group) => (
-          <div key={group.group} className="rg-vuln-group">
-            <div className="rg-vuln-group-label">{group.group}</div>
-            {group.items.map((item) => {
-              const restricted = VULN_PROVIDERS[item.id];
-              const unsupported =
-                restricted && provider && !restricted.includes(provider);
-              const title = unsupported
-                ? `${item.blurb || ""}\n\nNo payoff on ${provider}: only planted on ${restricted.join("/")}. Still declarable for a template that also targets those.`
-                : item.blurb || "";
-              return (
-                <label
-                  key={item.id}
-                  className={`rg-check${unsupported ? " is-provider-unsupported" : ""}`}
-                  title={title}
-                >
-                  <input
-                    type="checkbox"
-                    checked={set.includes(item.id)}
-                    disabled={disabled}
-                    onChange={() => toggle(item.id)}
-                  />
-                  {item.label}
-                  {unsupported ? (
-                    <span className="rg-vuln-provider-note">
-                      {" "}({restricted.join("/")} only)
-                    </span>
-                  ) : null}
-                </label>
-              );
-            })}
-          </div>
-        ))}
+        {VULN_CATALOG.map((group) => {
+          const selectedCount = group.items.filter((item) => set.includes(item.id)).length;
+          const isCollapsed = collapsed.has(group.group);
+          return (
+            <div key={group.group} className="rg-vuln-group">
+              <button
+                type="button"
+                className="rg-vuln-group-header"
+                aria-expanded={!isCollapsed}
+                onClick={() => toggleGroup(group.group)}
+              >
+                <span className="rg-vuln-group-caret" aria-hidden="true">
+                  {isCollapsed ? "▸" : "▾"}
+                </span>
+                <span className="rg-vuln-group-label">
+                  {group.group}
+                  {selectedCount ? ` (${selectedCount})` : ""}
+                </span>
+              </button>
+              {isCollapsed
+                ? null
+                : group.items.map((item) => {
+                    const restricted = VULN_PROVIDERS[item.id];
+                    const unsupported =
+                      restricted && provider && !restricted.includes(provider);
+                    const title = unsupported
+                      ? `${item.blurb || ""}\n\nNo payoff on ${provider}: only planted on ${restricted.join("/")}. Still declarable for a template that also targets those.`
+                      : item.blurb || "";
+                    const isSelected = set.includes(item.id);
+                    return (
+                      <label
+                        key={item.id}
+                        className={`rg-check${isSelected ? " is-selected" : ""}${unsupported ? " is-provider-unsupported" : ""}`}
+                        title={title}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          disabled={disabled}
+                          onChange={() => toggle(item.id)}
+                        />
+                        {item.label}
+                        {unsupported ? (
+                          <span className="rg-vuln-provider-note">
+                            {" "}({restricted.join("/")} only)
+                          </span>
+                        ) : null}
+                      </label>
+                    );
+                  })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1117,7 +1193,7 @@ export function Inspector({
             .map(([name, spec]) =>
               name === "vulns" ? (
                 <VulnPicker
-                  key={name}
+                  key={`${name}-${node.id}`}
                   value={(node.overlay || {}).vulns}
                   disabled={readOnly}
                   provider={provider}
@@ -1127,7 +1203,7 @@ export function Inspector({
                 />
               ) : name === "hardening" ? (
                 <HardeningPicker
-                  key={name}
+                  key={`${name}-${node.id}`}
                   value={(node.overlay || {}).hardening}
                   disabled={readOnly}
                   onChange={(value) =>
