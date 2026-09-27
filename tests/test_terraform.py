@@ -598,6 +598,64 @@ def test_public_jumpbox_keeps_ssh_and_portal_and_opens_no_vpn(redstack, provider
         assert rules["guac_in_art_jump_bx01"]["from_port"] == 443
 
 
+# -- transport wireguard: how the jumpbox reaches its MANAGED HOSTS (distinct
+# from access_mode, which is how operators reach the jumpbox). The jumpbox is the
+# wg server, so the hosts are peers reaching its listen port from their own
+# subnets: internal surface, never the operator ranges or the internet. See
+# plan.wireguard_transport.
+
+def test_wireguard_transport_opens_the_wg_port_from_the_managed_subnets_gcp(
+        redstack):
+    """A jumpbox with transport wireguard opens 51820/udp to the subnets of the
+    hosts it manages, so the peers can reach the tunnel endpoint. Internal only:
+    the source is those CIDRs, not the operator variable and not a wildcard."""
+    doc = _vpn_jumpbox(redstack, transport="wireguard")
+    rule = firewall_rules(doc)["wg_transport_in_art_jump_bx01"]
+    assert rule["allow"][0]["protocol"] == "udp"
+    assert rule["allow"][0]["ports"] == ["51820"]
+    assert rule["target_tags"] == ["art-jump-bx01"]
+    # The managed hosts sit in the ops, c2 and redirector subnets.
+    assert set(rule["source_ranges"]) == {
+        "10.30.10.0/24", "10.30.20.0/24", "10.31.10.0/24"}
+    joined = "".join(rule["source_ranges"])
+    assert "operator_source_ranges" not in joined
+    assert "0.0.0.0/0" not in joined
+
+
+def test_wireguard_transport_opens_the_wg_port_from_the_managed_subnets_aws(
+        redstack):
+    """The AWS mirror: one udp/51820 ingress per managed subnet, each sourced by a
+    CIDR, never the operator variable or a wildcard."""
+    doc = _vpn_jumpbox(redstack, transport="wireguard")
+    rules = aws_rules(doc)
+    wg = {n: r for n, r in rules.items()
+          if n.startswith("wg_transport_in_art_jump_bx01")}
+    assert wg
+    for rule in wg.values():
+        assert rule["ip_protocol"] == "udp"
+        assert rule["from_port"] == 51820 and rule["to_port"] == 51820
+        assert "cidr_ipv4" in rule and "/" in rule["cidr_ipv4"]
+        assert "for_each" not in rule                 # not the operator variable
+        assert rule["cidr_ipv4"] != "0.0.0.0/0"
+
+
+@pytest.mark.parametrize("provider", ["gcp", "aws"])
+def test_default_transport_opens_no_wireguard_port(redstack, provider):
+    """The default (transport absent, ssh) emits no wg transport rule."""
+    rules = (firewall_rules if provider == "gcp" else aws_rules)(redstack)
+    assert not [n for n in rules if n.startswith("wg_transport_in_")]
+
+
+def test_wireguard_transport_shares_the_pinned_port_with_wireguard_access(
+        redstack):
+    """When the jumpbox is also a wireguard ACCESS endpoint on a pinned port, the
+    transport tunnel is the same wg0 server, so it listens on that same port."""
+    doc = _vpn_jumpbox(redstack, transport="wireguard",
+                       access_mode="wireguard", vpn_port=51999)
+    rule = firewall_rules(doc)["wg_transport_in_art_jump_bx01"]
+    assert rule["allow"][0]["ports"] == ["51999"]
+
+
 # -- outputs
 
 def test_addresses_output_covers_every_host(redstack):

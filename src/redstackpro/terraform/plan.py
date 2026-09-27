@@ -352,6 +352,28 @@ class TerraformPlan:
         port = ov.get("vpn_port") or VPN_DEFAULT_PORT[mode]
         return (mode, port, protocol)
 
+    def wireguard_transport(self, jumpbox):
+        """Whether this jumpbox reaches the hosts it manages over a WireGuard
+        tunnel rather than direct ssh/ProxyJump (the transport overlay field).
+
+        Distinct from access_mode (vpn_access): access_mode is how OPERATORS reach
+        the jumpbox; transport is how the jumpbox reaches its MANAGED HOSTS. The
+        jumpbox is the WireGuard server here too (it holds .1 and runs
+        wg-quick@wg0), so the managed hosts are its peers and the listener sits on
+        the jumpbox at the WireGuard port. Bootstrap runs over ssh first; the
+        tunnel is the path afterward (BOOT001). See schema transport field.
+        """
+        return self.ctx.overlay(jumpbox["id"], "transport", "ssh") == "wireguard"
+
+    def wireguard_port(self, jumpbox):
+        """The WireGuard listen port for the transport tunnel. Defaults to the
+        role default (51820); an overlay vpn_port pins it only when access_mode is
+        also wireguard (the two share the one wg0 server on the jumpbox)."""
+        ov = jumpbox.get("overlay") or {}
+        if ov.get("access_mode") == "wireguard" and ov.get("vpn_port"):
+            return ov["vpn_port"]
+        return VPN_DEFAULT_PORT["wireguard"]
+
     def primary_segment(self, node):
         segments = self.ctx.segments_of(node["id"])
         if not segments:

@@ -749,6 +749,28 @@ def _firewall(plan):
              if h["id"] != jump and ctx.manager_of(h["id"]) == jump),
             key=lambda h: h["id"])
 
+        # transport wireguard: the jumpbox reaches its managed hosts over a
+        # WireGuard tunnel, so it is the wg server and the managed hosts are its
+        # peers connecting inbound to the wg port. This is *internal* surface, so
+        # the source is the managed hosts' own subnets, never operator ranges or
+        # the internet. Bootstrap still runs over ssh (BOOT001); the mgmt_out ssh
+        # rules above stay so the first, tunnel-less deploy can configure it.
+        # Host-side peer generation is not built yet, so this opens the endpoint
+        # the peers will use, not a live tunnel. See plan.wireguard_transport.
+        if plan.wireguard_transport(ctx.nodes[jump]):
+            name = "wg_transport_in_%s" % plan.ref(jump)
+            wg_sources = sorted({c for c in (source_cidr(h["id"])
+                                             for h in managed) if c})
+            if name not in seen and wg_sources:
+                seen.add(name)
+                lines += [""] + _rule(
+                    name, plan.ref(net), "INGRESS", "udp",
+                    [str(plan.wireguard_port(ctx.nodes[jump]))], [plan.tag(jump)],
+                    source_ranges=wg_sources,
+                    comment="%s manages its hosts over a WireGuard tunnel; peers "
+                            "reach the endpoint from their own subnets"
+                            % ctx.name(jump))
+
         # A Windows host is reached over WinRM, so opening 22 to it opens
         # nothing. Grouped by port rather than emitted per host, because a tag
         # based rule takes a list of targets and one rule per host would be

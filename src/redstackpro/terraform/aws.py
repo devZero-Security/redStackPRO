@@ -880,6 +880,31 @@ def _firewall(plan):
             (h for h in plan.hosts()
              if h["id"] != jump and ctx.manager_of(h["id"]) == jump),
             key=lambda h: h["id"])
+
+        # transport wireguard: the jumpbox reaches its managed hosts over a
+        # WireGuard tunnel, so it is the wg server and the managed hosts are its
+        # peers connecting inbound to the wg port. This is *internal* surface, so
+        # the source is the managed hosts' own subnets, never operator ranges or
+        # the internet. Bootstrap still runs over ssh (BOOT001); the mgmt_out ssh
+        # rules above stay so the first, tunnel-less deploy can configure it.
+        # Host-side peer generation is not built yet, so this opens the endpoint
+        # the peers will use, not a live tunnel. One rule per source (the AWS
+        # shape). See plan.wireguard_transport and gcp.py's mirror.
+        if plan.wireguard_transport(ctx.nodes[jump]):
+            port = plan.wireguard_port(ctx.nodes[jump])
+            wg_sources = sorted({c for c in (source_cidr(h["id"])
+                                             for h in managed) if c})
+            for cidr in wg_sources:
+                name = "wg_transport_in_%s_%s" % (
+                    plan.ref(jump), cidr.replace(".", "_").replace("/", "_"))
+                if name in seen:
+                    continue
+                seen.add(name)
+                lines += [""] + _ingress(
+                    name, plan.ref(jump), "udp", port, source_cidr=cidr,
+                    comment="%s manages its hosts over a WireGuard tunnel; peers "
+                            "reach the endpoint from %s" % (ctx.name(jump), cidr))
+
         jnet = network_of(jump)
         for host in managed:
             base = "mgmt_out_%s_%s" % (plan.ref(jump), plan.ref(host["id"]))
