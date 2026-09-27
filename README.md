@@ -118,7 +118,8 @@ Python 3.11 or newer, and Node 24 for the canvas.
 `redstackpro serve --port 8787` moves the API to a different port. Point the
 canvas dev server at it with `REDSTACKPRO_API=http://127.0.0.1:8787`.
 
-Open it, load a template from the library, choose your cloud in the toolbar
+Open it, use **Load template** (the button, or the mode palette) to open a
+shipped starting point, choose your cloud in the toolbar
 provider selector (GCP or AWS), open the Export tab (it compiles as you go), then
 Download. You get a zip of the working directory described below.
 
@@ -168,9 +169,13 @@ one forest, two domain controllers and a member server, plus a jumpbox.
 > See [Getting Started](https://github.com/devZero-Security/redStackPRO/wiki/Getting-Started)
 > for the full checklist.
 
-To deploy it, fill in `export/terraform/terraform.tfvars` and run:
+To deploy it, fill in `export/deploy.tfvars` (at the export root) and run:
 
     cd export && bash deploy.sh
+
+`deploy.sh` copies `deploy.tfvars` into `terraform/terraform.tfvars` at apply
+time and aborts if `deploy.tfvars` is missing, so edit the root file, not the
+one under `terraform/`.
 
 On Windows, run `.\deploy.ps1` instead: `bash deploy.sh` at a PowerShell prompt
 launches WSL, a different filesystem with different credentials. See the wiki
