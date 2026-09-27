@@ -180,7 +180,7 @@ def test_static_files_reject_an_unknown_provider():
 
 def test_compile_topology_produces_a_complete_working_directory(redstack, registry):
     files = compile_topology(redstack, registry=registry, provider="aws")
-    assert "README.md" in files
+    assert "DEPLOYMENT-GUIDE.md" in files
     assert "terraform/main.tf" in files
     assert any(p.startswith("ansible/host_vars/") for p in files)
     # The static half is stitched in, not just the generated half.
@@ -190,12 +190,12 @@ def test_compile_topology_produces_a_complete_working_directory(redstack, regist
 def test_compiled_provider_reaches_both_the_modules_and_the_readme(redstack, registry):
     aws = compile_topology(redstack, registry=registry, provider="aws")
     assert any(p.startswith("terraform/modules/aws/") for p in aws)
-    assert "aws" in aws["README.md"]
+    assert "aws" in aws["DEPLOYMENT-GUIDE.md"]
 
 
 def test_readme_hints_are_provider_specific(redstack, registry):
-    aws = compile_topology(redstack, registry=registry, provider="aws")["README.md"]
-    gcp = compile_topology(redstack, registry=registry, provider="gcp")["README.md"]
+    aws = compile_topology(redstack, registry=registry, provider="aws")["DEPLOYMENT-GUIDE.md"]
+    gcp = compile_topology(redstack, registry=registry, provider="gcp")["DEPLOYMENT-GUIDE.md"]
     assert "region" in aws          # aws tfvars list
     assert "project" in gcp         # gcp tfvars list
     # The Kali Marketplace subscription is an aws-only precondition.

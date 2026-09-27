@@ -323,7 +323,7 @@ def test_compiled_export_includes_the_roles_and_the_runbook(client, topology_id)
     assert "ansible/roles/redstackpro.teamserver/tasks/c2-mythic.yml" in paths
     assert "ansible/requirements.yml" in paths
     assert "tf_inventory.py" in paths
-    assert "README.md" in paths
+    assert "DEPLOYMENT-GUIDE.md" in paths
 
 
 def test_every_role_the_playbook_names_is_present(client, topology_id):

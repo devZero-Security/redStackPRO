@@ -1146,7 +1146,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-export-platform select { font-size: 11px; padding: 2px 4px; }
 
 /* The three things to do after extracting. Short enough to read standing up;
-   README.md in the download carries the long version. */
+   DEPLOYMENT-GUIDE.md in the download carries the long version. */
 .rg-export-steps {
   margin: 0 0 8px;
   padding-left: 18px;

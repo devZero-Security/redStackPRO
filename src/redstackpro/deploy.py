@@ -187,66 +187,6 @@ exit $LASTEXITCODE
 """
 
 
-# Shipped inside keys/ so the folder survives the zip (an empty directory does
-# not) and so the first person to open it is told what goes there.
-KEYS_README = """# keys
-
-Put the **private** ssh key for this deploy here, and `deploy.sh` will find it.
-
-**macOS, Linux, Git Bash:**
-
-    ssh-keygen -t ed25519 -f keys/id_ed25519 -N ""
-
-**Windows PowerShell** -- note the quoting, it is not the same:
-
-    ssh-keygen -t ed25519 -f keys\\id_ed25519 -N ''
-
-`-N ''` with single quotes. PowerShell passes `-N ""` through as two literal
-quote characters, so the key gets a passphrase of `""` instead of no passphrase.
-Nothing complains at the time: it surfaces later as
-`Permission denied (publickey)` from the jumpbox, after the deploy has retried
-for several minutes. If that happens, check the key with
-`ssh-keygen -y -P "" -f keys/id_ed25519` -- it prints the public half if the key
-has no passphrase, and fails if it has one.
-
-Then open `keys/id_ed25519.pub`, and paste its one line into
-`terraform/terraform.tfvars` as `ssh_public_key`. The two halves have to match:
-Terraform puts the public half on every host, and the deploy authenticates with
-the private half.
-
-`deploy.sh` looks in three places, in order:
-
-1. `$REDSTACKPRO_SSH_KEY`, if you set it
-2. a single key in this folder
-3. `~/.ssh/id_ed25519`
-
-If you keep more than one key here it will not guess between them; name the one
-you want with `REDSTACKPRO_SSH_KEY=keys/<name>`.
-
-Nothing in this folder is ever uploaded anywhere except to your own jumpbox, and
-nothing here came in the download. Do not commit it.
-
-## Change the key AFTER a deploy and it will not take
-
-The public key is written into each host's metadata when the host is created,
-and Terraform is told to ignore later changes to it, because the cloud's own
-guest agent rewrites that field and every plan would otherwise show a diff that
-is not yours.
-
-So editing `ssh_public_key` in `terraform.tfvars` and re-running `deploy.sh`
-does **nothing** to hosts that already exist: Terraform reads the new value,
-compares it to a field it has been told to ignore, and reports no changes. Get
-the key right before the first apply. If you have to change it afterwards,
-either destroy and re-apply, or add it by hand, for example on GCP:
-
-    gcloud compute instances add-metadata <host> --zone <zone> \\
-      --metadata-from-file ssh-keys=<file>
-
-and include every key already in that field, or you will remove the portal's own
-access along with the old one.
-"""
-
-
 def _jumpbox_name(ctx):
     for node in ctx.hosts():
         if ctx.kind(node["id"]) == "jumpbox":

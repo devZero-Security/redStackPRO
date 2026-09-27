@@ -1045,11 +1045,11 @@ def test_the_export_says_what_the_account_has_to_do_first(redstack, registry):
     """The Kali listing needs a subscription and an export cannot take it. An
     apply that stops with OptInRequired names the problem, not the remedy."""
     from redstackpro.export import compile_topology
-    readme = compile_topology(redstack, registry, provider="aws")["README.md"]
+    readme = compile_topology(redstack, registry, provider="aws")["DEPLOYMENT-GUIDE.md"]
     assert "subscription" in readme
     assert "availability_zone" in readme
     assert "subscription" not in compile_topology(
-        redstack, registry, provider="gcp")["README.md"]
+        redstack, registry, provider="gcp")["DEPLOYMENT-GUIDE.md"]
 
 
 # -- native defense range backends (aws and gcp)

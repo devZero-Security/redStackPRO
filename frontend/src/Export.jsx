@@ -231,7 +231,7 @@ export function ExportPanel({ document, provider }) {
       </ol>
       <p className="rg-export-note">{PLATFORMS[platform].note} Both scripts are
         in every download, so the same export deploys from either machine.
-        README.md has the long version.</p>
+        DEPLOYMENT-GUIDE.md has the long version.</p>
 
       <div className="rg-export-split">
         <div className="rg-tree">

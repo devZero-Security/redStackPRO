@@ -190,11 +190,10 @@ def test_windows_gets_a_wrapper_that_avoids_the_wsl_bash(tmp_path):
 
 
 def test_the_export_ships_a_place_for_the_operators_key(tmp_path):
-    """An empty directory does not survive a zip, so the folder carries a readme
-    that also says what goes in it."""
+    """An empty directory does not survive a zip, so the folder carries a
+    non-readme marker file: the export ships exactly one doc, at its root."""
     files = compile_topology(example("redstack.json"), Registry(), provider="gcp")
-    assert "keys/README.md" in files
-    assert "ssh_public_key" in files["keys/README.md"]
+    assert "keys/.keep" in files
 
 
 def test_a_topology_with_no_jumpbox_gets_neither_wrapper_nor_keys():
@@ -205,7 +204,7 @@ def test_a_topology_with_no_jumpbox_gets_neither_wrapper_nor_keys():
     files = compile_topology(document, Registry(), provider="gcp")
     assert "deploy.sh" not in files
     assert "deploy.ps1" not in files
-    assert "keys/README.md" not in files
+    assert "keys/.keep" not in files
 
 
 # --------------------------------------------------------------------------

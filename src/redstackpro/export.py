@@ -93,7 +93,7 @@ line into `terraform.tfvars`). Already have a key? Point at it instead with
 
 Get this right before the first apply. The public key is written into each host at
 creation and Terraform ignores later changes to it, so changing it afterwards means
-destroying and re-applying. `keys/README.md` has the detail."""
+destroying and re-applying."""
 
 # The deploy step is the one place the two platforms genuinely differ, so it is
 # the one place the instructions split. Everything above and below it is shared.
@@ -140,9 +140,15 @@ deploys the same way on all three.
 
 Set: **{tfvars}**
 
-`ssh_public_key` is the single line in `keys/id_ed25519.pub`. The two halves have
-to match: Terraform puts the public half on every host and the deploy
-authenticates with the private half.
+- `ssh_public_key`: the one line in `keys/id_ed25519.pub`, the PUBLIC half from
+  step 1. The PRIVATE half stays in `keys/` and is never pasted anywhere; the two
+  halves have to match, since Terraform puts the public half on every host and
+  the deploy authenticates with the private half.
+- `operator_source_ranges`: your own IP, for example `["203.0.113.5/32"]`. This is
+  what can reach ssh and the portal, so leaving it wide open is a mistake, not a
+  shortcut.
+- Confirm the region (and, on GCP, the project) are the ones you mean to deploy
+  into.
 
 ## 3. Authenticate to your cloud
 
@@ -243,9 +249,15 @@ deploys the same way on all three.
 
 Set: **{tfvars}**
 
-`ssh_public_key` is the single line in `keys/id_ed25519.pub`. The two halves have
-to match: Terraform puts the public half on every host and the deploy
-authenticates with the private half.
+- `ssh_public_key`: the one line in `keys/id_ed25519.pub`, the PUBLIC half from
+  step 1. The PRIVATE half stays in `keys/` and is never pasted anywhere; the two
+  halves have to match, since Terraform puts the public half on every host and
+  the deploy authenticates with the private half.
+- `operator_source_ranges`: your own IP, for example `["203.0.113.5/32"]`. This is
+  what can reach ssh and the portal, so leaving it wide open is a mistake, not a
+  shortcut.
+- Confirm the region (and, on GCP, the project) are the ones you mean to deploy
+  into.
 
 ## 3. Authenticate to your cloud
 
@@ -405,10 +417,13 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
         # Both ship with the deploy or not at all: they are only meaningful when
         # there is a jumpbox to deploy through. See deploy.py for why the wrapper
         # has to exist at all (`bash` at a PowerShell prompt is the WSL launcher).
-        from .deploy import DEPLOY_PS1, KEYS_README
+        from .deploy import DEPLOY_PS1
         files["deploy.ps1"] = DEPLOY_PS1
-        files["keys/README.md"] = KEYS_README
-    files["README.md"] = (RANGE_README if is_range else README).format(
+        # keys/ has to exist for ssh-keygen to write into and for deploy.sh to find
+        # a key in, and an empty directory does not survive a zip. A dotfile, not a
+        # README: the export ships exactly one doc, DEPLOYMENT-GUIDE.md, at its root.
+        files["keys/.keep"] = ""
+    files["DEPLOYMENT-GUIDE.md"] = (RANGE_README if is_range else README).format(
         name=document.get("name", "redStackPRO export"),
         provider=provider,
         jumpuser=platform_account((document or {}).get("mode")),
