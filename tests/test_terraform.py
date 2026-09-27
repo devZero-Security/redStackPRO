@@ -617,7 +617,7 @@ def test_rollover_pool_is_an_output(rollover):
 
 
 def test_instances_output_carries_what_each_providers_cli_needs(redstack):
-    """range.sh (status/start/stop) has to address exactly this range's own
+    """manage.sh (status/start/stop) has to address exactly this range's own
     hosts, not the whole account or project, so the root output carries the one
     identifier each provider's CLI takes: an instance id for aws, a name plus
     its zone for gcp."""
@@ -1078,17 +1078,17 @@ def test_the_export_says_what_the_account_has_to_do_first(redstack, registry):
 import json
 
 
-def _range_doc():
+def _MANAGE_doc():
     return json.loads(
         (ROOT / "frontend/public/goad/goad-light.json").read_text(encoding="utf-8"))
 
 
 @pytest.mark.parametrize("provider", ["aws", "gcp"])
-def test_range_backend_emits_range_apparatus(provider):
+def test_MANAGE_backend_emits_MANAGE_apparatus(provider):
     """A defense range compiles for both native backends with the same shape:
     Windows controllers on a real 2019 image, the low-touch lab password and
     Guacamole outputs, WinRM boot, and the range firewall rules."""
-    out = files(_range_doc(), provider=provider)
+    out = files(_MANAGE_doc(), provider=provider)
     main = out["terraform/main.tf"]
     fw = out["terraform/firewall.tf"]
 
@@ -1108,7 +1108,7 @@ def test_the_portal_login_is_the_platform_account_not_operator(provider):
     blueop. Guarding it because the old default was the literal "operator" and a
     regression would silently reintroduce a second account the portal and the
     Windows box would then disagree about. See naming.platform_account."""
-    out = files(_range_doc(), provider=provider)
+    out = files(_MANAGE_doc(), provider=provider)
     main = out["terraform/main.tf"]
     # Whitespace-insensitive for the same reason as the windows flag below:
     # align() repads a module block whenever a longer key joins it, so a pinned
@@ -1122,17 +1122,17 @@ def test_the_portal_login_is_the_platform_account_not_operator(provider):
     assert 'var.operator_username' not in main
 
 
-def test_range_rejects_a_provider_without_a_native_backend():
+def test_MANAGE_rejects_a_provider_without_a_native_backend():
     from redstackpro.export import compile_topology
     with pytest.raises(GenerationError):
-        compile_topology(_range_doc(), provider="digitalocean")
+        compile_topology(_MANAGE_doc(), provider="digitalocean")
 
 
-def test_range_proxmox_emits_vms_static_ips_and_vm_firewall():
+def test_MANAGE_proxmox_emits_vms_static_ips_and_vm_firewall():
     """The Proxmox range shape differs from the clouds: VMs (not cloud images
     per build), static addresses allocated from each segment, and a per-VM
     firewall. Windows still boots with WinRM and the low-touch credentials."""
-    out = files(_range_doc(), provider="proxmox")
+    out = files(_MANAGE_doc(), provider="proxmox")
     main = out["terraform/main.tf"]
     fw = out["terraform/firewall.tf"]
 
@@ -1150,11 +1150,11 @@ def test_range_proxmox_emits_vms_static_ips_and_vm_firewall():
     assert "foothold" in fw                              # jumpbox foothold ingress
 
 
-def test_range_azure_emits_vms_nsg_rules_and_winrm():
+def test_MANAGE_azure_emits_vms_nsg_rules_and_winrm():
     """The Azure range: a resource group, VMs with static private addresses, NSG
     rules matched by address, and the Windows WinRM self-provision extension.
     Windows carries the low-touch credentials the same as the other backends."""
-    out = files(_range_doc(), provider="azure")
+    out = files(_MANAGE_doc(), provider="azure")
     main = out["terraform/main.tf"]
     fw = out["terraform/firewall.tf"]
 
@@ -1173,11 +1173,11 @@ def test_range_azure_emits_vms_nsg_rules_and_winrm():
     assert "foothold" in fw                              # jumpbox foothold ingress
 
 
-def test_range_esxi_uses_vsphere_datasources_static_ips_and_no_firewall():
+def test_MANAGE_esxi_uses_vsphere_datasources_static_ips_and_no_firewall():
     """The ESXi range: vSphere data sources resolved once, VMs with static
     addresses (Linux from an OVA, Windows cloned from a template), and no
     firewall (vSphere has no managed per-VM firewall; VLANs isolate)."""
-    out = files(_range_doc(), provider="esxi")
+    out = files(_MANAGE_doc(), provider="esxi")
     main = out["terraform/main.tf"]
     fw = out["terraform/firewall.tf"]
 
@@ -1203,7 +1203,7 @@ def test_internal_ip_pins_the_exact_address(provider, var):
     (GOAD's own canonical octet, see 0055); every provider that takes it must
     render that literal address on kingslanding's module, not an auto-assigned
     one."""
-    kingslanding = _modules_for(_range_doc(), provider=provider)["hvn_kingslanding"]
+    kingslanding = _modules_for(_MANAGE_doc(), provider=provider)["hvn_kingslanding"]
     assert kingslanding[var] == "192.168.56.10"
 
 
@@ -1214,7 +1214,7 @@ def test_aws_puts_an_addressed_host_in_the_public_subnet():
     what made every AWS range unreachable at its jumpbox, silently. The jumpbox
     must land in the network's public subnet instead, while the AD hosts stay in
     the segment."""
-    mods = _modules_for(_range_doc(), provider="aws")
+    mods = _modules_for(_MANAGE_doc(), provider="aws")
     assert mods["hvn_jumpbox"]["subnet_id"] == \
         "${module.hvn_net01.public_subnet_id}"
     assert mods["hvn_kingslanding"]["subnet_id"] == \
@@ -1229,7 +1229,7 @@ def test_aws_drops_a_pin_on_a_host_it_moves_to_the_public_subnet():
     against the segment's range cannot be honoured there -- AWS would refuse an
     address outside the subnet. The jumpbox's pin is dropped; the AD pins, which
     are the ones fidelity depends on, are untouched."""
-    mods = _modules_for(_range_doc(), provider="aws")
+    mods = _modules_for(_MANAGE_doc(), provider="aws")
     assert "private_ip" not in mods["hvn_jumpbox"]
     assert mods["hvn_kingslanding"]["private_ip"] == "192.168.56.10"
 
@@ -1240,7 +1240,7 @@ def test_aws_keeps_the_foothold_reaching_the_ad_hosts():
     from the foothold against AD (SMB, LDAP, Kerberos, RPC) would be dropped. The
     rule references the jumpbox's security group, so it does not depend on which
     subnet the jumpbox ended up in."""
-    parsed = parse(files(_range_doc(), provider="aws")["terraform/firewall.tf"])
+    parsed = parse(files(_MANAGE_doc(), provider="aws")["terraform/firewall.tf"])
     rules = {}
     for block in parsed.get("resource", []):
         rules.update(block.get("aws_vpc_security_group_ingress_rule", {}))
@@ -1251,11 +1251,11 @@ def test_aws_keeps_the_foothold_reaching_the_ad_hosts():
         "${module.hvn_jumpbox.security_group_id}"
 
 
-def test_gcp_leaves_the_jumpbox_in_the_range_segment():
+def test_gcp_leaves_the_jumpbox_in_the_MANAGE_segment():
     """The AWS relocation must not leak into GCP, where Cloud NAT serves only
     instances without an external address, so an addressed host sits happily in
     the range subnet and keeps its pinned octet."""
-    mods = _modules_for(_range_doc(), provider="gcp")
+    mods = _modules_for(_MANAGE_doc(), provider="gcp")
     assert mods["hvn_jumpbox"]["subnetwork"] == "${module.hvn_sub01.self_link}"
     assert mods["hvn_jumpbox"]["network_ip"] == "192.168.56.4"
 
@@ -1263,12 +1263,12 @@ def test_gcp_leaves_the_jumpbox_in_the_range_segment():
 def test_internal_ip_pins_the_exact_address_proxmox():
     # Proxmox's ip_address carries the prefix length too (static config, not a
     # bare address), so it is checked separately from the other providers.
-    kingslanding = _modules_for(_range_doc(), provider="proxmox")["hvn_kingslanding"]
+    kingslanding = _modules_for(_MANAGE_doc(), provider="proxmox")["hvn_kingslanding"]
     assert kingslanding["ip_address"] == "192.168.56.10/24"
 
 
 def test_internal_ip_pins_the_exact_address_esxi():
-    kingslanding = _modules_for(_range_doc(), provider="esxi")["hvn_kingslanding"]
+    kingslanding = _modules_for(_MANAGE_doc(), provider="esxi")["hvn_kingslanding"]
     assert kingslanding["ip_address"] == "192.168.56.10"
 
 
@@ -1277,7 +1277,7 @@ def test_unset_internal_ip_leaves_the_default_dhcp_assignment(provider):
     """A host with no internal_ip on its overlay renders no pinned-address
     argument on GCP/AWS at all, so the provider keeps assigning one from the
     subnet's DHCP range exactly as before this feature existed."""
-    doc = _range_doc()
+    doc = _MANAGE_doc()
     kingslanding = next(n for n in doc["nodes"] if n["id"] == "kingslanding")
     del kingslanding["overlay"]["internal_ip"]
     key = "network_ip" if provider == "gcp" else "private_ip"
@@ -1286,7 +1286,7 @@ def test_unset_internal_ip_leaves_the_default_dhcp_assignment(provider):
 
 # -- auto stop (0057)
 
-def test_a_range_does_not_stop_itself_unless_asked(redstack):
+def test_a_MANAGE_does_not_stop_itself_unless_asked(redstack):
     """Off by default, deliberately: a range that disappears underneath someone
     is worse than one that bills. Nothing should be emitted when unset."""
     main = generate(redstack, provider="gcp")["terraform/main.tf"]
@@ -1377,7 +1377,7 @@ def test_the_azure_timezone_is_not_silently_translated(redstack):
 
 # -- ops mode opens the operator's own stack internally
 
-def test_ops_stack_is_open_internally_but_a_range_is_not(redstack):
+def test_ops_stack_is_open_internally_but_a_MANAGE_is_not(redstack):
     """An offense platform is the operator's own infrastructure, not a target,
     and segmenting it only creates friction -- the Windows operator box could
     not SSH the teamservers its own saved sessions point at, and the jumpbox
@@ -1398,7 +1398,7 @@ def test_ops_stack_is_open_internally_but_a_range_is_not(redstack):
         assert rule["allow"][0]["protocol"] == "all"
 
 
-def test_a_range_keeps_strictly_edge_derived_rules():
+def test_a_MANAGE_keeps_strictly_edge_derived_rules():
     """The mirror of the above, against a real shipped range template rather
     than a fixture, since this is the half that must not regress."""
     import json
@@ -1456,18 +1456,18 @@ def test_the_operator_setup_script_carries_no_stray_carriage_return():
     assert text.count("__RSP_KEY__%%") == 5, "one key path per saved session"
 
 
-def _stopping_range_doc():
-    doc = _range_doc()
+def _stopping_MANAGE_doc():
+    doc = _MANAGE_doc()
     doc["auto_stop"] = {"enabled": True, "at": "23:40", "timezone": "UTC"}
     return doc
 
 
-def test_aws_stops_the_range_with_a_schedule_and_no_lambda():
+def test_aws_stops_the_MANAGE_with_a_schedule_and_no_lambda():
     """AWS has no per-instance schedule -- no answer to GCP's resource policy or
     Azure's shutdown setting -- so the stop is one EventBridge schedule calling
     the SDK directly through the universal target. No Lambda to write or pay for.
     """
-    main = files(_stopping_range_doc(), provider="aws")["terraform/main.tf"]
+    main = files(_stopping_MANAGE_doc(), provider="aws")["terraform/main.tf"]
     assert 'resource "aws_scheduler_schedule" "auto_stop"' in main
     assert "arn:aws:scheduler:::aws-sdk:ec2:stopInstances" in main
     assert 'cron(40 23 * * ? *)' in main
@@ -1482,7 +1482,7 @@ def test_the_stop_permission_is_a_role_not_a_credential_on_a_host():
     (minimize-jumpbox-web-surface). EventBridge assumes the role itself, so no
     key material lands anywhere, and the policy names one action.
     """
-    main = files(_stopping_range_doc(), provider="aws")["terraform/main.tf"]
+    main = files(_stopping_MANAGE_doc(), provider="aws")["terraform/main.tf"]
     assert 'resource "aws_iam_role" "auto_stop"' in main
     assert '"scheduler.amazonaws.com"' in main
     flat = re.sub(r"[ \t]+", " ", main)
@@ -1499,7 +1499,7 @@ def test_no_auto_stop_means_no_iam_resource_at_all():
     cannot create roles would fail the apply on it. A range that never asked for
     a TTL should not meet that failure.
     """
-    doc = _range_doc()
+    doc = _MANAGE_doc()
     # The shared range fixture already asks for a TTL, so take it away rather
     # than assuming its absence.
     doc.pop("auto_stop", None)
@@ -1510,7 +1510,7 @@ def test_no_auto_stop_means_no_iam_resource_at_all():
 
 def test_every_host_is_named_in_the_stop_list():
     """A schedule that stops some of the range still bills for the rest."""
-    doc = _stopping_range_doc()
+    doc = _stopping_MANAGE_doc()
     main = files(doc, provider="aws")["terraform/main.tf"]
     body = main[main.index("aws_scheduler_schedule"):]
     hosts = [n["id"] for n in doc["nodes"]

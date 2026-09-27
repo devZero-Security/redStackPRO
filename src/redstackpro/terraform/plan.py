@@ -595,15 +595,15 @@ def outputs(plan):
         "}",
     ]
 
-    # Per-host identifiers for range.sh (status/start/stop), so those act on
+    # Per-host identifiers for manage.sh (status/start/stop), so those act on
     # exactly this range's own instances and never the whole account or
     # project. Only aws and gcp are wired: aws targets an instance by id, gcp
     # by name plus zone, and every host module already exposes what its
-    # provider needs. See deploy.py generate_range_script.
+    # provider needs. See deploy.py generate_manage_script.
     if plan.provider in ("aws", "gcp"):
         lines += [
             "",
-            "# Consumed by range.sh (status/start/stop). Not the whole account",
+            "# Consumed by manage.sh (status/start/stop). Not the whole account",
             "# or project, only this range's own hosts.",
             'output "redstackpro_instances" {',
             "  value = {",

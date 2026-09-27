@@ -12,7 +12,7 @@ under src/redstackpro/assets/ rather than at the repo root.
 from pathlib import Path
 
 from .ansible import generate as generate_ansible
-from .deploy import generate_deploy_script, generate_range_script
+from .deploy import generate_deploy_script, generate_manage_script
 from .naming import platform_account
 from .registry import Registry
 from .terraform import GenerationError
@@ -210,22 +210,22 @@ you, and a re-run that finds the listener already signed does not repeat it.
 
 ## Managing the deployment
 
-Once it is up, `range.ps1` (or `range.sh` from Git Bash, macOS, or Linux) checks
-on it and tears it down. Same wrapper pattern as the deploy: `.\\range.ps1` on
-Windows, `bash range.sh` everywhere else.
+Once it is up, `manage.ps1` (or `manage.sh` from Git Bash, macOS, or Linux) checks
+on it and tears it down. Same wrapper pattern as the deploy: `.\\manage.ps1` on
+Windows, `bash manage.sh` everywhere else.
 
 ```powershell
-.\\range.ps1 status
-.\\range.ps1 start
-.\\range.ps1 stop
-.\\range.ps1 teardown
+.\\manage.ps1 status
+.\\manage.ps1 start
+.\\manage.ps1 stop
+.\\manage.ps1 teardown
 ```
 
 ```bash
-bash range.sh status
-bash range.sh start
-bash range.sh stop
-bash range.sh teardown
+bash manage.sh status
+bash manage.sh start
+bash manage.sh stop
+bash manage.sh teardown
 ```
 
 `status` prints the Guacamole portal URL and the state of every host. `start`
@@ -354,22 +354,22 @@ Working from the jumpbox itself avoids the proxy and the agent entirely.
 
 ## Managing the range
 
-Once it is up, `range.ps1` (or `range.sh` from Git Bash, macOS, or Linux) checks
-on it and tears it down. Same wrapper pattern as the deploy: `.\\range.ps1` on
-Windows, `bash range.sh` everywhere else.
+Once it is up, `manage.ps1` (or `manage.sh` from Git Bash, macOS, or Linux) checks
+on it and tears it down. Same wrapper pattern as the deploy: `.\\manage.ps1` on
+Windows, `bash manage.sh` everywhere else.
 
 ```powershell
-.\\range.ps1 status
-.\\range.ps1 start
-.\\range.ps1 stop
-.\\range.ps1 teardown
+.\\manage.ps1 status
+.\\manage.ps1 start
+.\\manage.ps1 stop
+.\\manage.ps1 teardown
 ```
 
 ```bash
-bash range.sh status
-bash range.sh start
-bash range.sh stop
-bash range.sh teardown
+bash manage.sh status
+bash manage.sh start
+bash manage.sh stop
+bash manage.sh teardown
 ```
 
 `status` prints the Guacamole portal URL and the state of every host. `start`
@@ -433,7 +433,7 @@ def static_files(provider="gcp"):
 
 # Every native backend knows the Windows host kinds, which in the registry is the
 # `windows_image` capability. Module scope rather than a local, because the canvas
-# offers the same set and test_range_providers_sync pins the two together -- this
+# offers the same set and test_MANAGE_providers_sync pins the two together -- this
 # list and the toolbar's used to disagree, and esxi was the casualty.
 RANGE_PROVIDERS = ("aws", "gcp", "proxmox", "azure", "esxi")
 
@@ -488,12 +488,12 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
             files["deploy.tfvars"] = files.pop("terraform/terraform.tfvars")
         # Managing what deploy.sh stood up: status, start, stop, teardown.
         # Ships alongside deploy.sh/.ps1 under the same condition, a jumpbox to
-        # act through, and never without it. See deploy.py generate_range_script.
-        range_script = generate_range_script(document, registry, provider=provider)
-        if range_script:
-            files["range.sh"] = range_script
-            from .deploy import RANGE_PS1
-            files["range.ps1"] = RANGE_PS1
+        # act through, and never without it. See deploy.py generate_manage_script.
+        manage_script = generate_manage_script(document, registry, provider=provider)
+        if manage_script:
+            files["manage.sh"] = manage_script
+            from .deploy import MANAGE_PS1
+            files["manage.ps1"] = MANAGE_PS1
     files["DEPLOYMENT-GUIDE.md"] = (RANGE_README if is_range else README).format(
         name=document.get("name", "redStackPRO export"),
         provider=provider,

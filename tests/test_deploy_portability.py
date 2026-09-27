@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 from redstackpro import Registry
-from redstackpro.deploy import generate_deploy_script, generate_range_script
+from redstackpro.deploy import generate_deploy_script, generate_manage_script
 from redstackpro.export import compile_topology
 
 from shipped import example
@@ -394,63 +394,63 @@ def test_a_topology_with_no_jumpbox_has_no_deploy_script_to_log():
     assert generate_deploy_script(doc, Registry()) is None
 
 
-# -- range.sh (status/start/stop/teardown, the other half of managing a deploy)
+# -- manage.sh (status/start/stop/teardown, the other half of managing a deploy)
 
 @pytest.fixture(scope="module")
-def range_script():
-    return generate_range_script(example("redstack.json"), Registry(), provider="gcp")
+def manage_script():
+    return generate_manage_script(example("redstack.json"), Registry(), provider="gcp")
 
 
-def test_range_script_absent_without_a_jumpbox():
-    """Nothing was deployed through a jumpbox, so there is nothing for range.sh to
+def test_manage_script_absent_without_a_jumpbox():
+    """Nothing was deployed through a jumpbox, so there is nothing for manage.sh to
     manage. Mirrors deploy.sh's own gate."""
     doc = example("redstack.json")
     doc["nodes"] = [n for n in doc["nodes"] if n["kind"] != "jumpbox"]
     doc["edges"] = [e for e in doc["edges"]
                     if not (e["source"].startswith("jump") or e["target"].startswith("jump"))]
-    assert generate_range_script(doc, Registry()) is None
+    assert generate_manage_script(doc, Registry()) is None
 
 
-def test_range_script_has_all_four_subcommands(range_script):
+def test_manage_script_has_all_four_subcommands(manage_script):
     for word in ("status", "start", "stop", "teardown"):
-        assert word in range_script
-    assert "usage: bash range.sh status|start|stop|teardown" in range_script
+        assert word in manage_script
+    assert "usage: bash manage.sh status|start|stop|teardown" in manage_script
 
 
-def test_range_script_rejects_an_unknown_subcommand(range_script):
-    usage = range_script.index("usage: bash range.sh")
-    exit1 = range_script.index("exit 1", usage)
+def test_manage_script_rejects_an_unknown_subcommand(manage_script):
+    usage = manage_script.index("usage: bash manage.sh")
+    exit1 = manage_script.index("exit 1", usage)
     assert exit1 > usage, "an unrecognized subcommand does not print usage and stop"
 
 
-def test_teardown_copies_deploy_tfvars_before_destroying(range_script):
+def test_teardown_copies_deploy_tfvars_before_destroying(manage_script):
     """Same handoff as deploy.sh: the editable config lives at the export root as
     deploy.tfvars, and terraform only auto-loads terraform/terraform.tfvars, so
     destroy needs that copy too or it runs with no vars at all."""
-    teardown = range_script[range_script.index('"$cmd" = "teardown"'):]
+    teardown = manage_script[manage_script.index('"$cmd" = "teardown"'):]
     assert "cp deploy.tfvars terraform/terraform.tfvars" in teardown
     copy_at = teardown.index("cp deploy.tfvars")
     destroy_at = teardown.index("terraform -chdir=terraform destroy -auto-approve")
     assert copy_at < destroy_at
 
 
-def test_status_start_stop_never_run_before_the_teardown_check(range_script):
+def test_status_start_stop_never_run_before_the_teardown_check(manage_script):
     """teardown must not fall through into the instance lookup meant for the
     other three subcommands: it has its own exit, before either one is reached."""
-    teardown_at = range_script.index('"$cmd" = "teardown"')
-    exit_at = range_script.index("exit $?", teardown_at)
-    status_at = range_script.index('"$cmd" = "status"', teardown_at)
-    instances_at = range_script.index("redstackpro_instances", teardown_at)
+    teardown_at = manage_script.index('"$cmd" = "teardown"')
+    exit_at = manage_script.index("exit $?", teardown_at)
+    status_at = manage_script.index('"$cmd" = "status"', teardown_at)
+    instances_at = manage_script.index("redstackpro_instances", teardown_at)
     assert teardown_at < exit_at < status_at < instances_at
 
 
-def test_status_prints_the_guacamole_portal_url(range_script):
-    assert 'output -json guacamole' in range_script
-    assert "portal:" in range_script
+def test_status_prints_the_guacamole_portal_url(manage_script):
+    assert 'output -json guacamole' in manage_script
+    assert "portal:" in manage_script
 
 
 def test_aws_targets_instances_by_id():
-    aws = generate_range_script(example("redstack.json"), Registry(), provider="aws")
+    aws = generate_manage_script(example("redstack.json"), Registry(), provider="aws")
     assert "redstackpro_instances" in aws
     assert "aws ec2 start-instances --instance-ids" in aws
     assert "aws ec2 stop-instances --instance-ids" in aws
@@ -459,7 +459,7 @@ def test_aws_targets_instances_by_id():
 
 
 def test_gcp_targets_instances_by_name_and_zone():
-    gcp = generate_range_script(example("redstack.json"), Registry(), provider="gcp")
+    gcp = generate_manage_script(example("redstack.json"), Registry(), provider="gcp")
     assert "redstackpro_instances" in gcp
     assert "gcloud compute instances start" in gcp
     assert "gcloud compute instances stop" in gcp
@@ -471,37 +471,37 @@ def test_an_untested_provider_still_gets_teardown_but_says_so_for_the_rest():
     """Only aws and gcp are wired for live status/start/stop. A provider without
     that support must not block the export or the teardown path, which is
     provider agnostic; it just has to say plainly that the rest is not there."""
-    other = generate_range_script(example("redstack.json"), Registry(), provider="azure")
+    other = generate_manage_script(example("redstack.json"), Registry(), provider="azure")
     assert other is not None
     assert "terraform -chdir=terraform destroy -auto-approve" in other
     assert "not implemented" in other
 
 
-def test_range_sh_is_syntactically_valid_bash(range_script):
+def test_MANAGE_sh_is_syntactically_valid_bash(manage_script):
     """The executed check for this file: a template edited by hand is exactly
     how a stray unmatched brace or quote gets shipped to every export."""
     bash = _bash()
     if bash is None:
         pytest.skip("no bash to syntax-check the emitted script")
-    done = subprocess.run([bash, "-n", "-c", range_script],
+    done = subprocess.run([bash, "-n", "-c", manage_script],
                           capture_output=True, text=True)
     assert done.returncode == 0, done.stderr
 
 
-def test_range_ps1_wraps_git_bash_and_forwards_the_subcommand(tmp_path):
+def test_MANAGE_ps1_wraps_git_bash_and_forwards_the_subcommand(tmp_path):
     files = compile_topology(example("redstack.json"), Registry(), provider="gcp")
-    assert "range.ps1" in files
-    wrapper = files["range.ps1"]
+    assert "manage.ps1" in files
+    wrapper = files["manage.ps1"]
     assert "Git\\bin\\bash.exe" in wrapper
     assert "System32" in wrapper, "the wrapper does not explain the trap it avoids"
-    assert "range.sh" in wrapper
+    assert "manage.sh" in wrapper
 
 
-def test_range_scripts_ship_only_alongside_the_deploy():
+def test_manage_scripts_ship_only_alongside_the_deploy():
     """Both only mean anything once something has been deployed through a
     jumpbox, exactly like deploy.sh/deploy.ps1."""
     doc = {"schema_version": "0.6.0", "mode": "artie", "name": "no jumpbox",
            "nodes": [], "edges": []}
     files = compile_topology(doc, Registry(), provider="gcp")
-    assert "range.sh" not in files
-    assert "range.ps1" not in files
+    assert "manage.sh" not in files
+    assert "manage.ps1" not in files

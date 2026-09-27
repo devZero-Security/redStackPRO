@@ -36,7 +36,7 @@ def test_deploy_script_is_mode_aware(registry):
     assert "win_ping" not in ops and "!jumpboxes" not in ops
 
 
-def test_range_deploy_script_provisions_the_jumpbox_in_a_pass_of_its_own(registry):
+def test_MANAGE_deploy_script_provisions_the_jumpbox_in_a_pass_of_its_own(registry):
     # A range limits the jumpbox out of the AD retry loop, so something else has
     # to run its play: for the first year nothing did, and every range came up
     # with no Guacamole portal and no assumed-breach foothold account while the
@@ -203,25 +203,25 @@ def test_readme_hints_are_provider_specific(redstack, registry):
     assert "Marketplace" not in gcp
 
 
-# -- range.sh / range.ps1 (status, start, stop, teardown)
+# -- manage.sh / manage.ps1 (status, start, stop, teardown)
 
-def test_range_scripts_ship_alongside_the_deploy(redstack, registry):
+def test_manage_scripts_ship_alongside_the_deploy(redstack, registry):
     """Only meaningful once something has been deployed through a jumpbox,
     exactly like deploy.sh/deploy.ps1, and they ship or vanish together."""
     files = compile_topology(redstack, registry=registry, provider="gcp")
-    assert "range.sh" in files
-    assert "range.ps1" in files
+    assert "manage.sh" in files
+    assert "manage.ps1" in files
 
 
-def test_range_script_is_provider_correct(redstack, registry):
-    aws = compile_topology(redstack, registry=registry, provider="aws")["range.sh"]
-    gcp = compile_topology(redstack, registry=registry, provider="gcp")["range.sh"]
+def test_manage_script_is_provider_correct(redstack, registry):
+    aws = compile_topology(redstack, registry=registry, provider="aws")["manage.sh"]
+    gcp = compile_topology(redstack, registry=registry, provider="gcp")["manage.sh"]
     assert "aws ec2 start-instances" in aws and "gcloud" not in aws
     assert "gcloud compute instances start" in gcp and "aws ec2" not in gcp
 
 
 def test_deployment_guide_documents_managing_the_range(redstack, registry):
     guide = compile_topology(redstack, registry=registry, provider="gcp")["DEPLOYMENT-GUIDE.md"]
-    assert "range.ps1" in guide
-    assert "range.sh" in guide
+    assert "manage.ps1" in guide
+    assert "manage.sh" in guide
     assert "teardown" in guide
