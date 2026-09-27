@@ -821,6 +821,31 @@ def test_vpn004_duplicate_operator_handle_is_an_error(minimal):
     assert "VPN004" not in codes(minimal)
 
 
+def test_vpn005_unsafe_operator_handle_is_an_error(minimal):
+    """The handle reaches shell, filenames and SQL on the jumpbox, and the schema
+    pattern is not enforced at compile, so this rule is the gate. A space, an
+    uppercase letter, a shell metacharacter or an over-long handle all error."""
+    jb = _jumpbox(minimal)
+    jb["overlay"]["access_mode"] = "wireguard"
+    for bad in ("mike jones", "Mike", "a;rm -rf", "bob/../x", "x" * 33):
+        jb["overlay"]["operators"] = [{"handle": bad}]
+        assert "VPN005" in errors(minimal), bad
+    jb["overlay"]["operators"] = [{"handle": "j.smith"}, {"handle": "alice-1"}]
+    assert "VPN005" not in codes(minimal)
+
+
+def test_vpn006_unsafe_operator_role_is_an_error(minimal):
+    """The role is free-form but lands in the briefing table and the portal seed,
+    so a newline or a pipe or an over-long role errors; a normal label is fine."""
+    jb = _jumpbox(minimal)
+    jb["overlay"]["access_mode"] = "wireguard"
+    for bad in ("lead\ninjected", "a|b", "x" * 65):
+        jb["overlay"]["operators"] = [{"handle": "mike", "role": bad}]
+        assert "VPN006" in errors(minimal), repr(bad)
+    jb["overlay"]["operators"] = [{"handle": "mike", "role": "team lead (EU)"}]
+    assert "VPN006" not in codes(minimal)
+
+
 def test_shipped_examples_have_no_vpn_findings():
     """Templates omit the new fields, so they must stay clean of the VPN rules.
     This step makes the fields legal, it does not add them to any template."""

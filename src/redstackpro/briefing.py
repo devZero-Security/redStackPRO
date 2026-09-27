@@ -68,6 +68,13 @@ def _tok(ctx, node_id, field):
     return PLACEHOLDER % (ctx.name(node_id), field)
 
 
+def _cell(value):
+    """A value safe to drop in a markdown table cell: a literal pipe would start a
+    new column and a newline a new row, so both are neutralised. Operator handles
+    and roles are validated (VPN005/VPN006), this is the second line of defence."""
+    return str(value).replace("|", r"\|").replace("\r", " ").replace("\n", " ")
+
+
 def _domain_of(ctx, host_id):
     for e in ctx.by_role.get("joins", []):
         if e["source"] == host_id and ctx.kind(e["target"]) == "domain":
@@ -208,9 +215,9 @@ def range_briefing(document, registry=None):
             lines += ["", header, rule]
             if operators:
                 for op in operators:
-                    handle = op.get("handle", "-")
+                    handle = _cell(op.get("handle", "-"))
                     row = "| %s | %s | `%s` / lab password |" % (
-                        handle, op.get("role", "-"), handle)
+                        handle, _cell(op.get("role", "-")), handle)
                     if ext:
                         row += " `%s/%s.%s` |" % (vpn_dir, handle, ext)
                     lines.append(row)

@@ -89,7 +89,9 @@ ON CONFLICT DO NOTHING;
 -- by USER, so these accounts pick up every tile without a per-account grant.
 {% for op in redstackpro_jumpbox_operators | default([]) %}
 {%   if op.handle not in admins %}
--- operator {{ op.handle }}{{ ' (' ~ op.role ~ ')' if op.role is defined else '' }}
+{# role is validated (VPN006) but sanitized here too: it lands in this executed
+   seed, and a newline in a -- comment would otherwise run as SQL. #}
+-- operator {{ op.handle }}{{ ' (' ~ (op.role | replace('\n', ' ') | replace('\r', ' ')) ~ ')' if op.role is defined else '' }}
 {{ account(op.handle) }}
 {%   endif %}
 {% endfor %}

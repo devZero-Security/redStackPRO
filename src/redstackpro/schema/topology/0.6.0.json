@@ -769,11 +769,14 @@
               "handle": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9._-]*$",
-                "description": "The operator's login handle, lowercase. Keys the portal account and the VPN credential, so it is unique within the range."
+                "maxLength": 32,
+                "description": "The operator's login handle, lowercase. Keys the portal account and the VPN credential, so it is unique within the range. Interpolated into shell, filenames and SQL at apply, so the charset is strict (VPN005)."
               },
               "role": {
                 "type": "string",
-                "description": "Optional free-form label for the operator, e.g. lead or trainee. Advisory only for now."
+                "pattern": "^[^\\r\\n|]+$",
+                "maxLength": 64,
+                "description": "Optional free-form label for the operator, e.g. lead or trainee. Advisory only for now. A single line, no pipe character (it lands in the briefing table and the portal seed): VPN006."
               }
             }
           }

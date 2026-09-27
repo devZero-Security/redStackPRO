@@ -8,6 +8,7 @@ means adding a function and listing it in RULES.
 """
 
 import ipaddress
+import re
 
 from .findings import finding
 from .migrate import PUBLIC_BY_DEFAULT
@@ -743,6 +744,18 @@ def _jumpbox_access(node):
             ov.get("operators") or [])
 
 
+# The compile-time gate on operator handles and roles. The JSON schema carries a
+# handle pattern, but nothing enforces the schema at compile (validate and the
+# canvas run only these semantic rules), so a handle reaches the export unchecked
+# without this. Both values are interpolated into shell, filenames and SQL on the
+# jumpbox at apply, so a handle is held to a strict, metacharacter-free charset,
+# and the free-form role is held to a single short line. See VPN005/VPN006.
+_OPERATOR_HANDLE_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+_OPERATOR_HANDLE_MAX = 32
+_OPERATOR_ROLE_RE = re.compile(r"^[^\r\n|]+$")
+_OPERATOR_ROLE_MAX = 64
+
+
 def vpn001_wireguard_tcp(ctx):
     """WireGuard runs over udp only, so access_mode wireguard with vpn_protocol
     tcp names a listener that cannot exist. An error: the export would render an
@@ -814,6 +827,51 @@ def vpn004_duplicate_operator_handle(ctx):
                 "{name} has duplicate operator handles: {dupes}.",
                 remedy="A handle is one per operator; rename or remove the copies.",
                 name=self_name(ctx, n), dupes=", ".join(dupes))
+
+
+def vpn005_operator_handle_charset(ctx):
+    """An operator handle keys a filename, a portal account, a WireGuard peer and
+    an OpenVPN certificate CN, and it is interpolated into shell and SQL on the
+    jumpbox at apply. The schema pattern is not enforced at compile, so this rule
+    is the gate: a handle is lowercase letters, digits, dot, underscore or hyphen,
+    starts with a letter or digit, and stays short. An error: a malformed handle
+    would break the deploy, and an unchecked one is an injection risk."""
+    for n in ctx.of_kind("jumpbox"):
+        _, _, operators = _jumpbox_access(n)
+        bad = [op.get("handle") for op in operators
+               if op.get("handle")
+               and (not _OPERATOR_HANDLE_RE.match(op["handle"])
+                    or len(op["handle"]) > _OPERATOR_HANDLE_MAX)]
+        if bad:
+            yield finding(
+                "VPN005", "error", [n["id"]],
+                "{name} has operator handles that are not safe to deploy: {bad}. A "
+                "handle is lowercase letters, digits, dot, underscore or hyphen, "
+                "starts with a letter or digit, and is at most {max} characters.",
+                remedy="Rename each handle to that form.",
+                name=self_name(ctx, n), max=_OPERATOR_HANDLE_MAX,
+                bad=", ".join(repr(b) for b in bad))
+
+
+def vpn006_operator_role_charset(ctx):
+    """An operator role is free-form and advisory, but it is written into the
+    briefing table and, as a comment, into the Guacamole seed SQL, so a newline
+    or a pipe corrupts the table or could break out of the SQL comment. Keep it a
+    single short line. An error, for the same apply-safety reason as VPN005."""
+    for n in ctx.of_kind("jumpbox"):
+        _, _, operators = _jumpbox_access(n)
+        bad = [op.get("handle") or op.get("role") for op in operators
+               if op.get("role")
+               and (not _OPERATOR_ROLE_RE.match(op["role"])
+                    or len(op["role"]) > _OPERATOR_ROLE_MAX)]
+        if bad:
+            yield finding(
+                "VPN006", "error", [n["id"]],
+                "{name} has operator roles that are not safe to deploy (a role is a "
+                "single line, no pipe character, at most {max} characters): {bad}.",
+                remedy="Shorten the role and remove any newline or pipe character.",
+                name=self_name(ctx, n), max=_OPERATOR_ROLE_MAX,
+                bad=", ".join(str(b) for b in bad))
 
 
 # ---------------------------------------------------------------- peering
@@ -1318,6 +1376,8 @@ RULES = [
     vpn002_vpn_access_is_artie_only,
     vpn003_vpn_without_operators,
     vpn004_duplicate_operator_handle,
+    vpn005_operator_handle_charset,
+    vpn006_operator_role_charset,
     peer001_self_peer,
     peer002_duplicate_peer,
     peer003_cidr_overlap,

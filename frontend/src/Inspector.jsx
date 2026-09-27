@@ -445,17 +445,38 @@ function DomainAcls({ node, onChange }) {
 // becomes a portal account and, on a VPN access mode, gets a personal VPN
 // credential generated on the jumpbox at apply. Reuses the acls row styling. See
 // vpn-multiuser-spec.
+//
+// A handle is interpolated into shell, filenames and SQL on the jumpbox at apply,
+// so it is held to a strict charset here (matches VPN005), and the free-form role
+// to a single short line (VPN006), rather than letting a bad value through to fail
+// only at compile.
+const OPERATOR_HANDLE_RE = /^[a-z0-9][a-z0-9._-]*$/;
 function Operators({ node, onChange }) {
   const operators = (node.overlay || {}).operators || [];
   const [handle, setHandle] = useState("");
   const [role, setRole] = useState("");
+  const [err, setErr] = useState("");
 
   const set = (next) =>
     onChange({ ...(node.overlay || {}), operators: next.length ? next : undefined });
   const add = () => {
     const h = handle.trim().toLowerCase();
-    if (!h || operators.some((o) => (o.handle || "").toLowerCase() === h)) return;
-    set([...operators, role.trim() ? { handle: h, role: role.trim() } : { handle: h }]);
+    const r = role.trim();
+    if (!h) return;
+    if (!OPERATOR_HANDLE_RE.test(h) || h.length > 32) {
+      setErr("Handle: lowercase letters, digits, dot, underscore or hyphen, starting with a letter or digit, up to 32 characters.");
+      return;
+    }
+    if (operators.some((o) => (o.handle || "").toLowerCase() === h)) {
+      setErr(`${h} is already on the roster.`);
+      return;
+    }
+    if (r && (/[|\r\n]/.test(r) || r.length > 64)) {
+      setErr("Role: a single line with no pipe character, up to 64 characters.");
+      return;
+    }
+    setErr("");
+    set([...operators, r ? { handle: h, role: r } : { handle: h }]);
     setHandle("");
     setRole("");
   };
@@ -495,6 +516,7 @@ function Operators({ node, onChange }) {
         <input value={role} placeholder="role (optional)" onChange={(e) => setRole(e.target.value)} />
         <button type="button" onClick={add} disabled={!handle.trim()}>Add</button>
       </div>
+      {err ? <p className="rg-hint rg-danger-text">{err}</p> : null}
     </div>
   );
 }

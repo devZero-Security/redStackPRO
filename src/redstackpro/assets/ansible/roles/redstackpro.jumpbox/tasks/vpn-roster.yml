@@ -39,6 +39,27 @@
   ansible.builtin.set_fact:
     redstackpro_effective_operators: "{{ redstackpro_operator_roster_raw.content | b64decode | from_json }}"
 
+# The compiler gate (VPN005/VPN006) validates the topology, but the roster is
+# re-read from operators.json on every reconverge, where a live rsp-operator edit
+# or a hand-edit could have introduced an unsafe value. A handle is interpolated
+# unquoted into the wireguard/openvpn shell tasks that follow, so re-check it here
+# before any of them run, and hold the free-form role to a single safe line.
+- name: Reject an unsafe operator handle or role before it reaches a shell task
+  ansible.builtin.assert:
+    that:
+      - item.handle is defined
+      - item.handle is match('^[a-z0-9][a-z0-9._-]*$')
+      - (item.handle | length) <= 32
+      - (item.role is not defined) or (item.role is match('^[^\r\n|]+$') and (item.role | length) <= 64)
+    fail_msg: >-
+      operator entry {{ item | to_json }} is not safe to deploy: a handle is
+      lowercase letters, digits, dot, underscore or hyphen, starts alnum, at most
+      32 chars; a role is a single line with no pipe, at most 64 chars.
+    quiet: true
+  loop: "{{ redstackpro_effective_operators | default([]) }}"
+  loop_control:
+    label: "{{ item.handle | default('?') }}"
+
 - name: Install the rsp-operator management tool
   ansible.builtin.template:
     src: rsp-operator.j2
