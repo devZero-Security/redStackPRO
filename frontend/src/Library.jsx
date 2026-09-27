@@ -128,9 +128,9 @@ export function Library({
             others can clone; delete removes it and all its revisions.
           </p>
           {loading ? (
-            <p className="rg-muted">Loading.</p>
+            <p className="rg-muted rg-loading">Loading.</p>
           ) : topologies.length === 0 ? (
-            <p className="rg-muted">Nothing saved yet. Build a topology on the canvas and Save it.</p>
+            <p className="rg-muted">Nothing saved yet. Use Load template in the toolbar to start from a shipped topology, or build one and Save it.</p>
           ) : (
             <ul className="rg-library-list">
               {topologies.map((topology) => (
@@ -196,9 +196,9 @@ export function Library({
             blueprint itself stays read only.
           </p>
           {loading ? (
-            <p className="rg-muted">Loading.</p>
+            <p className="rg-muted rg-loading">Loading.</p>
           ) : blueprints.length === 0 ? (
-            <p className="rg-muted">No blueprints yet. Publish one of your topologies to add one here.</p>
+            <p className="rg-muted">No blueprints yet. Shipped starting points are under Load template in the toolbar. Publish one of your own topologies to add it here.</p>
           ) : (
             <ul className="rg-library-list">
               {blueprints.map((blueprint) => (

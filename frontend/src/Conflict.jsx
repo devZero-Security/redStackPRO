@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 
 import { conflictProse } from "./session.js";
 
@@ -12,9 +12,28 @@ import { conflictProse } from "./session.js";
 // that just won.
 
 export function ConflictDialog({ details, onReload, onFork, onDismiss, busy }) {
+  const keepRef = useRef(null);
+
+  // Match ConfirmDialog: focus the safe action (keep editing, which discards
+  // nothing) and let Esc take that same path. This dialog guards data loss, so
+  // it should not be the weaker one. Backdrop stays non-dismissible on purpose.
+  useEffect(() => {
+    keepRef.current?.focus();
+    const onKeyDown = (event) => {
+      if (event.key === "Escape" && !busy) onDismiss();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onDismiss, busy]);
+
   return (
     <div className="rg-modal-backdrop">
-      <div className="rg-modal">
+      <div
+        className="rg-modal"
+        role="alertdialog"
+        aria-modal="true"
+        aria-label="This topology moved"
+      >
         <h2>This topology moved</h2>
         <p>{conflictProse(details)}</p>
         <p className="rg-muted">
@@ -23,7 +42,7 @@ export function ConflictDialog({ details, onReload, onFork, onDismiss, busy }) {
         </p>
 
         <div className="rg-modal-actions">
-          <button onClick={onDismiss} disabled={busy}>
+          <button ref={keepRef} onClick={onDismiss} disabled={busy}>
             Keep editing
           </button>
           <button onClick={onReload} disabled={busy}>

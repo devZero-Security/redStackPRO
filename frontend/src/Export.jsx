@@ -176,7 +176,7 @@ export function ExportPanel({ document, provider }) {
     return (
       <aside className="rg-panel rg-export">
         <h2>Export</h2>
-        <p className="rg-hint">
+        <p className={busy ? "rg-hint rg-loading" : "rg-hint"}>
           {busy ? "Compiling" : "Add a node to see the working directory."}
         </p>
       </aside>
@@ -230,8 +230,9 @@ export function ExportPanel({ document, provider }) {
         </li>
       </ol>
       <p className="rg-export-note">{PLATFORMS[platform].note} Both scripts are
-        in every download, so the same export deploys from either machine.
-        DEPLOYMENT-GUIDE.md has the long version.</p>
+        in every download, so the same export deploys from either machine. After
+        it is up, manage.sh (manage.ps1 on Windows) does status, stop, start, and
+        teardown. DEPLOYMENT-GUIDE.md has the long version.</p>
 
       <div className="rg-export-split">
         <div className="rg-tree">
