@@ -1390,13 +1390,6 @@ function Editor() {
         <button onClick={tidy} title="Arrange by tier, peer networks side by side">
           Tidy
         </button>
-        <button
-          className="rg-primary"
-          onClick={() => setPanel("export")}
-          disabled={busy}
-        >
-          View working directory
-        </button>
       </header>
 
       <div className="rg-body">
