@@ -235,6 +235,11 @@ cloud account or project. `teardown` runs
 into place, the same handoff the deploy uses; running that raw command
 yourself from `terraform/` works too, once `terraform.tfvars` is there.
 
+To pause overnight and keep the cost down, use `manage.sh stop` and then
+`manage.sh start` the next day: this halts the instances without destroying
+anything, so the same deployment comes back. Save `teardown` for when you are
+finished with it.
+
 ## What redStackPRO did not do
 
 It did not run Terraform, hold a credential, or reach any environment. It
@@ -378,6 +383,11 @@ account or project. `teardown` runs
 `terraform -chdir=terraform destroy -auto-approve` after copying `deploy.tfvars`
 into place, the same handoff the deploy uses; running that raw command yourself
 from `terraform/` works too, once `terraform.tfvars` is there.
+
+To pause the range overnight and keep the cost down, use `manage.sh stop` and
+then `manage.sh start` the next day: this halts the instances without destroying
+anything, so the same range comes back. Save `teardown` for when you are finished
+with it.
 
 ## What redStackPRO did not do
 

@@ -102,16 +102,33 @@ def _remote_block(script, marker):
     return "\n".join(body)
 
 
-def test_a_wide_open_operator_source_ranges_warns_before_apply(script):
+def test_a_wide_open_operator_source_ranges_aborts_before_apply(script):
     """operator_source_ranges left at 0.0.0.0/0 opens the jumpbox ssh and the
-    Guacamole portal to the whole internet. It is a tfvars value, not a topology
-    field, so the topology validator never sees it and the warning lives here. It is
-    non-blocking: it warns and continues, and it warns before terraform apply."""
+    Guacamole portal to the whole internet, and a range can hold deliberately
+    vulnerable hosts. It is a tfvars value, not a topology field, so the topology
+    validator never sees it and the check lives here. It is a BLOCKING abort before
+    terraform apply, bypassable only with an explicit override env var."""
     code = _code(script)
     assert "operator_source_ranges" in code
+    # The literal 0.0.0.0/0 entry is what trips it; subnet-scoped values do not.
+    assert '"0\\.0\\.0\\.0/0"' in code
+    # An abort with the override env var, mirroring the auto-stop guard.
+    assert "REDSTACKPRO_ALLOW_OPEN_INGRESS" in code
+    # The abort is before apply, and it exits.
+    abort_at = code.index("REDSTACKPRO_ALLOW_OPEN_INGRESS")
+    assert code.index("exit 1", abort_at) < code.index('say "terraform apply"')
+
+
+def test_open_ingress_override_downgrades_the_abort_to_a_warning(script):
+    """The escape hatch for an operator who truly means an open range: setting
+    REDSTACKPRO_ALLOW_OPEN_INGRESS=1 prints the old warning and proceeds instead of
+    aborting, the same shape as REDSTACKPRO_MIN_STOP_LEAD on the auto-stop guard."""
+    code = _code(script)
+    assert 'REDSTACKPRO_ALLOW_OPEN_INGRESS:-0' in code
     warn = "WARNING: operator_source_ranges is 0.0.0.0/0"
     assert warn in script
-    assert script.index(warn) < script.index('say "terraform apply"')
+    # The message tells the user the one-line fix and the override.
+    assert "REDSTACKPRO_ALLOW_OPEN_INGRESS=1 bash deploy.sh" in script
 
 
 def test_the_deploy_does_not_need_rsync(script):
@@ -360,6 +377,28 @@ def test_a_missing_key_says_how_to_make_one(staged):
     assert done.returncode == 1
     assert "ssh-keygen -t ed25519 -f keys/id_ed25519" in done.stdout, done.stdout
     assert "ssh_public_key" in done.stdout
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_open_ingress_aborts_the_run_and_the_override_lets_it_through(staged):
+    """Executed. The shipped example's tfvars carries operator_source_ranges
+    0.0.0.0/0, so a real run must abort at the ingress check, and only the explicit
+    override may carry it past."""
+    export, stubs = staged
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    # gcloud must succeed so the run reaches the ingress check that follows it.
+    _stub(stubs, "gcloud", "exit 0")
+
+    blocked = _run(export, stubs)
+    assert blocked.returncode == 1
+    assert "operator_source_ranges is 0.0.0.0/0" in blocked.stdout, blocked.stdout
+    assert "terraform apply" not in blocked.stdout
+
+    allowed = _run(export, stubs, env_extra={"REDSTACKPRO_ALLOW_OPEN_INGRESS": "1"})
+    # The abort message names the exposure; the warning does not. Only the abort
+    # must be gone, and the run must reach apply.
+    assert "which exposes ssh and the portal" not in allowed.stdout, allowed.stdout
+    assert "terraform apply" in allowed.stdout, allowed.stdout + allowed.stderr
 
 
 # -- the deployment log (issue-triage artifact)

@@ -140,9 +140,10 @@ if [ "$RSP_STOP_LEAD" -lt "${REDSTACKPRO_MIN_STOP_LEAD:-150}" ]; then
   echo "This build stops itself at %(hour)02d:%(minute)02d %(timezone)s, which is $RSP_STOP_LEAD minutes away."
   echo "Provisioning takes up to 75 minutes, so the range would stop part-built."
   echo
-  echo "  Fix:      re-run the compile now -- auto_stop.after_hours counts from"
-  echo "            the COMPILE, not the apply, so a fresh compile resets the clock."
-  echo "  Override: REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh"
+  echo "  Override: REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh -- use this when you are"
+  echo "            re-deploying an existing export, where there is no compile to re-run."
+  echo "  Recompile: re-run the compile now -- auto_stop.after_hours counts from the"
+  echo "            COMPILE, not the apply, so a fresh compile resets the clock."
   exit 1
 fi
 """
@@ -418,11 +419,26 @@ SSH="ssh -i $KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
   exit 1
 }}
 
-{cloud_preflight}# Non-blocking: warn if management ingress is left open to the whole internet.
+{cloud_preflight}# Refuse to apply when management ingress is open to the whole internet.
 # operator_source_ranges is a tfvars value the topology validator never sees, so
-# the check happens here, at apply time. It warns and continues, never aborts.
-if grep -Eq 'operator_source_ranges[[:space:]]*=[[:space:]]*\[[[:space:]]*"0\.0\.0\.0/0"' deploy.tfvars 2>/dev/null; then
-  echo "WARNING: operator_source_ranges is 0.0.0.0/0 (ssh and the portal are open to the whole internet). Narrow it in deploy.tfvars."
+# the check happens here, at apply time. A range can hold deliberately vulnerable
+# hosts, so a literal 0.0.0.0/0 entry is a blocking abort, not a warning; it aborts
+# the same way the auto-stop guard does, with an explicit override. Subnet-scoped
+# values do not trip it: only the literal 0.0.0.0/0 does. The pattern is loose on
+# spacing and quoting and catches 0.0.0.0/0 as one entry among several.
+if grep -Eq 'operator_source_ranges[^#]*"0\.0\.0\.0/0"' deploy.tfvars 2>/dev/null; then
+  if [ "${{REDSTACKPRO_ALLOW_OPEN_INGRESS:-0}}" = "1" ]; then
+    echo "WARNING: operator_source_ranges is 0.0.0.0/0 (ssh and the portal are open to the whole internet). Narrow it in deploy.tfvars."
+  else
+    echo "operator_source_ranges is 0.0.0.0/0, which exposes ssh and the portal to the"
+    echo "entire internet. This range may contain deliberately vulnerable hosts, so an"
+    echo "open range is a mistake, not a shortcut."
+    echo
+    echo "  Fix:      set operator_source_ranges to your own IP/CIDR in deploy.tfvars,"
+    echo '            for example ["203.0.113.5/32"].'
+    echo "  Override: REDSTACKPRO_ALLOW_OPEN_INGRESS=1 bash deploy.sh"
+    exit 1
+  fi
 fi
 # deploy.tfvars is the one config file you edit, here in the export root. Terraform
 # auto-loads terraform/terraform.tfvars, so copy it into place for apply and destroy.
