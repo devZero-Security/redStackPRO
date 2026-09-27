@@ -47,8 +47,8 @@ test("an unfilled address placeholder is called out", () => {
   assert.ok(out.includes('<span class="p">'), "placeholders should be visible");
 });
 
-test("the panel says redStackPRO ran nothing", () => {
-  assert.ok(/ran nothing/.test(source), "the export note is the whole pitch");
+test("the panel states the export-only model", () => {
+  assert.ok(/under your credentials/.test(source), "the export note is the whole pitch");
   assert.ok(/refuses to run on an invalid topology/.test(source));
 });
 

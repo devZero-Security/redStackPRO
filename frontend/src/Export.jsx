@@ -211,8 +211,7 @@ export function ExportPanel({ document, provider }) {
       </div>
 
       <p className="rg-export-note">
-        redStackPRO generated this and ran nothing. You apply it, under your
-        credentials, on your machine.
+        You apply it, under your credentials, on your machine.
       </p>
 
       <ol className="rg-export-steps">
