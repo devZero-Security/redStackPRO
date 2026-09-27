@@ -1,5 +1,5 @@
-"""Blueprints are starter topologies to clone from. A seeded system one has no owner
-and is readable by anyone; a team can publish its own. A clone is a private copy.
+"""Blueprints are starter topologies to clone from. A team publishes one of its own
+topologies as a blueprint; nothing is seeded by default. A clone is a private copy.
 See 0025.
 """
 
@@ -11,7 +11,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from redstackpro.api import create_app
-from redstackpro.api.app import BLUEPRINT_REDSTACK_ID
 from redstackpro.api.principal import Principal
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -37,30 +36,31 @@ def _blueprints(client):
     return r.json()
 
 
-def test_the_starter_is_seeded_as_a_blueprint(client):
-    starters = _blueprints(client)
-    assert len(starters) == 1
-    only = starters[0]
-    assert only["is_blueprint"] is True
-    assert only["owner_id"] is None
-    # No person owns it, so no person can edit it in place.
-    assert only["editable"] is False
+def _published_blueprint(client, document):
+    """Publish a fresh topology as a blueprint and return its (owned) record."""
+    created = client.post(V1 + "/topologies",
+                          json={"name": "team template", "document": document})
+    topology_id = created.json()["id"]
+    published = client.post(V1 + "/topologies/%s/publish" % topology_id)
+    assert published.status_code == 200
+    return published.json()
 
 
-def test_the_topology_list_does_not_show_blueprints(client):
+def test_the_topology_list_does_not_show_blueprints(client, document):
+    _published_blueprint(client, document)
     assert _blueprints(client)                      # a blueprint exists
     assert client.get(V1 + "/topologies").json() == []  # and is not a topology
 
 
-def test_a_blueprint_is_readable_despite_having_no_owner(client):
-    bid = _blueprints(client)[0]["id"]
-    r = client.get(V1 + "/topologies/%s" % bid)
+def test_a_published_blueprint_is_readable(client, document):
+    blueprint = _published_blueprint(client, document)
+    r = client.get(V1 + "/topologies/%s" % blueprint["id"])
     assert r.status_code == 200
     assert r.json()["document"]["schema_version"]
 
 
-def test_cloning_makes_a_private_copy_owned_by_the_caller(client):
-    blueprint = _blueprints(client)[0]
+def test_cloning_makes_a_private_copy_owned_by_the_caller(client, document):
+    blueprint = _published_blueprint(client, document)
     r = client.post(V1 + "/blueprints/%s/clone" % blueprint["id"])
     assert r.status_code == 201
     clone = r.json()
@@ -107,8 +107,7 @@ def test_publish_then_unpublish_toggles_membership(client, document):
     assert topology_id in [g["id"] for g in client.get(V1 + "/topologies").json()]
 
 
-# A blueprint a team publishes is scoped to that team's org, unlike the seeded
-# system starter which has no owner and is global. See 0028.
+# A blueprint a team publishes is scoped to that team's org. See 0028.
 
 def test_a_published_blueprint_is_scoped_to_its_org(document):
     db_url = "sqlite+pysqlite:///" + tempfile.mktemp(suffix=".db")
@@ -121,8 +120,7 @@ def test_a_published_blueprint_is_scoped_to_its_org(document):
     outsider = TestClient(create_app(db_url, principal=Principal(
         id="u-outsider", org_id="org-elsewhere", kind="human", role="member")))
     listed = [b["id"] for b in outsider.get(V1 + "/blueprints").json()]
-    # The system starter is global; the team's blueprint is not theirs to see.
-    assert BLUEPRINT_REDSTACK_ID in listed
+    # The team's blueprint is not theirs to see.
     assert topology_id not in listed
     # And it is unreadable and unclonable, the same as a topology they cannot read.
     assert outsider.get(V1 + "/topologies/%s" % topology_id).status_code == 404

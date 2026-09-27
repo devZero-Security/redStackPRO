@@ -4,7 +4,6 @@ redStackPRO generates code and does not deploy it. Nothing here holds cloud
 credentials, runs Terraform, or reaches a target environment. See 0001.
 """
 
-import json
 import os
 from contextlib import contextmanager
 from pathlib import Path
@@ -14,14 +13,10 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from ..migrate import LATEST, migrate
+from ..migrate import LATEST
 from . import db, routes
 from .routes import TAGS
 from .principal import LOCAL_ORG_ID, LOCAL_PRINCIPAL, LOCAL_USER_ID
-
-# A fixed id so a restart re-seeds the same blueprint rather than a second one.
-# Reserved range, well clear of the generated hex ids. See 0025.
-BLUEPRINT_REDSTACK_ID = "00000000000000000000000000000010"
 
 
 def seed(session_factory):
@@ -54,45 +49,6 @@ def _ensure_schema(engine):
         upgrade_to_head(engine.url.render_as_string(hide_password=False))
 
 
-def seed_blueprints(session_factory):
-    """A starter to clone from, seeded once. It belongs to no person, so owner_id
-    is null; is_blueprint is what makes it readable by anyone. Idempotent on the
-    fixed id, so a restart does not stack copies. See 0025.
-
-    The document is migrated to the current schema on the way in, the same as any
-    ingested document, so the seed does not go stale when the schema moves."""
-    example = (Path(__file__).resolve().parents[1]
-               / "schema/topology/examples" / LATEST / "redstack.json")
-    if not example.is_file():
-        return
-    with session_factory() as sess:
-        if sess.get(db.Topology, BLUEPRINT_REDSTACK_ID) is not None:
-            return
-        document = migrate(json.loads(example.read_text(encoding="utf-8")))
-        topology = db.Topology(
-            id=BLUEPRINT_REDSTACK_ID,
-            org_id=LOCAL_ORG_ID,
-            owner_id=None,
-            name="redStack starter",
-            mode=document.get("mode", "artie"),
-            visibility="org",
-            schema_version=document["schema_version"],
-            version=1,
-            is_blueprint=True,
-        )
-        sess.add(topology)
-        sess.flush()
-        revision = db.TopologyRevision(topology_id=topology.id, version=1,
-                                    author_id=None, document=document)
-        sess.add(revision)
-        sess.flush()
-        topology.current_revision_id = revision.id
-        # The starter is published at its seeded revision, so a clone gets the
-        # curated topology rather than nothing. See 0028.
-        topology.published_revision_id = revision.id
-        sess.commit()
-
-
 def _static_dir():
     """The built canvas to serve, or None. REDSTACKPRO_STATIC_DIR overrides the
     repo-relative frontend/dist; without a build the API stays headless (dev uses vite)."""
@@ -107,7 +63,6 @@ def create_app(database_url=None, principal=None):
     _ensure_schema(engine)
     session_factory = db.make_session_factory(engine)
     seed(session_factory)
-    seed_blueprints(session_factory)
 
     app = FastAPI(
         title="redStackPRO",
