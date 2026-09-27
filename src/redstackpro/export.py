@@ -68,25 +68,32 @@ az login
 # and the deploy fails minutes later with `Permission denied (publickey)` from
 # the jumpbox. `-N ''` is the form that yields no passphrase there. Found by
 # following the bash version of this line at a PowerShell prompt.
-MAKE_A_KEY = """**macOS, Linux, or Git Bash on Windows:**
+MAKE_A_KEY = """This is an SSH key you generate yourself. It is not your cloud
+credentials: your cloud login (for example `aws configure`, or `gcloud auth login`)
+is separate and is what applies the Terraform. This key is only how you log into the
+range hosts once they exist.
+
+**macOS, Linux, or Git Bash on Windows:**
 
 ```bash
 ssh-keygen -t ed25519 -f keys/id_ed25519 -N ""
 ```
 
-**Windows PowerShell** -- the quoting differs, and getting it wrong does not
-fail until much later:
+**Windows PowerShell** (the quoting differs, and getting it wrong does not fail until
+much later):
 
 ```powershell
 ssh-keygen -t ed25519 -f keys\\id_ed25519 -N ''
 ```
 
-`keys/` is beside this file and is where the deploy looks. Already have a key?
-Point at it instead with `REDSTACKPRO_SSH_KEY=/path/to/key`.
+That writes two files: the private key `keys/id_ed25519` (leave it in `keys/`, the
+deploy finds it there) and the public key `keys/id_ed25519.pub` (step 2 puts its one
+line into `terraform.tfvars`). Already have a key? Point at it instead with
+`REDSTACKPRO_SSH_KEY=/path/to/key`.
 
-Get this right before the first apply. The public key is written into each host's
-metadata at creation and Terraform ignores later changes to it, so changing it
-afterwards means destroying and re-applying. `keys/README.md` has the detail."""
+Get this right before the first apply. The public key is written into each host at
+creation and Terraform ignores later changes to it, so changing it afterwards means
+destroying and re-applying. `keys/README.md` has the detail."""
 
 # The deploy step is the one place the two platforms genuinely differ, so it is
 # the one place the instructions split. Everything above and below it is shared.
