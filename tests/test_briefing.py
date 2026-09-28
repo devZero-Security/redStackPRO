@@ -20,13 +20,13 @@ def _goad():
 def test_briefing_covers_boxes_accounts_users_trusts_and_siem():
     md = range_briefing(_goad())
     # The sections a hand-off needs.
-    for heading in ("Range Briefing", "## The access model", "## Access",
+    for heading in ("Defense Briefing", "## The access model", "## Access",
                     "## Credentials", "## Hosts", "## Domains & trusts",
                     "## Domain users", "## Planted attack surface"):
         assert heading in md
-    # The external red-team POV is stated up front (P0.2), and patient zero (the
+    # The external red team POV is stated up front, and patient zero (the
     # assumed_breach foothold, hodor in GOAD) is named as the entry identity.
-    assert "external red-team POV" in md
+    assert "external red team POV" in md
     assert "Patient zero" in md
     assert "Assumed-breach foothold" in md and "hodor" in md
     # Access + credentials.
@@ -75,12 +75,14 @@ def test_briefing_filename_is_mode_specific():
     # The old fixed RANGE-BRIEFING.md name is gone from both.
     files = compile_topology(_goad(), Registry(), provider="aws")
     assert "DEFENSE-BRIEFING.md" in files
-    assert "Range Briefing" in files["DEFENSE-BRIEFING.md"]
+    assert "Defense Briefing" in files["DEFENSE-BRIEFING.md"]
     assert "RANGE-BRIEFING.md" not in files
 
     redstack = load(ROOT / "frontend/public/redstack.json")
     ops_files = compile_topology(redstack, Registry(), provider="aws")
     assert "OFFENSE-BRIEFING.md" in ops_files
+    assert "Offense Briefing" in ops_files["OFFENSE-BRIEFING.md"]
+    assert "Range Briefing" not in ops_files["OFFENSE-BRIEFING.md"]
     assert "DEFENSE-BRIEFING.md" not in ops_files
 
 
