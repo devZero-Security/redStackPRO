@@ -290,7 +290,12 @@ button:disabled { opacity: 0.5; cursor: default; }
   top: 0;
   z-index: 3;
 }
-.rg-palette-labs > h3 { color: var(--accent); margin-top: 0; }
+.rg-palette-labs > h3 { margin-top: 0; }
+/* Templates box and heading carry the mode color: red on offense, blue on defense. */
+.rg-mode-artie .rg-palette-labs { border-color: var(--danger-2); }
+.rg-mode-haven .rg-palette-labs { border-color: var(--info); }
+.rg-mode-artie .rg-palette-labs > h3 { color: var(--danger-2); }
+.rg-mode-haven .rg-palette-labs > h3 { color: var(--info); }
 .rg-palette-lab {
   flex-direction: column;
   align-items: stretch;
