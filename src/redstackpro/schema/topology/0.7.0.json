@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://redstackpro.dev/schema/topology/0.7.0.json",
   "title": "redStackPRO topology",
-  "description": "Provider-agnostic topology document. No provider vocabulary appears at this layer. Derived overlay fields and per-kind requirements live in the node kind registry, not in this document. Version 0.1.0 covers ops mode only.",
+  "description": "Provider-agnostic topology document. No provider vocabulary appears at this layer. Derived overlay fields and per-kind requirements live in the node kind registry, not in this document. Version 0.7.0 covers offense and defense modes.",
   "type": "object",
   "required": [
     "schema_version",
@@ -32,7 +32,7 @@
     "prefix": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9]{0,7}$",
-      "description": "Instance prefix, composed with every node id to form the rendered name. off-myth-ts01 is prefix off and id myth-ts01. Defaults to off for offense and def for defense, and the person can change it. Per graph rather than per node, because rendering the same template for several operators is a change to one field. Kept short: prefix plus id must fit the 15 character NetBIOS limit."
+      "description": "Instance prefix, composed with every node id to form the rendered name. off-myth-ts01 is prefix off and id myth-ts01. Defaults to off for offense and def for defense, and the person can change it. Per graph rather than per node, because rendering the same template for several operators is a change to one field. Kept short: prefix plus id must fit the 15 character NetBIOS limit. Give each concurrent range a distinct prefix so their host names stay distinguishable; account-global cloud names carry an automatic per-deployment suffix, so ranges never collide even on a shared prefix."
     },
     "description": {
       "type": "string"
@@ -883,7 +883,7 @@
               },
               "assumed_breach": {
                 "type": "boolean",
-                "description": "Marks this account as the range's assumed-breach foothold (patient zero): the low-priv identity an operator starts from, per the external red-team access model. The range briefing names it. Absent means not the foothold."
+                "description": "Marks this account as the range's assumed-breach foothold (patient zero): the low-priv identity an operator starts from, per the external red team access model. The range briefing names it. Absent means not the foothold."
               },
               "description": {
                 "type": "string",

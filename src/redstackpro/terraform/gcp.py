@@ -188,7 +188,8 @@ region         = "%s"
 zone           = "%s-a"
 ssh_public_key = ""
 
-# Narrow this to the addresses operators connect from.
+# Narrow this to the addresses operators connect from. You can list several:
+# add one /32 per operator, or a CIDR, e.g. ["203.0.113.5/32", "198.51.100.7/32"].
 operator_source_ranges = ["0.0.0.0/0"]
 """ % (plan.region, plan.region)
 
@@ -379,7 +380,7 @@ def _main(plan):
         # The offense Windows operator self-provisions its kit at boot (it has no
         # WinRM and Ansible never reaches it), so it takes the operator setup
         # script verbatim as a metadata key plus a hosts block for its MobaXterm
-        # sessions. Ops-mode only: a range's Windows hosts are driven by Ansible.
+        # sessions. Offense only: a range's Windows hosts are driven by Ansible.
         if (not is_range and node["kind"] == "operator"
                 and plan.is_windows(node)):
             pairs += [
@@ -396,7 +397,7 @@ def _main(plan):
             ]
         # GCP's Windows images are 50 GB, so a Windows boot disk must be at least
         # that large (the module default of 30 is fine for Linux but GCP rejects
-        # it for Windows). This applies in ops mode too (the offense Windows
+        # it for Windows). This applies in offense mode too (the offense Windows
         # operator), not just ranges, so it lives outside the is_range block.
         # Exchange needs far more for the ISO and install.
         services = node.get("overlay", {}).get("services") or []
@@ -504,7 +505,7 @@ def _firewall(plan):
     ]
     seen = set()
 
-    # OPS MODE ONLY: the stack's own hosts reach each other freely.
+    # OFFENSE ONLY: the stack's own hosts reach each other freely.
     #
     # An offense platform is the operator's own infrastructure, not a target.
     # Segmenting it buys nothing to defend against and costs real friction: the

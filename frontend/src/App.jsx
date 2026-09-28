@@ -1507,13 +1507,13 @@ function Editor() {
         />
         <label
           className="rg-prefix"
-          title="Prepended to every host's name, e.g. off for Offense or def for Defense"
+          title="Prepended to every host's name (off for Offense, def for Defense). Give each concurrent range a distinct prefix to keep host names clear."
         >
           prefix
           <input
             value={document.prefix}
             size={6}
-            title="Prepended to every host's name, e.g. off for Offense or def for Defense"
+            title="Prepended to every host's name (off for Offense, def for Defense). Give each concurrent range a distinct prefix to keep host names clear."
             onChange={(e) =>
               history.coalesce("prefix", (current) => ({ ...current, prefix: e.target.value }))
             }

@@ -160,7 +160,8 @@ location        = "eastus"
 resource_group  = "redstackpro-range"
 ssh_public_key  = ""
 
-# Narrow this to the addresses operators connect from.
+# Narrow this to the addresses operators connect from. You can list several:
+# add one /32 per operator, or a CIDR, e.g. ["203.0.113.5/32", "198.51.100.7/32"].
 operator_source_ranges = ["0.0.0.0/0"]
 """
 
@@ -320,7 +321,7 @@ def _main(plan):
         # WinRM and Ansible never reaches it), so it takes the operator setup
         # script -- base64-encoded to ride inside the extension command, since the
         # script has here-strings of its own -- plus a hosts block for its
-        # MobaXterm sessions. Ops-mode only: a range's Windows hosts use Ansible.
+        # MobaXterm sessions. Offense only: a range's Windows hosts use Ansible.
         if not is_range and node["kind"] == "operator" and windows:
             pairs += [
                 ("operator_setup", "true"),

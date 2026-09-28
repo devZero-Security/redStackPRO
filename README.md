@@ -217,8 +217,11 @@ infrastructure running and billing.
   on the account, per region. redStackPRO generates code and touches no account, so
   you subscribe once per region you deploy Kali into.
 
-All of this is per region, along with the key pair name. The full quota table, the
-increase commands, and the pre-deploy checklist are in the wiki:
+All of this is per region. Running several ranges at once? Give each a distinct
+**prefix** so its host names stay clear; the few account-global names (the key pair
+and the auto-stop role) auto-suffix per deployment, so ranges never collide in one
+account. The full quota table, the increase commands, and the pre-deploy checklist
+are in the wiki:
 [Providers](https://github.com/devZero-Security/redStackPRO/wiki/Providers) and
 [Deploying a Range](https://github.com/devZero-Security/redStackPRO/wiki/Deploying-a-Range).
 

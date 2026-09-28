@@ -197,7 +197,8 @@ ssh_public_key    = ""
 # Required when the range has Windows hosts.
 proxmox_windows_iso_url = ""
 
-# Narrow this to the addresses operators connect from.
+# Narrow this to the addresses operators connect from. You can list several:
+# add one /32 per operator, or a CIDR, e.g. ["203.0.113.5/32", "198.51.100.7/32"].
 operator_source_ranges = ["0.0.0.0/0"]
 """
 

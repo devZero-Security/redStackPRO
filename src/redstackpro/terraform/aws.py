@@ -186,7 +186,7 @@ variable "ssh_public_key" {
 }
 
 variable "key_name" {
-  description = "Name of the key pair this export creates from ssh_public_key. Defaults to the topology prefix so concurrent ranges in one region do not collide on the region-global key pair name. Keep the prefix unique per range."
+  description = "Base name of the key pair this export creates from ssh_public_key. A per deployment random suffix is appended so concurrent ranges never collide on the region-global key pair name."
   type        = string
   default     = "%s-key"
 }
@@ -213,7 +213,8 @@ def _tfvars(plan):
 region         = "us-east-1"
 ssh_public_key = ""
 
-# Narrow this to the addresses operators connect from.
+# Narrow this to the addresses operators connect from. You can list several:
+# add one /32 per operator, or a CIDR, e.g. ["203.0.113.5/32", "198.51.100.7/32"].
 operator_source_ranges = ["0.0.0.0/0"]
 """
 
@@ -226,10 +227,16 @@ def _main(plan):
         "# One module block per node. Inter module references resolve at apply",
         "# time on your machine, because redStackPRO never runs Terraform. See 0001.",
         "",
+        "# A per deployment random suffix so concurrent ranges in one AWS account",
+        "# never collide on account global names (the IAM role and key pair). See 0001.",
+        'resource "random_id" "deploy" {',
+        "  byte_length = 4",
+        "}",
+        "",
         "# One key pair for the export. The key itself is a variable and is",
         "# never generated or stored here. See 0001.",
         'resource "aws_key_pair" "redstackpro" {',
-        "  key_name   = var.key_name",
+        '  key_name   = "${var.key_name}-${random_id.deploy.hex}"',
         "  public_key = var.ssh_public_key",
         "}",
         "",
@@ -344,7 +351,7 @@ def _main(plan):
             "",
             "# Auto stop. One schedule for the whole range.",
             'resource "aws_iam_role" "auto_stop" {',
-            '  name = "%s-auto-stop"' % prefix,
+            '  name = "%s-auto-stop-${random_id.deploy.hex}"' % prefix,
             "  assume_role_policy = jsonencode({",
             '    Version = "2012-10-17"',
             "    Statement = [{",
@@ -356,7 +363,7 @@ def _main(plan):
             "}",
             "",
             'resource "aws_iam_role_policy" "auto_stop" {',
-            '  name = "%s-auto-stop"' % prefix,
+            '  name = "%s-auto-stop-${random_id.deploy.hex}"' % prefix,
             "  role = aws_iam_role.auto_stop.id",
             "  policy = jsonencode({",
             '    Version = "2012-10-17"',
@@ -372,7 +379,7 @@ def _main(plan):
             "}",
             "",
             'resource "aws_scheduler_schedule" "auto_stop" {',
-            '  name                         = "%s-auto-stop"' % prefix,
+            '  name                         = "%s-auto-stop-${random_id.deploy.hex}"' % prefix,
             '  schedule_expression          = "cron(%s %s * * ? *)"'
             % (stop["minute_tpl"], stop["hour_tpl"]),
             # AWS takes an IANA name, the same vocabulary GCP uses, so the
@@ -501,7 +508,7 @@ def _main(plan):
         # WinRM and Ansible never reaches it), so it takes the operator setup
         # script -- encoded to ride inside user_data, since the script has
         # here-strings of its own -- plus a hosts block for its MobaXterm
-        # sessions. Ops-mode only: a range's Windows hosts are driven by Ansible.
+        # sessions. Offense only: a range's Windows hosts are driven by Ansible.
         #
         # base64GZIP, not base64encode. AWS caps user_data at 16384 bytes, and
         # plain base64 of this script is 13808 of them; with the boot wrapper
@@ -655,7 +662,7 @@ def _firewall(plan):
     ]
     seen = set()
 
-    # OPS MODE ONLY: the stack's own hosts reach each other freely.
+    # OFFENSE ONLY: the stack's own hosts reach each other freely.
     #
     # An offense platform is the operator's own infrastructure, not a target.
     # Segmenting it buys nothing to defend against and costs real friction: the

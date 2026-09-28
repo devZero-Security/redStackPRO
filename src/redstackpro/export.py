@@ -146,7 +146,8 @@ way on all three.
   step 1. The PRIVATE half stays in `keys/` and is never pasted anywhere; the two
   halves have to match, since Terraform puts the public half on every host and
   the deploy authenticates with the private half.
-- `operator_source_ranges`: your own IP, for example `["203.0.113.5/32"]`. This is
+- `operator_source_ranges`: the IPs operators connect from, for example
+  `["203.0.113.5/32", "198.51.100.7/32"]` (one /32 per operator, or a CIDR). This is
   what can reach ssh and the portal, so leaving it wide open is a mistake, not a
   shortcut.
 - Confirm the region (and, on GCP, the project) are the ones you mean to deploy
@@ -290,7 +291,8 @@ way on all three.
   step 1. The PRIVATE half stays in `keys/` and is never pasted anywhere; the two
   halves have to match, since Terraform puts the public half on every host and
   the deploy authenticates with the private half.
-- `operator_source_ranges`: your own IP, for example `["203.0.113.5/32"]`. This is
+- `operator_source_ranges`: the IPs operators connect from, for example
+  `["203.0.113.5/32", "198.51.100.7/32"]` (one /32 per operator, or a CIDR). This is
   what can reach ssh and the portal, so leaving it wide open is a mistake, not a
   shortcut.
 - Confirm the region (and, on GCP, the project) are the ones you mean to deploy
