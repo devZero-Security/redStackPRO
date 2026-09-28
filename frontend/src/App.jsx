@@ -1696,6 +1696,11 @@ function Editor() {
           >
             <Background color={document.mode === "haven" ? "#37424e" : "#4a373b"} gap={18} />
             <Panel position="top-left" className="rg-legend">
+              <span className="rg-legend-mode">
+                {document.mode === "haven"
+                  ? "HAVEN, defense ranges"
+                  : "ARTIE, attack and operator infrastructure"}
+              </span>
               {legendItems(document).map((item) => (
                 <span key={item.key} className="rg-legend-item">
                   <span className="rg-legend-swatch" style={{ background: item.color }} />

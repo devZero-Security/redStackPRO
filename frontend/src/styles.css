@@ -975,6 +975,11 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 .rg-legend-item { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
 .rg-legend-swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+/* The active mode spelled out on the canvas, sitting on its own line above the
+   legend swatches, in the mode color (red for Offense, blue for Defense). */
+.rg-legend-mode { flex-basis: 100%; font-weight: 700; }
+.rg-mode-artie .rg-legend-mode { color: var(--danger-2); }
+.rg-mode-haven .rg-legend-mode { color: var(--info); }
 
 /* The resize affordance on a selected container: an accent boundary, corner
    squares, and eight border zones that carry window-style resize cursors. Drag
