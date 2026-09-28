@@ -53,11 +53,11 @@ resource "aws_instance" "this" {
   # Pinned when the topology locks this host to a specific address (a range on
   # GOAD's canonical octets, see 0055); null lets AWS assign one from the
   # subnet's range, the unchanged default.
-  private_ip                  = var.private_ip != "" ? var.private_ip : null
+  private_ip = var.private_ip != "" ? var.private_ip : null
   # Windows AMIs reject ed25519 key pairs on AWS, and a Windows host is reached
   # over WinRM with the lab password rather than SSH, so it takes no key pair.
-  key_name                    = var.windows ? null : var.key_name
-  vpc_security_group_ids      = [aws_security_group.this.id]
+  key_name               = var.windows ? null : var.key_name
+  vpc_security_group_ids = [aws_security_group.this.id]
   # A host with no Elastic IP still needs egress. On a NAT-routed segment the NAT
   # handles it; on an internet-exposure (IGW-routed) segment there is no NAT, so an
   # address-less host takes an auto-assigned public IP for egress, the redStack way.

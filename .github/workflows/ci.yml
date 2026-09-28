@@ -76,6 +76,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[dev]"
       # No em dashes anywhere, and no credentials or tfvars values tracked.
       # Both are rules in the project conventions that nothing else checks.
       - run: python -m redstackpro.tools.check_conventions
@@ -146,11 +148,11 @@ jobs:
       - name: No credential reached the export
         # 0001. redStackPRO emits variables, never values, and never holds a key.
         run: |
-          if grep -rIn -e 'BEGIN .*PRIVATE KEY' -e 'ssh-rsa AAAA' -e 'ssh-ed25519 AAAA' export; then
+          if grep -rIn -e '-----BEGIN[A-Z0-9 ]*PRIVATE KEY' -e 'ssh-rsa AAAA' -e 'ssh-ed25519 AAAA' export; then
             echo "key material in the export"
             exit 1
           fi
-          grep -q 'ssh_public_key = ""' export/terraform/terraform.tfvars
+          grep -q 'ssh_public_key = ""' export/deploy.tfvars
 
   ansible:
     # ansible-core does not run on Windows, so this is the check a contributor
