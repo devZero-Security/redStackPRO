@@ -5,7 +5,6 @@
 # enumeration path reflects a hardened DC. A DC automatically enables LDAPS once a
 # suitable Server-Authentication certificate for its own FQDN is in the machine
 # store, so this creates a self-signed one and lets the directory pick it up.
-# See goad-fidelity-build and dracarys-fidelity-gap.
 
 - name: Ensure an LDAPS server-authentication certificate is present
   ansible.windows.win_powershell:

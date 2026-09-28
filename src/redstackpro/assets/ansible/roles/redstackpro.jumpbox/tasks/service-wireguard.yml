@@ -3,7 +3,7 @@
 # declared operators (redstackpro_jumpbox_operators), each one gets a key pair, a
 # peer on the server, and a client config rendered for the admin to hand out. The
 # keys are generated here and never leave the jumpbox; only the client config is
-# fetched and distributed. See vpn-multiuser-spec and 0001.
+# fetched and distributed.
 
 - name: Install wireguard
   ansible.builtin.apt:

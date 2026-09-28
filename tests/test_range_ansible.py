@@ -37,7 +37,7 @@ def test_assumed_breach_user_becomes_a_jumpbox_foothold():
     """A domain user flagged assumed_breach (GOAD's hodor) is threaded to the
     jumpbox as a foothold account, so the jumpbox role creates it as a local
     admin patient-zero can SSH in as. It stays a low-priv domain member on the
-    dc side. See range-access-model and P2.5."""
+    dc side."""
     files = generate(GOAD_FULL)
     jb = yaml.safe_load(files["ansible/host_vars/def-jumpbox.yml"])
     assert "hodor" in (jb.get("redstackpro_jumpbox_foothold_users") or [])
@@ -48,7 +48,7 @@ def test_local_admin_users_are_added_to_member_administrators():
     threaded to the Windows member servers of its own domain as DOMAIN\\user, so
     the srv role adds it to local Administrators -- rhaegal must be able to log on
     to vhagar for the keepass_bot CredSSP hop to run there. The DC itself gets no
-    such list. See dracarys-fidelity-gap."""
+    such list."""
     files = generate(DRACARYS)
     vhagar = yaml.safe_load(files["ansible/host_vars/def-vhagar.yml"])
     assert "DRACARYS\\rhaegal" in (vhagar.get("redstackpro_srv_local_admins") or [])
@@ -81,7 +81,7 @@ def test_a_workstation_grants_patient_zero_rdp():
     signs in as the assumed-breach user. The compiler emits redstackpro_srv_rdp_users
     for the landing host of either kind, but only the srv role consumed it, so a
     patient zero on a workstation was refused RDP (dana.brooks on harbor's fr-wks01
-    hit exactly this live). The wks role must apply it too. See range-access-model."""
+    hit exactly this live). The wks role must apply it too."""
     wks = (ROOT / "src/redstackpro/assets/ansible/roles/redstackpro.wks"
            "/tasks/main.yml").read_text(encoding="utf-8")
     assert "redstackpro_srv_rdp_users" in wks
@@ -91,7 +91,7 @@ def test_a_workstation_grants_patient_zero_rdp():
 def test_endpoint_telemetry_toggle_reaches_the_host():
     """A host with endpoint_telemetry set gets redstackpro_endpoint_telemetry so
     the host_vulns role installs Sysmon + command-line auditing; a host without it
-    does not. goad-wazuh opts its Wazuh-monitored hosts in. See F-wazuh-telemetry."""
+    does not. goad-wazuh opts its Wazuh-monitored hosts in."""
     files = generate(json.loads(
         (ROOT / "frontend/public/goad/goad-wazuh.json").read_text(encoding="utf-8")))
     wint = yaml.safe_load(files["ansible/host_vars/def-winterfell.yml"])
@@ -104,7 +104,7 @@ def test_dracarys_vault_and_bots_are_faithful():
     """The dracarys chain: vhagar generates a KeePass vault (keepass_vault) and
     runs a real SSH bot to syrax; balerion runs a CredSSP keepass_bot and serves
     LDAPS. These make the challenge's credential-exposure path real rather than a
-    hollow stand-in. See dracarys-fidelity-gap."""
+    hollow stand-in."""
     files = generate(DRACARYS)
     vhagar = yaml.safe_load(files["ansible/host_vars/def-vhagar.yml"])
     assert "keepass_vault" in (vhagar.get("redstackpro_srv_vulns") or [])
@@ -123,7 +123,7 @@ def test_the_jumpbox_accepts_keys_only_even_for_patient_zero():
     patient zero. Since 2026-09-10 the portal is the way in and the foothold is
     reached through an RDP tile, so that exception was a password-authenticating
     account on the internet with nothing depending on it. Guarding the inversion
-    matters because restoring it looks like a fix. See range-access-model."""
+    matters because restoring it looks like a fix."""
     tpl = (ROOT / "src/redstackpro/assets/ansible/roles/redstackpro.jumpbox"
                   "/templates/sshd-redstackpro.conf.j2").read_text(
         encoding="utf-8")
@@ -140,7 +140,7 @@ JUMPBOX_ROLE = (ROOT / "src/redstackpro/assets/ansible/roles"
 
 
 def test_the_portal_seeds_a_database_not_a_file():
-    """ADR 0056: the portal moved off the read-only file provider onto a JDBC
+    """The portal moved off the read-only file provider onto a JDBC
     database, because named accounts and per-user TOTP both need writable user
     records. The file template is gone and its logic is SQL now. These guard the
     pieces that would fail silently: the seed still exists, the service stands up
@@ -230,7 +230,7 @@ def test_patient_zero_gets_a_portal_tile_on_one_landing_host():
     beacon launched from one of those starts the engagement holding the wrong
     token. Three things have to agree: the compiler picks one landing host per
     breach domain, that host lets p0 log on over RDP, and the tile carries the
-    credential the dc role actually seeded. See range-access-model."""
+    credential the dc role actually seeded."""
     out = generate(GOAD_FULL)
     jumpbox = yaml.safe_load(out["ansible/host_vars/def-jumpbox.yml"])
     tiles = jumpbox["redstackpro_jumpbox_foothold_tiles"]
@@ -269,7 +269,7 @@ def test_every_host_is_named_for_a_hosts_file():
     The recipient of the block is any host that does NOT join a domain: the
     jumpbox gets it (and so carries no FQDN of its own, only the alias); the AD
     members are excluded from the play because they resolve through the DCs'
-    DNS. See range-access-model and the /etc/hosts PAI item."""
+    DNS."""
     out = generate(GOAD_FULL)
     wint = yaml.safe_load(out["ansible/host_vars/def-winterfell.yml"])
     assert wint["redstackpro_host_fqdn"] == "winterfell.north.sevenkingdoms.local"
@@ -303,10 +303,10 @@ def test_every_host_is_named_for_a_hosts_file():
 
 
 def test_host_vuln_building_blocks_are_wired():
-    """disable_firewall / directory / files (GOAD's host building blocks, P9)
+    """disable_firewall / directory / files (GOAD's host building blocks)
     are real host_vulns roles now, not notes: each has a task file and is in the
     implemented list (so main.yml dispatches it). Catalog membership is guarded
-    on the frontend by vulns.test.mjs. See goad-fidelity-build."""
+    on the frontend by vulns.test.mjs."""
     role = ROOT / "src/redstackpro/assets/ansible/roles/redstackpro.host_vulns"
     for v in ("disable_firewall", "directory", "files"):
         assert v in HOST_VULNS_IMPLEMENTED, v
@@ -317,7 +317,7 @@ def test_defender_off_by_default_and_opts_in_per_host():
     """Windows Defender RTP is off by default (no redstackpro_defender_enabled
     in a host's vars) -- even on GOAD's DCs, which carry edr=defender, so the
     two are independent. A host with the defender_enabled overlay toggle set
-    (a defended range) gets redstackpro_defender_enabled true. See PZ-5 / P0.2."""
+    (a defended range) gets redstackpro_defender_enabled true."""
     import copy
     files = generate(GOAD_FULL)
     kl = yaml.safe_load(files["ansible/host_vars/def-kingslanding.yml"])
@@ -332,7 +332,7 @@ def test_defender_off_by_default_and_opts_in_per_host():
 
 
 def test_range_connects_as_the_blueop_account():
-    """A defensive range's single platform account is blueop (P1.7): the SSH /
+    """A defensive range's single platform account is blueop: the SSH /
     admin identity every host authorizes, emitted as the group-wide ansible_user."""
     files = generate(GOAD_FULL)
     all_vars = yaml.safe_load(files["ansible/group_vars/all.yml"])
@@ -347,8 +347,7 @@ def test_printnightmare_kept_optin_not_declaart_on_default_dcs():
     cube0x0 fails at driver enumeration) -- a provider cannot fix that, only a
     patch-baseline image can, and that is not built yet. So unlike
     ldap_signing_off, printnightmare gets no `providers` gate and simply is not
-    declared by the default templates. See goad-fidelity-build and
-    current-activity-list (session 4 Part 4/5 conclusions)."""
+    declared by the default templates."""
     files = generate(GOAD_FULL)
     for dc in ("def-kingslanding", "def-winterfell", "def-meereen"):
         vulns = yaml.safe_load(files[f"ansible/host_vars/{dc}.yml"])[
@@ -365,8 +364,7 @@ def test_ldap_signing_off_is_provider_gated_to_proxmox_and_esxi():
     it when compiling for a provider whose network model gives the range a real
     L2 broadcast domain. A cloud compile (no provider named, or any of
     aws/gcp/azure) silently drops it; Proxmox/ESXi keep it. See
-    redstackpro.ansible.VULN_PROVIDERS and current-activity-list (provider-aware
-    toggles)."""
+    redstackpro.ansible.VULN_PROVIDERS."""
     dcs = ("def-kingslanding", "def-winterfell", "def-meereen")
 
     def _dc_vulns(provider):
@@ -397,7 +395,7 @@ def test_ldap_signing_off_is_provider_gated_to_proxmox_and_esxi():
 def test_defender_is_off_by_default_with_an_enable_toggle():
     """Windows Defender is disabled by default (GOAD parity) via the shared
     host_vulns path, with an opt-in redstackpro_defender_enabled toggle to leave it
-    on. See productize-temp-fixes (PZ-5)."""
+    on."""
     role = ROOT / "src/redstackpro/assets/ansible/roles/redstackpro.host_vulns"
     defaults = yaml.safe_load((role / "defaults/main.yml").read_text(encoding="utf-8"))
     assert defaults["redstackpro_defender_enabled"] is False
@@ -410,8 +408,8 @@ def test_defender_is_off_by_default_with_an_enable_toggle():
 def test_essos_ca_plants_the_full_esc_template_set():
     """The essos forest CA (braavos) aggregates mayfly's ESC1/ESC2/ESC3 templates
     (declared on the essos DC) alongside the ESC6/7/11/13/15 it already carried, and
-    each ESC template has a clean-room planter script. Closes the Part 6 fidelity
-    delta where ESSOS-CA shipped only ESC4+ESC13. See goad-fidelity-build."""
+    each ESC template has a clean-room planter script. Closes the fidelity
+    delta where ESSOS-CA shipped only ESC4+ESC13."""
     files = generate(GOAD_FULL)
     escs = yaml.safe_load(files["ansible/host_vars/def-braavos.yml"])[
         "redstackpro_adcs_forest_escs"]
@@ -426,8 +424,7 @@ def test_essos_ca_plants_the_full_esc_template_set():
 def test_linked_sql_hosts_map_a_remote_login_not_self():
     """Each GOAD SQL host with a linked server also carries a linked-login mapping
     to a fixed remote login (sa), so a domain caller crossing the trusted link does
-    not double-hop to ANONYMOUS (the Part 7 finding) and the link RCE chain lands.
-    See goad-fidelity-build."""
+    not double-hop to ANONYMOUS and the link RCE chain lands."""
     files = generate(GOAD_FULL)
     for h in ("def-castelblack", "def-braavos"):
         vv = yaml.safe_load(files[f"ansible/host_vars/{h}.yml"])[
@@ -604,7 +601,7 @@ def test_a_host_declaring_no_vulns_compiles_to_an_empty_list():
     assert ws01["redstackpro_wks_vulns"] == []
 
 
-# -- the foothold's offensive toolchain (PZ-2)
+# -- the foothold's offensive toolchain
 
 def test_a_range_jumpbox_carries_the_toolchain_by_default():
     """In a range the jumpbox IS the assumed-breach foothold the solution runs
@@ -649,7 +646,7 @@ def test_offense_stack_names_every_host(redstack):
     the redirector fronting rely on. Every host carries a shortname and none
     carries an FQDN (no AD), and the Linux hosts play is emitted (the Windows
     operator is not an ansible recipient -- it has no WinRM and takes its block
-    from the boot script instead). See the /etc/hosts PAI item."""
+    from the boot script instead)."""
     out = generate(redstack)
     for path, body in out.items():
         if not path.startswith("ansible/host_vars/"):

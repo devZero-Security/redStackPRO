@@ -70,7 +70,7 @@
 # from the portal starts in the right context. A Domain Users member has no
 # interactive remote logon right anywhere by default, so the tile would fail the
 # logon without this. Remote Desktop Users only -- p0 stays low-priv here, which
-# is the whole premise of the solution. See range-access-model.
+# is the whole premise of the solution.
 - name: Let patient zero sign in over RDP
   ansible.windows.win_powershell:
     parameters:

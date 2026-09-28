@@ -2,7 +2,7 @@
 
 Source restriction is by network tag. A tag is a string, so a rule references a
 host without depending on the host resource, which is why this backend needs no
-per host firewall object. The AWS backend does. See 0015.
+per host firewall object. The AWS backend does.
 """
 
 from .plan import (  # noqa: F401  GenerationError re-exported
@@ -209,7 +209,7 @@ def _needs_nat(plan, segment_id):
     and it holds any member that took no public address. Without this the offense
     management subnet (internet-exposed, jumpbox addressed, collector/operators
     internal) left the collector with no route out and its apt install hung. See
-    0021, 0039, and segment_needs_nat in plan.py.
+    segment_needs_nat in plan.py.
     """
     seg = plan.ctx.nodes[segment_id]
     if seg["overlay"].get("egress") != "allowed":
@@ -234,7 +234,7 @@ def _main(plan):
     # platform alike), so its portal credentials and connection key are
     # provisioned whenever a jumpbox is present, not only for ranges. The shared
     # lab password and the key pair are generated at apply and never written into
-    # the export. See 0001, guacamole-on-the-jumpbox, goad-native-recreation.
+    # the export.
     has_jumpbox = any(n["kind"] == "jumpbox" for n in plan.hosts())
     if has_jumpbox:
         lines += [
@@ -282,7 +282,7 @@ def _main(plan):
             # Exposure is a ceiling, so it cannot answer whether any member
             # lacks an address. Only the compiler sees the members. GCP's Cloud
             # NAT coexists with external IPs, so this uses the GCP rule rather
-            # than plan.segment_needs_nat's AWS one. See _needs_nat and 0021.
+            # than plan.segment_needs_nat's AWS one. See _needs_nat.
             ("nat", "true" if _needs_nat(plan, node["id"]) else "false"),
         ]) + ["}"]
 
@@ -290,7 +290,7 @@ def _main(plan):
     # weekend. GCP expresses this natively as a resource policy every instance
     # references, which means no credential anywhere and nothing to keep running
     # -- the scheduler is the cloud's, not ours. STOP, never delete: the forest
-    # took forty minutes to provision and comes back on boot. See 0057.
+    # took forty minutes to provision and comes back on boot.
     stop = plan.auto_stop
     if stop:
         lines += plan.auto_stop_block()
@@ -333,12 +333,11 @@ def _main(plan):
             # Reserve a static external IP for the hosts whose address must not
             # change across a stop/start: the redirector (its C2 callback domain
             # must keep resolving) and the jumpbox (the Guacamole/SSH entry point).
-            # Released on teardown, so a fresh deploy still rotates the IP. See the
-            # ephemeral-IP finding.
+            # Released on teardown, so a fresh deploy still rotates the IP.
             ("reserve_ip",
              "true" if node["kind"] in ("redirector", "jumpbox") else "false"),
             # The single platform account (redop for ops, blueop for a range);
-            # the module creates it and authorizes the keys for it. See P1.7.
+            # the module creates it and authorizes the keys for it.
             ("admin_username", '"%s"' % plan.admin_account),
             ("ssh_public_key", "var.ssh_public_key"),
         ]
@@ -346,7 +345,7 @@ def _main(plan):
         if machine:
             pairs.append(("machine_type", '"%s"' % machine))
         # A range locking this host to a specific address (GOAD's canonical
-        # octets, see 0055); omitted lets GCP assign one from the subnet's
+        # octets); omitted lets GCP assign one from the subnet's
         # DHCP range, the unchanged default.
         internal_ip = (node.get("overlay") or {}).get("internal_ip")
         if internal_ip:
@@ -355,8 +354,7 @@ def _main(plan):
             # Every box authorizes the Guacamole key for the admin account and (Linux) or
             # sets the operator account (Windows) so the portal tiles connect with
             # no password on the wire; the jumpbox alone gets the private half of
-            # the key and writes the portal credential files. See
-            # guacamole-on-the-jumpbox and goad-native-recreation.
+            # the key and writes the portal credential files.
             pairs += [
                 ("windows", "true" if plan.is_windows(node) else "false"),
                 # WinRM is the range's Windows provisioning path (the boot script
@@ -370,7 +368,7 @@ def _main(plan):
                 # single platform identity as the Linux admin (redop for ops,
                 # blueop for a range), not a separate "operator". The module input
                 # keeps its name; the value it now carries is the platform account.
-                # See P1.7 and naming.platform_account.
+                # See naming.platform_account.
                 ("operator_username", '"%s"' % plan.admin_account),
                 ("guac_public_key", "tls_private_key.guacamole.public_key_openssh"),
                 ("guac_private_key",
@@ -416,7 +414,7 @@ def _main(plan):
         lines += ["", 'module "%s" {' % plan.ref(node["id"])] + align(pairs) + ["}"]
 
     # peers: a network peering, both directions. The module names each side; the
-    # routes exchange on their own. See 0030.
+    # routes exchange on their own.
     for edge in plan.ctx.by_role.get("peers", []):
         a, b = edge["source"], edge["target"]
         lines += ["", 'module "%s" {' % plan.ref(edge["id"])] + align([
@@ -516,8 +514,7 @@ def _firewall(plan):
     # A RANGE keeps strictly edge-derived rules. There the segmentation IS the
     # exercise -- what a lateral movement step proves depends on it -- so this
     # deliberately does not apply. External ingress is untouched in both modes,
-    # which is the property that actually matters. See 0057-era notes and
-    # range-access-model.
+    # which is the property that actually matters.
     if not plan.is_range():
         stack_cidrs = [ctx.overlay(n["id"], "cidr") for n in plan.networks()]
         stack_cidrs = [c for c in stack_cidrs if c]
@@ -551,7 +548,7 @@ def _firewall(plan):
 
     def source_cidr(node_id):
         # The host's own subnet, for a rule that reaches it across a peering
-        # where a network tag would not carry. See 0030.
+        # where a network tag would not carry.
         return ctx.overlay(plan.primary_segment(ctx.nodes[node_id]), "cidr")
 
     # fronts: public ingress to the redirector, then redirector to teamserver.
@@ -576,7 +573,7 @@ def _firewall(plan):
             seen.add(name)
             # A redirector in the teamserver's network names itself by tag; one
             # across a peering names its subnet CIDR, since a tag does not carry
-            # across the boundary. See 0030.
+            # across the boundary.
             if net == tsnet:
                 source = {"source_tags": [plan.tag(rdir)]}
                 across = ""
@@ -597,7 +594,7 @@ def _firewall(plan):
     # teamserver management path that nothing else opens. Same network names the
     # operator by tag; across a peering, by its subnet CIDR. Emitted only for a
     # teamserver whose C2 has a known control port and only when an operator
-    # exists to reach it. See P7.
+    # exists to reach it.
     operators = sorted(plan.operators(), key=lambda h: h["id"])
     for ts in sorted(plan.hosts(), key=lambda h: h["id"]):
         ports = plan.control_ports(ts)
@@ -650,7 +647,7 @@ def _firewall(plan):
 
     # logs_to: senders reach the collector on its ingest port and nothing else.
     # A sender in the collector's own network is named by tag; one across a
-    # peering is named by its subnet CIDR, since tags do not cross. See 0030.
+    # peering is named by its subnet CIDR, since tags do not cross.
     sinks = {}
     for edge in ctx.by_role.get("logs_to", []):
         sinks.setdefault(edge["target"], []).append(edge["source"])
@@ -691,7 +688,7 @@ def _firewall(plan):
         # reach it over the tunnel instead. In public mode (the default, and every
         # defense range) the portal is opened on 443 as before. The jumpbox keeps its
         # stable public IP either way, since it is the VPN endpoint. Mirrors the AWS
-        # backend. See vpn-multiuser-spec.
+        # backend.
         name = "mgmt_in_%s" % plan.ref(jump)
         if name not in seen:
             seen.add(name)
@@ -733,7 +730,7 @@ def _firewall(plan):
         # SMB call back to a relay listener is dropped (ERROR_BAD_NETPATH). This
         # is *internal* (range-segment) surface, which a lab expects; the
         # jumpbox's internet surface stays limited to the operator rules above.
-        # Mirrors the all-from-segment rule the AD hosts get below. See part-04.
+        # Mirrors the all-from-segment rule the AD hosts get below.
         name = "foothold_in_%s" % plan.ref(jump)
         scidr = source_cidr(jump)
         if name not in seen and scidr:
@@ -753,7 +750,7 @@ def _firewall(plan):
         # A Windows host is reached over WinRM, so opening 22 to it opens
         # nothing. Grouped by port rather than emitted per host, because a tag
         # based rule takes a list of targets and one rule per host would be
-        # noise. See 0019.
+        # noise.
         same = [h for h in managed if network_of(h["id"]) == net]
         cross = [h for h in managed if network_of(h["id"]) != net]
 
@@ -779,7 +776,7 @@ def _firewall(plan):
 
         # Managed hosts across a peering: the rule sits on their network and
         # names the jumpbox subnet by CIDR, because a tag does not carry across
-        # the boundary. See 0030.
+        # the boundary.
         xby = {}
         for host in cross:
             xby.setdefault((network_of(host["id"]), plan.management_port(host)),

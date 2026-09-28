@@ -4,7 +4,6 @@
 # with the groups and users the canvas defined. It does not vendor or derive
 # from GOAD's roles. GOAD is the fidelity benchmark; redStackPRO is the engine,
 # and these labs are recreated natively on the canvas, not imported or wrapped.
-# See goad-native-recreation.
 
 - name: Load the domain definition
   ansible.builtin.include_vars:
@@ -41,7 +40,7 @@
 # Install-ADDSDomain for a child) is what AWS proved. GCP tears its WinRM
 # runspace down mid-promote, so it hands the promotion to a SYSTEM scheduled task
 # instead. Both branch on redstackpro_platform; neither shares code with the
-# other. See goad-native-recreation and redstackpro_platform.
+# other.
 - name: Promote this host with the default (AWS-proven) path
   ansible.builtin.include_tasks: promote_default.yml
   when:

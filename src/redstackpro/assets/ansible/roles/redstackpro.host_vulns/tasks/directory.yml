@@ -3,7 +3,7 @@
 # drop point, a marker a lab or CTF references). Paths come from
 # vulns_vars.directory (a list); a default is used if none. Distinct from the
 # share vulns (openshares / writable_share) which publish SMB shares -- this only
-# makes the folder. Mirrors GOAD's directory. See goad-fidelity-build.
+# makes the folder. Mirrors GOAD's directory.
 
 - name: Create the declared directories
   ansible.windows.win_file:

@@ -173,7 +173,7 @@ def test_the_portal_only_offers_the_dashboard_when_there_is_a_collector():
 
 
 def test_the_dashboard_is_reached_through_the_portal_not_a_new_public_port():
-    """minimize-jumpbox-web-surface: the range's public surface stays 443 and 22.
+    """The range's public surface stays 443 and 22.
     The dashboard is proxied from the portal the operator already opens, and the
     collector itself holds no public address."""
     cfg = (COLLECTOR / "templates/opensearch-dashboards.yml.j2").read_text(encoding="utf-8")

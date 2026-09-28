@@ -1,11 +1,10 @@
 ---
-# Assumed-breach foothold accounts (P2.5). Each name here is a domain user the
+# Assumed-breach foothold accounts. Each name here is a domain user the
 # canvas flagged assumed_breach; on the jumpbox it is also created as a LOCAL
 # admin (sudo) so an operator can SSH in as patient zero. The domain side (the
 # same name as a low-priv member) is seeded by the dc role, so the one identity
 # is a jumpbox admin and a low-priv domain user at once. The password is the
 # shared lab password the boot script wrote to /etc/redstackpro/lab-password.
-# See range-access-model and tests-run-through-beacon.
 
 - name: Create each assumed-breach foothold account (local admin)
   ansible.builtin.user:

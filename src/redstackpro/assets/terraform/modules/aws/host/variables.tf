@@ -23,7 +23,7 @@ variable "subnet_id" {
 }
 
 variable "private_ip" {
-  description = "A pinned private address inside the segment's cidr, e.g. a range host locking to GOAD's canonical octets (see 0055). Empty means AWS assigns one from the subnet's range, the unchanged default."
+  description = "A pinned private address inside the segment's cidr, e.g. a range host locking to GOAD's canonical octets. Empty means AWS assigns one from the subnet's range, the unchanged default."
   type        = string
   default     = ""
 }
@@ -49,13 +49,13 @@ variable "disk_size_gb" {
 }
 
 variable "public_address" {
-  description = "Allocate a public address. Decided per host now, bounded by the segment exposure. See 0021."
+  description = "Allocate a public address. Decided per host now, bounded by the segment exposure."
   type        = bool
   default     = false
 }
 
 variable "auto_public_ip" {
-  description = "Give an address-less host on an internet-exposure (IGW-routed) segment an auto-assigned public IP for egress only, the way redStack does. No Elastic IP, and the security group still locks inbound. Without it such a host has no route out (an IGW is useless to an address-less instance and the segment has no NAT). See 0021."
+  description = "Give an address-less host on an internet-exposure (IGW-routed) segment an auto-assigned public IP for egress only, the way redStack does. No Elastic IP, and the security group still locks inbound. Without it such a host has no route out (an IGW is useless to an address-less instance and the segment has no NAT)."
   type        = bool
   default     = false
 }
@@ -77,13 +77,13 @@ variable "ssh_public_key" {
 }
 
 variable "windows" {
-  description = "Stand up a WinRM listener, because a Windows host is not reached over ssh. See 0019."
+  description = "Stand up a WinRM listener, because a Windows host is not reached over ssh."
   type        = bool
   default     = false
 }
 
 variable "enable_winrm" {
-  description = "Provision this Windows host over WinRM. A range's controllers and members are (the boot script sets the Administrator password and stands up an HTTPS listener); an offense range's Windows operator self-provisions and is left alone. See goad-native-recreation."
+  description = "Provision this Windows host over WinRM. A range's controllers and members are (the boot script sets the Administrator password and stands up an HTTPS listener); an offense range's Windows operator self-provisions and is left alone."
   type        = bool
   default     = false
 }

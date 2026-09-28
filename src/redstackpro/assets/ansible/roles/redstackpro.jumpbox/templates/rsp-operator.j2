@@ -9,7 +9,7 @@
 #   rsp-operator remove <handle>       revoke them
 #   rsp-operator list                  show the roster and the live peers
 #
-# The access mode is detected from what the deploy stood up. See vpn-multiuser-spec.
+# The access mode is detected from what the deploy stood up.
 
 set -euo pipefail
 
@@ -190,7 +190,7 @@ EOF
 
 remove_openvpn() {
   local handle="$1"
-  # The certificate stays valid until it expires; a CRL is future work (PZ note).
+  # The certificate stays valid until it expires; a CRL is future work.
   rm -f "$OVPN_CLIENTS/$handle.key" "$OVPN_CLIENTS/$handle.csr" \
         "$OVPN_CLIENTS/$handle.crt" "$CLIENT_DIR/$handle.ovpn"
 }

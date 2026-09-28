@@ -1,7 +1,7 @@
 ---
 # The web root IIS serves and the folder the upload app writes into. GOAD's web
 # member serves a small upload application at the site root and the shell lands
-# in an "upload" subfolder, so those are the defaults. See goad-native-recreation.
+# in an "upload" subfolder, so those are the defaults.
 redstackpro_iis_web_root: 'C:\inetpub\wwwroot'
 redstackpro_iis_upload_dir: 'C:\inetpub\wwwroot\upload'
 # Classic ASP alongside ASP.NET. The upload application is .aspx, but the shell an

@@ -2,8 +2,8 @@
 # The pinned offensive Python toolchain, installed with pipx so each tool keeps
 # its own impacket. Coercer pins impacket < 0.11 and Certipy pulls 0.13+, so a
 # single shared environment cannot satisfy both; pipx gives each its own. This is
-# the coherent, reproducible resolution of the version trap called out in PZ-2.
-# Runs for the operator account so the tools are on its PATH. See goad-fidelity-build.
+# the coherent, reproducible resolution of the version trap.
+# Runs for the operator account so the tools are on its PATH.
 
 - name: Ensure pipx paths are set up for the operator
   become: true

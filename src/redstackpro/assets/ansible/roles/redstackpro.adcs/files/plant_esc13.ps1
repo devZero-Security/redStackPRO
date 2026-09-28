@@ -4,7 +4,7 @@
 # that group's membership. We create a client-auth template named "ESC13", mint an
 # issuance-policy OID object, link that OID to the target group, stamp the policy
 # onto the template, and publish to the low-priv group. Runs as Enterprise Admin
-# (config-partition writes). Idempotent. See goad-fidelity-build.
+# (config-partition writes). Idempotent.
 param($CaName, $GroupCn, $EnrollGroup = "Domain Users")
 $ErrorActionPreference = "Stop"
 

@@ -4,7 +4,7 @@
 # fail to launch unattended) and set up the recognizable MSSQL attack surface:
 # a Domain Users login that can EXECUTE AS sa (impersonation -> sysadmin) and
 # linked servers for lateral movement. GOAD is the fidelity benchmark; this is
-# our own role. See goad-fidelity-build.
+# our own role.
 
 # Edition drives the chocolatey package, the instance, and the service name. The
 # default Express is fine for a plain SQL member; a MECM site database requires a

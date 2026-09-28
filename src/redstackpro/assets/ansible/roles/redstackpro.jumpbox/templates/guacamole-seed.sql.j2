@@ -1,5 +1,5 @@
 -- {{ ansible_managed }}
--- The portal's accounts and connections, seeded into the JDBC schema (ADR 0056).
+-- The portal's accounts and connections, seeded into the JDBC schema.
 -- This replaces the rendered user-mapping.xml the file provider used to read.
 --
 -- Two halves with different idempotency, on purpose:
@@ -37,7 +37,7 @@ DELETE FROM guacamole_entity WHERE name = 'guacadmin' AND type = 'USER';
 
 -- One account: the break-glass admin (the platform account, redop/blueop),
 -- whose password is in the terraform outputs. Named per-person accounts with
--- their own passwords and access levels are an Enterprise concern (ADR 0056);
+-- their own passwords and access levels are an Enterprise concern;
 -- the base tier is a single shared admin login.
 -- ---------------------------------------------------------------- accounts
 {# Create a portal user if absent and set its password once from :'labpw'. A
@@ -70,8 +70,7 @@ UPDATE guacamole_user u
 -- {{ admin }}{{ ' (break-glass)' if admin == breakglass else '' }}
 {{ account(admin) }}
 -- Full admin. Every system permission so the account can manage users and
--- connections from the portal UI (create the personal accounts ADR 0056
--- describes, enable TOTP on them).
+-- connections from the portal UI (create personal accounts, enable TOTP on them).
 INSERT INTO guacamole_system_permission (entity_id, permission)
 SELECT e.entity_id, p
   FROM guacamole_entity e,
@@ -84,7 +83,7 @@ ON CONFLICT DO NOTHING;
 
 -- Per-operator accounts (the offense multi-user roster). Each declared operator
 -- gets its own portal login on the shared lab password; per-user passwords are
--- an Enterprise concern (ADR 0056). No system permissions: an operator drives
+-- an Enterprise concern. No system permissions: an operator drives
 -- the range, it does not administer the portal. The connection grant below is
 -- by USER, so these accounts pick up every tile without a per-account grant.
 {% for op in redstackpro_jumpbox_operators | default([]) %}
@@ -140,7 +139,7 @@ SELECT connection_id, '{{ key }}', '{{ value }}'
 
 {# Patient-zero tiles: sign in AS the assumed-breach user on the chosen landing
    host, so a beacon launched from the portal starts in the right context. Same
-   reasoning as the file provider carried; see range-access-model. #}
+   reasoning as the file provider carried. #}
 {% for tile in redstackpro_jumpbox_foothold_tiles | default([]) %}
 {%   set tname = tile.host ~ ' as ' ~ tile.username ~ ' (patient zero)' %}
 -- {{ tname }}

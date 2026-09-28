@@ -2,7 +2,7 @@
 # redStackPRO SIEM. Clean-room MIT: installs the telemetry product the canvas
 # chose on the standalone box (the Windows hosts get the matching agent from the
 # agent step keyed on their edr). Reached over SSH as root. A range collects
-# through this box, not the attack-side shipper. See goad-native-recreation.
+# through this box, not the attack-side shipper.
 
 - name: Install Wazuh
   ansible.builtin.include_tasks: wazuh.yml

@@ -11,7 +11,6 @@ The addresses are `<<tf:name:field>>` placeholders that tf_inventory.py
 fills in after `terraform apply`, the same tokens the Ansible tree uses. The one
 credential not embedded is the generated lab password, which lives only in the
 Terraform state; the briefing points at `terraform output -raw lab_password`.
-See goad-native-recreation.
 """
 
 from .naming import platform_account
@@ -24,7 +23,7 @@ def briefing_filename(mode):
     """The hand-off file's name, chosen by mode: DEFENSE-BRIEFING.md for a defense
     range, OFFENSE-BRIEFING.md for an offense stack. tf_inventory and the deploy
     script find it by the *-BRIEFING.md glob, so both names carry the same
-    address tokens. See 0047."""
+    address tokens."""
     return "OFFENSE-BRIEFING.md" if mode == "offense" else "DEFENSE-BRIEFING.md"
 
 _KIND_ROLE = {
@@ -92,8 +91,8 @@ def _dc_of(ctx, domain_id):
 def range_briefing(document, registry=None):
     ctx = Context(document, registry)
     account = platform_account(document.get("mode"))
-    # Assumed-breach foothold users (P2.5): patient zero, a jumpbox local admin
-    # and a low-priv domain member at once. See range-access-model.
+    # Assumed-breach foothold users: patient zero, a jumpbox local admin
+    # and a low-priv domain member at once.
     breach = [(u["username"], (d.get("overlay") or {}).get("fqdn"))
               for d in ctx.of_kind("domain")
               for u in ((d.get("overlay") or {}).get("users") or [])
@@ -115,7 +114,7 @@ def range_briefing(document, registry=None):
     jump = jumps[0] if jumps else None
 
     # -- The access model, stated up front so the briefing reads the same on
-    # every provider. See range-access-model.
+    # every provider.
     if jump and is_offense:
         lines += [
             "", "## The access model", "",
@@ -196,8 +195,7 @@ def range_briefing(document, registry=None):
     # are offense concepts; a defense range ignores them (VPN002), so the section is
     # rendered only for an offense stack that declared either. Each operator gets a
     # personal portal account, and on a VPN access mode a personal credential the
-    # jumpbox generates at apply; this names where to fetch each one. See
-    # vpn-multiuser-spec.
+    # jumpbox generates at apply; this names where to fetch each one.
     if jump and document.get("mode") == "offense":
         jov = jump.get("overlay", {}) or {}
         operators = jov.get("operators") or []

@@ -1,13 +1,13 @@
 ---
-# The foothold's offensive toolchain (PZ-2). A range jumpbox is the documented
-# assumed-breach foothold and patient zero ([[range-access-model]]), so the operator
+# The foothold's offensive toolchain. A range jumpbox is the documented
+# assumed-breach foothold and patient zero, so the operator
 # works FROM here: this is the box the GOAD solution runs from. Arming it is what
 # makes the solution zero-touch. Opt out with `offensive_toolkit: false` on the
 # jumpbox overlay; offense bastions never get it, since there the tooling belongs
 # on the kali/operator box rather than the perimeter host.
 #
-# Nothing here opens a port, so this does not widen the jumpbox's internet surface
-# ([[minimize-jumpbox-web-surface]]). It only changes what is installed locally.
+# Nothing here opens a port, so this does not widen the jumpbox's internet surface.
+# It only changes what is installed locally.
 #
 # WHY pipx AND NOT pip: the tools disagree about impacket and cannot share an
 # environment. coercer 2.4.3 pins impacket<0.11 while certipy needs 0.13.x, so a
@@ -27,7 +27,7 @@
       - krb5-user
       - build-essential
       # ntlmrelayx and responder want a real terminal: run them under screen or
-      # tmux, never as a bare ansible/ssh command. See PZ-3.
+      # tmux, never as a bare ansible/ssh command.
       - screen
       - tmux
       - hashcat

@@ -6,7 +6,6 @@
 # window station where SetupWpf launches, so setup runs synchronously here as the
 # forest-root admin (the same account that prepped AD) for the ~1h install. The
 # prerequisite redist is staged first with setupdl so setup does not fetch it.
-# See goad-fidelity-build.
 
 - name: Work around the MSSQL cert-generation ACL bug before setup
   ansible.windows.win_acl:

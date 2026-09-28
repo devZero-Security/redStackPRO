@@ -1,7 +1,7 @@
 # redStackPRO: plant the SCCM attack surface on an installed MECM site (clean-room
 # MIT). Drives the ConfigurationManager module as a CM Full Administrator. Each
 # primitive is wrapped so one failure does not sink the rest, and the outcomes are
-# written to a result file the caller reads. See goad-fidelity-build.
+# written to a result file the caller reads.
 param($SiteCode, $Password, $NaaAccount, $PushAccount, $DaAccount, $AdminGroup,
       $ManagedGroup, $SiteFqdn)
 $ErrorActionPreference = "Continue"

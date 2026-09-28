@@ -5,13 +5,12 @@
 # one is recorded and skipped, so a template may declare more than the engine
 # plants yet without failing the run. This is the socket every host attack-path
 # role plugs into. GOAD is the fidelity benchmark; these are our own tasks, not
-# vendored. See goad-native-recreation.
+# vendored.
 
 # Windows Defender is OFF by default to match GOAD (mayfly ships it disabled so lab
 # tooling and payloads run unhindered). This is legitimate default range config,
 # not an attack step: it runs on every Windows host regardless of declared vulns.
 # The opt-in toggle redstackpro_defender_enabled (default false) leaves Defender on.
-# See productize-temp-fixes (PZ-5).
 - name: Disable Windows Defender unless explicitly enabled
   ansible.builtin.include_tasks: disable_defender.yml
   when: not (redstackpro_defender_enabled | default(false))

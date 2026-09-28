@@ -2,11 +2,11 @@
 
 Nodes become module blocks calling static modules. Edges become generated code,
 because a firewall rule permitting 443 from one host to another exists only
-because someone drew a line. See 0015.
+because someone drew a line.
 
 Everything provider agnostic lives here. What a backend adds is the vocabulary:
 GCP keys firewall rules on a network tag, AWS on a security group reference, and
-0015 already names that as the place the abstraction leaks.
+that is the place the abstraction leaks.
 """
 
 import datetime as _dt
@@ -19,8 +19,7 @@ from ..validate import Context
 # Attack-side host kinds and the AD range host kinds. Both become real machines
 # the terraform stands up. A domain is a logical container, not a host, so it is
 # absent here and never gets a module block; it drives the Ansible layer instead.
-# See goad-native-recreation: a defend range compiles through this same native
-# pipeline, not a GOAD package.
+# A defend range compiles through this same native pipeline, not a GOAD package.
 AD_HOST_KINDS = ("dc", "srv", "wks")
 HOST_KINDS = ("redirector", "teamserver", "collector", "jumpbox", "operator",
               "dc", "srv", "wks", "siem")
@@ -38,7 +37,7 @@ DEFAULT_REGION = {"aws": "us-east-1", "gcp": "us-east4"}
 # operator drives the teamserver over these from an operator box; the beacon
 # channel itself rides the fronts edge through the redirector and is opened
 # there. A teamserver with an unset or unknown C2 gets no operator control rule,
-# the same secure default as a generic teamserver. See P7.
+# the same secure default as a generic teamserver.
 C2_CONTROL_PORTS = {
     "mythic": [7443],    # Mythic web UI
     "sliver": [31337],   # Sliver multiplayer operator listener
@@ -47,12 +46,11 @@ C2_CONTROL_PORTS = {
     # Debian catchall for a custom, operator-supplied C2 (OC2 and the like, plus any
     # C2 kept for the roadmap such as Cobalt Strike), which the operator installs and
     # drives themselves rather than through an in-range operator box, so there is no
-    # redStackPRO service to open a control port for. See P2.
+    # redStackPRO service to open a control port for.
 }
 
 # The VPN listen port per access mode, used when the jumpbox overlay leaves
-# vpn_port unset. WireGuard is udp only; OpenVPN takes udp or tcp. See
-# vpn-multiuser-spec.
+# vpn_port unset. WireGuard is udp only; OpenVPN takes udp or tcp.
 VPN_DEFAULT_PORT = {"wireguard": 51820, "openvpn": 1194}
 
 
@@ -64,7 +62,7 @@ class TerraformPlan:
         self.ctx = Context(topology, self.registry)
         # Region: the compile argument wins, then a region on the document, then
         # the per-provider default. A location rather than provider vocabulary,
-        # so the document may carry it without naming a provider. See 0053.
+        # so the document may carry it without naming a provider.
         self.region = region or topology.get("region") or DEFAULT_REGION.get(provider)
 
     # -- naming
@@ -96,7 +94,7 @@ class TerraformPlan:
 
     def is_public(self, node):
         """Whether this host takes an address, not whether its segment permits
-        one. The validator answers it, so the two cannot disagree. See 0021."""
+        one. The validator answers it, so the two cannot disagree."""
         return self.ctx.public_address(node["id"])
 
     def takes_public_address(self, node):
@@ -107,7 +105,7 @@ class TerraformPlan:
         callers that care (which subnet a host lands in, and whether to allocate
         an address) go through here so they cannot disagree: on AWS a host that
         takes an address must leave the NAT-routed segment subnet, and deciding
-        that twice is how the jumpbox ended up unreachable. See 0021.
+        that twice is how the jumpbox ended up unreachable.
         """
         return bool(self.is_public(node)
                     or (self.is_range() and node["kind"] == "jumpbox"))
@@ -152,7 +150,7 @@ class TerraformPlan:
     @property
     def auto_stop(self):
         """When this range turns itself off, resolved to one shape every
-        provider reads, or None when it does not. See 0057.
+        provider reads, or None when it does not.
 
         The canvas offers two ways to say it and they answer different
         questions, so both are kept rather than collapsed. `at` is a daily wall
@@ -228,7 +226,7 @@ class TerraformPlan:
             # Azure wants HHMM with no separator, which needs zero padding the
             # other two do not. Precomputed as a local so a fixed `at` still
             # renders the same literal it always did: an input that has not
-            # changed must not produce a different file. See 0010.
+            # changed must not produce a different file.
             "hhmm_expr": ("local.rsp_stop_hhmm" if hours
                           else '"%02d%02d"' % (minute // 60, minute % 60)),
         }
@@ -306,7 +304,7 @@ class TerraformPlan:
         (AD replicates on a wide, partly dynamic port set) plus the SIEM boxes
         (agents ship to them on ingest ports a rule per product would not
         enumerate, and a blocked ingest looks like a dead SIEM). The lab subnet
-        is isolated, so an all-from-segment rule is the pragmatic shape. See 0019."""
+        is isolated, so an all-from-segment rule is the pragmatic shape."""
         hosts = list(self.ad_hosts())
         seen = {h["id"] for h in hosts}
         hosts += [h for h in self.hosts()
@@ -316,13 +314,13 @@ class TerraformPlan:
     def management_port(self, node):
         """A Windows host is reached over WinRM rather than ssh, so the rule
         that opens its management path opens a different port. Same branch the
-        Ansible generator makes for the connection plugin. See 0019."""
+        Ansible generator makes for the connection plugin."""
         return 5986 if self.is_windows(node) else 22
 
     def control_ports(self, node):
         """The management ports an operator uses to drive this teamserver, keyed
         on its C2 product. Empty for a non-teamserver or an unknown/unset C2, so
-        a generic teamserver opens no operator control path by default. See P7."""
+        a generic teamserver opens no operator control path by default."""
         if self.ctx.kind(node["id"]) != "teamserver":
             return []
         c2 = node.get("overlay", {}).get("c2", "")
@@ -339,8 +337,7 @@ class TerraformPlan:
         keeps the public portal, so this returns None there. In a VPN mode the
         jumpbox exposes only its VPN port and management (ssh plus the Guacamole
         portal) rides the tunnel rather than the public 22/443. WireGuard is udp
-        only; OpenVPN takes udp or tcp. The port defaults per mode when unset. See
-        vpn-multiuser-spec.
+        only; OpenVPN takes udp or tcp. The port defaults per mode when unset.
         """
         if self.is_range():
             return None
@@ -370,7 +367,7 @@ class TerraformPlan:
         """Whether this segment needs a NAT route of its own.
 
         Not derivable inside the segment module, which is why it is computed
-        here and passed in. Under 0021 a segment can permit public addresses and
+        here and passed in. A segment can permit public addresses and
         still hold hosts that took none, and a gateway route is no use to a host
         with no address. So the question is about the members, and only the
         compiler can see them.
@@ -382,7 +379,7 @@ class TerraformPlan:
         the redStack shape: one public subnet, the jumpbox addressed, everyone
         else internal. GCP renders the same topology with Cloud NAT, so its
         internal members do get their own egress; that provider difference is
-        surfaced by CAP003 as a note, not refused. See 0021 and 0039.
+        surfaced by CAP003 as a note, not refused.
         """
         segment = self.ctx.nodes[segment_id]
         if segment["overlay"].get("egress") != "allowed":
@@ -521,7 +518,7 @@ def operator_hosts_hcl(plan):
     counterpart to the redstackpro.hosts Ansible role (which names the Linux
     hosts); the Windows operator has no WinRM, so its block rides the boot
     script. Provider-agnostic: every host module outputs private_address. See
-    operator_setup.ps1 and the /etc/hosts PAI item.
+    operator_setup.ps1.
 
     The Windows operators are omitted: this list is consumed only by a Windows
     operator (its operator_hosts input), and a host that referenced its own
@@ -620,7 +617,7 @@ def outputs(plan):
         lines += ["  }", "}"]
 
     # Rollover pools. The topology knows which redirectors serve which teamserver;
-    # the operator writes the C2 profile. See 0007.
+    # the operator writes the C2 profile.
     pools = {}
     for edge in ctx.by_role.get("fronts", []):
         pools.setdefault(edge["target"], []).append(edge["source"])

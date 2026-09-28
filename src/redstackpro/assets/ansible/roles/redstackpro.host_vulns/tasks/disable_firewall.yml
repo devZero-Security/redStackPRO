@@ -2,8 +2,7 @@
 # disable_firewall: turn the Windows Firewall off on all profiles, so a host
 # stops filtering the services (SMB, WinRM, RPC) it would otherwise block from
 # the range. A deliberate host misconfiguration, secure by default (only planted
-# when the host declares it). Mirrors GOAD's disable_firewall. See
-# goad-fidelity-build.
+# when the host declares it). Mirrors GOAD's disable_firewall.
 
 - name: Disable the Windows Firewall on all profiles
   ansible.windows.win_shell: netsh advfirewall set allprofiles state off

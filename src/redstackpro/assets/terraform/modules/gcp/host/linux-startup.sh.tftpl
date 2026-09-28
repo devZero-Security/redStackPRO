@@ -6,7 +6,7 @@
 # so a direct login works, and on the jumpbox drops the credential files the
 # portal reads. operator_username carries the same platform account now, so the
 # operator-username file holds redop/blueop. The password is generated at apply,
-# never in the export. See 0001, P1.7, goad-native-recreation.
+# never in the export.
 set -eu
 
 # The guest agent may create ${admin_username} slightly after this runs; wait briefly.

@@ -2,7 +2,7 @@
 # Plant the SCCM attack surface on the installed site. The ConfigurationManager
 # module and the SMS WMI provider require CM Full Administrator, which the site's
 # installing account (the forest-root admin) holds, so this runs under a scheduled
-# task logged on as that account. Best-effort per primitive. See goad-fidelity-build.
+# task logged on as that account. Best-effort per primitive.
 
 - name: Stage the SCCM config script
   ansible.windows.win_copy:

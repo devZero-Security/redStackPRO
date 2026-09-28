@@ -5,7 +5,7 @@
 # inside the same session. GCP does not use this file: its WinRM runspace is torn
 # down mid-promote, so it takes the scheduled-task path in promote_gcp.yml. This
 # file is included only when redstackpro_platform != 'gcp', so a GCP-specific fix
-# can never regress the provider that proved this path. See goad-native-recreation.
+# can never regress the provider that proved this path.
 
 - name: Promote the forest root domain
   microsoft.ad.domain:

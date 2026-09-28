@@ -3,8 +3,7 @@
 # trust is established implicitly when the child domain is created, so this only
 # handles the trusts that must be built explicitly: a forest trust between two
 # separate forest roots (GOAD's sevenkingdoms <-> essos). The source domain runs
-# it with credentials for both sides, so one run wires up both directions. See
-# goad-native-recreation.
+# it with credentials for both sides, so one run wires up both directions.
 
 - name: Establish the forest trust
   ansible.windows.win_powershell:

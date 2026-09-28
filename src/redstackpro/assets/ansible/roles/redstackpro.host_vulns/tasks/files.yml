@@ -4,7 +4,7 @@
 # they land in vulns_vars.files_dir (default C:\redstackpro). A generic file
 # plant. administrator_folder is the specialized admin-desktop-flag form and
 # sysvol_secret is the SYSVOL-logon-script form; this is the plain host drop.
-# Mirrors GOAD's files. See goad-fidelity-build.
+# Mirrors GOAD's files.
 
 # The scalars below are SINGLE-quoted on purpose. In a double-quoted YAML scalar
 # the loader eats one level of backslash before Jinja ever sees it, which leaves

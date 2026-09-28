@@ -8,7 +8,7 @@
 # IIS itself, the upload application, and a plain write grant come from the
 # redstackpro.iis role, which the srv role runs when the host declares the iis
 # service. This file adds only what turns that into an exploitable path, so a host
-# can serve uploads without being exploitable. See goad-fidelity-build (F-iis-webshell).
+# can serve uploads without being exploitable.
 #
 # Path scalars are SINGLE-quoted so the loader leaves backslashes for Jinja; see
 # files.yml for the fuller note on that trap.

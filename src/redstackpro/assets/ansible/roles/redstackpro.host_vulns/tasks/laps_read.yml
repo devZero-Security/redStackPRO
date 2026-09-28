@@ -3,7 +3,7 @@
 # managed local-admin password up to AD and process the policy now, so there is a
 # stored password for the delegated readers to read. The reader delegation itself
 # is applied domain-side from laps_readers. Best-effort: no-ops if the LAPS module
-# is not on this image. See goad-fidelity-build.
+# is not on this image.
 
 - name: Back this host's local-admin password up to AD via Windows LAPS
   ansible.windows.win_powershell:

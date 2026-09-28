@@ -7,7 +7,7 @@
 # load (RCE / local privesc to SYSTEM) fires again on a fully patched host. This is
 # a config toggle, not a patch-level dependency -- it lands on the modern build.
 # Secure by default: only planted when the host declares `printnightmare`. GOAD is
-# the fidelity benchmark; this is our own role. See goad-fidelity-build.
+# the fidelity benchmark; this is our own role.
 
 - name: Point-and-Print - suppress the install/update elevation prompts
   ansible.windows.win_regedit:

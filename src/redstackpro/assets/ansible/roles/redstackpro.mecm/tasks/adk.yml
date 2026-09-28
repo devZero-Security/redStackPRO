@@ -1,7 +1,7 @@
 ---
 # Windows ADK 2004 + the WinPE add-on (the pairing MECM 2303 requires). The
 # offline installers are downloaded, then run quiet with the feature sets MECM
-# needs. See goad-fidelity-build.
+# needs.
 
 - name: Download the ADK installer
   ansible.windows.win_get_url:

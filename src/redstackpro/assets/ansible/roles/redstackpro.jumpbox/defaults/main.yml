@@ -1,6 +1,5 @@
 ---
 # Defaults only. Real values come from host_vars, generated from the topology.
-# See 0011.
 
 redstackpro_jumpbox_services:
   - ssh
@@ -9,26 +8,25 @@ redstackpro_jumpbox_certificate_authority: true
 redstackpro_jumpbox_user: "{{ ansible_user }}"
 # The account service-ssh.yml ensures exists. It is the single platform account
 # (redop for ops, blueop for a range), the same identity ansible connects as and
-# the boot script created -- not a separate "operator". See P1.7 and
-# naming.platform_account.
+# the boot script created -- not a separate "operator".
 redstackpro_jumpbox_operator: "{{ ansible_user }}"
 redstackpro_jumpbox_root: /opt/redstackpro
 
 # The certificate authority. The key is generated here and never leaves. redStackPRO
 # emits variables and paths, never key material, so the CA is created at run
-# time on your own infrastructure. See 0001.
+# time on your own infrastructure.
 redstackpro_ca_dir: /etc/redstackpro/ca
 redstackpro_ca_days: 1825
 redstackpro_ca_subject: "/O=redStackPRO/CN=redStackPRO issuing CA"
 
 # Hardening. This is the only host with a public address, so it carries the
 # most of it. AllowTcpForwarding stays on because every other host in the export
-# is reached by ProxyJump through here. See 0011.
-# Assumed-breach foothold accounts (P2.5): domain users the canvas flagged
+# is reached by ProxyJump through here.
+# Assumed-breach foothold accounts: domain users the canvas flagged
 # assumed_breach, created here as local admins so an operator can SSH in as
 # patient zero. The compiler fills this from the range's users; empty otherwise.
 redstackpro_jumpbox_foothold_users: []
-# The offensive toolchain (PZ-2). The compiler turns this on for a RANGE jumpbox,
+# The offensive toolchain. The compiler turns this on for a RANGE jumpbox,
 # which is the assumed-breach foothold the solution runs from, and leaves it off
 # for an ops bastion. Off by default here so the role is safe standalone.
 redstackpro_jumpbox_offensive_toolkit: false
@@ -71,7 +69,7 @@ redstackpro_vpn_client_dir: "{{ redstackpro_jumpbox_root }}/vpn"
 
 # WireGuard. The server holds .1 of the tunnel /24 and operator peers count up
 # from .2. allowed_ips is what an operator's tunnel routes: the default carve is
-# 10.0.0.0/8 (0046), which covers every range subnet and the tunnel itself.
+# 10.0.0.0/8, which covers every range subnet and the tunnel itself.
 redstackpro_wireguard_port: 51820
 redstackpro_wireguard_subnet: "10.99.0"
 redstackpro_wireguard_address: "{{ redstackpro_wireguard_subnet }}.1/24"
@@ -82,7 +80,7 @@ redstackpro_openvpn_protocol: udp
 redstackpro_openvpn_subnet: 10.98.0.0
 redstackpro_openvpn_netmask: 255.255.255.0
 # Networks the server pushes to clients so their tunnel routes the range, in
-# "network netmask" form. Default covers the 10.0.0.0/8 carve (0046), matching
+# "network netmask" form. Default covers the 10.0.0.0/8 carve, matching
 # the WireGuard allowed_ips default.
 redstackpro_openvpn_routes:
   - "10.0.0.0 255.0.0.0"
@@ -92,7 +90,7 @@ redstackpro_openvpn_routes:
 redstackpro_openvpn_tun_mtu: 1400
 redstackpro_openvpn_mssfix: 1300
 
-# The portal. Authentication is a PostgreSQL database (ADR 0056): named accounts
+# The portal. Authentication is a PostgreSQL database: named accounts
 # and per-user TOTP both need writable user records, which the old read-only
 # file provider could not hold. The connection list is still derived from the
 # inventory -- it is seeded as SQL now instead of a rendered XML file.
@@ -100,7 +98,7 @@ redstackpro_guacamole_version: "1.6.0"
 redstackpro_guacamole_http_port: 8080
 # The database behind the portal. Loopback-only like guacd and the web app; the
 # password is generated on this host at first run and never leaves it or enters
-# the export, the same guarantee the lab password has (0001).
+# the export, the same guarantee the lab password has.
 redstackpro_guacamole_db_image: "postgres:15-alpine"
 redstackpro_guacamole_db_name: guacamole
 redstackpro_guacamole_db_user: guacamole
@@ -116,8 +114,8 @@ redstackpro_guacamole_db_volume: /opt/redstackpro/guac-db
 # that would allow a present-but-off state is defeated by GUACAMOLE-2140, which
 # ignores and deletes a pre-seeded disable flag during rollout and force-enrols
 # everyone. So "enable TOTP" is a deploy-time choice for the whole portal, not a
-# click. Named accounts with mixed enforcement are an Enterprise concern (ADR
-# 0056); this base tier is one admin who either wants 2FA on their login or not.
+# click. Named accounts with mixed enforcement are an Enterprise concern; this
+# base tier is one admin who either wants 2FA on their login or not.
 redstackpro_jumpbox_totp: false
 # The beacon drop. Every RDP tile maps this one directory as a drive, and it is
 # bind-mounted here on the jumpbox, so a file put in it by any route -- scp,

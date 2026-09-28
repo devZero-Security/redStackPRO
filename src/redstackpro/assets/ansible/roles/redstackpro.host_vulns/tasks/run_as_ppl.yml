@@ -2,7 +2,7 @@
 # LSASS RunAsPPL: turn on LSA protection so lsass runs as a protected process. In
 # the GOAD lab this is a hardening tell on a box (braavos) that shapes how the
 # credential-access step must work (a driver/BYOVD or a downgrade), not a weakness
-# on its own. Pure registry; effective after a reboot. See goad-fidelity-build.
+# on its own. Pure registry; effective after a reboot.
 
 - name: Enable LSA protection (RunAsPPL)
   ansible.windows.win_regedit:

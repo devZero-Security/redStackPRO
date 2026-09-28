@@ -2,7 +2,7 @@
 # redStackPRO member server. Clean-room MIT: joins the domain the canvas points
 # it at. A Windows member joins over WinRM; a Linux member (GOAD's lx01, or
 # Dracarys's syrax) enrols with realm/sssd over SSH. Service roles and planted
-# attack paths come from the attack-path layer. See goad-native-recreation.
+# attack paths come from the attack-path layer.
 
 - name: Join a Windows member server
   ansible.builtin.include_tasks: join_windows.yml
@@ -73,7 +73,7 @@
 # A member carrying the iis service installs IIS and publishes the upload
 # application. Declaring the service alone is not an attack path: the iis_webshell
 # host vuln, planted later by the attack-path layer, is what makes a dropped file
-# executable. See goad-fidelity-build (F-iis-webshell).
+# executable.
 - name: Install and configure IIS on a web member
   ansible.builtin.include_role:
     name: redstackpro.iis

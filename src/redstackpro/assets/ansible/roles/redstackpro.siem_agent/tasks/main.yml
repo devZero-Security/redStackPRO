@@ -4,8 +4,7 @@
 # to it with Winlogbeat, and if there is a Wazuh box it enrols the Wazuh agent
 # with it, so both agents run side by side when both boxes exist. Which agents
 # install is driven by the SIEM boxes present (redstackpro_siem_addresses), not
-# by any single host edr. Runs after the SIEM boxes are up. See
-# goad-native-recreation.
+# by any single host edr. Runs after the SIEM boxes are up.
 
 - name: Install the Wazuh agent
   when: "'wazuh' in (redstackpro_siem_addresses | default({}))"

@@ -1,8 +1,7 @@
 ---
 # redStackPRO workstation. Clean-room MIT: a domain-joined user endpoint. Same
 # baseline as a member server (join the domain the canvas points it at); the
-# endpoint's own attack surface comes in a later phase. See
-# goad-native-recreation.
+# endpoint's own attack surface comes in a later phase.
 
 - name: Point DNS at the domain controller
   ansible.windows.win_dns_client:
@@ -28,7 +27,7 @@
 # next task dies on RemoteDisconnected. That is not cosmetic: it cost minilab an
 # entire run, where the controller had fully converged and the workstation failed
 # here on the last attempt, exhausting the retry budget. The dc role already waits
-# like this after its promotion reboot. See goad-fidelity-build.
+# like this after its promotion reboot.
 - name: Wait for the connection to settle after the domain join
   ansible.builtin.wait_for_connection:
     delay: 20
@@ -50,8 +49,7 @@
 # AS the assumed-breach user, and a Domain Users member has no interactive remote
 # logon right by default, so the tile fails the logon without this. Remote Desktop
 # Users only, p0 stays low-priv. Same redstackpro_srv_rdp_users the srv role
-# consumes; the compiler emits it for the landing host of either kind. See
-# range-access-model.
+# consumes; the compiler emits it for the landing host of either kind.
 - name: Let patient zero sign in over RDP
   ansible.windows.win_powershell:
     parameters:

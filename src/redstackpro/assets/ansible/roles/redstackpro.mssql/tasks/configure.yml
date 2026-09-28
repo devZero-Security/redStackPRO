@@ -2,7 +2,7 @@
 # Configure the MSSQL attack paths. Runs SqlCmd as the local administrator, who
 # the chocolatey install makes a sysadmin (-E = trusted connection). First turns
 # on mixed-mode auth and the sa login (the impersonation target), then plants the
-# declared paths. Idempotent-ish. See goad-fidelity-build.
+# declared paths. Idempotent-ish.
 
 - name: Enable mixed-mode auth and the sa login
   ansible.windows.win_powershell:
@@ -138,11 +138,11 @@
 
 # Map the linked-server outbound login to a fixed remote SQL login instead of the
 # default self-mapping. Without this, a domain-authenticated caller crossing the
-# link double-hops to ANONYMOUS on the remote (the Part 7 finding), so the trusted-
+# link double-hops to ANONYMOUS on the remote, so the trusted-
 # link RCE chain does not land. useself=false + @locallogin=NULL applies the remote
 # credential to every local login. The remote password is not carried in the
 # template: an entry names the remote login (GOAD uses sa) and the lab password is
-# substituted at deploy time. Idempotent (drop-then-add). See goad-fidelity-build.
+# substituted at deploy time. Idempotent (drop-then-add).
 - name: Map linked-server logins to a remote credential (not self)
   ansible.windows.win_powershell:
     script: |

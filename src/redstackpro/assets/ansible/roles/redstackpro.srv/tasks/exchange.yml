@@ -4,7 +4,7 @@
 # an enterprise admin, then an unattended mailbox-role install that can run over
 # an hour. The ISO is large and version-specific, so its URL is a variable the
 # operator sets (redstackpro_exchange_iso_url). Runs as the domain admin because
-# schema prep needs it. See goad-native-recreation.
+# schema prep needs it.
 
 - name: Authenticate as the domain administrator for Exchange setup
   ansible.builtin.set_fact:
@@ -146,7 +146,7 @@
   # polls for completion, so a finished install reports success instead of the
   # task being killed at 60 minutes while the scheduled task keeps going. The
   # inner wait loop is shorter than this ceiling, so it is what actually reports
-  # the result. See goad-native-recreation.
+  # the result.
   async: 7200
   poll: 60
   when: redstackpro_exchange_iso_url | default('') | length > 0

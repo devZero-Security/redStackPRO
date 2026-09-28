@@ -10,7 +10,7 @@
 # filter). An offense stack has no domains, so every host names every other; a
 # defense range's standalone hosts (jumpbox, SIEM, operator boxes) name the AD
 # hosts they cannot otherwise resolve, while the AD members themselves resolve
-# through the DCs' DNS and never run this. See range-access-model.
+# through the DCs' DNS and never run this.
 #
 # Marker-bounded and idempotent: a re-run rewrites only redStackPRO's block, and
 # the whole set is re-derived from the inventory each time so an added or

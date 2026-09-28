@@ -2,7 +2,7 @@
 
 A compile produces the complete working directory: generated code plus the
 static modules and roles. Both halves live here so the API and the CLI cannot
-produce different output. See 0010 and 0015.
+produce different output.
 
 Static assets ship inside the package because the API needs them at runtime.
 They are still ordinary version controlled files, reviewable and editable, just
@@ -28,7 +28,7 @@ TFVARS_TO_FILL = {
 }
 
 # Things the account has to have done before apply, which an export cannot do
-# for you because redStackPRO touches no account. See 0001.
+# for you because redStackPRO touches no account.
 ACCOUNT_PRECONDITIONS = {
     "aws": """
 ## Before apply
@@ -457,12 +457,12 @@ RANGE_PROVIDERS = ("aws", "gcp", "proxmox", "azure", "esxi")
 def compile_topology(document, registry=None, provider="gcp", region=None):
     """The whole working directory as {path: contents}.
 
-    This is the artifact 0010 makes primary. The archive endpoint and the CLI
+    This is the primary artifact. The archive endpoint and the CLI
     are both formatters over it. Both an offense range and a defense range
     compile to a redStackPRO terraform + ansible working directory through the
     same native pipeline: a defense range is an Active Directory forest recreated
     natively on the canvas, not a GOAD package. GOAD is the inspiration and the
-    fidelity benchmark; redStackPRO is the engine. See goad-native-recreation.
+    fidelity benchmark; redStackPRO is the engine.
     """
     is_range = (document or {}).get("mode") == "defense"
 

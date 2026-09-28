@@ -1,6 +1,6 @@
 # Every redStackPRO host kind uses this module. The kind distinction is carried by
 # inputs (image, public_address, machine_type) rather than by separate modules,
-# because per kind host modules would be near identical copies. See 0015.
+# because per kind host modules would be near identical copies.
 
 locals {
   tags = concat([var.node_id, "redstackpro", var.kind], var.extra_tags)
@@ -14,7 +14,7 @@ locals {
 # C2 callback domain must keep resolving) and the jumpbox (its Guacamole/SSH entry
 # point). A reserved address is released on teardown like any other resource, so a
 # fresh deploy still gets a new IP; it only holds steady across stop/start of the
-# same range. See the ephemeral-IP finding and range access model.
+# same range.
 resource "google_compute_address" "this" {
   count   = var.public_address && var.reserve_ip ? 1 : 0
   name    = "${lower(var.name)}-ip"
@@ -36,7 +36,7 @@ resource "google_compute_instance" "this" {
 
   # The auto stop schedule, when the canvas asked for one. GCP applies the
   # policy itself, so nothing of ours has to be running or hold a credential
-  # for the range to turn off. See 0057.
+  # for the range to turn off.
   resource_policies = var.resource_policies
 
   boot_disk {
@@ -56,7 +56,7 @@ resource "google_compute_instance" "this" {
   network_interface {
     subnetwork = var.subnetwork
     # Pinned when the topology locks this host to a specific address (a range on
-    # GOAD's canonical octets, see 0055); null lets GCP assign one from the
+    # GOAD's canonical octets); null lets GCP assign one from the
     # subnet's DHCP range, the unchanged default.
     network_ip = var.network_ip != "" ? var.network_ip : null
 
@@ -75,7 +75,7 @@ resource "google_compute_instance" "this" {
   # account, RDP, and for a range the Administrator password plus an HTTPS WinRM
   # listener); a Linux host takes ssh-keys to create the admin account, and for a range a
   # startup script that sets the shared password, authorizes the Guacamole key,
-  # and drops the jumpbox credential files. See 0019, goad-native-recreation.
+  # and drops the jumpbox credential files.
   metadata = merge(
     {
       block-project-ssh-keys = "TRUE"

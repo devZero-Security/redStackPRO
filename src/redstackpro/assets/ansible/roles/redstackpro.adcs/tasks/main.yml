@@ -7,7 +7,6 @@
 # under a scheduled task logged on as the forest-root Administrator (a batch logon
 # carries the full token). The caller supplies that identity. Idempotent: skips if
 # a CA is already present. GOAD is the fidelity benchmark; this is our own role.
-# See goad-native-recreation and goad-fidelity-build.
 
 - name: Fail early if no Enterprise Admin identity was supplied
   ansible.builtin.assert:

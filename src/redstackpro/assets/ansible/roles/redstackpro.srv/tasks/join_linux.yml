@@ -10,8 +10,7 @@
 # the bare node id (KINGSLANDING, VHAGAR). Found live on dracarys. That asymmetry
 # breaks the guarantee that `prefix` namespaces CLOUD resources only and never AD
 # identity, and upstream dracarys calls the host syrax. The Windows path already
-# passes this same variable to microsoft.ad.membership. See 0055 and the naming note
-# in goad-fidelity-build.
+# passes this same variable to microsoft.ad.membership.
 - name: Set the hostname to the lab's node name before enrolling
   become: true
   ansible.builtin.hostname:

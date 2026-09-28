@@ -5,7 +5,6 @@
 # plant both under the single "esc10" catalog id:
 #   case1 - Kdc StrongCertificateBindingEnforcement = 0 (no strong binding)
 #   case2 - Schannel CertificateMappingMethods = 0x4 (weak UPN mapping)
-# See goad-fidelity-build.
 
 - name: ESC10 case1 - disable Kdc strong certificate binding enforcement
   ansible.windows.win_regedit:

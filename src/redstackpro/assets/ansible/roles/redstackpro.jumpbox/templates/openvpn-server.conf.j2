@@ -20,7 +20,7 @@ keepalive 10 120
 # packets over the tunnel blackhole while the handshake (small) succeeds: the
 # tunnel comes up but the portal never answers. tun-mtu is pushed to clients, and
 # mssfix clamps TCP MSS so HTTPS/RDP/SSH over the tunnel fit the path. WireGuard
-# avoids this with its own 1420 default. See vpn-multiuser-spec.
+# avoids this with its own 1420 default.
 tun-mtu {{ redstackpro_openvpn_tun_mtu }}
 mssfix {{ redstackpro_openvpn_mssfix }}
 

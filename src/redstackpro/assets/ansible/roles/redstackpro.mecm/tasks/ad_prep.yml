@@ -4,7 +4,7 @@
 # the schema (extadsch.exe). The container/ACL/schema writes need Schema + Domain
 # Admin, so they run under a scheduled task logged on as the forest-root admin (a
 # batch logon carries that token; a network logon does not). The extracted media is
-# reused by the site install. See goad-fidelity-build.
+# reused by the site install.
 
 - name: Download the MECM baseline media
   ansible.windows.win_get_url:

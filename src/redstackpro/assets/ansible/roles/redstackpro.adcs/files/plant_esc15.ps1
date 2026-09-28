@@ -3,7 +3,7 @@
 # policies, a requester can inject an arbitrary Application Policy (e.g. Client
 # Authentication) into the CSR. The built-in "WebServer" template is schema v1, so
 # the whole exploit is: make it enrollable by a low-priv group and publish it.
-# Runs as Enterprise Admin. Idempotent. See goad-fidelity-build.
+# Runs as Enterprise Admin. Idempotent.
 param($CaName, $EnrollGroup = "Domain Users")
 $ErrorActionPreference = "Stop"
 

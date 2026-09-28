@@ -57,7 +57,7 @@
 # read it, the live profile's client headers stayed empty, and every generated implant
 # beaconed WITHOUT the gating header. The redirector then did its job and handed it the
 # decoy page, so the implant never came back -- from a deploy that reported success and
-# a teamserver you could log into. See F-sliver-c2-profile.
+# a teamserver you could log into.
 - name: Install the C2 profile applier
   ansible.builtin.template:
     src: sliver-c2profile.sh.j2
@@ -96,7 +96,7 @@
 # version of this bug -- you get a teamserver you can log into, generate implants
 # from, and which never receives a callback. The Mythic role learned the same
 # lesson; this mirrors its shape, including verifying the bind rather than
-# trusting the command. See F-sliver-listener.
+# trusting the command.
 - name: Write the listener rc script
   ansible.builtin.template:
     src: sliver-listener.rc.j2

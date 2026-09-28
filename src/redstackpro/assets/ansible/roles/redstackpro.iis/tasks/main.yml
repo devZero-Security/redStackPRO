@@ -5,7 +5,7 @@
 # only give us a simple file upload functionality"). The application is deliberately
 # ordinary: it is the loose ACL on the upload folder that makes it a foothold, and
 # that is planted separately by the iis_webshell host vuln, so a host can run IIS
-# without being exploitable. See goad-native-recreation and goad-fidelity-build.
+# without being exploitable.
 #
 # Path scalars are SINGLE-quoted throughout. Double-quoted, the YAML loader eats a
 # backslash level before Jinja sees it, which is how 'C:\inetpub\wwwroot\upload'

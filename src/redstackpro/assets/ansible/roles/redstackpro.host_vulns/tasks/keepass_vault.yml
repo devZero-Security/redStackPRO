@@ -8,8 +8,7 @@
 # the vault stays consistent with whatever password the domain user really got.
 #
 # The database is built on-host with KeePassLib (shipped inside KeePass.exe), not
-# KPScript, so no extra plugin download is needed. See goad-fidelity-build and
-# dracarys-fidelity-gap.
+# KPScript, so no extra plugin download is needed.
 
 - name: Resolve the keepass_vault parameters
   ansible.builtin.set_fact:

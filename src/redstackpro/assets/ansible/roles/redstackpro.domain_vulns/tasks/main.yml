@@ -4,7 +4,7 @@
 # runs in a final play on the controllers; it reloads the domain definition
 # because it is its own play, and connects as the domain admin the controller
 # play already set. Recognizable-first: unconstrained delegation and shadow
-# credentials. See goad-native-recreation.
+# credentials.
 
 - name: Load the domain definition
   ansible.builtin.include_vars:

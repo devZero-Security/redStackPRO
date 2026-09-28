@@ -4,8 +4,7 @@
 # Administrator with the shared lab password and stands up an HTTPS WinRM
 # listener, so Ansible connects as Administrator (which becomes the domain
 # Administrator once the forest root is promoted, the same password surviving the
-# promotion). The subnet is isolated, so the listener is self signed. See
-# goad-native-recreation.
+# promotion). The subnet is isolated, so the listener is self signed.
 $ErrorActionPreference = "Stop"
 $pass = ConvertTo-SecureString "${lab_password}" -AsPlainText -Force
 

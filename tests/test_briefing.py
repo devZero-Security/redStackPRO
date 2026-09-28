@@ -86,7 +86,7 @@ def test_briefing_filename_is_mode_specific():
     assert "DEFENSE-BRIEFING.md" not in ops_files
 
 
-# -- the offense operators / VPN access section (vpn-multiuser-spec)
+# -- the offense operators / VPN access section
 
 def _offense_with_operators(access_mode=None, operators=None, **vpn):
     doc = json.loads(

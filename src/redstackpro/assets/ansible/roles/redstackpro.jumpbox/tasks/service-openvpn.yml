@@ -3,7 +3,7 @@
 # The server stands up either way; when the topology declared operators, each one
 # gets a client certificate issued by the jumpbox CA and a client .ovpn rendered
 # for the admin to hand out. Keys are generated here and never leave the jumpbox;
-# only the .ovpn is fetched and distributed. See vpn-multiuser-spec and 0001.
+# only the .ovpn is fetched and distributed.
 #
 # The server certificate is issued by the jumpbox CA, so a topology that turns the
 # certificate authority off and asks for openvpn is a topology that has to supply

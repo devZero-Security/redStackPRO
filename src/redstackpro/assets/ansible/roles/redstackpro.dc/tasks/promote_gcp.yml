@@ -9,16 +9,14 @@
 # install uses for the double-hop. Ansible only stages the script, starts the
 # task, and waits for the host to come back a controller; nothing heavy runs over
 # WinRM. Included only when redstackpro_platform == 'gcp', so this never touches
-# the AWS-proven path in promote_default.yml. See goad-native-recreation and
-# redstackpro_platform.
+# the AWS-proven path in promote_default.yml.
 
 # Is this host already a promoted controller? A re-run of the play (the deploy
 # loop retries site.yml) must be idempotent: if the box is already a DC, the
 # whole promotion sequence -- staging, the scheduled task, and above all the
 # "wait for the promotion reboot to take the port down" -- must be skipped, or
 # that 1200s down-wait times out forever because an already-promoted box never
-# reboots again. This is the re-run half of P1-CHILDDC. DomainRole 4=backup DC,
-# 5=primary DC.
+# reboots again. DomainRole 4=backup DC, 5=primary DC.
 - name: Detect whether this host is already a domain controller
   ansible.windows.win_powershell:
     script: |
@@ -93,7 +91,7 @@
         # because the task is one-shot. That pre-flight runs BEFORE any directory
         # change, so retrying is clean: wait for the parent's LDAP to actually
         # answer, then attempt the promotion, and retry the whole thing a few
-        # times before giving up. See P1-CHILDDC.
+        # times before giving up.
         $cred = New-Object System.Management.Automation.PSCredential(
           "Administrator@{{ redstackpro_domain.parent_fqdn }}",
           (ConvertTo-SecureString "{{ redstackpro_lab_password }}" -AsPlainText -Force))
@@ -171,7 +169,7 @@
         # the one-shot trigger fired). The box is stable on a re-run, so re-fire the
         # promotion directly rather than waiting for a trigger that already spent
         # itself. This is what stops a transient parent outage from stalling the
-        # child DC forever. See P1-CHILDDC.
+        # child DC forever.
         Start-ScheduledTask -TaskName RSPPromote
       }
   register: redstackpro_register

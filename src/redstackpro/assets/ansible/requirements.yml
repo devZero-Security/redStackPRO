@@ -4,19 +4,19 @@
 #
 # Ansible itself is not bundled and its source is not vendored or linked. These
 # are ordinary dependencies the operator installs on their own machine, and the
-# generated playbooks are redStackPRO's own work. See 0002.
+# generated playbooks are redStackPRO's own work.
 collections:
   - name: community.general
   - name: ansible.posix
   # The jumpbox portal runs in containers.
   - name: community.docker
   # A Windows operator box. Reached over psrp rather than ssh, so every module
-  # that touches it comes from here. See 0019.
+  # that touches it comes from here.
   - name: ansible.windows
   - name: community.windows
   - name: chocolatey.chocolatey
   # Active Directory for the defensive ranges: a range's controllers, domains,
   # trusts, groups, and users are built with these modules. redStackPRO's own
   # roles orchestrate them; the collection is an ordinary dependency the operator
-  # installs, not vendored GOAD content. See goad-native-recreation.
+  # installs, not vendored GOAD content.
   - name: microsoft.ad

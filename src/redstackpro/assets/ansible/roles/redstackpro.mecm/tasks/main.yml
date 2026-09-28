@@ -4,7 +4,7 @@
 # the attack config is quick CM-module scripting. Idempotent: the site install is
 # skipped once the site is present, and the config is safe to re-run. Runs the
 # AD-writing and setup steps under a batch logon as the forest-root admin (Schema/
-# Enterprise Admin), the same token trick the ADCS role uses. See goad-fidelity-build.
+# Enterprise Admin), the same token trick the ADCS role uses.
 
 - name: Fail early without a domain admin identity or a SQL server
   ansible.builtin.assert:

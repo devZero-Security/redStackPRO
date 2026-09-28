@@ -38,7 +38,7 @@
 
 # The assumed-breach foothold accounts, if the range declared any. Local admins
 # so an operator can SSH in as patient zero (the domain side is a low-priv member
-# seeded by the dc role). See range-access-model and P2.5.
+# seeded by the dc role).
 - name: Create the assumed-breach foothold accounts
   ansible.builtin.include_tasks: foothold.yml
   when: redstackpro_jumpbox_foothold_users | default([]) | length > 0

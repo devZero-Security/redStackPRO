@@ -3,7 +3,7 @@
 # the chain references but the directory does not have yet is created, a target
 # that cannot be resolved is skipped rather than aborting the run, and every
 # entry is wrapped so one bad ACE does not sink the rest. Majority-coverage by
-# design. See redStackPRO goad-native-recreation.
+# design.
 param($AclsJson)
 Import-Module ActiveDirectory
 $ErrorActionPreference = "Stop"

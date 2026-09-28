@@ -3,7 +3,6 @@
 # authenticates over SMB to another host, generating coercible NTLM auth an
 # attacker can relay (e.g. to LDAP or the AD CS web endpoint). Runs as a
 # privileged domain user (GOAD uses eddard.stark) with the shared lab password.
-# See goad-fidelity-build.
 
 - name: Create the NTLM-relay coercion bot
   ansible.windows.win_powershell:

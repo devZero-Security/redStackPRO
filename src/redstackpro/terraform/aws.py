@@ -9,7 +9,7 @@ AWS restricts by security group reference, so the group has to exist as a
 resource before a rule can point at it, and a rule carries exactly one source.
 Three senders to one collector is one rule on GCP and three here.
 
-That is the provider abstraction leaking, and 0015 says it leaks here.
+That is the provider abstraction leaking, and this is where it leaks.
 """
 
 from .plan import (  # noqa: F401  GenerationError re-exported
@@ -281,13 +281,13 @@ def _main(plan):
         # address, so their outbound rides a NAT gateway rather than the internet
         # gateway. The gateway is built only when a segment actually needs it
         # (segment_needs_nat), because it bills by the hour; its subnet is carved
-        # from a range no segment occupies. See 0021.
+        # from a range no segment occupies.
         needs_nat = plan.needs_nat(nid)
         # An addressed host cannot live in a NAT-routed subnet on AWS: one route
         # table serves the whole subnet, so pointing it at the NAT for the internal
         # hosts leaves the addressed one unable to answer inbound. It goes in the
         # public subnet instead, which is the same subnet the NAT gateway needs, so
-        # one is enough. See public_hosts and 0021.
+        # one is enough. See public_hosts.
         public_hosts = plan.public_hosts_in_network(nid)
         pairs = [
             ("source", '"./modules/aws/network"'),
@@ -315,7 +315,7 @@ def _main(plan):
             # A subnet holding any host without a public address routes its
             # outbound through the NAT gateway; a public subnet (jumpbox,
             # redirector) keeps the internet gateway. segment_needs_nat sees the
-            # members, which exposure alone cannot. See 0021.
+            # members, which exposure alone cannot.
             ("nat", "true" if plan.segment_needs_nat(node["id"]) else "false"),
             ("internet_gateway_id",
              "module.%s.internet_gateway_id" % plan.ref(network)),
@@ -331,10 +331,10 @@ def _main(plan):
     # the SDK directly, so there is no Lambda to write, deploy or pay for. The
     # permission lives in a role EventBridge assumes, NOT a credential on any
     # host -- in particular not on the jumpbox, which is the range's only public
-    # box and stays credential-free (minimize-jumpbox-web-surface).
+    # box and stays credential-free.
     #
     # STOP, never terminate: the forest took forty minutes to provision and comes
-    # back on boot. See 0057.
+    # back on boot.
     #
     # NOTE this is the stack's first IAM resource. An operator whose credentials
     # cannot create roles will fail the apply here, and the error names this
@@ -410,7 +410,7 @@ def _main(plan):
         seg_ov = plan.ctx.nodes[segment].get("overlay", {})
         # An address-less host on an internet-exposure (IGW-routed) segment has no
         # NAT to reach, so it takes an auto-assigned public IP for egress, the way
-        # redStack does. Egress only: no Elastic IP, SG locks inbound. See 0021.
+        # redStack does. Egress only: no Elastic IP, SG locks inbound.
         auto_public_ip = (not takes_public
                           and seg_ov.get("exposure") == "internet"
                           and seg_ov.get("egress") == "allowed")
@@ -438,12 +438,11 @@ def _main(plan):
             # else -- teamservers, operators, collectors -- stays private with no
             # public IP, so it cannot be scanned or reached from the internet at
             # all, and egresses through the NAT gateway. Matches the GCP model.
-            # See 0021.
             ("public_address", "true" if takes_public else "false"),
             ("auto_public_ip", "true" if auto_public_ip else "false"),
             ("key_name", "aws_key_pair.redstackpro.key_name"),
             # The single platform account (redop for ops, blueop for a range);
-            # cloud-init creates it and authorizes the keys for it. See P1.7.
+            # cloud-init creates it and authorizes the keys for it.
             ("admin_username", '"%s"' % plan.admin_account),
             # The key pair lands only on the image default account. cloud-init in
             # the host module uses this to create the admin account the Ansible
@@ -451,12 +450,12 @@ def _main(plan):
             ("ssh_public_key", "var.ssh_public_key"),
             # A fresh Windows image has no WinRM listener, so the host module
             # stands one up. Without it the operators play cannot connect at
-            # all. See 0019.
+            # all.
             ("windows", "true" if plan.is_windows(node) else "false"),
             # A range's controllers and members are provisioned over WinRM, so
             # the boot script sets the Administrator password and an HTTPS
             # listener. An offense range's Windows operator self-provisions and
-            # is left alone. See goad-native-recreation.
+            # is left alone.
             ("enable_winrm",
              "true" if (plan.is_range() and plan.is_windows(node)) else "false"),
             # A stable Elastic IP for the two hosts reached from outside, so their
@@ -472,7 +471,7 @@ def _main(plan):
             # The Windows local account and the Guacamole login are the same
             # single platform identity as the Linux admin (redop for ops, blueop
             # for a range), not a separate "operator". The module input keeps its
-            # name; the value it now carries is the platform account. See P1.7 and
+            # name; the value it now carries is the platform account. See
             # naming.platform_account.
             ("operator_username", '"%s"' % plan.admin_account),
             ("guac_public_key", "tls_private_key.guacamole.public_key_openssh"),
@@ -492,7 +491,7 @@ def _main(plan):
             # module's default does not have.
             pairs.append(("disk_size_gb", "50"))
         # A range locking this host to a specific address (GOAD's canonical
-        # octets, see 0055); omitted lets AWS assign one from the subnet's
+        # octets); omitted lets AWS assign one from the subnet's
         # range, the unchanged default.
         #
         # An addressed host is the exception: it sits in the public subnet, whose
@@ -500,7 +499,7 @@ def _main(plan):
         # with the segment the pin was written against. Honouring the pin there
         # would fail at apply for an address outside the subnet, so it is dropped
         # and AWS assigns one. The pinned octets that matter for fidelity are the
-        # AD hosts', and those stay in the segment. See 0055.
+        # AD hosts', and those stay in the segment.
         internal_ip = node.get("overlay", {}).get("internal_ip")
         if internal_ip and not takes_public:
             pairs.append(("private_ip", '"%s"' % internal_ip))
@@ -534,11 +533,10 @@ def _main(plan):
         lines += ["", 'module "%s" {' % plan.ref(node["id"])] + align(pairs) + ["}"]
 
     # peers: a VPC peering plus a route to the peer CIDR in every segment route
-    # table on each side, because AWS does not exchange routes on its own. See
-    # 0031.
+    # table on each side, because AWS does not exchange routes on its own.
     #
     # "Every route table" has to include the PUBLIC one, not just the segments'.
-    # A public-addressed host does not live in a segment subnet on AWS (0054) --
+    # A public-addressed host does not live in a segment subnet on AWS --
     # it is relocated into the network's public subnet, which has a route table
     # of its own carrying only a local route and a default route to the internet
     # gateway. Leave it out and such a host reaches the internet and its own VPC
@@ -696,12 +694,12 @@ def _firewall(plan):
     def source_cidr(node_id):
         # The host's own subnet, for a rule that reaches it across a peering.
         # A security group reference across peered VPCs needs the connection
-        # active first, so a CIDR sidesteps the apply ordering. See 0031.
+        # active first, so a CIDR sidesteps the apply ordering.
         #
         # A host that takes a public address is NOT in its declared segment on
         # AWS. One route table serves a whole subnet, so an addressed host
         # cannot sit in the NAT-routed one and gets relocated into the network's
-        # public subnet instead (see public_hosts and 0054). Naming the declared
+        # public subnet instead (see public_hosts). Naming the declared
         # segment here would therefore allow a CIDR the host is not in, and the
         # rule would deny the very traffic it was written for. This is exactly
         # how the ops jumpbox lost SSH to its redirector across the peering: the
@@ -745,7 +743,7 @@ def _firewall(plan):
             seen.add(name)
             # Same VPC names the redirector by its security group; across a
             # peering, by its subnet CIDR, since a group reference needs the
-            # connection active first. See 0031.
+            # connection active first.
             if network_of(rdir) == network_of(ts):
                 lines += [""] + _ingress(
                     name, plan.ref(ts), protocol, upstream,
@@ -765,7 +763,7 @@ def _firewall(plan):
     # teamserver management path that nothing else opens. One rule per
     # operator/port, because a security group rule takes one source. Same VPC
     # names the operator by its security group; across a peering, by its subnet
-    # CIDR. Emitted only for a teamserver whose C2 has a known control port. See P7.
+    # CIDR. Emitted only for a teamserver whose C2 has a known control port.
     operators = sorted(plan.operators(), key=lambda h: h["id"])
     for ts in sorted(plan.hosts(), key=lambda h: h["id"]):
         ports = plan.control_ports(ts)
@@ -805,7 +803,7 @@ def _firewall(plan):
                 continue
             seen.add(name)
             # Same VPC names the sender by its security group; across a peering,
-            # by its subnet CIDR. See 0031.
+            # by its subnet CIDR.
             if network_of(sender) == cnet:
                 lines += [""] + _ingress(
                     name, plan.ref(collector), "tcp", port,
@@ -830,8 +828,7 @@ def _firewall(plan):
         # listen port, and the Guacamole portal is NOT exposed publicly: operators
         # reach it over the tunnel instead. In public mode (the default, and every
         # defense range) the portal is opened on 443 as before. The jumpbox keeps its
-        # stable public IP either way, since it is the VPN endpoint. See
-        # vpn-multiuser-spec.
+        # stable public IP either way, since it is the VPN endpoint.
         name = "mgmt_in_%s" % plan.ref(jump)
         if name not in seen:
             seen.add(name)
@@ -871,7 +868,7 @@ def _firewall(plan):
         # to a relay listener is dropped. This is *internal* (range-segment)
         # surface, which a lab expects; the jumpbox's internet surface stays the
         # operator rules above. Mirrors the AD hosts' all-from-segment rule
-        # below. See part-04 and gcp.py's foothold rule.
+        # below. See gcp.py's foothold rule.
         name = "foothold_in_%s" % plan.ref(jump)
         scidr = source_cidr(jump)
         if name not in seen and scidr:
@@ -893,7 +890,7 @@ def _firewall(plan):
             base = "mgmt_out_%s_%s" % (plan.ref(jump), plan.ref(host["id"]))
             # A Windows host is reached over WinRM (22 opens nothing on it), and
             # guacd on the jumpbox also needs 3389 to render its RDP tile, for a
-            # Windows host or a desktop-mode Kali operator alike. See 0019.
+            # Windows host or a desktop-mode Kali operator alike.
             rules = [(base, plan.management_port(host))]
             if plan.is_windows(host) or plan.is_gui_operator(host):
                 rules.append((base + "_rdp", 3389))
@@ -902,7 +899,7 @@ def _firewall(plan):
                     continue
                 seen.add(name)
                 # Same VPC names the jumpbox by its security group; across a
-                # peering, by its subnet CIDR. See 0031.
+                # peering, by its subnet CIDR.
                 if network_of(host["id"]) == jnet:
                     lines += [""] + _ingress(
                         name, plan.ref(host["id"]), "tcp", port,

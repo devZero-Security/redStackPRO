@@ -5,7 +5,6 @@
 # NTLM fallback (coercible/relayable to site takeover), password-less PXE, and a
 # Full-Administrator RBAC grant. GOAD's SCCM lab is the fidelity benchmark; this
 # is our own role. Version-locked: MECM 2303 pairs with ADK 2004.
-# See goad-fidelity-build.
 
 redstackpro_mecm_site_code: "P01"
 redstackpro_mecm_site_name: "redStackPRO Site"

@@ -1,7 +1,7 @@
 ---
 # CredSSP server: let this host accept CredSSP authentication -- the receiving end
 # of an unconstrained double-hop, so a relayed/forwarded credential can be used
-# here. Adds CredSSP to the WSMan service's allowed auth. See goad-fidelity-build.
+# here. Adds CredSSP to the WSMan service's allowed auth.
 
 - name: Enable CredSSP server authentication
   ansible.windows.win_powershell:

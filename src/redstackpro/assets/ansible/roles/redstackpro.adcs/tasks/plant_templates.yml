@@ -4,7 +4,7 @@
 # writes go to the configuration partition, so every planter runs under the
 # Enterprise-Admin scheduled task in run_ea.yml. Planters are idempotent (they
 # return "template exists" if already present). CA-wide flags (esc6/esc11/esc7)
-# are handled in ca_config.yml, not here. See goad-fidelity-build.
+# are handled in ca_config.yml, not here.
 
 - name: Stage the certificate-template planters
   ansible.windows.win_copy:

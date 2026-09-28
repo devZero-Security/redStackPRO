@@ -7,7 +7,7 @@
 # This is a config toggle (a security-descriptor/registry setting), not a patch
 # dependency. Only meaningful on a DC, so it is guarded on the NTDS service; on a
 # non-DC it is a harmless no-op. Reversing a hardening default -- deliberately a
-# vuln toggle, secure by default. See goad-fidelity-build.
+# vuln toggle, secure by default.
 
 - name: Check whether this host is a domain controller (NTDS present)
   ansible.windows.win_service_info:

@@ -2,8 +2,7 @@
 # A recurring scheduled task (GOAD's connect_bot / a login bot). Generalizes the
 # coercion-bot pattern: runs a command on a repeating interval, optionally as a
 # domain user (the range's shared lab password) so an interactive logon / stored
-# credential is present for capture. Parameters from vulns_vars.schedule. See
-# goad-fidelity-build.
+# credential is present for capture. Parameters from vulns_vars.schedule.
 
 - name: Stage the bot script if one is provided
   ansible.windows.win_copy:

@@ -4,8 +4,7 @@
 # laps_read attack path (a low-priv principal who can read a box's local admin
 # password). Uses Windows LAPS (built into current Windows Server); if the LAPS
 # module is not present (an unpatched image) it no-ops rather than failing, so the
-# path is best-effort. Runs on the controller as domain admin. See
-# goad-fidelity-build.
+# path is best-effort. Runs on the controller as domain admin.
 
 - name: Configure LAPS schema and reader delegation
   ansible.windows.win_powershell:

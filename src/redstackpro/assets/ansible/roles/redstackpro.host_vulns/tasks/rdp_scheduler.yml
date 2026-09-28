@@ -2,7 +2,7 @@
 # RDP scheduled logon: a recurring task that performs an interactive-style logon
 # as a domain user, so an attacker on the box can capture a live session or its
 # credentials (GOAD's connect_bot). Runs as a domain user with the shared lab
-# password. See goad-fidelity-build.
+# password.
 
 - name: Ensure the setup directory exists
   ansible.windows.win_file:

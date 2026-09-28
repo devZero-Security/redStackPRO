@@ -76,7 +76,7 @@ def test_groups_come_from_the_registry(redstack):
     inv = load(files(redstack), "ansible/inventory.yml")
     children = inv["all"]["children"]
     # windows is auxiliary, not a kind group: it exists only to give the
-    # bootstrap play a target. See 0022.
+    # bootstrap play a target.
     assert set(children) == {"collectors", "jumpboxes", "operators",
                              "redirectors", "teamservers", "windows"}
     assert set(children["redirectors"]["hosts"]) == {"off-apache-rd01"}
@@ -123,7 +123,7 @@ def test_collector_does_not_ship_to_itself(redstack):
 
 
 def test_manages_injects_proxy_jump(redstack):
-    # The proxy user is the single platform account, redop in ops mode (P1.7).
+    # The proxy user is the single platform account, redop in ops mode.
     ts = load(files(redstack), "ansible/host_vars/off-myth-ts01.yml")
     assert "ProxyJump=redop@<<tf:off-jump-bx01:public_address>>" in \
         ts["ansible_ssh_common_args"]
@@ -304,7 +304,7 @@ def test_ssh_key_path_is_defined_not_left_dangling(redstack):
 def test_windows_operator_is_not_reached_over_ssh(redstack):
     """A role cannot choose its own connection: Ansible picks the plugin before
     the first task runs. So the connection is part of what the topology derives,
-    the same as the group and the play position. See 0019."""
+    the same as the group and the play position."""
     ops = load(files(redstack), "ansible/host_vars/off-win-op01.yml")
     assert ops["redstackpro_operator_os"] == "windows"
     assert ops["ansible_connection"] == "psrp"
@@ -336,7 +336,7 @@ def test_linux_operator_keeps_its_proxy_jump(redstack):
     assert "ansible_connection" not in ops
 
 
-# -- windows listener signing (0022)
+# -- windows listener signing
 
 def test_windows_host_vars_validate_against_the_authority(redstack):
     """The steady state validates. The listener is signed by the bootstrap play,
@@ -376,7 +376,7 @@ def test_range_emits_the_compile_provider_as_platform():
     """A range surfaces the provider it compiled for as redstackpro_platform so
     the roles can branch on it. AWS and GCP must stay independent: a promotion
     fix proven on one provider cannot regress another, and the branch key is
-    this variable. See goad-native-recreation."""
+    this variable."""
     for provider in ("aws", "gcp"):
         out = files(_range_doc(), provider=provider)
         all_ = load(out, "ansible/group_vars/all.yml")
@@ -422,7 +422,7 @@ def test_every_play_ships_when_the_topology_says_to(redstack):
     """The shipper role follows the logs_to edge rather than the kind, so it is
     a conditional role on every play rather than a group of its own."""
     site = load(files(redstack), "ansible/site.yml")
-    # The bootstrap play does not ship logs; it only signs the listener (0022).
+    # The bootstrap play does not ship logs; it only signs the listener.
     # The hosts-mapping play only writes /etc/hosts and ships nothing either.
     for play in [p for p in site if p["hosts"] != "windows"
                  and not p["name"].startswith("Map hosts by name")]:
@@ -1120,7 +1120,7 @@ def test_the_mythic_unpin_runs_after_every_install_that_regenerates_the_compose(
         assert names.index(installer) < unpin, (installer, names[unpin])
 
 
-# -- multi-user VPN access wiring (vpn-multiuser-spec)
+# -- multi-user VPN access wiring
 # access_mode is the single field an operator sets; the compiler turns it into the
 # concrete VPN service task and pins the listen port so Ansible and Terraform agree.
 

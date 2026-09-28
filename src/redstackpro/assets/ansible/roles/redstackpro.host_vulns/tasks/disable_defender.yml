@@ -7,8 +7,7 @@
 # the Real-Time Protection keys), which Tamper Protection does not override and
 # which takes effect on the next boot. Set-MpPreference is still attempted for an
 # immediate effect when Tamper Protection is off. A reboot is triggered only when a
-# policy key actually changed, so a re-run is idempotent. See goad-fidelity-build
-# and productize-temp-fixes (PZ-5).
+# policy key actually changed, so a re-run is idempotent.
 
 - name: Set the Windows Defender policy keys (master + real-time protection)
   ansible.windows.win_regedit:

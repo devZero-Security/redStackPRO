@@ -3,8 +3,7 @@
 # GOAD paths from the range's own data: kerberoastable and AS-REP-roastable
 # accounts, weak credentials, and the ACL escalation chain. Majority-coverage by
 # design, prioritized by how recognizable the path is, not a vuln-by-vuln clone.
-# Runs as the domain administrator, after the directory is populated. See
-# goad-native-recreation.
+# Runs as the domain administrator, after the directory is populated.
 
 - name: Set SPNs on kerberoastable accounts
   microsoft.ad.user:
@@ -102,8 +101,7 @@
 # superman, so the credential the lab documents no longer authenticated. Worse, it
 # deadlocked the deploy: stored_credential registers a scheduled task as alice using
 # the declared password and got "The user name or password is incorrect", failing
-# every attempt. Only dave worked, because his two values happened to match. See
-# goad-fidelity-build.
+# every attempt. Only dave worked, because his two values happened to match.
 - name: Set a weak, sprayable password on flagged accounts that declare none
   microsoft.ad.user:
     name: "{{ item.username }}"

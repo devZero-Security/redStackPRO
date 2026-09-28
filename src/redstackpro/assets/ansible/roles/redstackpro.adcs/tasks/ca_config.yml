@@ -5,7 +5,7 @@
 # the CA host (the play's session is a local admin on the CA, which is enough to
 # write the CA's HKLM registry) and take effect after a CertSvc restart. Each is
 # gated on the host declaring that esc id. GOAD is the fidelity benchmark; this is
-# our own role. See goad-fidelity-build.
+# our own role.
 
 # ESC6: the CA honours a subject alternative name supplied in the request for any
 # template (EDITF_ATTRIBUTESUBJECTALTNAME2), so a low-priv user can request a cert

@@ -1,7 +1,6 @@
 ---
 # WSUS (a MECM software-update-point prerequisite). Installs the role against the
 # remote SQL instance, then runs the post-install to link WSUS to that SQL box.
-# See goad-fidelity-build.
 
 - name: Install the WSUS role (services + DB, remote SQL)
   ansible.windows.win_feature:

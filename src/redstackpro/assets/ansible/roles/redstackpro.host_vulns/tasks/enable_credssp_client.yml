@@ -2,7 +2,7 @@
 # CredSSP client: let this host delegate fresh credentials to any server (the
 # initiating end of a double-hop). Turns on the AllowFreshCredentials policy with
 # a wildcard delegate list, so a logon here can be forwarded anywhere -- the
-# permissive posture the double-hop attack relies on. See goad-fidelity-build.
+# permissive posture the double-hop attack relies on.
 
 - name: Enable CredSSP client delegation
   ansible.windows.win_powershell:

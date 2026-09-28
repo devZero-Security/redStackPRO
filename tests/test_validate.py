@@ -126,7 +126,7 @@ def test_car008_desktop_kali_operator_satisfies_ui_c2(redstack):
 def test_rng009_user_flaw_declaart_as_host_vuln_warns():
     """Kerberoasting on a host is a no-op (it is a user flaw), so the compiler
     warns rather than silently planting nothing. It stays valid: a warning, not
-    an error. See F-dual-modeling."""
+    an error."""
     topology = {
         "schema_version": "0.7.0", "mode": "defense", "name": "T", "prefix": "def",
         "nodes": [
@@ -167,7 +167,7 @@ def test_mgt001_no_management_path(minimal):
 
 def test_exp002_teamserver_exposed(minimal):
     """A teamserver holding an address, which is now the host's own field
-    rather than a fact about the segment it landed in. See 0021."""
+    rather than a fact about the segment it landed in."""
     for n in minimal["nodes"]:
         if n["id"] == "c2-sub01":
             n["overlay"]["exposure"] = "internet"
@@ -210,7 +210,7 @@ def test_exp005_an_address_the_segment_forbids(minimal):
 
 
 def test_a_jumpbox_may_share_a_segment_with_what_it_fronts(redstack, registry):
-    """The shape 0021 exists for: one management segment holding the jumpbox
+    """The shape exists for: one management segment holding the jumpbox
     and the operator boxes, which 0.2.0 could not express at all."""
     nodes = {n["id"]: n for n in redstack["nodes"]}
     nodes["mgmt-sub01"]["overlay"]["exposure"] = "internet"
@@ -302,7 +302,7 @@ def test_cap003_is_retiart_and_a_mixed_segment_is_no_longer_flagged():
     NAT route. The AWS backend no longer builds that shape: an addressed host goes
     in the network's own public subnet, so the segment's subnet routes at the NAT
     for everyone else. The rule had also never fired, being gated on
-    exposure == "internet" while every shipped template uses "local". See 0054."""
+    exposure == "internet" while every shipped template uses "local"."""
     from redstackpro import validate as validate_module
     assert not hasattr(validate_module, "cap003_mixed_exposure_segment")
 
@@ -310,12 +310,12 @@ def test_cap003_is_retiart_and_a_mixed_segment_is_no_longer_flagged():
 def test_the_shipped_examples_compile_everywhere(redstack, registry):
     """Nothing shipped is single provider: the blueprint has no errors on GCP or
     AWS. The one internet segment renders with Cloud NAT on GCP and as a gateway
-    subnet on AWS. See 0039."""
+    subnet on AWS."""
     for provider in ("gcp", "aws"):
         assert errors(redstack, provider=provider, registry=registry) == set()
 
 
-# -- peering (0029)
+# -- peering
 
 def _two_networks(cidr_a="10.10.0.0/16", cidr_b="10.20.0.0/16"):
     """A jumpbox in network-a managing network-b, the cross-network case. Valid enough

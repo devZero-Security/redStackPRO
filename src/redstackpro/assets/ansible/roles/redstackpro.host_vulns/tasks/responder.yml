@@ -3,7 +3,7 @@
 # deliberately unresolvable host, so its name lookup falls through to LLMNR/NBT-NS
 # and a rogue responder captures the bot user's NetNTLM hash. Runs as a domain
 # user (the range shares one lab password). Pairs with llmnr_poisoning /
-# nbtns_poisoning. See goad-fidelity-build.
+# nbtns_poisoning.
 
 - name: Create the Responder coercion bot
   ansible.windows.win_powershell:

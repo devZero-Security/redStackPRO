@@ -1,6 +1,5 @@
 ---
 # Defaults only. Real values come from host_vars, generated from the topology.
-# See 0011.
 
 redstackpro_operator_os: debian
 redstackpro_operator_user: operator
@@ -35,7 +34,7 @@ redstackpro_operator_debian_packages:
   - openssh-client
   # ntlmrelayx wants a pty (run it under screen/tmux); hashcat needs an OpenCL
   # implementation for a compute device; addspn/krbrelayx and a few pip builds
-  # want the Kerberos and Windows toolchains. See PZ-2.
+  # want the Kerberos and Windows toolchains.
   - hashcat
   # Mesa's llvmpipe gives a CPU/software OpenCL device on a GPU-less VM, which is
   # what hashcat runs on here. This replaces pocl-opencl-icd, which a live deploy
@@ -50,7 +49,7 @@ redstackpro_operator_debian_packages:
 # The offensive Python toolchain, each in its own pipx environment so their
 # impacket pins cannot collide: Coercer pins impacket < 0.11 while Certipy pulls
 # impacket 0.13+, which is the exact conflict that breaks a single shared venv.
-# Isolating each tool is the clean resolution (PZ-2). ntlmrelayx crashes without
+# Isolating each tool is the clean resolution. ntlmrelayx crashes without
 # DSInternals, so it is injected into impacket's own environment.
 # `binary` is the CONSOLE SCRIPT, which is not the package name: certipy-ad
 # installs `certipy`, bloodhound-ce installs `bloodhound-ce-python`, and impacket
@@ -74,14 +73,14 @@ redstackpro_operator_pipx_tools:
   # netexec (nxc) is deliberately NOT here: it publishes no PyPI package, so
   # `pipx install netexec` fails with "No matching distribution found" and, as the
   # sole host in the operators play, took the whole deploy down with it. This
-  # mirrors the jumpbox toolkit decision (PZ-2). Install it by hand from git when
+  # mirrors the jumpbox toolkit decision. Install it by hand from git when
   # needed: pipx install git+https://github.com/Pennyw0rth/NetExec
   - name: bloodhound-ce
     binary: bloodhound-ce-python
 
 # Extra offensive repos cloned into the operator root (no pip package, or a
 # script used as-is): krbrelayx (addspn.py / krbrelayx.py) for the LDAP/RBCD
-# relay path. See PZ-2 and PZ-3.
+# relay path.
 redstackpro_operator_git_tools:
   - repo: https://github.com/dirkjanm/krbrelayx.git
     dest: krbrelayx

@@ -3,7 +3,7 @@
 # identity write where it should not. In GOAD this is the IIS worker identity
 # (IIS_IUSRS) with FullControl over the web root's upload folder, turning an upload
 # form into a web shell. Parameters come from the host's vulns_vars.permissions
-# (path/user/rights), defaulting to that IIS case. See goad-fidelity-build.
+# (path/user/rights), defaulting to that IIS case.
 # The path scalars are SINGLE-quoted so the YAML loader leaves the backslashes
 # alone: double-quoted, the default collapsed to 'C:\inetpub\wwwroot\upload' and
 # Jinja died on the \u as a truncated \uXXXX escape. See files.yml for the fuller

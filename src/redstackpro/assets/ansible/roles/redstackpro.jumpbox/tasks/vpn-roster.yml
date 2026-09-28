@@ -5,8 +5,7 @@
 # so an operator added on the box survives the next apply rather than being wiped
 # when wg0.conf is regenerated. OpenVPN and the Guacamole accounts already survive
 # a reconverge on their own (any CA-signed cert connects; the portal seed never
-# deletes a user), so the roster's job is mainly WireGuard's peer list. See
-# vpn-multiuser-spec.
+# deletes a user), so the roster's job is mainly WireGuard's peer list.
 
 - name: Create the client config output directory
   ansible.builtin.file:

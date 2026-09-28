@@ -23,7 +23,7 @@
         "ops",
         "range"
       ],
-      "description": "The canvas: ops is redStackPRO (red team infrastructure), range is Cyber Ranges (an AD forest to attack). Gates the palette, prefix, and chrome, not the compiler. Fixed at creation. See 0047."
+      "description": "The canvas: ops is redStackPRO (red team infrastructure), range is Cyber Ranges (an AD forest to attack). Gates the palette, prefix, and chrome, not the compiler. Fixed at creation."
     },
     "name": {
       "type": "string",
@@ -39,7 +39,7 @@
     },
     "region": {
       "type": "string",
-      "description": "Optional cloud region the deploy targets, e.g. us-east-1 for AWS or us-east4 for GCP. A deploy hint rather than topology, so it names a location and never a provider: it sets the region variable's default and the compile --region overrides it. Ignored by on-prem providers. See 0053."
+      "description": "Optional cloud region the deploy targets, e.g. us-east-1 for AWS or us-east4 for GCP. A deploy hint rather than topology, so it names a location and never a provider: it sets the region variable's default and the compile --region overrides it. Ignored by on-prem providers."
     },
     "nodes": {
       "type": "array",
@@ -62,11 +62,11 @@
     },
     "base_cidr": {
       "$ref": "#/$defs/cidr",
-      "description": "Canvas convenience: the address root the allocator carves networks and subnets from, default 10.0.0.0/8. Lets an operator pin the deployment into a mandated block. Optional; the compiler only sees the ranges it produces. See 0046."
+      "description": "Canvas convenience: the address root the allocator carves networks and subnets from, default 10.0.0.0/8. Lets an operator pin the deployment into a mandated block. Optional; the compiler only sees the ranges it produces."
     },
     "auto_stop": {
       "type": "object",
-      "description": "When the range turns itself off. A range exists to be attacked for an afternoon and nothing otherwise stops it, so the operator has to remember; forgetting has cost real money. Per graph, because the whole range stops together. Optional and off by default: a range that disappears underneath someone is worse than one that bills, so this is opted into. Instances are STOPPED, not destroyed, so the provisioned forest comes back on boot; disks and reserved addresses keep billing, so this saves most of the cost and not all of it. See 0057.",
+      "description": "When the range turns itself off. A range exists to be attacked for an afternoon and nothing otherwise stops it, so the operator has to remember; forgetting has cost real money. Per graph, because the whole range stops together. Optional and off by default: a range that disappears underneath someone is worse than one that bills, so this is opted into. Instances are STOPPED, not destroyed, so the provisioned forest comes back on boot; disks and reserved addresses keep billing, so this saves most of the cost and not all of it.",
       "additionalProperties": false,
       "properties": {
         "enabled": {
@@ -193,7 +193,7 @@
       "properties": {
         "id": {
           "$ref": "#/$defs/identifier",
-          "description": "Canonical identifier and the only name a node has. Lowercase kebab, a purpose slug then the kind tag then a two digit ordinal: myth-ts01, main-net01, c2-sub01. The slug is optional (ts01). The rendered name is prefix plus id. Terraform module labels replace hyphens with underscores. Rule NAM001 checks the kind tag against the node kind and NAM002 checks the ordinal. The slug is derived from what the node holds unless the person renames it. See 0016.",
+          "description": "Canonical identifier and the only name a node has. Lowercase kebab, a purpose slug then the kind tag then a two digit ordinal: myth-ts01, main-net01, c2-sub01. The slug is optional (ts01). The rendered name is prefix plus id. Terraform module labels replace hyphens with underscores. Rule NAM001 checks the kind tag against the node kind and NAM002 checks the ordinal. The slug is derived from what the node holds unless the person renames it.",
           "maxLength": 24
         },
         "kind": {
@@ -229,7 +229,7 @@
         },
         "pinned": {
           "type": "boolean",
-          "description": "The person renamed this node's id by hand, so the derived id scheme leaves it alone rather than re-deriving the slug from its contents. Authoring state only; the compiler ignores it. See 0043 and 0044."
+          "description": "The person renamed this node's id by hand, so the derived id scheme leaves it alone rather than re-deriving the slug from its contents. Authoring state only; the compiler ignores it."
         }
       }
     },
@@ -447,7 +447,7 @@
         "internal_ip": {
           "$ref": "#/$defs/ipv4",
           "x-redstackpro-source": "user",
-          "description": "A pinned private address inside this host's segment cidr. Absent means the provider assigns one at apply time. See overlay_range_host and 0055."
+          "description": "A pinned private address inside this host's segment cidr. Absent means the provider assigns one at apply time. See overlay_range_host."
         }
       }
     },
@@ -724,12 +724,12 @@
         "internal_ip": {
           "$ref": "#/$defs/ipv4",
           "x-redstackpro-source": "user",
-          "description": "A pinned private address inside this host's segment cidr. Absent means the provider assigns one at apply time. See overlay_range_host and 0055."
+          "description": "A pinned private address inside this host's segment cidr. Absent means the provider assigns one at apply time. See overlay_range_host."
         },
         "offensive_toolkit": {
           "type": "boolean",
           "x-redstackpro-source": "user",
-          "description": "Install the foothold's offensive toolchain (impacket, certipy, coercer, netexec, bloodhound-python, hashcat). Defaults to true on a RANGE jumpbox, which is the documented assumed-breach foothold the solution runs from, and false on an ops bastion, where the tooling belongs on the operator box instead. Opens no ports. Each tool gets its own python environment, because coercer and certipy require different impacket versions. See PZ-2."
+          "description": "Install the foothold's offensive toolchain (impacket, certipy, coercer, netexec, bloodhound-python, hashcat). Defaults to true on a RANGE jumpbox, which is the documented assumed-breach foothold the solution runs from, and false on an ops bastion, where the tooling belongs on the operator box instead. Opens no ports. Each tool gets its own python environment, because coercer and certipy require different impacket versions."
         }
       }
     },
@@ -775,7 +775,7 @@
         "users": {
           "type": "array",
           "x-redstackpro-source": "user",
-          "description": "The domain's user accounts, for populating an AD lab. A user may hold a privilege and a set of misconfigurations that seed an attack path. The canvas can generate a realistic set. See 0049.",
+          "description": "The domain's user accounts, for populating an AD lab. A user may hold a privilege and a set of misconfigurations that seed an attack path. The canvas can generate a realistic set.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -874,7 +874,7 @@
         "acls": {
           "type": "array",
           "x-redstackpro-source": "user",
-          "description": "The dangerous access-control rights between principals that make the lab an attack graph: who can act on whom. Each entry is a right one principal holds over another object, the same shape GOAD carries and BloodHound walks. This is the escalation chain a domain's users and groups sit inside. See 0052.",
+          "description": "The dangerous access-control rights between principals that make the lab an attack graph: who can act on whom. Each entry is a right one principal holds over another object, the same shape GOAD carries and BloodHound walks. This is the escalation chain a domain's users and groups sit inside.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -1056,7 +1056,7 @@
         "internal_ip": {
           "$ref": "#/$defs/ipv4",
           "x-redstackpro-source": "user",
-          "description": "A pinned private address inside this host's segment cidr, e.g. 192.168.56.10. Absent means the provider assigns one at apply time (the default, unchanged behaviour). Set when a range must be deterministic -- GOAD's own canonical octets, so a solution can hardcode an address instead of re-discovering it every deploy. NET004/NET005 catch an address outside the segment or reused by another host in it. See 0055."
+          "description": "A pinned private address inside this host's segment cidr, e.g. 192.168.56.10. Absent means the provider assigns one at apply time (the default, unchanged behaviour). Set when a range must be deterministic -- GOAD's own canonical octets, so a solution can hardcode an address instead of re-discovering it every deploy. NET004/NET005 catch an address outside the segment or reused by another host in it."
         },
         "vulns_vars": {
           "type": "object",
@@ -1222,7 +1222,7 @@
       }
     },
     "edge_joins": {
-      "description": "Range host to domain. The host is joined to the domain the edge points at. Logical membership, drawn as a badge rather than nesting, because a host is physically in a subnet and logically in a domain at once. See 0047.",
+      "description": "Range host to domain. The host is joined to the domain the edge points at. Logical membership, drawn as a badge rather than nesting, because a host is physically in a subnet and logically in a domain at once.",
       "properties": {
         "role": {
           "const": "joins"
@@ -1230,7 +1230,7 @@
       }
     },
     "edge_trusts": {
-      "description": "Domain to domain. Carries the trust direction, type, and transitivity. A two way trust is one edge with direction bidirectional, which the compiler expands to both sides. See 0047.",
+      "description": "Domain to domain. Carries the trust direction, type, and transitivity. A two way trust is one edge with direction bidirectional, which the compiler expands to both sides.",
       "properties": {
         "role": {
           "const": "trusts"

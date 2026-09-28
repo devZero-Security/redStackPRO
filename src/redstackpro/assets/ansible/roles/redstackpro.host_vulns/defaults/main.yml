@@ -8,7 +8,7 @@ redstackpro_host_vulns: []
 redstackpro_host_vulns_vars: {}
 # Windows Defender posture. Off by default to match GOAD (mayfly ships it disabled);
 # set true (a per-host or per-range canvas toggle) to leave Defender enabled. See
-# disable_defender.yml and productize-temp-fixes (PZ-5).
+# disable_defender.yml.
 redstackpro_defender_enabled: false
 redstackpro_endpoint_telemetry: false
 # The esc ids the redstackpro.adcs role plants. They are not host_vulns tasks, so

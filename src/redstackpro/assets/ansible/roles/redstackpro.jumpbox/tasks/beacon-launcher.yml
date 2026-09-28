@@ -2,9 +2,7 @@
 # The headless way to get a beacon running as patient zero. A person uses the
 # portal's patient-zero tile and the mapped drop drive; that needs a browser,
 # so a script or an automated solution run needs this instead. See
-# launch-beacon.yml for why staging uses the range admin and execution does not,
-# and range-access-model for which path is the product's and which is the
-# affordance.
+# launch-beacon.yml for why staging uses the range admin and execution does not.
 
 - name: Create the operator tooling directory
   ansible.builtin.file:

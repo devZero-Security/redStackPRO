@@ -2,8 +2,7 @@
 # Open shares: an everyone-readable SMB share (and an anonymous, guest-accessible
 # one) exposing files a low-privileged or unauthenticated attacker can enumerate.
 # Mirrors GOAD's openshares role: a public share (Users can change, Admins full)
-# and an "all" share reachable by the guest/anonymous account. See
-# goad-fidelity-build.
+# and an "all" share reachable by the guest/anonymous account.
 
 - name: Create the share directories
   ansible.windows.win_file:

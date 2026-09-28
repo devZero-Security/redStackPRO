@@ -5,7 +5,7 @@
 # session (a member's local admin, or a network logon) does not have it. The caller
 # sets redstackpro_ea_taskname and redstackpro_ea_command; the command must write
 # its outcome (containing "planted" or "exists") to redstackpro_ea_outfile. This is
-# the same enterprise-admin trick the CA install uses. See goad-fidelity-build.
+# the same enterprise-admin trick the CA install uses.
 
 - name: "Run an Enterprise-Admin scheduled task planter: {{ redstackpro_ea_taskname }}"
   ansible.windows.win_powershell:

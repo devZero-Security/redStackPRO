@@ -1,7 +1,7 @@
 # Edge roles. Closed set, so one file rather than one file per role.
 # Each role declares what it injects and into which endpoint, which is what
 # lets the compiler derive firewall rules, Ansible variables, and play order
-# from a single drawn line. See decision 0007.
+# from a single drawn line.
 
 roles:
   - role: attached
@@ -114,14 +114,14 @@ roles:
     # needs it, so it asserts nothing about a prior path. It injects nothing into
     # a host either: the two networks are wired at the Terraform layer, and what
     # crosses the peering is decided by the manages and logs_to edges that now
-    # reach across it. See 0029.
+    # reach across it.
     requires_reachability: false
     endpoints:
       - source: network
         target: network
     injects: []
 
-  # Defense mode (0047, goad-native-recreation). Joins is domain membership;
+  # Defense mode. Joins is domain membership;
   # trusts is between domains. A joins edge carries the domain's identity onto
   # the joining host: a controller learns the domain it anchors, a member learns
   # the domain it joins. Both are overlay fields on the domain, known at compile
