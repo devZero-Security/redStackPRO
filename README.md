@@ -127,12 +127,12 @@ Python 3.11 or newer, and Node 24 for the canvas.
 `redstackpro serve --port 8787` moves the API to a different port. Point the
 canvas dev server at it with `REDSTACKPRO_API=http://127.0.0.1:8787`.
 
-Open it, use **Load template** (the button, or the mode palette) to open a
+Open it, use **Load blueprint** (the button, or the mode palette) to open a
 shipped starting point, choose your cloud in the toolbar
 provider selector (GCP or AWS), open the Export tab (it compiles as you go), then
 Download. You get a zip of the working directory described below.
 
-**Or skip the canvas entirely** and compile a shipped template from the command
+**Or skip the canvas entirely** and compile a shipped blueprint from the command
 line, same compiler, same output:
 
     redstackpro compile frontend/public/goad/goad-light.json -o export
