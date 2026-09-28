@@ -33,8 +33,9 @@ Containment is nesting, not lines. A host dropped inside a segment is an
 the edges in any real topology, and drawing them all buries the relationships that
 matter.
 
-Drawn lines are `fronts`, `logs_to`, and `manages`, and the role follows from
-what the line connects, so the canvas never asks which one you meant.
+Drawn lines are `fronts`, `logs_to`, `peers`, and, in defense mode, `trusts`,
+and the role follows from what the line connects, so the canvas never asks
+which one you meant.
 
 Validation runs against the API on every settled change, so what the canvas
 shows and what the compiler will refuse are the same rules rather than two

@@ -46,7 +46,7 @@ treat it as on-prem for now (static hosts entries, no managed peering).
 
 ## Topology
 
-Domain `dracarys.lab`, subnet `192.168.56.0/24`, prefix `cyb` (GCP resource names
+Domain `dracarys.lab`, subnet `192.168.56.0/24`, prefix `def` (cloud resource names
 only; the Windows/AD names are the bare hostnames). Three members plus the
 jumpbox:
 
@@ -127,7 +127,7 @@ keepass2john vault.kdbx        # or open directly with the known master
 ### 5. Domain Admin
 
 Authenticate as drogon and confirm Domain Admin on `dracarys.lab` (DCSync, or a
-beacon on balerion as SEVENKINGDOMS-equivalent DA).
+beacon on balerion as a DRACARYS Domain Admin).
 
 ```
 proxychains -q secretsdump.py 'dracarys.lab/drogon:<pass>@balerion.dracarys.lab'

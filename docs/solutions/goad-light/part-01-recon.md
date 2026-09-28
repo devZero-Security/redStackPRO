@@ -7,7 +7,7 @@
 Reference: [mayfly - GOAD part 1](https://mayfly277.github.io/posts/GOADv2-pwning_part1/).
 mayfly runs this from a Kali sitting on the `192.168.56.0/24` lab LAN. We run it
 **from within redStack**, through Mythic, per the
-[methodology](README.md#governing-methodology-read-first).
+[methodology](../goad/README.md#methodology).
 
 > **Status legend:** ✅ PASS · ❌ FAIL · ⏳ not yet run · ➖ N/A.
 > Fill the live IPs and results during the first pass; log every ❌ to the PAI.
@@ -196,7 +196,7 @@ mayfly: `cme smb 192.168.56.1/24`.
           print(ip, "ERR", exc)
   PY
   ```
-  Expect the 6 Windows hosts + DC flags + SMB signing status. `✅/❌`
+  Expect the 5 core Windows hosts (plus the-eyrie if you deployed the Exchange add-on) with DC flags and SMB signing status. `✅/❌`
 
 Expected: three DCs report **signing:True (required)**; castelblack / braavos /
 the-eyrie report signing not required (relay candidates).
@@ -209,7 +209,7 @@ mayfly: `nslookup -type=srv _ldap._tcp.dc._msdcs.sevenkingdoms.local <dc-ip>`.
   `run`/`shell`, per domain. `✅/❌`
 - [ ] **2.2 (SOCKS):**
   ```bash
-  proxychains -q dig @{{KINGSLANDING_IP}} SRV _ldap._tcp.dc._msdcs.sevenkingdoms.local
+  proxychains -q dig @192.168.56.10 SRV _ldap._tcp.dc._msdcs.sevenkingdoms.local
   ```
   Repeat for `north.sevenkingdoms.local` and `essos.local`. `✅/❌`
 
@@ -242,7 +242,7 @@ mayfly: `nmap -Pn -p- -sC -sV -oA full_scan_goad 192.168.56.10-12,22-23`.
 - [ ] **4.1 (SOCKS):**
   ```bash
   proxychains -q nmap -Pn -sT -sV -p 53,80,88,135,139,389,445,464,636,1433,3268,3269,3389,5985,5986 \
-    -oA goad_scan {{KINGSLANDING_IP}} {{WINTERFELL_IP}} {{MEEREEN_IP}} {{CASTELBLACK_IP}} {{BRAAVOS_IP}} {{THE_EYRIE_IP}}
+    -oA goad_scan 192.168.56.10 192.168.56.11 192.168.56.12 192.168.56.22 192.168.56.23 <the-eyrie-ip>
   ```
   (proxychains needs `-sT` TCP-connect; `-p-` is viable but slow over SOCKS - targeted port list first, full sweep if time allows.) `✅/❌`
 - [ ] **4.2** Confirm expected services per mayfly: DNS/Kerberos/LDAP(S)/GC/SMB

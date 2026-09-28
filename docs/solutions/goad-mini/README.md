@@ -14,10 +14,10 @@ per deploy and not in these pages.
 |------|-------------|------|
 | [part-01-recon.md](part-01-recon.md) | yes |  |
 | [part-02-find-users.md](part-02-find-users.md) | yes |  |
-| [part-03-enumeration-with-user.md](part-03-enumeration-with-user.md) | partial | 1 step(s) removed |
+| [part-03-enumeration-with-user.md](part-03-enumeration-with-user.md) | partial | 1 step removed |
 | part-04-poison-and-relay.md | not on this lab | no step it carries is reachable here |
 | part-05-exploit-with-user.md | not on this lab | no step it carries is reachable here |
-| [part-06-adcs.md](part-06-adcs.md) | partial | 7 step(s) removed |
+| [part-06-adcs.md](part-06-adcs.md) | partial | 7 steps removed |
 | part-07-mssql.md | not on this lab | no step it carries is reachable here |
 | part-08-privilege-escalation.md | not on this lab | no step it carries is reachable here |
 | part-09-lateral-move.md | not on this lab | no step it carries is reachable here |

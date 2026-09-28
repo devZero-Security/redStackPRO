@@ -20,10 +20,16 @@
 > **redStackPRO is in prerelease (beta).** The schema and features are still moving.
 > GCP and AWS are tested end to end; Azure, Proxmox, and ESXi are on the roadmap.
 > Expect rough edges, and pin to a released version if you need stability.
+>
+> **Hit a rough edge, or have feedback?** Open an issue at
+> [Issues](https://github.com/devZero-Security/redStackPRO/issues/new/choose). If it was a
+> deploy, attach the scrubbed `logs/deploy-*.log` the run wrote (it records versions,
+> provider, and where it stopped, with secrets removed) so it can be analyzed fast. Your
+> reports shape the release.
 
 redStackPRO puts attack infrastructure and target ranges on the same canvas. The two
 canvas modes are **Offense** (attack infrastructure) and **Defense** (defense ranges); the
-export names its hand-off `OFFENSE-BRIEFING.md` or `DEFENSE-BRIEFING.md` to match.
+export names its handoff `OFFENSE-BRIEFING.md` or `DEFENSE-BRIEFING.md` to match.
 
 Split horizon C2, attack infrastructure: two front doors that do not share a fate,
 Apache fronting Sliver and Nginx fronting Mythic, each redirector on its own peered
@@ -106,7 +112,7 @@ own machine, exactly as in the from-source flow below.
 
 Python 3.11 or newer, and Node 24 for the canvas.
 
-    git clone <this repo> && cd redstackpro
+    git clone <this repo> && cd redStackPRO
     python -m venv .venv && . .venv/bin/activate
     pip install -e ".[dev]"
 
@@ -279,7 +285,7 @@ target ranges on the same canvas.
         assets/              Ansible roles and static files baked into the export
     frontend/                the web canvas (Vite + React)
     tests/                   the suite: compiler, validator, API, export
-    docs/                    architecture, schema, validation, solutions, decisions
+    docs/                    architecture, schema, validation, solutions, images
     pyproject.toml           package metadata, deps, and the console entry points
     alembic.ini              migration config for the Postgres backend
     Dockerfile               the one-container build (API plus built canvas)

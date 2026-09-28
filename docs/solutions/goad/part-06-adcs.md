@@ -13,11 +13,11 @@ which CA, depends on the lab.
 
 On full GOAD this part attacks the **essos.local** forest - CA `ESSOS-CA` on
 **braavos** (`192.168.56.23`), essos DC **meereen** (`192.168.56.12`) - driven
-with **certipy 4.8.2** as `khal.drogo@essos.local:horse`, run **through the hodor
+with **certipy-ad 5.x** as `khal.drogo@essos.local:horse`, run **through the hodor
 beacon's SOCKS proxy** (every certipy call below is `proxychains -q certipy …`;
 the DCs are internal, reachable only over the beacon's SOCKS - see
 [part 1](part-01-recon.md) Step 1 for the proxy setup and
-[methodology](README.md#governing-methodology-read-first)).
+[methodology](../goad/README.md#methodology)).
 
 **GOAD-Light has none of this** - no essos forest, so no braavos, meereen or
 khal.drogo. It ships an ESC1 in sevenkingdoms instead; see
@@ -110,7 +110,7 @@ khal.drogo can rewrite the ESC4 template, so make it ESC1-vulnerable, enroll as
   never sets up. Same patch class as noPac (Part 5). `❌ PATCHED`
 
 > **Document-only, by decision.** Certifried is a code-path CVE (a DC-side
-> dNSHostName validation fix), not a misconfiguration, so no toggle re-opens it - > only an unpatched image would. redStackPRO keeps it documented rather than
+> dNSHostName validation fix), not a misconfiguration, so no toggle re-opens it - only an unpatched image would. redStackPRO keeps it documented rather than
 > shipping that image, because it is a redundant route to a certificate-based
 > takeover the solution already lands twice on essos: **ESC4 → DA** and **Shadow
 > Credentials** (both above). The opt-in unpatched-image path is available if live

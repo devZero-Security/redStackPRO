@@ -1,4 +1,4 @@
-# Validator rules, schema 0.7.0, offense mode
+# Validator rules, schema 0.7.0
 
 JSON Schema covers document shape only. Everything below is topology semantics and
 belongs in the topology layer validator, not in the compiler. Every rule carries a
@@ -132,7 +132,7 @@ Names are composed from the topology `prefix` and the node `id`, never stored. S
 - `RDR002` warning. A redirector sets `gating.decoy_video` but no
   `gating.decoy_asset_pack`, which is a combination that cannot do anything. Every
   other asset on the cover page has a keyless fallback, so turning a knob on always
-  produces something; a hero clip has none. Free-licence libraries carry documentary
+  produces something; a hero clip has none. Free-license libraries carry documentary
   footage rather than short quiet brand-free b-roll, and the libraries that do carry
   b-roll want their terms discharged with a visible credit on the page, which is
   the one thing a cover page cannot show without announcing what it is. So an
@@ -312,4 +312,4 @@ now rather than surfacing as a failure mid-run.
   is gone. See the amendment in 0007.
 - Whether `manages` may target an individual host, for the per-host exception
   case. Currently a validator relaxation with no schema change.
-- Instantiation parameters for per-operator templates. Not in 0.5.0.
+- Instantiation parameters for per-operator templates. Not in 0.7.0.

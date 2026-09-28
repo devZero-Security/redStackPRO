@@ -99,7 +99,7 @@ portal.
 > **document-only** (a redundant MIC bypass we no longer need once signing is not
 > enforced: reaching RBCD via `ldap_signing_off` (on Proxmox/ESXi) or via the
 > direct genericWrite to RBCD path in Part 10 already demonstrates the takeover).
-> Opt-in unpatched image only; see Part 5's "noPac, why it stays documented."
+> Opt-in unpatched image only; see Part 5's *noPac - why it stays documented*.
 
 > **Firewall dependency (F-jumpbox-relay-ingress):** the coerced callback lands
 > on the jumpbox foothold's listener, so the jumpbox needs ingress from the range
@@ -146,5 +146,5 @@ topology - the same blocks you would hit on a patched on-prem GOAD.
   re-validation on an actual Proxmox/ESXi run.
 - **ESC8 not demonstrable here** - ADCS web enrollment isn't reachable from the
   north foothold (CA is cross-forest in essos). Revisited in
-  [part 6 (ADCS)](README.md).
+  [part 6 (ADCS)](part-06-adcs.md).
 - **F-jumpbox-relay-ingress** - see above (productized `db64dd9`).

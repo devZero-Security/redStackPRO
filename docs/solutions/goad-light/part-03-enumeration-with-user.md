@@ -8,7 +8,7 @@ Reference: [mayfly - GOAD part 3](https://mayfly277.github.io/posts/GOADv2-pwnin
 (offline: `../_mayfly-source/_posts/2022-07-07-GOADv2-pwning-part3.md`).
 With a valid domain user we enumerate the forest, kerberoast, and collect
 BloodHound - all **through the beacon's SOCKS proxy** (external POV,
-[methodology](README.md#governing-methodology-read-first)).
+[methodology](../goad/README.md#methodology)).
 
 > **Status legend:** ✅ PASS · ❌ fail · ⏳ not yet run · ➖ N/A.
 > **Result: Part 3 PASS (mechanism).** Authenticated enum, kerberoast, and
@@ -68,7 +68,6 @@ mayfly: `GetUserSPNs.py -request` → crack `$krb5tgs$23` (RC4).
   (`proxychains -q bloodhound-python … -ns <DC-IP> --dns-tcp`; force TCP DNS
   since proxychains does not carry UDP, and set the beacon interactive
   (`sleep 0`) first so collection is not throttled by the check-in interval).
-  Zips staged at `D:\tmp\bloodhound\`.
 
 ## Live verification (2026-09-14, GOAD-Light)
 

@@ -213,10 +213,13 @@ def render_part(source: Path, lab: str, surface: set[str]) -> tuple[str, list[st
         return None
 
     if dropped:
-        note = (
-            f"{len(dropped)} step(s) from the source page are not reachable on "
-            "this lab and were removed; they are listed at the end."
-        )
+        n = len(dropped)
+        if n == 1:
+            note = ("1 step from the source page is not reachable on this lab "
+                    "and was removed; it is listed at the end.")
+        else:
+            note = (f"{n} steps from the source page are not reachable on this "
+                    "lab and were removed; they are listed at the end.")
     else:
         note = "Every step of the source page applies to this lab."
 
@@ -312,7 +315,8 @@ def generate(lab: str, check: bool) -> int:
         content, dropped = result
         wanted[source.name] = content
         if dropped:
-            rows.append((source.name, "partial", f"{len(dropped)} step(s) removed"))
+            plural = "" if len(dropped) == 1 else "s"
+            rows.append((source.name, "partial", f"{len(dropped)} step{plural} removed"))
         else:
             rows.append((source.name, "yes", ""))
 

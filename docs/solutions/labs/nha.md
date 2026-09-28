@@ -51,7 +51,7 @@ principal and ACL before claiming an escalation.
 
 A lab marker rather than an attack: a flag folder on the administrator desktop
 that proves an operator genuinely reached that host as an administrator. It is
-the per host proof of compromise for this lab. Note it is catalogued under "Lab
+the per-host proof of compromise for this lab. Note it is catalogued under "Lab
 markers" and is deliberately host provided, so a missing folder means the host
 vuln dispatch did not reach that host at all.
 

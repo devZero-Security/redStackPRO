@@ -25,7 +25,7 @@ these work. Our cloud range is **headless**, so there is no automatic victim.
 victim user and manually detonate the trap**, while the attacker side (a
 Responder / ntlmrelayx listener on the jumpbox foothold) is running. This is
 exactly how mayfly does it ("simulate the victim with an RDP session"). See
-[Manual detonation](#manual-detonation--you-play-the-victim) below.
+[Manual detonation](#manual-detonation---you-play-the-victim) below.
 
 > Alternative to a human: run a GOAD-style victim-simulation bot (scripted logins
 > / share visits) so the traps fire on their own. Tracked in the PAI.

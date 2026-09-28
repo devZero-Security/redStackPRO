@@ -73,7 +73,7 @@ hosts here, which the potato trigger uses.
 > patched against the MIC-removal bypass (CVE-2019-1040), which is what actually
 > stops the relay. KrbRelayUp's own viability on this posture was not driven this
 > pass; the precise blocker is the NTLM-signing + patch combination, not a
-> requiart-signing registry setting. The SYSTEM path (Step 2) is unaffected either
+> require-signing registry setting. The SYSTEM path (Step 2) is unaffected either
 > way.
 
 ## First-pass result log (2026-09-07)

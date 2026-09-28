@@ -2,7 +2,7 @@
 
 Each shipped lab gets a walkthrough here: the attack path an operator runs
 against a live deploy, written against that lab's own topology. Read a lab's
-`DEFENSE-BRIEFING.md` (written into the export at `terraform apply` time)
+`DEFENSE-BRIEFING.md` (written into the export at compile time, filled in with your deploy's real addresses after `terraform apply`)
 alongside its walkthrough for the exact hosts, addresses, and credentials of
 your deploy; the pages below name the template's hosts, which are not yours.
 

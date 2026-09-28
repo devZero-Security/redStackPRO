@@ -17,12 +17,12 @@ per deploy and not in these pages.
 | [part-03-enumeration-with-user.md](part-03-enumeration-with-user.md) | yes |  |
 | [part-04-poison-and-relay.md](part-04-poison-and-relay.md) | yes |  |
 | [part-05-exploit-with-user.md](part-05-exploit-with-user.md) | yes |  |
-| [part-06-adcs.md](part-06-adcs.md) | partial | 7 step(s) removed |
-| [part-07-mssql.md](part-07-mssql.md) | partial | 1 step(s) removed |
+| [part-06-adcs.md](part-06-adcs.md) | partial | 7 steps removed |
+| [part-07-mssql.md](part-07-mssql.md) | partial | 1 step removed |
 | [part-08-privilege-escalation.md](part-08-privilege-escalation.md) | yes |  |
 | [part-09-lateral-move.md](part-09-lateral-move.md) | yes |  |
 | [part-10-delegations.md](part-10-delegations.md) | yes |  |
 | [part-11-acl.md](part-11-acl.md) | yes |  |
-| [part-12-trusts.md](part-12-trusts.md) | partial | 1 step(s) removed |
+| [part-12-trusts.md](part-12-trusts.md) | partial | 1 step removed |
 | [part-13-having-fun.md](part-13-having-fun.md) | yes |  |
 | part-14-adcs-advanced.md | not on this lab | no step it carries is reachable here |

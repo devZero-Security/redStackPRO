@@ -7,7 +7,7 @@ step live.
 
 ## Methodology
 
-We reframe GOAD from an **external red-team point of view**. GOAD is normally an
+We reframe GOAD from an **external red team point of view**. GOAD is normally an
 internal-pentest lab; here redStack enforces the realistic external kill-chain.
 See the [range access model](../README.md#range-access-model). Conventions we follow:
 
@@ -170,7 +170,7 @@ The **GOAD-Light** column says whether the part has a target on that smaller lab
 | 1 | reconnaissance and scan | [part-01-recon.md](part-01-recon.md) | PASS (live) | ✅ fewer hosts, no essos |
 | 2 | find users | [part-02-find-users.md](part-02-find-users.md) | PASS (live) | ✅ no essos accounts (khal.drogo) |
 | 3 | enumeration with user | [part-03-enumeration-with-user.md](part-03-enumeration-with-user.md) | PASS (live) | ✅ |
-| 4 | poison and relay | [part-04-poison-and-relay.md](part-04-poison-and-relay.md) | validated (cloud broadcast gap + coercion→relay) | ◑ winterfell poisons; relay targets \\meereen\\braavos are essos, absent |
+| 4 | poison and relay | [part-04-poison-and-relay.md](part-04-poison-and-relay.md) | validated (cloud broadcast gap + coercion→relay) | ✅ coercion→relay to castelblack applies (both domains present); Step 1 Responder/mitm6 is the cloud gap regardless of lab |
 | 5 | exploit with user | [part-05-exploit-with-user.md](part-05-exploit-with-user.md) | run - both chains (noPac + PrintNightmare) patch-blocked; fidelity toggles needed | ◑ winterfell present; same patch blocks |
 | 6 | ADCS | [part-06-adcs.md](part-06-adcs.md) | PASS - ESC4→DA + Shadow Creds (Certifried patched) | ◑ kingslanding ESC1 only; ESC4 is on braavos/essos |
 | 7 | MSSQL | [part-07-mssql.md](part-07-mssql.md) | PASS - impersonation/msdb RCE (trusted link self-maps) | ◑ castelblack impersonation works; cross-forest link is essos |
@@ -180,7 +180,7 @@ The **GOAD-Light** column says whether the part has a target on that smaller lab
 | 11 | ACL | [part-11-acl.md](part-11-acl.md) | partial - edges/write-primitives work; shadow-creds gated by kingslanding LDAPS | ✅ sevenkingdoms ACL chain present |
 | 12 | trusts | [part-12-trusts.md](part-12-trusts.md) | partial - topology confirmed; escalation needs a TGT/beacon | ◑ parent-child only; no essos forest trust |
 | 13 | having fun inside a domain | [part-13-having-fun.md](part-13-having-fun.md) | plant verified; payoffs need victim/beacon | ◑ |
-| 14 | ADCS 5/7/9/10/11/13/14/15 | [part-14-adcs-advanced.md](part-14-adcs-advanced.md) | PASS - ESC7→DA (ESC13 unpublished; ESC9/10/14/15 need certipy-merged) | ➖ ADCS advanced surface is on braavos/essos |
+| 14 | ADCS 5/7/9/10/11/13/14/15 | [part-14-adcs-advanced.md](part-14-adcs-advanced.md) | PASS - ESC7→DA; ESC5/9/13/14 built, not yet run live (certipy-ad 5.1.0, no fork needed) | ➖ ADCS advanced surface is on braavos/essos |
 
 Attribution: adapted from mayfly277's GOAD series (mayfly277.github.io) and the
 Orange-Cyberdefense GOAD project. Rewritten in our own words for redStackPRO.

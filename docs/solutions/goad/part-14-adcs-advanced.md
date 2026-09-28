@@ -6,7 +6,7 @@ Reference: [mayfly - GOAD part 14](https://mayfly277.github.io/posts/ADCS-part14
 The advanced ESC families (2025 GOAD additions). Driven with certipy **through
 the hodor beacon's SOCKS proxy** (`proxychains -q certipy …`; the CA and DC are
 internal, see [part 1](part-01-recon.md) Step 1) against **ESSOS-CA** (braavos
-`.6`, essos DC meereen `.7`).
+`.23`, essos DC meereen `.12`).
 
 > **Status legend:** ✅ PASS · ❌ blocked/absent · ⚠ partial · 🔨 built but never
 > run against a live CA · ⏳ needs something else first.

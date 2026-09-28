@@ -55,9 +55,8 @@ treat it as on-prem for now (static hosts entries, no managed peering).
 
 ## Topology under test
 
-Domain `sccm.lab`, subnet `192.168.56.0/24`, prefix `cyb` on the range's GCP
-project. Cloud resource names carry the prefix, Windows and AD names do
-not.
+Domain `sccm.lab`, subnet `192.168.56.0/24`, prefix `def` (defense mode).
+Cloud resource names carry the prefix, Windows and AD names do not.
 
 | host | AD name | address | role |
 |------|---------|---------|------|
@@ -73,7 +72,7 @@ reachable, because the site server authenticates to a **different** host.
 ## Attack coverage
 
 The lab shape decides which attacks exist. This mirrors mayfly's own
-present/not-present list, because our topology matches the same five host shape.
+present/not-present list, because our topology matches the same five-host shape.
 
 Present:
 

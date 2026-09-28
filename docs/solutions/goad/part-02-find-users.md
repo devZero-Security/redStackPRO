@@ -4,7 +4,7 @@ Reference: [mayfly - GOAD part 2](https://mayfly277.github.io/posts/GOADv2-pwnin
 (offline: `../_mayfly-source/_posts/2022-07-04-GOADv2-pwning-part2.md`).
 mayfly hunts users and first credentials from a Kali on the lab LAN. We run the
 same enumeration **through the beacon's SOCKS proxy** (external POV,
-[methodology](README.md#governing-methodology-read-first)); hosts/IPs are in
+[methodology](../goad/README.md#methodology)); hosts/IPs are in
 [part 1](part-01-recon.md#range-facts---read-your-defense-briefingmd-first).
 
 > **Status legend:** ✅ PASS · ❌ fail · ⏳ not yet run · ➖ N/A.
@@ -27,7 +27,7 @@ mayfly: winterfell allows null sessions, so users/groups list anonymously.
   his password in the description field. `✅` → **samwell.tarly:Heartsbane**.
 
 > **Difference from mayfly:** GOAD's canonical per-user passwords are seeded by
-> the redStack build (commits `d7b67a3`, `97df4c1`, `c45e358`, `ea692a1`; schema
+> the redStack build (schema
 > `password` field + a password-policy relax so the weak lab creds are allowed).
 > Full account parity was confirmed - no missing or extra users vs mayfly.
 

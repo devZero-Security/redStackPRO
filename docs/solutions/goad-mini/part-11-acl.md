@@ -86,7 +86,7 @@ are gated by two known infra items (kingslanding LDAPS; RC4 etype), not by the
 ACLs themselves.
 
 ### Findings → PAI
-- **F-kingslanding-ldaps** - LDAPS to the sevenkingdoms DC (kingslanding, .4)
+- **F-kingslanding-ldaps** - LDAPS to the sevenkingdoms DC (kingslanding, .10)
   resets the TLS handshake, blocking certipy/shadow-creds/any LDAPS write there;
   essos (meereen) LDAPS is fine. Investigate the DC's LDAPS cert/channel-binding;
   likely the same class as the earlier winterfell LDAPS reset. **Infra fidelity.**
