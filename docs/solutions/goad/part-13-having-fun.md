@@ -1,8 +1,7 @@
 # GOAD Part 13 - Having fun inside a domain (redStackPRO)
 <!-- lab-requires: openshares, writable_share -->
 
-Reference: [mayfly - GOAD part 13](https://mayfly277.github.io/posts/GOADv2-pwning-part13/)
-(offline: `../_mayfly-source/_posts/2023-04-26-GOADv2-pwning-part13.md`).
+Reference: [mayfly - GOAD part 13](https://mayfly277.github.io/posts/GOADv2-pwning-part13/).
 Post-compromise "living off the land": file-based coercion, WebDAV coercion,
 token impersonation, and RDP session hijacking. **These techniques need an
 active victim or code execution on a Windows host** - mayfly simulates the victim
@@ -25,9 +24,9 @@ exactly how mayfly does it ("simulate the victim with an RDP session"). See
 [Manual detonation](#manual-detonation---you-play-the-victim) below.
 
 > Alternative to a human: run a GOAD-style victim-simulation bot (scripted logins
-> / share visits) so the traps fire on their own. Tracked in the PAI.
+> / share visits) so the traps fire on their own.
 
-## Headline result (2026-09-07)
+## Headline result
 
 The **plant** primitives work from the Linux foothold (writable share + coerce
 file). The **payoff** (NetNTLM capture, token theft, RDP hijack) is triggered by
@@ -104,23 +103,6 @@ the **attacker** collects:
 > (sevenkingdoms/north members) blocks RDP-session hijack; use the 2016 essos
 > hosts for that one.
 
-## First-pass result log (2026-09-07)
+## Cleanup
 
-**Part 13 plant-verified.** The coercion plant works from the foothold; the
-payoffs are inherently victim- or Windows-beacon-dependent and fit the standing
-beacon-coverage goal (and a victim-simulation bot). Notably the file-coerce
-callback is unicast, so it is demonstrable on cloud once a victim browses (a
-real advantage over Part 4's impossible broadcast poisoning).
-
-### Findings → PAI
-- **Victim simulation:** to demo Part 13 end-to-end on a headless cloud range,
-  add a "victim browses a share / has an RDP session" bot (GOAD-style), or drive
-  it from a Windows operator beacon. Ties to the beacon-coverage goal.
-- **Cleanup:** remove the planted `clickme.url` from `\\castelblack\all`.
-- **Tooling (PZ-2):** the cme/nxc convenience modules (slinky, scuffy, drop-sc,
-  impersonate, webdav) are **deliberately not shipped**: NetExec is not on PyPI
-  and its `aardwolf` dependency needs a Rust toolchain compiled on the
-  internet-facing host, so PZ-2 dropped it (see `/opt/redstackpro/TOOLKIT.md`).
-  What these modules do is a file-write plus a UNC path, which the planting steps
-  above already do by hand. Still worth considering for the operator image:
-  PsExec64 / SharpImpersonation.
+Remove the planted `clickme.url` from `\\castelblack\all` once you are done.

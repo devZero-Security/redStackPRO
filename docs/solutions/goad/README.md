@@ -2,8 +2,7 @@
 
 A redStackPRO adaptation of [mayfly277's GOAD pwning series](https://mayfly277.github.io/categories/goad/).
 mayfly's write-up is the reference template; these pages capture the **same
-attack path executed the redStackPRO way** and are updated as we validate each
-step live.
+attack path executed the redStackPRO way**.
 
 ## Methodology
 
@@ -139,25 +138,16 @@ treat it as on-prem for now (static hosts entries, no managed peering).
   | braavos | essos.local | ☑ | ☐ | MSSQL/ADCS member - Apollo as ESSOS\administrator (high integrity) |
   | the-eyrie (srv01) | sevenkingdoms.local | ☑ | ☐ | Exchange member (optional add-on, not in base goad.json) - Apollo as SEVENKINGDOMS\administrator (high integrity) |
 
-  Beacon coverage validated live 2026-09-07: all five base servers plus the
-  optional the-eyrie add-on ran a fresh Apollo beacon that checked in through
-  cdn.redops.design → redirector → Mythic and
-  returned `whoami` on task (callbacks 9-14). Delivery was uniform - wmiexec as
-  the host's domain administrator (lab password), staging `b2.exe` over HTTP
-  from the jumpbox foothold (192.168.56.4:1025), Defender off by default. This
-  proves external-C2 pathing to every host. Persistence is still open: these
-  beacons are in-memory only and do NOT survive a reboot (a stop/start of the
-  range dropped every prior beacon; they were re-delivered from scratch).
+  Beacon coverage is verified end to end on a live range: every base server plus
+  the optional the-eyrie add-on runs a fresh Apollo beacon that checks in through
+  the redirector to Mythic and returns `whoami` on task. Delivery is uniform,
+  wmiexec as the host's domain administrator (lab password), staging `b2.exe` over
+  HTTP from the jumpbox foothold (192.168.56.4:1025), Defender off by default.
+  Persistence is still open: these beacons are in-memory only and do not survive a
+  reboot or a range stop/start.
 
   Stability = callback holds through a reboot, uses jittered sleep, and routes
   out via the redStack redirector (not a direct teamserver hit).
-
-## How we validate
-
-For each part: run it against the live deployment, mark every step
-**PASS / FAIL / N-A**, and log every gap in the Pending Action Items list with a
-recommendation. We fix + commit, then rerun until the part reaches parity with
-mayfly's documented outcome before moving on.
 
 ## Parts
 

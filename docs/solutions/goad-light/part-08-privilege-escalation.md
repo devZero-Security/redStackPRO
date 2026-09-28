@@ -4,8 +4,7 @@
 > [the source page](../goad/part-08-privilege-escalation.md) and run `python -m redstackpro.tools.gen_solutions`.
 > Every step of the source page applies to this lab.
 
-Reference: [mayfly - GOAD part 8](https://mayfly277.github.io/posts/GOADv2-pwning-part8/)
-(offline: `../_mayfly-source/_posts/2022-09-25-GOADv2-pwning-part8.md`).
+Reference: [mayfly - GOAD part 8](https://mayfly277.github.io/posts/GOADv2-pwning-part8/).
 Local privilege escalation on a member server (castelblack, `192.168.56.22`) from
 a service account with `SeImpersonatePrivilege` - the "potato" family (never
 patched by Microsoft) and KrbRelayUp.
@@ -18,7 +17,7 @@ reaching *other* hosts; privesc happens where the beacon runs.
 
 > **Status legend:** ✅ PASS · ❌ blocked · ⚠ partial · ⏳ not run.
 
-## Headline result (2026-09-07)
+## Headline result
 
 **SeImpersonate → SYSTEM works (PrintSpoofer).** The service-account foothold
 (SQL / IIS) holds `SeImpersonatePrivilege`, and the potato technique is
@@ -58,7 +57,7 @@ DCs enforce.
   enforced** on our DCs → KrbRelayUp's relay-to-LDAP leg is blocked.
   `❌ (verify with an ldap-signing check)`.
 
-## Live verification (2026-09-14, GOAD-Light)
+## GOAD-Light
 
 castelblack is a GOAD-Light host, so this part applies unchanged - the
 SeImpersonate → SYSTEM (PrintSpoofer/potato) path is a never-patched local-token
@@ -66,33 +65,24 @@ technique and the service-account foothold holds `SeImpersonatePrivilege` by
 Windows default. Step 5 (part 5) already confirmed the Spooler is running on the
 hosts here, which the potato trigger uses.
 
-> **Accuracy note on Step 3 (KrbRelayUp / "LDAP signing enforced").** The
-> ldap-signing check Step 3 asks for was run live against the DC registry:
-> `LDAPServerIntegrity = 1` (the **default** - the server signs if the client
-> asks but does **not hard-require** it; `2` would be required) and channel
-> binding is not set. So the SMB→LDAP relay block seen in
-> [part 4](part-04-poison-and-relay.md) is **not** a hard LDAPServerIntegrity=2:
-> it comes from the coerced NTLM auth negotiating signing plus the DC being
-> patched against the MIC-removal bypass (CVE-2019-1040), which is what actually
-> stops the relay. KrbRelayUp's own viability on this posture was not driven this
-> pass; the precise blocker is the NTLM-signing + patch combination, not a
-> require-signing registry setting. The SYSTEM path (Step 2) is unaffected either
-> way.
+> **Note on Step 3 (KrbRelayUp / "LDAP signing enforced").** On these DCs the
+> LDAP server signs when the client asks but does **not hard-require** it
+> (`LDAPServerIntegrity = 1`, the Windows **default**; `2` would be required),
+> and channel binding is not set. So the SMB→LDAP relay block seen in
+> [part 4](part-04-poison-and-relay.md) is **not** a hard require-signing
+> setting: it comes from the coerced NTLM auth negotiating signing plus the DC
+> being patched against the MIC-removal bypass (CVE-2019-1040), which is what
+> actually stops the relay. The precise blocker is the NTLM-signing + patch
+> combination, not a require-signing registry setting. The SYSTEM path (Step 2)
+> is unaffected either way.
 
-## First-pass result log (2026-09-07)
+## Notes
 
-**Part 8 PASS on the potato path.** SeImpersonate → SYSTEM via PrintSpoofer is
-reliable on the service-account foothold (unpatched technique). KrbRelayUp is
-gated by LDAP signing, which our DCs enforce (consistent with the Part 4 relay
-findings).
-
-### Findings → PAI
-- **Guide note:** the potato privesc needs the print spooler (or an RPC/DCOM
-  trigger) running on the target - confirmed active on all hosts (Part 5). On a
-  Defender-on host, prepend the AMSI bypass + reflective assembly load.
-- **KrbRelayUp blocked by LDAP signing** - if a solution should demonstrate
-  it, that's a fidelity toggle (LDAP signing not enforced) on the DC, opposite to
-  the current secure default. Batched for a later rebuild.
-- **PrintSpoofer `-c` stdout** isn't relayed back through xp_cmdshell; the
+- The potato privesc needs the print spooler (or an RPC/DCOM trigger) running on
+  the target: confirmed active on all hosts (Part 5). On a Defender-on host,
+  prepend the AMSI bypass + reflective assembly load.
+- To demonstrate KrbRelayUp you would need LDAP signing not enforced on the DC,
+  the opposite of the secure default used here.
+- PrintSpoofer's `-c` stdout isn't relayed back through xp_cmdshell; the
   `CreateProcessAsUser() OK` line is the success signal (or write output to a
   file and read it back).

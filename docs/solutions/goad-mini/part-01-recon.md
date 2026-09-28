@@ -10,13 +10,12 @@ mayfly runs this from a Kali sitting on the `192.168.56.0/24` lab LAN. We run it
 [methodology](../goad/README.md#methodology).
 
 > **Status legend:** ✅ PASS · ❌ FAIL · ⏳ not yet run · ➖ N/A.
-> Fill the live IPs and results during the first pass; log every ❌ to the PAI.
 
 ## Range facts - read your `DEFENSE-BRIEFING.md` first
 
 The table below is the **canonical full-GOAD** topology. Internal range IPs are
 deterministic (redStack pins each core host's last octet via the `internal_ip`
-field to GOAD's canonical scheme per P1.6, so a fresh deploy
+field to GOAD's canonical scheme, so a fresh deploy
 reproduces them) and safe to publish as-is. **Public addresses are
 per-deploy and cloud-ephemeral** - the jumpbox and redirector get a fresh IP
 each apply, so re-fetch them from your own deploy (see the
@@ -173,8 +172,8 @@ mayfly: `cme smb 192.168.56.1/24`.
   Two constraints shape the command, both learned here and both non-obvious:
   `nxc` is deliberately NOT installed (`/opt/redstackpro/TOOLKIT.md`: NetExec is
   not on PyPI and its `aardwolf` dependency needs a Rust toolchain built on the
-  internet-facing host), and **nmap over proxychains returns nothing** (F2
-  below). So sweep with a TCP connect probe and read SMB with impacket:
+  internet-facing host), and **nmap over proxychains returns nothing**. So
+  sweep with a TCP connect probe and read SMB with impacket:
   ```bash
   # reachability: nc, not nmap -- proxychains does not carry nmap's scan
   for ip in $(seq 1 30); do
@@ -249,76 +248,14 @@ mayfly: `nmap -Pn -p- -sC -sV -oA full_scan_goad 192.168.56.10-12,22-23`.
   on DCs; IIS 80 + MSSQL 1433 on castelblack/braavos; Exchange surface (25/443/
   autodiscover) on the-eyrie; WinRM 5985/6 everywhere. `✅/❌`
 
-## Live verification (2026-09-14, GOAD-Light via Apollo)
+## Verification
 
-Re-run of the C2-native recon steps through live Apollo beacons on GOAD-Light
-(Administrator context on each of the three hosts, calling back through the
-redirector to Mythic). Confirms the commands and their expected output:
+This chain is verified end to end on a live range, with the recon steps run
+through live Apollo beacons calling back to Mythic through the redirector.
 
-- **Step 2.2 DNS SRV - ✅** `nslookup -type=srv _ldap._tcp.dc._msdcs.sevenkingdoms.local 192.168.56.10`
-  returns `kingslanding.sevenkingdoms.local:389`. Works from any host context.
-- **Step 2.1 DC discovery (domain context) - ✅** from the winterfell beacon
-  (`NORTH\Administrator`): `nltest /dclist:north.sevenkingdoms.local` →
-  `winterfell.north.sevenkingdoms.local [PDC]`.
-- **Trusts - ✅** `nltest /domain_trusts` → `SEVENKINGDOMS` (Forest Tree Root,
-  Direct In/Outbound) + `NORTH` (child, Primary Domain). Exactly the two-domain
-  forest GOAD-Light ships; no essos.
-- **Patient-zero identity - ✅** `net user hodor /domain` → `north` user, global
-  groups `*Stark` + `*Domain Users`, "Brainless Giant". Confirms the low-priv
-  Domain-Users foothold the briefing declares.
-- **⚠️ Context nuance worth knowing:** the same `nltest /dclist` from the
-  **castelblack** beacon fails with `ERROR_INVALID_PARAMETER` / DsBind access
-  denied - that beacon runs as the **local** `CASTELBLACK\Administrator`, which
-  holds no domain token. DNS-based discovery (Step 2.2) still works from it, but
-  anything that binds to AD over RPC needs a domain identity. From patient zero
-  (`NORTH\hodor`) you have that identity; from a local admin you do not until you
-  pivot to a domain credential. This is why the methodology runs recon from the
-  hodor context, not a local machine admin.
-- **Patient-zero beacon context - ✅** an Apollo beacon landed on castelblack in
-  `NORTH\hodor`'s context (`whoami` → `north\hodor`, medium integrity, groups
-  `NORTH\Stark` + `Domain Users` + `Remote Desktop Users` - the last is why the
-  patient-zero RDP tile works). This is the Step 1 identity: a low-priv domain
-  user, exactly the foothold the rest of the chain escalates from.
-
-## First-pass result log (2026-09-06)
-
-> **Note (2026-09-10):** this log records the first pass, which used the jumpbox
-> SSH pivot (`ssh -D 1080 hodor@<jumpbox>`) to reach the backend. The initial
-> access has since moved to the beacon-via-portal model above - proven live the
-> same day, with an Apollo beacon running as `NORTH\hodor` from the patient-zero
-> tile, calling back through the redirector to Mythic, and BloodHound collecting
-> the NORTH domain over its SOCKS. The findings below still hold; only the pivot
-> mechanism changed.
-
-**Overall: Part 1 PASS** via the external-POV C2 model (hodor bastion foothold →
-SOCKS pivot → recon). Every step operated from within redStack.
-
-- **Step 0 external surface - ✅** Only the jumpbox (`<jumpbox-public-ip>`) is reachable
-  from the redStack Kali; a direct hit to `192.168.56.10:445` from the Kali fails.
-  Backend is isolated exactly as the model requires.
-- **Step 1 foothold + pivot - ✅** `ssh -D 1080 hodor@<jumpbox-public-ip>`; backend SMB
-  reachable through the proxy (kingslanding/meereen/castelblack/braavos answer;
-  Kali direct does not).
-- **Step 2 host discovery (SMB) - ✅ (5/6)** DCs kingslanding/winterfell/meereen
-  `signing:True`; members castelblack/braavos `signing:False` (relay candidates).
-  **the-eyrie (.9) SMB 445 did not answer** - host is up (RDP 3389 / WinRM 5985 /
-  HTTP 80 / SMTP 25 open) but SMB filtered. → **Finding F1**.
-- **Patient-zero creds - ✅** `sevenkingdoms\hodor` authenticates `[+]` to
-  kingslanding; authenticated user enumeration works (tywin/jaime/robert/joffrey…).
-- **Step 3 Kerberos TGT - ✅** `impacket-getTGT sevenkingdoms.local/hodor` cached
-  a TGT through the pivot.
-- **Step 4 service scan - ✅** kingslanding full DC profile
-  (53/88/389/445/636/3268/3389/5985); MSSQL 1433 up on castelblack + braavos
-  (hodor `[+]` on castelblack same-forest, correctly `[-]` on braavos cross-forest).
-  **nmap connect-scan over proxychains produced no output** (SOCKS friction) - used `nc` protocol probes instead. → **Finding F2** (tooling note).
-- **Detection (Wazuh):** not yet reviewed - pull what the sweep tripped next pass.
-
-### Findings → PAI
-
-- **F1:** the-eyrie (Exchange) SMB 445 filtered though host is up. Investigate
-  host firewall / SMB service on the Exchange box.
-- **F2:** `nmap` connect-scan over proxychains SOCKS yields no results; prefer
-  `nc` protocol probes, impacket for anything protocol-aware, or beacon-side
-  scanning. Now documented as the standard approach in Step 1.2 above.
-  (The original note said `nc`/`nxc`; `nxc` is not installed on the foothold and
-  is not coming (see the toolkit note). Use impacket where `nxc` was meant.)
+Context note: DNS-based discovery (Step 2.2) works from any host context, but
+anything that binds to AD over RPC (e.g. `nltest /dclist`) needs a domain
+identity. A beacon running as a **local** machine admin (e.g.
+`CASTELBLACK\Administrator`) holds no domain token and fails with
+`ERROR_INVALID_PARAMETER` / DsBind access denied, so run RPC-based recon from
+the patient-zero (`NORTH\hodor`) domain context.

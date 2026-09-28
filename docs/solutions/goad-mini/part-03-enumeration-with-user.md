@@ -4,15 +4,13 @@
 > [the source page](../goad/part-03-enumeration-with-user.md) and run `python -m redstackpro.tools.gen_solutions`.
 > 1 step from the source page is not reachable on this lab and was removed; it is listed at the end.
 
-Reference: [mayfly - GOAD part 3](https://mayfly277.github.io/posts/GOADv2-pwning-part3/)
-(offline: `../_mayfly-source/_posts/2022-07-07-GOADv2-pwning-part3.md`).
+Reference: [mayfly - GOAD part 3](https://mayfly277.github.io/posts/GOADv2-pwning-part3/).
 With a valid domain user we enumerate the forest, kerberoast, and collect
 BloodHound - all **through the beacon's SOCKS proxy** (external POV,
 [methodology](../goad/README.md#methodology)).
 
 > **Status legend:** ✅ PASS · ❌ fail · ⏳ not yet run · ➖ N/A.
-> **Result: Part 3 PASS (mechanism).** Authenticated enum, kerberoast, and
-> BloodHound all work; two tooling findings logged (F-crack-backend, F-bh).
+> Authenticated enum, kerberoast, and BloodHound all work through the beacon.
 
 ## Step 1 - Full user + LDAP enumeration
 
@@ -52,11 +50,9 @@ BloodHound - all **through the beacon's SOCKS proxy** (external POV,
   since proxychains does not carry UDP, and set the beacon interactive
   (`sleep 0`) first so collection is not throttled by the check-in interval).
 
-## Live verification (2026-09-14, GOAD-Light)
+## Kerberoast targets
 
-Confirmed the product-specific claim that makes kerberoast work here - the
-**RC4-only enc-type fidelity fix** - by reading the SPN accounts straight from
-the directory through the domain-context beacon:
+The kerberoastable accounts, read from the directory through the beacon:
 
 | Account | `msDS-SupportedEncryptionTypes` | SPN |
 | ------- | ------------------------------- | --- |
@@ -64,31 +60,15 @@ the directory through the domain-context beacon:
 | sansa.stark | **4 (RC4-only)** | HTTP `eyrie.north...` |
 | sql_svc | **4 (RC4-only)** | MSSQLSvc `castelblack.north...:1433` |
 
-All three carry `msDS-SupportedEncryptionTypes = 0x4`, so a Server-2019 KDC
-issues the classic crackable `$krb5tgs$23` (RC4) ticket - the `467df2a`→`7d55fdf`
-fix, proven live. `sql_svc`'s SPN is on **castelblack**, which ties into
-[part 7 (MSSQL)](../goad/part-07-mssql.md).
+All three carry `msDS-SupportedEncryptionTypes = 0x4`, so a Server 2019 KDC
+issues the classic crackable `$krb5tgs$23` (RC4) ticket. `sql_svc`'s SPN is on
+**castelblack**, which ties into [part 7 (MSSQL)](../goad/part-07-mssql.md).
 
 > **GOAD-Light scope:** Step 4 says "collect all three domains" and cites
 > full-GOAD BloodHound counts - on GOAD-Light there are **two** domains
 > (`north` + `sevenkingdoms`, no essos trust), so collection targets those two
 > and the sevenkingdoms object count is lower (no essos users, no cross-forest
 > trust edges). The kerberoast targets above all live in `north`.
-
-## First-pass result log (2026-09-06, full GOAD)
-
-**Part 3 PASS (mechanism).** Authenticated enum, kerberoast (fixed), and
-BloodHound all work through the foothold/pivot.
-
-### Findings → PAI
-- **F-crack-backend (product, real):** the redStack Kali operator ships **no
-  hashcat compute backend** (no OpenCL/CUDA/CPU runtime → `CL_PLATFORM_NOT_FOUND_KHR`,
-  hashcat exits silently). `john` works (CPU). Fix: add `pocl-opencl-icd` to
-  `redstackpro.operator` provisioning so hashcat runs like mayfly's commands.
-- **F-bh (resolved 6SEP):** `bloodhound-python` can't run over the TCP-only SOCKS
-  pivot (DNS is UDP). Resolved by collecting from the foothold beacon with an
-  explicit `-ns <DC-IP>`; the durable path is beacon-side SharpHound via
-  execute-assembly once a Windows beacon lands.
 
 ## Not on this lab
 

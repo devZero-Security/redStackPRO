@@ -4,15 +4,13 @@
 > [the source page](../goad/part-03-enumeration-with-user.md) and run `python -m redstackpro.tools.gen_solutions`.
 > Every step of the source page applies to this lab.
 
-Reference: [mayfly - GOAD part 3](https://mayfly277.github.io/posts/GOADv2-pwning-part3/)
-(offline: `../_mayfly-source/_posts/2022-07-07-GOADv2-pwning-part3.md`).
+Reference: [mayfly - GOAD part 3](https://mayfly277.github.io/posts/GOADv2-pwning-part3/).
 With a valid domain user we enumerate the forest, kerberoast, and collect
 BloodHound - all **through the beacon's SOCKS proxy** (external POV,
 [methodology](../goad/README.md#methodology)).
 
 > **Status legend:** ✅ PASS · ❌ fail · ⏳ not yet run · ➖ N/A.
-> **Result: Part 3 PASS (mechanism).** Authenticated enum, kerberoast, and
-> BloodHound all work; two tooling findings logged (F-crack-backend, F-bh).
+> Authenticated enum, kerberoast, and BloodHound all work through the beacon.
 
 ## Step 1 - Full user + LDAP enumeration
 
@@ -41,14 +39,14 @@ mayfly: `GetUserSPNs.py -request` → crack `$krb5tgs$23` (RC4).
   `GetUserSPNs.py -request -dc-ip <dc> <dom>/<user>:<pass>`. `✅` - jon.snow,
   sansa.stark, sql_svc all issue `$krb5tgs$23`.
 - [x] **2.2** Crack with a wordlist → **north/jon.snow:iknownothing**. `✅`
-  (cracked with **john** on CPU; hashcat is dead on the Kali - see F-crack-backend).
+  (cracked with **john** on CPU; hashcat is not usable on the Kali operator).
 
-> **Difference from mayfly (fidelity fix):** modern GCP Server 2019 KDCs refused
+> **Difference from mayfly:** modern Server 2019 KDCs refused
 > RC4 (`KDC_ERR_ETYPE_NOSUPP`) with enc-types unset, so no crackable ticket
-> issued. Fix (commits `467df2a` → `7d55fdf`): kerberoastable accounts are pinned
+> issued. In redStackPRO, kerberoastable accounts are pinned
 > to **RC4-only** (`msDS-SupportedEncryptionTypes = 0x4`) so the classic
 > crackable `$krb5tgs$23` issues. (AES salt would make an AES roast
-> uncrackable, so RC4-only, not RC4+AES.) Kerberoast is verified end-to-end.
+> uncrackable, so RC4-only, not RC4+AES.) Kerberoast is verified end to end.
 
 ## Step 3 - Share + DNS enumeration
 
@@ -69,11 +67,9 @@ mayfly: `GetUserSPNs.py -request` → crack `$krb5tgs$23` (RC4).
   since proxychains does not carry UDP, and set the beacon interactive
   (`sleep 0`) first so collection is not throttled by the check-in interval).
 
-## Live verification (2026-09-14, GOAD-Light)
+## Kerberoast targets
 
-Confirmed the product-specific claim that makes kerberoast work here - the
-**RC4-only enc-type fidelity fix** - by reading the SPN accounts straight from
-the directory through the domain-context beacon:
+The kerberoastable accounts, read from the directory through the beacon:
 
 | Account | `msDS-SupportedEncryptionTypes` | SPN |
 | ------- | ------------------------------- | --- |
@@ -81,28 +77,12 @@ the directory through the domain-context beacon:
 | sansa.stark | **4 (RC4-only)** | HTTP `eyrie.north...` |
 | sql_svc | **4 (RC4-only)** | MSSQLSvc `castelblack.north...:1433` |
 
-All three carry `msDS-SupportedEncryptionTypes = 0x4`, so a Server-2019 KDC
-issues the classic crackable `$krb5tgs$23` (RC4) ticket - the `467df2a`→`7d55fdf`
-fix, proven live. `sql_svc`'s SPN is on **castelblack**, which ties into
-[part 7 (MSSQL)](part-07-mssql.md).
+All three carry `msDS-SupportedEncryptionTypes = 0x4`, so a Server 2019 KDC
+issues the classic crackable `$krb5tgs$23` (RC4) ticket. `sql_svc`'s SPN is on
+**castelblack**, which ties into [part 7 (MSSQL)](part-07-mssql.md).
 
 > **GOAD-Light scope:** Step 4 says "collect all three domains" and cites
 > full-GOAD BloodHound counts - on GOAD-Light there are **two** domains
 > (`north` + `sevenkingdoms`, no essos trust), so collection targets those two
 > and the sevenkingdoms object count is lower (no essos users, no cross-forest
 > trust edges). The kerberoast targets above all live in `north`.
-
-## First-pass result log (2026-09-06, full GOAD)
-
-**Part 3 PASS (mechanism).** Authenticated enum, kerberoast (fixed), and
-BloodHound all work through the foothold/pivot.
-
-### Findings → PAI
-- **F-crack-backend (product, real):** the redStack Kali operator ships **no
-  hashcat compute backend** (no OpenCL/CUDA/CPU runtime → `CL_PLATFORM_NOT_FOUND_KHR`,
-  hashcat exits silently). `john` works (CPU). Fix: add `pocl-opencl-icd` to
-  `redstackpro.operator` provisioning so hashcat runs like mayfly's commands.
-- **F-bh (resolved 6SEP):** `bloodhound-python` can't run over the TCP-only SOCKS
-  pivot (DNS is UDP). Resolved by collecting from the foothold beacon with an
-  explicit `-ns <DC-IP>`; the durable path is beacon-side SharpHound via
-  execute-assembly once a Windows beacon lands.

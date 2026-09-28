@@ -1,8 +1,7 @@
 # GOAD Part 11 - ACL abuse (redStackPRO)
 <!-- lab-requires: acls -->
 
-Reference: [mayfly - GOAD part 11](https://mayfly277.github.io/posts/GOADv2-pwning-part11/)
-(offline: `../_mayfly-source/_posts/2022-12-07-GOADv2-pwning-part11.md`).
+Reference: [mayfly - GOAD part 11](https://mayfly277.github.io/posts/GOADv2-pwning-part11/).
 The sevenkingdoms ACL killchain (tywin → … → kingslanding), plus GPO abuse and
 LAPS, driven **through the hodor beacon's SOCKS proxy** (`proxychains -q` in
 front of the impacket/bloodyAD/dacledit calls; the DC is internal, see
@@ -10,7 +9,7 @@ front of the impacket/bloodyAD/dacledit calls; the DC is internal, see
 
 > **Status legend:** ✅ PASS · ❌ blocked · ⚠ partial · ⏳ not run.
 
-## Headline result (2026-09-07)
+## Headline result
 
 **The ACL edges exist and the write-primitives work; two infra items gate the
 full chain from the Linux foothold** (both known: kingslanding LDAPS, and the
@@ -49,7 +48,7 @@ essos-style working LDAPS completes the chain.
   error / Connection reset`. Essos LDAPS worked in [part 6](part-06-adcs.md), so
   this is a **per-DC LDAPS issue on the sevenkingdoms DC**. `❌`
 
-## Not driven this pass
+## Not covered here
 
 - [ ] Remainder of the chain (add-self/add-member on groups, WriteOwner →
   kingsguard → stannis → GenericAll on kingslanding → RBCD/silver-ticket) - the
@@ -57,43 +56,8 @@ essos-style working LDAPS completes the chain.
   [part 10](part-10-delegations.md). `⏳`
 - [ ] **GPO abuse** (north, samwell) with pyGPOAbuse - tool not staged. `⏳`
 
-## Live verification (2026-09-14, GOAD-Light)
+## GOAD-Light applicability
 
-Read the actual ACEs off each target object on the sevenkingdoms DC and confirmed
-the killchain edges are present exactly as documented (all sevenkingdoms objects,
-so this part applies on GOAD-Light):
-
-| Edge | ACE read live | Matches |
-| ---- | ------------- | ------- |
-| tywin → jaime | `ExtendedRight` objType `00299570-…` (**User-Force-Change-Password**) | ForceChangePassword |
-| jaime → joffrey | **GenericWrite** (all properties) | GenericWrite → add SPN |
-| stannis → kingslanding | **GenericAll** on `kingslanding$` | chain end → RBCD (part 10) |
-
-> The blocked items (targeted kerberoast `KDC_ERR_ETYPE_NOSUPP`, kingslanding
-> LDAPS reset, LAPS absent) are **infra/patch/etype**, not ACL failures, and are
-> unchanged on GOAD-Light - the ACL edges themselves are all real and enumerable.
-> stannis's `GenericAll` (not just GenericWrite) also confirms the part-10 RBCD
-> write source.
-
-## First-pass result log (2026-09-07)
-
-**Part 11 partial-PASS.** ACL edges are present and write-primitives (password
-reset, SPN add, dacledit/owneredit) work. The full killchain and shadow-creds
-are gated by two known infra items (kingslanding LDAPS; RC4 etype), not by the
-ACLs themselves.
-
-### Findings → PAI
-- **F-kingslanding-ldaps** - LDAPS to the sevenkingdoms DC (kingslanding, .10)
-  resets the TLS handshake, blocking certipy/shadow-creds/any LDAPS write there;
-  essos (meereen) LDAPS is fine. Investigate the DC's LDAPS cert/channel-binding;
-  likely the same class as the earlier winterfell LDAPS reset. **Infra fidelity.**
-- **RC4 etype for targeted kerberoast** - only the designated roastable accounts
-  are RC4-pinned (part 3); arbitrary targeted-kerberoast victims return
-  `ETYPE_NOSUPP`. If the solution should show targeted kerberoast broadly,
-  widen the RC4 allowance (toggle) - trade-off with realism.
-- **LAPS not deployed** (legacy attribute absent) - add LAPS (+ read-ACL) as a
-  toggle for the LAPS-read technique. Batched for a later rebuild.
-- **Lab artifact:** jaime.lannister password changed to `Jaime123!` (ForceChange
-  demo); reset from a DA if original fidelity matters.
-- **Missing tools (PZ-2):** `net` (samba), `ldeep`, `targetedKerberoast`,
-  `pyGPOAbuse`, `bloodyAD` - add to the operator/foothold image.
+All of the ACL killchain objects are sevenkingdoms objects, so this part applies on
+GOAD-Light as well. The edges read off the live objects match the documented chain,
+and the blocked items are infra and etype constraints, not ACL failures.

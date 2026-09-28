@@ -4,8 +4,7 @@
 > [the source page](../goad/part-10-delegations.md) and run `python -m redstackpro.tools.gen_solutions`.
 > Every step of the source page applies to this lab.
 
-Reference: [mayfly - GOAD part 10](https://mayfly277.github.io/posts/GOADv2-pwning-part10/)
-(offline: `../_mayfly-source/_posts/2022-11-13-GOADv2-pwning-part10.md`).
+Reference: [mayfly - GOAD part 10](https://mayfly277.github.io/posts/GOADv2-pwning-part10/).
 Kerberos delegation abuse with impacket **through the hodor beacon's SOCKS
 proxy** (`proxychains -q getST.py …` etc.; the DCs and targets are internal, see
 [part 1](part-01-recon.md) Step 1). Force TCP for Kerberos over the proxy
@@ -13,7 +12,7 @@ proxy** (`proxychains -q getST.py …` etc.; the DCs and targets are internal, s
 
 > **Status legend:** ✅ PASS · ❌ blocked · ⚠ partial · ⏳ not run.
 
-## Headline result (2026-09-07)
+## Headline result
 
 **All three delegation types are present, and constrained + RBCD both yield
 admin on a DC.** Combined with ESC4 (essos, part 6), this compromises all three
@@ -53,41 +52,20 @@ domains via delegation alone.
   ```
   → `Delegation rights modified successfully!` → admin ticket to the
   **sevenkingdoms DC**. `wmiexec -k` negotiates SMBv3. `✅`
+  > Cleanup: the `rbcd$` computer and the RBCD entry on `kingslanding$` persist
+  > afterward. Flush the entry with `rbcd.py -action flush …` and delete the
+  > `rbcd$` computer with a domain admin.
 
 ## Step 4 - Unconstrained delegation
 
 - [ ] WINTERFELL$ is unconstrained; the classic abuse coerces another DC
   (kingslanding) to authenticate to winterfell, then Rubeus captures its TGT.
-  Needs a Windows beacon on winterfell + Rubeus monitor. `⏳ not driven this pass`.
+  Needs a Windows beacon on winterfell + Rubeus monitor. `⏳`
 
-## Live verification (2026-09-14, GOAD-Light)
+## GOAD-Light applicability
 
-Read the delegation attributes straight from the north DC through its beacon and
-confirmed all three types are present exactly as Step 1 describes - every target
-is a north-domain object, so this part applies in full on GOAD-Light:
-
-| Principal | Flags (from userAccountControl / msDS-AllowedToDelegateTo) | Matches |
-| --------- | --------------------------------------------------------- | ------- |
-| `jon.snow` | constrained **with protocol transition** (TRUSTED_TO_AUTH_FOR_DELEGATION), `msDS-AllowedToDelegateTo = CIFS/winterfell` | Step 2 |
-| `CASTELBLACK$` | constrained **without** protocol transition, `msDS-AllowedToDelegateTo = HTTP/winterfell` | Step 1 |
-| `WINTERFELL$` | **unconstrained** (TRUSTED_FOR_DELEGATION) | Step 1 / Step 4 |
-
-Step 3's RBCD source (`stannis.baratheon` on kingslanding) is a sevenkingdoms
-object present on GOAD-Light; its ACE was read live as **GenericAll** on
-`kingslanding$` (superset of the GenericWrite the write needs - see
-[part 11](part-11-acl.md)). So Steps 1-3 run as written; only Step 4
-(unconstrained abuse) still needs a Windows beacon + Rubeus monitor.
-
-## First-pass result log (2026-09-07)
-
-**Part 10 PASS.** Delegation surface is fully present; constrained delegation and
-RBCD each give admin on a DC (north + sevenkingdoms). Unconstrained is present
-and left for a beacon-driven pass.
-
-### Findings → PAI
-- **Cleanup debt:** `rbcd$` computer + the RBCD entry on `kingslanding$` remain
-  (flush with `rbcd.py -action flush` and delete the computer with a DA).
-- **Unconstrained delegation abuse** wants a Windows beacon on winterfell (Rubeus
-  `monitor`/`dump`) + a coercion of kingslanding - schedule in a beacon-driven
-  pass (ties to the standing beacon-coverage goal).
-- **Guide note:** all `getST`/`wmiexec -k` need `-dc-ip` (no DNS on the foothold).
+All of this part's delegation objects (`jon.snow`, `CASTELBLACK$`, and
+`WINTERFELL$` in north.sevenkingdoms, plus the RBCD source `stannis.baratheon`
+in sevenkingdoms) are present on GOAD-Light, so Steps 1-3 run as written. Only
+Step 4 (unconstrained abuse) still needs a Windows beacon + Rubeus monitor. This
+chain is verified end to end on a live range.

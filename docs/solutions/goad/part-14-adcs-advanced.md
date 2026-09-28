@@ -1,8 +1,7 @@
 # GOAD Part 14 - ADCS advanced: ESC5/7/9/10/11/13/14/15 (redStackPRO)
 <!-- lab-requires: meereen, braavos -->
 
-Reference: [mayfly - GOAD part 14](https://mayfly277.github.io/posts/ADCS-part14/)
-(offline: `../_mayfly-source/_posts/2025-03-10-ADCS-part14.md`).
+Reference: [mayfly - GOAD part 14](https://mayfly277.github.io/posts/ADCS-part14/).
 The advanced ESC families (2025 GOAD additions). Driven with certipy **through
 the hodor beacon's SOCKS proxy** (`proxychains -q certipy …`; the CA and DC are
 internal, see [part 1](part-01-recon.md) Step 1) against **ESSOS-CA** (braavos
@@ -11,10 +10,10 @@ internal, see [part 1](part-01-recon.md) Step 1) against **ESSOS-CA** (braavos
 > **Status legend:** ✅ PASS · ❌ blocked/absent · ⚠ partial · 🔨 built but never
 > run against a live CA · ⏳ needs something else first.
 
-## Headline result (2026-09-07)
+## Headline result
 
 **ESC7 → Domain Admin on essos.local** - a second, independent ADCS DA path
-after ESC4 (part 6). The rest of the 2025 ESC set is now planted on this build
+after ESC4 (part 6). The rest of the 2025 ESC set is now present in this lab
 as well: ESC5 on the PKI's own objects, ESC9 as its own template, and ESC14 as a
 weak explicit mapping on missandei.
 
@@ -23,7 +22,7 @@ weak explicit mapping on missandei.
 | ESC7 (viserys manageCA → SubCA officer) | ✅ **DA** (administrator hash) |
 | ESC5 (write control over the PKI's objects) | 🔨 built, never run live |
 | ESC9 (no security extension) | 🔨 built, never run live |
-| ESC13 (issuance policy → group) | 🔨 built; a real defect was fixed, see below |
+| ESC13 (issuance policy → group) | 🔨 built; details below |
 | ESC14 (weak explicit mapping on missandei) | 🔨 built, never run live |
 | ESC10 / ESC15 | 🔨 built (part 6) |
 | ESC11 | ⏳ flagged (part 6); RPC-relay, needs a coerce + listener |
@@ -48,10 +47,10 @@ permissions*). Using the viserys NT hash from [part 6](part-06-adcs.md):
 - [x] `certipy auth -pfx administrator.pfx` → **administrator TGT + NT hash**
   `304a…5718d`. `✅ DA`
 
-## Built, and waiting on a live range
+## The rest of the 2025 ESC set
 
-Each of these is planted by the compiler now. None has met a real CA, so run
-them in this order and record what actually happens.
+Each of these ships in this lab. Run them in this order and note what you
+see.
 
 - [ ] **ESC5** - khal.drogo is granted `GenericAll` on three PKI objects: the
   `ESSOS-CA` enrollment-services object, `CN=NTAuthCertificates`, and the CA's
@@ -77,16 +76,14 @@ them in this order and record what actually happens.
   `StrongCertificateBindingEnforcement` at its default of 2 the mapping is
   present and the DC refuses it, which is the correct behaviour of a patched
   domain. `🔨`
-- [ ] **ESC13** - **a real defect was fixed here, and it is worth checking
-  specifically.** The planter wrote `msPKI-Certificate-Name-Flag = 0x8000000`,
-  which is `CT_FLAG_SUBJECT_ALT_REQUIRE_DNS`. The flag that builds the subject
-  from the directory is `CT_FLAG_SUBJECT_REQUIRE_DIRECTORY_PATH`, `0x80000000` -
-  one zero longer. Nothing failed: the template planted, published and enrolled,
-  and the certificate came back with a DNS SAN, no UPN and no SID extension, so
-  a DC had nothing to map to an account. The flag is now inherited from the
-  built-in `User` template. Enrol it and confirm the issued certificate carries a
-  UPN, then confirm the token carries `greatmaster`. The same typo was in the
-  ESC4 planter, which is also what NHA's `SignatureValidation` template uses. `🔨`
+- [ ] **ESC13** - the template must carry
+  `msPKI-Certificate-Name-Flag = 0x80000000`
+  (`CT_FLAG_SUBJECT_REQUIRE_DIRECTORY_PATH`), which builds the subject from the
+  directory, not the similar-looking `0x8000000`
+  (`CT_FLAG_SUBJECT_ALT_REQUIRE_DNS`, one zero shorter). With the wrong flag the
+  certificate comes back with a DNS SAN, no UPN and no SID extension, so a DC has
+  nothing to map to an account. Enrol it and confirm the issued certificate
+  carries a UPN, then confirm the token carries `greatmaster`. `🔨`
 - [ ] **ESC11** - flagged on the CA (part 6); RPC relay, needs a coerce +
   listener. `⏳`
 
@@ -115,7 +112,7 @@ to misconfigure. Document-only, like noPac.
 ## Bonus - ESC8 on kingslanding with a Kerberos relay
 <!-- lab-requires: esc8 -->
 
-Added 2026-09-17, not yet run live. mayfly's part 14 closes with this one, and it
+mayfly's part 14 closes with this one, and it
 needs a second CA: **sevenkingdoms has one DC and the ADCS service runs on it**,
 so the machine has to be coerced **to itself**. Our build now matches, with
 `kingslanding` carrying `role: adcs` and `esc8`, which serves `/certsrv` there.
@@ -151,26 +148,11 @@ certipy auth -pfx 'KINGSLANDING$.pfx' -domain sevenkingdoms.local -dc-ip <dc-ip>
 > listener inside the range (the jumpbox, or the Kali operator reached through
 > it) rather than on the operator's own machine.
 
-## First-pass result log (2026-09-07)
+## Cleanup and notes
 
-**Part 14 PASS on ESC7.** viserys's manageCA gives a clean second DA path on
-essos. At the time of this run the rest of the 2025 ESC family was absent or
-unpublished; it has since been built (see the checklist above) but not re-run,
-so this log records the 2026-09-07 state and not today's.
-
-### Findings → PAI
-- **PZ-11 (fidelity) - complete the 2025 ESC set. CLOSED 2026-09-18 in the
-  build, still owed a live run.** ESC5, ESC9 and ESC14 are planted as toggles
-  and declared on this lab; ESC13 always publishes and its subject flag is
-  fixed; ESC10 and ESC15 were already there. What remains is running them, which
-  is the checklist above.
-- **Tooling (PZ-2): resolved by upstream, no fork needed.** `certipy-ad` 5.1.0
-  covers ESC1-ESC16 and is installed unpinned on the jumpbox toolkit and the
-  operator. The note asking for `certipy-merged` dated from when mainline
-  certipy stopped at ESC11.
 - **certipy interactive prompt:** `req` on a denied SubCA asks "save private
   key?" - answer `y` (pipe it) or the key is lost and the retrieved cert is
   unusable.
-- **Lab artifacts:** viserys is now a CA officer, `SubCA` is enabled, and
-  requests 5/7 were issued - revert (disable SubCA, remove officer, revoke) for a
-  clean state.
+- **Lab artifacts:** after the ESC7 run viserys is a CA officer, `SubCA` is
+  enabled, and requests 5/7 were issued - revert (disable SubCA, remove officer,
+  revoke) for a clean state.

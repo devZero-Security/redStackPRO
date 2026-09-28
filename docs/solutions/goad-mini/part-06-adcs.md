@@ -4,8 +4,7 @@
 > [the source page](../goad/part-06-adcs.md) and run `python -m redstackpro.tools.gen_solutions`.
 > 7 steps from the source page are not reachable on this lab and were removed; they are listed at the end.
 
-Reference: [mayfly - GOAD part 6](https://mayfly277.github.io/posts/GOADv2-pwning-part6/)
-(offline: `../_mayfly-source/_posts/2022-09-07-GOADv2-pwning-part6.md`).
+Reference: [mayfly - GOAD part 6](https://mayfly277.github.io/posts/GOADv2-pwning-part6/).
 AD CS abuse: find a certificate template the attacker can bend, enroll as a
 privileged principal, and authenticate with the certificate. Which template, on
 which CA, depends on the lab.
@@ -15,7 +14,7 @@ which CA, depends on the lab.
 ## ESC1 on SEVENKINGDOMS-CA
 
 GOAD-Light ships a clean **ESC1** in the **sevenkingdoms** forest, verified live
-on a real range on 2026-09-14. Drive it with **certipy** through the beacon's
+on a real range. Drive it with **certipy** through the beacon's
 SOCKS proxy, the same way the full GOAD page does (see
 [part 1](part-01-recon.md) Step 1 for the proxy setup):
 
@@ -38,9 +37,9 @@ These steps are in the full GOAD series but need techniques this
 lab does not carry. They are listed so nothing looks missing:
 
 - Target surface (full GOAD: essos) (needs `meereen`)
-- Headline result (2026-09-07, full GOAD / essos) (needs `meereen`)
+- Headline result (full GOAD / essos) (needs `meereen`)
 - Step 1 - Enumerate the CA + templates (needs `meereen`)
 - Step 2 - ESC4 → Domain Admin (the win) (needs `meereen`)
 - Step 3 - Shadow Credentials (needs `meereen`)
 - Step 4 - Certifried (CVE-2022-26923) (needs `meereen`)
-- First-pass result log (2026-09-07) (needs `meereen`)
+- Summary (full GOAD / essos) (needs `meereen`)

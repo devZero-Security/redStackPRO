@@ -1,15 +1,14 @@
 # GOAD Part 12 - Trusts (redStackPRO)
 <!-- lab-requires: multi_domain -->
 
-Reference: [mayfly - GOAD part 12](https://mayfly277.github.io/posts/GOADv2-pwning-part12/)
-(offline: `../_mayfly-source/_posts/2022-12-21-GOADv2-pwning-part12.md`).
+Reference: [mayfly - GOAD part 12](https://mayfly277.github.io/posts/GOADv2-pwning-part12/).
 Child→parent escalation and forest→forest lateral move, **through the hodor
 beacon's SOCKS proxy** (`proxychains -q` in front of the impacket calls; every
 DC is internal, see [part 1](part-01-recon.md) Step 1).
 
 > **Status legend:** ✅ PASS · ❌ blocked · ⚠ partial · ⏳ not run.
 
-## Headline result (2026-09-07)
+## Headline result
 
 **Trust topology confirmed.** The trust-escalation *techniques* (golden+extra-SID,
 trust ticket, SID history) all need a **TGT-level or krbtgt-level** foothold in
@@ -60,36 +59,9 @@ completes cleanly from a Windows beacon or with a domain krbtgt hash.
 - [ ] **Unconstrained delegation** (WINTERFELL$) - enumerated in part 10; needs a
   Windows beacon + Rubeus monitor to capture a coerced DC TGT. `⏳`
 
-## Live verification (2026-09-14, GOAD-Light)
+## Verify the trust
 
-Confirmed the trust topology from the DCs through their beacons:
-
-- **Step 1 north↔sevenkingdoms - ✅** `nltest /domain_trusts` on winterfell
-  returns `SEVENKINGDOMS` (Forest Tree Root) + `NORTH` (child, within-forest), and
-  `Get-ADForest` returns exactly those two domains. The child/parent WITHIN_FOREST
-  trust is present, so Step 2 (child→parent golden + extra-SID) has its target.
-- **⚠️ GOAD-Light has NO essos forest trust.** There is no `essos.local`, so
-  **Step 3's forest→forest paths (SID-history golden essos→sevenkingdoms, the
-  MSSQL trusted link castelblack→braavos) have no target here** - they are full
-  GOAD only. On GOAD-Light, Part 12 is the single child↔parent trust; the
-  cross-forest half of the page does not apply.
-
-The escalation techniques still need a TGT/krbtgt-level foothold in the source
-domain (a Windows beacon or a dumped child-DA hash), as the first-pass log notes -
-that constraint is independent of lab size.
-
-## First-pass result log (2026-09-07)
-
-**Part 12 partial.** Trust topology confirmed. The escalation techniques are
-documented and understood; each needs a TGT/krbtgt-level foothold in the source
-domain, which a Windows beacon supplies - schedule with the beacon-coverage goal.
-Domain ownership is already established via parts 6/10.
-
-### Findings → PAI
-- **Linux-foothold limit:** DCSync needs a TGT or hash, not an S4U service ticket.
-  The trust-escalation demos want a north/essos DA **hash** (dump once, reuse) or a
-  Windows beacon (Rubeus/mimikatz golden tickets).
-- **SID-history fidelity:** confirm whether SID history is enabled on the
-  sevenkingdoms↔essos trust and whether a privileged RID>1000 group exists
-  (mayfly's dragonrider). Add as a toggle for the forest SID-history attack.
-  Batched for a later rebuild.
+`nltest /domain_trusts` on winterfell returns `SEVENKINGDOMS` (Forest Tree Root)
+and `NORTH` (child, within-forest), and `Get-ADForest` returns exactly those two
+domains. The child/parent WITHIN_FOREST trust is present, so Step 2 (child→parent
+golden + extra-SID) has its target.

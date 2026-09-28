@@ -1,7 +1,6 @@
 # GOAD Part 6 - ADCS (redStackPRO)
 
-Reference: [mayfly - GOAD part 6](https://mayfly277.github.io/posts/GOADv2-pwning-part6/)
-(offline: `../_mayfly-source/_posts/2022-09-07-GOADv2-pwning-part6.md`).
+Reference: [mayfly - GOAD part 6](https://mayfly277.github.io/posts/GOADv2-pwning-part6/).
 AD CS abuse: find a certificate template the attacker can bend, enroll as a
 privileged principal, and authenticate with the certificate. Which template, on
 which CA, depends on the lab.
@@ -27,7 +26,7 @@ khal.drogo. It ships an ESC1 in sevenkingdoms instead; see
 <!-- lab-only: goad-light, goad-mini -->
 
 GOAD-Light ships a clean **ESC1** in the **sevenkingdoms** forest, verified live
-on a real range on 2026-09-14. Drive it with **certipy** through the beacon's
+on a real range. Drive it with **certipy** through the beacon's
 SOCKS proxy, the same way the full GOAD page does (see
 [part 1](part-01-recon.md) Step 1 for the proxy setup):
 
@@ -44,7 +43,7 @@ SOCKS proxy, the same way the full GOAD page does (see
 So GOAD-Light still gives a complete ADCS to Domain Admin story; it runs against
 SEVENKINGDOMS-CA/kingslanding with ESC1 rather than essos ESC4.
 
-## Headline result (2026-09-07, full GOAD / essos)
+## Headline result (full GOAD / essos)
 <!-- lab-requires: meereen -->
 
 **Domain Admin on essos.local achieved via ESC4.** Two clean wins; the
@@ -57,7 +56,7 @@ are N/A on this build.
 | Shadow Credentials | ✅ NT hash of target | not patch-dependent |
 | Certifried (CVE-2022-26923) | ❌ patched | `dNSHostName` constraint violation |
 | ESC6 | ❌ | CA flag set but "does not work after May 2022" |
-| ESC8 | ⏳ served since 2026-09-17, not yet run live | Web Enrollment now installed on ESSOS-CA |
+| ESC8 | ⏳ not yet run live | Web Enrollment installed on ESSOS-CA |
 | ESC11 | ⏳ | flagged (relay-based), not exploited |
 | ESC1 / ESC2 / ESC3 | ➖ | templates not present (build ships ESC4 + ESC13) |
 
@@ -117,38 +116,11 @@ khal.drogo can rewrite the ESC4 template, so make it ESC1-vulnerable, enroll as
 > Certifried is specifically needed. See Part 5's *noPac - why it stays documented*
 > for the full rationale.
 
-## First-pass result log (2026-09-07)
+## Summary (full GOAD / essos)
 <!-- lab-requires: meereen -->
 
-**Part 6 PASS on the misconfiguration paths.** ESC4 gives full DA on essos.local
-(DCSync'd krbtgt) using the modern `-sid` technique; Shadow Credentials yields a
-target's NT hash. The CVE-based path (Certifried) is patched, and ESC6/ESC8 are
-not applicable on this build. This is a strong, faithful Part 6 - the ESC
-template misconfigurations (unlike the 2021/2022 CVEs) are config, not patch
-level, so they land cleanly.
-
-### Findings → PAI
-- **ESC4 needs `-sid`** on the patched DC (KB5014754). Document in the guide; no
-  fix needed - it's the correct modern form.
-- **Certifried patched → document-only** - code-path CVE, not config-reopenable;
-  redundant with ESC4 + Shadow Creds which both land. Opt-in unpatched image only.
-- **Template-set fidelity delta → RESOLVED + LIVE-VALIDATED (2026-09-07)** - first
-  pass shipped only ESC4 + ESC13; mayfly's **ESC1/ESC2/ESC3** are now built as
-  clean-room planters, declared on the essos DC, and planted on the forest CA
-  (braavos). Confirmed live: `certipy find -vulnerable` as `essos\khal.drogo` flags
-  **RSPESC1 → ESC1**, **RSPESC2 → ESC1/2/3** (Any-Purpose EKU satisfies all three),
-  **RSPESC3 → ESC3**, each enrollable by `ESSOS\Domain Users`.
-- **ESC8 N/A** - Web Enrollment is disabled on ESSOS-CA; enabling it (scoped)
-  would make the classic PetitPotam→ESC8 path demonstrable.
-  **✅ CLOSED 2026-09-17.** The CA now installs `ADCS-Web-Enrollment` and serves
-  `/certsrv` whenever a host declares `esc8`, and goad declares it on braavos, so
-  this build matches upstream. That was the whole gap: **ESC8 plants no template**
-  (it uses the built-in `DomainController` one) and the CA living in essos was
-  never the obstacle, because mayfly's own chain coerces **meereen** and relays to
-  **braavos**, both inside essos.
-  **Not yet run live.** When a range next stands up, the path to walk is
-  `ntlmrelayx.py -t http://braavos.essos.local/certsrv/certfnsh.asp -smb2support
-  --adcs --template DomainController`, coerced with an **authenticated** method:
-  mayfly records that unauthenticated PetitPotam no longer works against a patched
-  DC, and that relaying NTLM to a CA on the host you coerced returns 401, which is
-  why the two-host essos path is the one that works.
+Part 6 passes on the misconfiguration paths. ESC4 gives full Domain Admin on
+essos.local (DCSync of krbtgt) using the modern `-sid` technique, and Shadow
+Credentials yields a target's NT hash. The CVE-based path (Certifried) is
+patched. Unlike the 2021/2022 CVEs, the ESC template misconfigurations are
+config, not patch level, so they land cleanly.

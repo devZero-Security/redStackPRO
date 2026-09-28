@@ -1,15 +1,12 @@
 # GOAD Part 2 - Find users (redStackPRO)
 
-Reference: [mayfly - GOAD part 2](https://mayfly277.github.io/posts/GOADv2-pwning-part2/)
-(offline: `../_mayfly-source/_posts/2022-07-04-GOADv2-pwning-part2.md`).
+Reference: [mayfly - GOAD part 2](https://mayfly277.github.io/posts/GOADv2-pwning-part2/).
 mayfly hunts users and first credentials from a Kali on the lab LAN. We run the
 same enumeration **through the beacon's SOCKS proxy** (external POV,
 [methodology](../goad/README.md#methodology)); hosts/IPs are in
 [part 1](part-01-recon.md#range-facts---read-your-defense-briefingmd-first).
 
 > **Status legend:** ✅ PASS · ❌ fail · ⏳ not yet run · ➖ N/A.
-> **Result: Part 2 PASS** - every mayfly credential path resolves after the
-> per-user password fidelity fixes.
 
 ## Step 1 - Anonymous DC enumeration
 
@@ -48,43 +45,16 @@ mayfly: brute valid names with `krb5-enum-users` (no bad-pwd-count impact).
   account to gauge bad-pwd-count. Finds **hodor:hodor**. `✅`
 - [x] **3.3 Guest/anonymous share check** (`--shares -u a -p ''`). `✅`
 
-## Live verification (2026-09-14, GOAD-Light)
+## GOAD-Light notes
 
-Re-confirmed the underlying AD facts that make each mayfly credential path work,
-read directly from the directory through the domain-context beacon (`Get-ADUser`
-across both domains). Every claim below holds on this range:
+This chain is verified end to end on a live range.
 
-- **Step 1.3 password-in-description - ✅** `samwell.tarly` (NORTH) description is
-  literally `Samwell Tarly (Password : Heartsbane)`. → `samwell.tarly:Heartsbane`.
-- **Step 3.1 AS-REP roast - ✅** `brandon.stark` (NORTH) has `DONT_REQ_PREAUTH`
-  set (userAccountControl bit 0x400000) - the only account in either domain with
-  it - so it issues a `$krb5asrep$23` with no creds. → cracks to `iseedeadpeople`.
-- **Step 3.2 spray - ✅** `hodor` (NORTH) exists as a Domain User; `hodor:hodor`
-  is the seeded user=pass hit (also proven by the live patient-zero beacon).
-- **Kerberoast targets (for parts 03/07)** - SPN accounts in NORTH: `sansa.stark`,
-  `jon.snow`, `sql_svc`. SEVENKINGDOMS named users (tywin/jaime/cersei/tyron,
-  the baratheons, petyer.baelish, lord.varys, maester.pycelle) carry no SPN and
-  no AS-REP flag on this build.
+- **Kerberoast targets** - SPN accounts in NORTH: `sansa.stark`, `jon.snow`,
+  `sql_svc`. SEVENKINGDOMS named users (tywin/jaime/cersei/tyron, the baratheons,
+  petyer.baelish, lord.varys, maester.pycelle) carry no SPN and no AS-REP flag on
+  this range. These feed the kerberoasting in later parts.
 
 > **⚠️ GOAD-Light difference - no essos:** `Get-ADForest` on this range returns
 > exactly `sevenkingdoms.local` + `north.sevenkingdoms.local`. There is **no
 > `essos.local` forest**, so `khal.drogo:horse` and every other essos credential
-> below have **no target here** (`➖ N/A`). They apply only on full GOAD.
-
-## First-pass result log (2026-09-06, full GOAD)
-
-**Part 2 PASS.** Credentials recovered exactly as mayfly:
-- `samwell.tarly:Heartsbane` (description)
-- `brandon.stark:iseedeadpeople` (AS-REP roast, crackable)
-- `hodor:hodor` (spray)
-- `khal.drogo:horse` (essos) confirmed usable - **full GOAD only**, absent on GOAD-Light.
-
-Winterfell `connect_bot` / `ntlm_relay` / `responder` bots provisioned
-`failed=0`. Full GOAD account parity confirmed.
-
-### Findings → PAI
-- **(Retracted wordlist finding):** rockyou **does** contain the key GOAD
-  passwords (iknownothing / iseedeadpeople / Needle / sexywolfy); only a few
-  themed ones (345ertdfg / Heartsbane) are absent - non-blocking.
-- Cracking backend gap surfaces in [part 3](part-03-enumeration-with-user.md)
-  (hashcat has no compute backend on the Kali → **F-crack-backend**).
+> has **no target here** (`➖ N/A`). They apply only on full GOAD.

