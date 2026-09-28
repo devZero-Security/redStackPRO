@@ -1470,7 +1470,7 @@ function Editor() {
             role="tab"
             aria-selected={document.mode !== "haven"}
             className={`rg-mode-seg rg-mode-artie ${document.mode !== "haven" ? "is-active" : ""}`}
-            title="ARTIE: attack infrastructure (C2, redirectors, operators)"
+            title="ARTIE: Automated Red Team Infrastructure Environment (C2, redirectors, operators)"
             onClick={() => chooseMode("artie")}
           >
             Offense (ARTIE)
@@ -1480,7 +1480,7 @@ function Editor() {
             role="tab"
             aria-selected={document.mode === "haven"}
             className={`rg-mode-seg rg-mode-haven ${document.mode === "haven" ? "is-active" : ""}`}
-            title="HAVEN: defense ranges (AD forests, hosts, SIEM)"
+            title="HAVEN: Hardened Adversarial Validation Environment Network (AD forests, hosts, SIEM)"
             onClick={() => chooseMode("haven")}
           >
             Defense (HAVEN)
@@ -1698,8 +1698,8 @@ function Editor() {
             <Panel position="top-left" className="rg-legend">
               <span className="rg-legend-mode">
                 {document.mode === "haven"
-                  ? "HAVEN, defense ranges"
-                  : "ARTIE, attack and operator infrastructure"}
+                  ? "HAVEN: Hardened Adversarial Validation Environment Network"
+                  : "ARTIE: Automated Red Team Infrastructure Environment"}
               </span>
               {legendItems(document).map((item) => (
                 <span key={item.key} className="rg-legend-item">
