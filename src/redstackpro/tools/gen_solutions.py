@@ -267,7 +267,31 @@ def retarget_links(content: str, present: set[str]) -> str:
     return PART_LINK.sub(fix, content)
 
 
-def render_index(lab: str, rows: list[tuple[str, str, str]], surface: set[str]) -> str:
+KIND_LABEL = {"dc": "DC", "srv": "server", "wks": "workstation",
+              "siem": "SIEM", "jumpbox": "jumpbox"}
+
+
+def lab_roster(template: dict) -> tuple[list[str], list[str]]:
+    """The domains and hosts this lab actually deploys. The source pages are
+    written against full GOAD, so a smaller lab's pages still name hosts it does
+    not have; listing the real roster in the lab README tells a reader which of
+    the cast in the walkthrough applies here."""
+    domains: list[str] = []
+    hosts: list[str] = []
+    for node in template.get("nodes", []):
+        overlay = node.get("overlay") or {}
+        kind = node.get("kind")
+        if kind == "domain":
+            netbios = overlay.get("netbios")
+            fqdn = overlay.get("fqdn", node.get("id"))
+            domains.append(f"{fqdn} ({netbios})" if netbios else fqdn)
+        elif kind in KIND_LABEL:
+            hosts.append(f"{overlay.get('hostname', node.get('id'))} ({KIND_LABEL[kind]})")
+    return domains, hosts
+
+
+def render_index(lab: str, rows: list[tuple[str, str, str]], surface: set[str],
+                 roster: tuple[list[str], list[str]] = ([], [])) -> str:
     """The lab's own README: what applies, what does not, and why."""
     applies = sum(1 for _, status, _ in rows if status != "not on this lab")
     lines = [
@@ -282,6 +306,17 @@ def render_index(lab: str, rows: list[tuple[str, str, str]], surface: set[str]) 
         f"**{applies} of the {len(rows)} parts**. Read your deploy's own",
         "`DEFENSE-BRIEFING.md` for the hosts, addresses and credentials, which are",
         "per deploy and not in these pages.",
+    ]
+    domains, hosts = roster
+    if domains or hosts:
+        lines += ["", "## Hosts on this lab", "",
+                  "The walkthrough uses the full GOAD cast; this lab deploys only these"
+                  " (your `DEFENSE-BRIEFING.md` has their per-deploy addresses):", ""]
+        if domains:
+            lines.append("- **Domains:** " + ", ".join(domains))
+        if hosts:
+            lines.append("- **Hosts:** " + ", ".join(hosts))
+    lines += [
         "",
         "| part | on this lab | note |",
         "|------|-------------|------|",
@@ -322,7 +357,7 @@ def generate(lab: str, check: bool) -> int:
 
     present = set(wanted)
     wanted = {name: retarget_links(content, present) for name, content in wanted.items()}
-    wanted["README.md"] = render_index(lab, rows, techniques)
+    wanted["README.md"] = render_index(lab, rows, techniques, lab_roster(template))
 
     if check:
         stale: list[str] = []

@@ -10,6 +10,13 @@ The `goad-mini` lab carries **2 techniques** and reaches
 `DEFENSE-BRIEFING.md` for the hosts, addresses and credentials, which are
 per deploy and not in these pages.
 
+## Hosts on this lab
+
+The walkthrough uses the full GOAD cast; this lab deploys only these (your `DEFENSE-BRIEFING.md` has their per-deploy addresses):
+
+- **Domains:** sevenkingdoms.local (SEVENKINGDOMS)
+- **Hosts:** kingslanding (DC), jumpbox (jumpbox)
+
 | part | on this lab | note |
 |------|-------------|------|
 | [part-01-recon.md](part-01-recon.md) | yes |  |
