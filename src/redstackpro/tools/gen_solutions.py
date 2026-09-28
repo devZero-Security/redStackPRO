@@ -46,11 +46,20 @@ SOURCE_DIR = ROOT / "docs" / "solutions" / "goad"
 TEMPLATE_DIR = ROOT / "frontend" / "public" / "goad"
 SOLUTIONS_DIR = ROOT / "docs" / "solutions"
 
-# Only labs the coverage matrix calls a strict subset of goad are generated.
-# goad-wazuh, nha and minilab each carry techniques the goad series never
-# exercises, so a filtered copy of that series would be an incomplete guide to
-# them rather than a smaller one. They keep their hand-written coverage page.
-GENERATED_LABS = ("goad-light", "goad-mini")
+# Only a lab whose reader can actually follow the filtered goad series is
+# generated. Two reasons keep a lab off this list, both of which mean the
+# reader would be shown the wrong walkthrough:
+#   - it exercises techniques goad never covers (goad-wazuh, nha, minilab), so a
+#     filtered copy is an incomplete guide rather than a smaller one; or
+#   - its topology narrative differs from goad's even though its technique
+#     surface is a subset. goad-mini is single domain (sevenkingdoms.local on
+#     kingslanding) with an assumed-foothold ACL path, but the goad source pages
+#     narrate a two-domain topology (north patient zero on winterfell, essos,
+#     hodor) in prose the section filter does not rewrite, so the filtered pages
+#     described hosts and users the range does not have. It now keeps a
+#     hand-written coverage page like the others.
+# Labs off this list keep a hand-written coverage page.
+GENERATED_LABS = ("goad-light",)
 
 MARKER = re.compile(r"<!--\s*lab-requires:\s*(.+?)\s*-->", re.IGNORECASE)
 ONLY = re.compile(r"<!--\s*lab-only:\s*(.+?)\s*-->", re.IGNORECASE)

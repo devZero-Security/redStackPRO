@@ -51,7 +51,8 @@ solutions build on, so the per-lab pages here are not replaced.
 | lab | solution | source |
 |-----|----------|--------|
 | goad | [14 parts](../goad/README.md) | GOADv2 pwning part1-13 plus ADCS part14, run live per step |
-| goad-light, goad-mini | [goad-light](goad-light.md), [goad-mini](goad-mini.md) | generated from the goad series by `python -m redstackpro.tools.gen_solutions` |
+| goad-light | [goad-light](goad-light.md) | generated from the goad series by `python -m redstackpro.tools.gen_solutions` |
+| goad-mini | [goad-mini](../goad-mini/README.md) | hand-written coverage; single domain, ESC1 and the sevenkingdoms ACL chain |
 | sccm | [goad-sccm](../goad-sccm/README.md) | mayfly SCCM-LAB part0x0-0x3 |
 | dracarys | [goad-dracarys](../goad-dracarys/README.md) | reconstructed (mayfly publishes no solution) |
 | nha | [goad-nha](../goad-nha/README.md) | hand-authored from the template |

@@ -2,7 +2,7 @@
 
 Reference: [mayfly - GOAD part 1](https://mayfly277.github.io/posts/GOADv2-pwning_part1/).
 mayfly runs this from a Kali sitting on the `192.168.56.0/24` lab LAN. We run it
-**from within redStack**, through Mythic, per the
+**from within redStackPRO**, through Mythic, per the
 [methodology](../goad/README.md#methodology).
 
 > **Status legend:** ✅ PASS · ❌ FAIL · ⏳ not yet run · ➖ N/A.
@@ -10,7 +10,7 @@ mayfly runs this from a Kali sitting on the `192.168.56.0/24` lab LAN. We run it
 ## Range facts - read your `DEFENSE-BRIEFING.md` first
 
 The table below is the **canonical full-GOAD** topology. Internal range IPs are
-deterministic (redStack pins each core host's last octet via the `internal_ip`
+deterministic (redStackPRO pins each core host's last octet via the `internal_ip`
 field to GOAD's canonical scheme, so a fresh deploy
 reproduces them) and safe to publish as-is. **Public addresses are
 per-deploy and cloud-ephemeral** - the jumpbox and redirector get a fresh IP
@@ -45,18 +45,18 @@ live C2 redirector does not belong in a solution.
 > as written. Optional add-on hosts (the-eyrie/wazuh) are not IP-pinned even on
 > full GOAD and stay DHCP-assigned - verify at runtime.
 
-- redStack redirector (public, per-deploy): **cdn.redops.design** (an example
+- redStackPRO redirector (public, per-deploy): **cdn.redops.design** (an example
   value, your deploy's own `--hostname` domain goes here) → Mythic C2.
 - Mythic teamserver: `10.30.20.4` (myth-ts01), UI `:7443` via jumpbox tunnel
   (Sliver `10.30.20.2`, Adaptix `10.30.20.3`; the redirector routes to each).
-  These live in the separate redStack offense project, reached only through the C2.
+  These live in the separate redStackPRO offense project, reached only through the C2.
 
 ### Assumed-breach identity - patient zero = **hodor** (see the [range access model](../README.md#range-access-model))
 
 - **Portal entry:** the Guacamole portal on the jumpbox (`https://<jumpbox-public-ip>/guacamole`), then the **`castelblack as hodor (patient zero)`** RDP tile. That tile signs straight in as `NORTH\hodor` on a range host - the operator never touches SSH. This is the way in for the whole engagement.
 - **Domain patient zero:** `north\hodor` / its lab password (see the briefing), **Domain Users only** (low-priv). The seeded phished-employee credential the RDP tile logs in with. Verified live: hodor is a `north.sevenkingdoms.local` user, global groups `*Stark` + `*Domain Users`.
 
-### Operator `/etc/hosts` block (redStack Kali op)
+### Operator `/etc/hosts` block (redStackPRO Kali op)
 
 > **Provider note (name resolution).** These static `/etc/hosts` and `krb5.conf`
 > entries are how you resolve range names on an **on-prem** backend (`proxmox`,
@@ -99,7 +99,7 @@ live C2 redirector does not belong in a solution.
 ## Step 0 - External surface recon (external POV)
 
 An external attacker sees only the public perimeter: the range **jumpbox** and
-the redStack **redirector**. Every backend host is private. This step proves
+the redStackPRO **redirector**. Every backend host is private. This step proves
 that.
 
 - [ ] **0.1** Scan the jumpbox public surface (`<jumpbox-public-ip>`): only the
@@ -119,7 +119,7 @@ Mythic through the redirector, and every later step runs through *that*
 beacon. It models initial access more realistically than dropping a beacon on
 the jumpbox itself.
 
-**Build the Apollo payload** (from the redStack offense side; headless via the
+**Build the Apollo payload** (from the redStackPRO offense side; headless via the
 Mythic scripting library on the teamserver, or the Mythic UI). The two things
 that matter are the callback host and the redirector's gating contract:
 
@@ -164,7 +164,7 @@ mayfly: `cme smb 192.168.56.1/24`.
 
 - [ ] **1.1 (C2-native):** from the beacon, `net view` / Apollo host enum, or
   execute-assembly a discovery assembly. `✅/❌`
-- [ ] **1.2 (SOCKS + Kali, where needed):** from the redStack Kali operator.
+- [ ] **1.2 (SOCKS + Kali, where needed):** from the redStackPRO Kali operator.
   Two constraints shape the command, both learned here and both non-obvious:
   `nxc` is deliberately NOT installed (`/opt/redstackpro/TOOLKIT.md`: NetExec is
   not on PyPI and its `aardwolf` dependency needs a Rust toolchain built on the
@@ -211,7 +211,7 @@ mayfly: `nslookup -type=srv _ldap._tcp.dc._msdcs.sevenkingdoms.local <dc-ip>`.
 ## Step 3 - Kerberos client setup + TGT test (operator side)
 
 mayfly configures `/etc/hosts` + `/etc/krb5.conf`, then `getTGT.py` and a
-kerberized `smbclient.py`. We do the same on the **redStack Kali operator**,
+kerberized `smbclient.py`. We do the same on the **redStackPRO Kali operator**,
 routing through SOCKS.
 
 - [ ] **3.1** `/etc/hosts` on the operator maps the 6 range hosts to their real

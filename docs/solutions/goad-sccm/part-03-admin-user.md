@@ -71,7 +71,7 @@ service and account passwords the site stores, including any domain admin
 grade account used to run the site.
 
 ```
-proxychains -q nxc smb 192.168.56.5 -u sccm-account-da -p '<recovered>' -d sccm.lab
+proxychains -q smbclient.py 'sccm.lab/sccm-account-da:<recovered>'@192.168.56.5 -L
 ```
 
 If a recovered account is a domain admin, this closes the loop from low user to

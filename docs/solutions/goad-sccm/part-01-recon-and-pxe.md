@@ -26,7 +26,7 @@ low noise path is to look for the site over SMB and HTTP once you can reach the
 subnet, and to identify the site code (here `P01`).
 
 ```
-proxychains -q nxc smb 192.168.56.3 --shares
+proxychains -q smbclient.py -no-pass -L 192.168.56.3
 proxychains -q sccmhunter.py find -u <user> -p <pass> -d sccm.lab -dc-ip 192.168.56.5
 ```
 
@@ -68,7 +68,7 @@ code without touching the site server directly.
 ### SMB shares
 
 ```
-proxychains -q nxc smb 192.168.56.3 -u <user> -p <pass> -d sccm.lab --shares
+proxychains -q smbclient.py 'sccm.lab/<user>:<pass>'@192.168.56.3 -L
 proxychains -q sccmhunter.py smb -u <user> -p <pass> -d sccm.lab -dc-ip 192.168.56.5 -debug
 ```
 

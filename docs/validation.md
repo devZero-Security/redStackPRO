@@ -5,6 +5,9 @@ belongs in the topology layer validator, not in the compiler. Every rule carries
 machine-readable code and prose written for a reader, because the eventual agent
 harness iterates on the prose.
 
+Four-digit codes (00NN) are internal design-decision references and are not
+published with this repo.
+
 Severity is `error` or `warning`. The compiler refuses to run on any error.
 
 Implemented in `src/redstackpro/validate.py`, one function per rule, with a negative

@@ -42,10 +42,13 @@ list of `operators` (handle plus role), and each gets a Guacamole portal login
 on the shared lab password. Set the jumpbox's `access_mode` to `wireguard` or
 `openvpn` (default is a public portal) and every operator also gets a personal
 VPN credential generated on the jumpbox at apply: the keys never leave the box
-or enter the export, only the client config file does. On a VPN access mode
-the portal closes to the internet and moves behind the tunnel, while SSH stays
-open so the admin can keep deploying and managing the box. Add or remove a
-teammate on a running jumpbox with `sudo rsp-operator add <handle>`. See the
+or enter the export, only the client config file does. The portal logins today
+share the one lab password, so per-operator isolation comes from each operator's
+own VPN credential, not the portal login; individual portal passwords are on the
+roadmap. On a VPN access mode the portal closes to the internet and moves behind
+the tunnel, while SSH stays open so the admin can keep deploying and managing the
+box. Add or remove a teammate on a running jumpbox with
+`sudo rsp-operator add <handle>`. See the
 wiki [Deploying a Range](https://github.com/devZero-Security/redStackPRO/wiki/Deploying-a-Range).
 
 Harbor, a target range: a small corporate forest, a root domain and a child over a
@@ -196,6 +199,16 @@ Every run writes a timestamped, secret-scrubbed log to
 `logs/deploy-<timestamp>.log` in the export. If a deploy fails or a range
 comes up wrong, attach the newest one to a GitHub issue; `deploy.sh` prints
 its path and a link when something goes wrong.
+
+**Manage and tear down.** The export also ships lifecycle scripts, `manage.sh`
+(and `manage.ps1` on Windows), for the running range. They take `status`,
+`start`, `stop`, and `teardown`: `stop` pauses billing without destroying the
+range, and `teardown` destroys it.
+
+    ./manage.sh status
+    ./manage.sh start
+    ./manage.sh stop
+    ./manage.sh teardown
 
 ---
 

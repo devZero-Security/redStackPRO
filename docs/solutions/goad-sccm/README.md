@@ -29,6 +29,14 @@ rules apply. See the [range access model](../README.md#range-access-model):
 3. **Linux tooling runs through the pivot** (the beacon's SOCKS) with
    proxychains. Windows side work runs through the beacon.
 
+## Tools to stage
+
+Several tools these pages call are not on the shipped operator foothold image and
+must be staged by the operator: `nxc` (NetExec), `sccmhunter`, `pxethief`,
+`ccmpwn`, and `sccmwtf`. See `/opt/redstackpro/TOOLKIT.md` on the foothold for
+where to place them. Plain SMB and LDAP recon can use the shipped impacket
+substitutes (for example `smbclient.py` in place of a plain `nxc` share list).
+
 ## Provider differences
 
 redStackPRO compiles this range for cloud backends (`gcp`, `aws`, `azure`) and
@@ -119,9 +127,8 @@ missing host to the canvas), not a role change.
 ## How we validate
 
 Same rule as the GOAD series: run each part against the live deployment, mark
-every step PASS, FAIL or N-A, log gaps in the Pending Action Items list with a
-recommendation, fix and commit, then rerun until the part matches the documented
-outcome.
+every step PASS, FAIL or N-A, note any gaps for your own retest, fix and commit,
+then rerun until the part matches the documented outcome.
 
 Attribution: adapted from mayfly277's SCCM LAB series (mayfly277.github.io) and
 the Misconfiguration Manager project. Rewritten in our own words for

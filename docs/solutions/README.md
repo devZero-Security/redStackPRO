@@ -10,7 +10,7 @@ your deploy; the pages below name the template's hosts, which are not yours.
 |-----|------|------------|
 | goad | [goad/README.md](goad/README.md) | full GOAD, three domains, the 14-part reference series |
 | goad-light | [goad-light/README.md](goad-light/README.md) | two domains, three Windows hosts; generated from the goad series |
-| goad-mini | [goad-mini/README.md](goad-mini/README.md) | the smallest lab; generated from the goad series |
+| goad-mini | [goad-mini/README.md](goad-mini/README.md) | the smallest lab; hand-written coverage, ESC1 and the sevenkingdoms ACL chain |
 | minilab | [goad-minilab/README.md](goad-minilab/README.md) | one domain, a DC and a workstation; CredSSP delegation and scheduled-task abuse |
 | nha | [goad-nha/README.md](goad-nha/README.md) | Ninja Hack Academy, two forests, an ESC4 certificate-template takeover across the trust |
 | sccm | [goad-sccm/README.md](goad-sccm/README.md) | an SCCM/MECM site, recon through execution |
