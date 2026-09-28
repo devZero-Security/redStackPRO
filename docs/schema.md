@@ -5,6 +5,9 @@ and their examples stay in the repo as migration fixtures.
 
 The schema is the artifact, not this file.
 
+Four-digit codes (00NN) are internal design-decision references and are not
+published with this repo.
+
 - `src/redstackpro/schema/topology/0.7.0.json` is the document schema
 - `src/redstackpro/schema/topology/examples/0.7.0/` holds four worked examples that
   double as test fixtures
@@ -51,11 +54,9 @@ guard between two files that would otherwise diverge.
   its own network peered to the main range, fronting three teamservers on separate
   prefixes, with a collector in its own tier. Kept to a single redirector because
   that is the familiar redStack shape; the rollover pool of a second redirector is
-  exercised by the `rollover` test fixture rather than shipped here. Verify against
-  real redStack before this ships as the default blueprint
+  exercised by the `rollover` test fixture rather than shipped here.
 - `parallel-chains.json`, two independent chains in separate routing domains with
-  one management network reaching both. Substituted for the GOAD example, which
-  moves to the range pass
+  one management network reaching both.
 - `peered.json`, two networks joined by a `peers` edge so a jumpbox in one manages
   hosts in the other across the peered boundary
 
@@ -96,9 +97,7 @@ sit on a subnet rather than joining a domain. Range semantics are checked by the
 times without CIDR, hostname, or domain collisions. A topology-level variables block.
 Not in 0.7.0. See 0012.
 
-## Roadmap
-
-Anticipated, not decided. None of these is an ADR yet.
+## Landed
 
 - `peers` landed in 0.4.0: a network to network role for same-cloud links that do
   not warrant an endpoint host, which relaxes the cross-network management,
@@ -113,6 +112,11 @@ Anticipated, not decided. None of these is an ADR yet.
   RDP tile, which satisfies CAR008's GUI requirement for a web-UI C2 without a
   Windows operator. Additive and default false, so the migration from 0.4.0 is a
   version bump and nothing else
+
+## Roadmap
+
+Anticipated, not decided. None of these is an ADR yet.
+
 - `tunnel` as a standalone role if defense mode produces a pivot host case where
   the transport is the entire relationship
 - Mixed-provider compilation, reading the optional `provider` field on networks.

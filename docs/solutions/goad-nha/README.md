@@ -1,4 +1,4 @@
-# nha solution - the ESC4 chain redStackPRO plants and nothing served
+# nha solution - redStackPRO edition
 
 `nha` (Ninja Hack Academy, a GOAD community lab) is covered technique-by-technique
 in [the coverage page](../labs/nha.md). This page exists because that audit found

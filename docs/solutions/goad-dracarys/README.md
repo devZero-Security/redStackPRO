@@ -1,6 +1,6 @@
 # DRACARYS solution - redStackPRO edition
 
-DRACARYS is a GOAD challenge lab (by Cyril Servieres / Orange Cyberdefense):
+DRACARYS is a GOAD challenge lab (by Cyril Servieres / Orange-Cyberdefense):
 start with no credentials and reach Domain Admin on `dracarys.lab`. Unlike the
 GOAD pwning series, mayfly deliberately publishes no solution. This page
 documents the intended chain against redStackPRO's faithful recreation of the

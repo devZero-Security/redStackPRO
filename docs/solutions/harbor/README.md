@@ -98,7 +98,9 @@ actually meets them.
 ### 0. Foothold as patient zero
 
 The engagement starts as `dana.brooks` on the workstation `fr-wks01`, reached
-through the portal's patient-zero tile as in the GOAD methodology. She is a plain
+through the portal's patient-zero RDP tile as in the GOAD methodology (she has to
+be a Remote Desktop Users member on `fr-wks01` for the tile to open, which the
+range grants). She is a plain
 `freight.harbor.corp` domain user. `fr-wks01` also carries `stored_credential`:
 check the Windows Credential Manager on the box for a saved credential that gives
 an early second identity.
@@ -110,9 +112,7 @@ proxychains bloodhound-python -d freight.harbor.corp -u dana.brooks -p '<pw>' \
   -c all -ns 172.20.10.11
 ```
 
-Patient zero is reached through the portal's patient-zero tile, an RDP session as
-`dana.brooks` (she has to be a Remote Desktop Users member on `fr-wks01` for the tile
-to open, which the range grants). Landing the first payload is the practical hurdle.
+Landing the first payload is the practical hurdle.
 The tile carries a shared drive (GuacShare) you can drop a file into, but if the
 browser upload stalls, smuggle the payload in over the range's own management plane
 instead. That path is more reliable and leaves no mark-of-the-web to raise

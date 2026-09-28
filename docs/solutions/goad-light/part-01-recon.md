@@ -53,7 +53,7 @@ live C2 redirector does not belong in a solution.
   value, your deploy's own `--hostname` domain goes here) → Mythic C2.
 - Mythic teamserver: `10.30.20.4` (myth-ts01), UI `:7443` via jumpbox tunnel
   (Sliver `10.30.20.2`, Adaptix `10.30.20.3`; the redirector routes to each).
-  These live in the separate redStack ops project, reached only through the C2.
+  These live in the separate redStack offense project, reached only through the C2.
 
 ### Assumed-breach identity - patient zero = **hodor** (see the [range access model](../README.md#range-access-model))
 
@@ -112,7 +112,7 @@ that.
 - [ ] **0.2** Confirm no backend host is internet-reachable (no public
   3389/445/389/1433 anywhere but the jumpbox). `✅/❌`
 
-## Step 1 - Initial access: patient zero runs the first beacon
+## Initial access: patient zero runs the first beacon
 
 The initial access **is a C2 beacon in patient zero's context**, delivered and
 run through the portal - not an SSH foothold on the jumpbox. This is the
@@ -135,22 +135,22 @@ that matter are the callback host and the redirector's gating contract:
   serves the CDN decoy and the beacon never reaches Mythic. The token is in the
   redirector's `redstackpro_redirector_gating.header_value`.
 
-- [ ] **1.1** Log into the portal `https://<jumpbox-public-ip>/guacamole` (the
+- [ ] **IA.1** Log into the portal `https://<jumpbox-public-ip>/guacamole` (the
   operator account + lab password), open the **`castelblack as hodor (patient
   zero)`** tile. It logs in as `NORTH\hodor`. `✅/❌`
-- [ ] **1.2** Drop the Apollo `.exe` onto the **GuacShare** mapped drive in the
+- [ ] **IA.2** Drop the Apollo `.exe` onto the **GuacShare** mapped drive in the
   RDP session (or upload it to the jumpbox drop folder `/opt/redstackpro/drop`,
   which is that same drive), and run it. `✅/❌`
-- [ ] **1.3** Confirm the session lands in Mythic as `user=hodor domain=NORTH`.
+- [ ] **IA.3** Confirm the session lands in Mythic as `user=hodor domain=NORTH`.
   `✅/❌`
-- [ ] **1.4** Open a SOCKS proxy through the beacon. Apollo lazy-loads `socks`,
+- [ ] **IA.4** Open a SOCKS proxy through the beacon. Apollo lazy-loads `socks`,
   so load then start it (Mythic UI, or scripting):
   ```
   load socks
   socks -action start -port 7005
   ```
   The proxy opens on the teamserver at `127.0.0.1:7005`. `✅/❌`
-- [ ] **1.5** Point `proxychains` at `socks5 127.0.0.1 7005` and confirm backend
+- [ ] **IA.5** Point `proxychains` at `socks5 127.0.0.1 7005` and confirm backend
   reachability through the beacon, e.g.
   `proxychains4 -q nc -vz 192.168.56.11 389`. `✅/❌`
 

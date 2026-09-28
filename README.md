@@ -28,12 +28,12 @@
 > reports shape the release.
 
 redStackPRO puts attack infrastructure and target ranges on the same canvas. The two
-canvas modes are **Offense** (attack infrastructure) and **Defense** (defense ranges); the
+canvas modes are **Offense** (attack infrastructure) and **Defense** (defensive AD ranges); the
 export names its handoff `OFFENSE-BRIEFING.md` or `DEFENSE-BRIEFING.md` to match.
 
 Split horizon C2, attack infrastructure: two front doors that do not share a fate,
 Apache fronting Sliver and Nginx fronting Mythic, each redirector on its own peered
-network, with the teamservers, collector and operators behind a jumpbox.
+network, with the teamservers, collector, and operators behind a jumpbox.
 
 ![Split horizon C2 on the canvas: two redirector networks, Apache fronting Sliver and Nginx fronting Mythic, over a shared C2 subnet with the teamservers, an OpenSearch collector, operators and a jumpbox.](docs/images/split-horizon.png)
 
@@ -232,7 +232,7 @@ are in the wiki:
 Everything the canvas does is available headless, so an agent can operate
 redStackPRO without a person clicking through it. A topology is plain JSON against
 a published schema (`src/redstackpro/schema/topology/`, also served at `/api/v1/registry/schema`),
-the registry endpoints report the vocabulary of node kinds, providers and roles,
+the registry endpoints report the vocabulary of node kinds, providers, and roles,
 and the validate and compile steps the canvas calls are the same REST endpoints.
 The API is documented at `/docs` and `/openapi.json`, which a model can read as
 tools.

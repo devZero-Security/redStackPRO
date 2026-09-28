@@ -6,7 +6,7 @@ mayfly poisons LLMNR/NBT-NS with Responder + mitm6 and relays NTLM. On cloud the
 picture splits in two - this is the most important **cloud-vs-onprem fidelity
 difference** in the series.
 
-> **Status legend:** ✅ PASS · ❌ blocked · ⏳ not yet run · ➖ N/A.
+> **Status legend:** ✅ PASS · ❌ blocked · ⚠ partial · ⏳ not yet run · ➖ N/A.
 
 ## Headline result
 

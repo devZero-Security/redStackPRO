@@ -1,7 +1,7 @@
-# SCCM part 1 - recon and PXE
+# SCCM Part 1 - Recon and PXE
 
 Adapts mayfly's SCCM LAB part 0x1. Establish what the site looks like, first
-with no credentials, then with a low privileged domain user, and pull the first
+with no credentials, then with a low-privileged domain user, and pull the first
 secret from PXE.
 
 Initial access follows the same model as the GOAD series (see
@@ -30,7 +30,7 @@ proxychains -q nxc smb 192.168.56.3 --shares
 proxychains -q sccmhunter.py find -u <user> -p <pass> -d sccm.lab -dc-ip 192.168.56.5
 ```
 
-Without a user, most LDAP recon is blind; PXE below is the credential free entry
+Without a user, most LDAP recon is blind; PXE below is the credential-free entry
 point.
 
 ### PXE
@@ -47,12 +47,12 @@ proxychains -q python3 pxethief.py 2 192.168.56.3
 - If PXE has a password: crack the hash offline, then decrypt.
 
 **redStackPRO status:** to be filled at live run. PXE is an optional MECM
-feature; confirm the site was deployed with a PXE enabled distribution point,
+feature; confirm the site was deployed with a PXE-enabled distribution point,
 otherwise mark CRED-1 N-A for this build and note it as a topology option.
 
 ## Recon with a user
 
-A low privileged domain user (the assumed-breach foothold) opens up LDAP, SMB
+A low-privileged domain user (the assumed-breach foothold) opens up LDAP, SMB
 and HTTP enumeration.
 
 ### LDAP
@@ -96,7 +96,7 @@ the precondition for the relay takeovers in
 
 | step | id | result | notes |
 |------|----|--------|-------|
-| PXE secret | CRED-1 | | needs a PXE enabled DP |
+| PXE secret | CRED-1 | | needs a PXE-enabled DP |
 | LDAP recon | RECON-1 | | |
 | SMB recon | RECON-2 | | |
 | HTTP recon | RECON-3 | | |

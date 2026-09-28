@@ -6,9 +6,15 @@ authenticating and relay that authentication to the site database. The site
 server runs as its machine account `MECM$`, which is a sysadmin on the site
 database, so relaying it is a full site takeover.
 
-Everything runs from the Kali through the jumpbox SOCKS proxy. ntlmrelayx needs
-a pty, so run it under `screen -dmS`. It must not bind :80 if nginx already owns
-it on the jumpbox; use `--no-http-server` when relevant.
+The enumeration and impacket client tooling runs from the Kali over patient
+zero's beacon SOCKS (the jumpbox SSH SOCKS is the admin fallback), matching
+[part 1](part-01-recon-and-pxe.md). The relay listener is the exception:
+`ntlmrelayx` runs on the jumpbox foothold, not down the beacon SOCKS, because it
+has to receive the coerced inbound authentication, which a SOCKS proxy cannot
+deliver. This is the documented relay exception (see the relay step in
+[GOAD part 4](../goad/part-04-poison-and-relay.md)). ntlmrelayx needs a pty, so
+run it under `screen -dmS`. It must not bind :80 if nginx already owns it on the
+jumpbox; use `--no-http-server` when relevant.
 
 ## Takeover 1 - relay to the site database over MSSQL
 

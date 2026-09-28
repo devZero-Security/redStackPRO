@@ -49,6 +49,14 @@ RECON-4. CMPivot runs live queries against managed clients from the console or
 the AdminService. Enumerate installed software, logged on users, or files across
 the estate without touching each host directly.
 
+### Recon 5 - SMS provider enumeration
+
+RECON-5. The SMS Provider is the site's own management interface. As an SCCM
+admin, enumerate it through the AdminService to read the site's view of itself:
+site code, collections, deployments, and the accounts and devices the site
+tracks. This complements CMPivot's live client queries with the site's stored
+configuration.
+
 ### Exec - application and script deployment
 
 EXEC-1 and EXEC-2. As an SCCM admin, deploy an application or a PowerShell script
