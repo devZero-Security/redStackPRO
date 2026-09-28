@@ -129,8 +129,9 @@ has been applied and nothing here holds a credential.
 | On the hosts | nothing: Ansible is installed on the jumpbox for you |
 | Time | roughly 60 to 75 minutes, most of it building C2 agents |
 
-All four local tools ship with Git for Windows, macOS and any Linux, so this
-deploys the same way on all three.
+`ssh` and `tar` are already on macOS and Linux and ship with Git for Windows;
+install `terraform` and a Python 3.8+ yourself. The deploy then runs the same
+way on all three.
 
 ## 1. Make an ssh key
 
@@ -183,7 +184,8 @@ Every run also writes a full log to `logs/deploy-<timestamp>.log`. If a deploy
 fails or a range comes up wrong, that file is what to attach to a GitHub issue: it
 records the versions, the provider, and where the run stopped, and it is scrubbed
 of secrets (private keys and passwords) before it is written. `deploy.sh` prints
-its path, and the link to open an issue, on a failure.
+its path, and the link to open an issue, on a failure. Bug reports and
+feedback are welcome any time in GitHub Issues.
 
 If a redirector uses Let's Encrypt, `deploy.sh` prints the exact DNS A record to
 create the moment the address exists. Create it while the build runs: issuance
@@ -271,8 +273,9 @@ you are attacking; this file is only how to stand it up.
 | On the hosts | nothing: Ansible is installed on the jumpbox for you |
 | Time | roughly 45 minutes for a small forest, longer for a large one |
 
-All four local tools ship with Git for Windows, macOS and any Linux, so this
-deploys the same way on all three.
+`ssh` and `tar` are already on macOS and Linux and ship with Git for Windows;
+install `terraform` and a Python 3.8+ yourself. The deploy then runs the same
+way on all three.
 
 ## 1. Make an ssh key
 
@@ -330,7 +333,8 @@ Every run also writes a full log to `logs/deploy-<timestamp>.log`. If a deploy
 fails or the range comes up wrong, that file is what to attach to a GitHub issue:
 it records the versions, the provider, and where the run stopped, and it is
 scrubbed of secrets before it is written. `deploy.sh` prints its path, and the
-link to open an issue, on a failure.
+link to open an issue, on a failure. Bug reports and feedback are welcome
+any time in GitHub Issues.
 
 ## What this builds
 

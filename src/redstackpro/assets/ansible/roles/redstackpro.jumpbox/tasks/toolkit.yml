@@ -217,7 +217,7 @@
       | PKINITtools | `gettgtpkinit`, `getnthash` | certificate to TGT |
 
       These are wrappers: the tools import impacket, which lives in its own venv,
-      so a bare `python3` cannot run them. Authenticate with the NETBIOS domain
+      so a bare `python3` cannot run them. Authenticate with the NetBIOS domain
       (`NORTH\user`), not the FQDN, or ldap3's NTLM returns
       NO_AUTHENTICATING_AUTHORITY.
 
@@ -227,7 +227,7 @@
       holds on this host -- free it, or run krbrelayx from a host without the
       portal, before an AD CS kerberos relay (part 14) can land.
 
-      ## Why nxc (netexec) is not here
+      ## Why nxc (NetExec) is not here
 
       It cannot be installed cheaply on this image and it is convenience rather
       than capability. NetExec is not on PyPI under any name, publishes no release
@@ -246,7 +246,8 @@
 
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           . "$HOME/.cargo/env"
-          PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install \n            git+https://github.com/Pennyw0rth/NetExec
+          PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install \
+            git+https://github.com/Pennyw0rth/NetExec
 
 # This is the task that decides whether the foothold is usable, and it is why the
 # per-tool install above can tolerate a single failure without aborting.
