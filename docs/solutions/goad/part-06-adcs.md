@@ -47,8 +47,9 @@ SEVENKINGDOMS-CA/kingslanding with ESC1 rather than essos ESC4.
 <!-- lab-requires: meereen -->
 
 **Domain Admin on essos.local achieved via ESC4.** Two clean wins; the
-CVE-based paths are patched (same story as Parts 4-5); a couple of ESC variants
-are N/A on this build.
+CVE-based paths are patched (same story as Parts 4-5). ESC1/2/3 are now planted
+on the essos CA (see the last table row and Step 1), but were added after the
+live run below and are not yet enumerated here.
 
 | Technique | Result | Note |
 |-----------|--------|------|
@@ -58,7 +59,7 @@ are N/A on this build.
 | ESC6 | ❌ | CA flag set but "does not work after May 2022" |
 | ESC8 | ⏳ not yet run live | Web Enrollment installed on ESSOS-CA |
 | ESC11 | ⏳ | flagged (relay-based), not exploited |
-| ESC1 / ESC2 / ESC3 | ➖ | templates not present (build ships ESC4 + ESC13) |
+| ESC1 / ESC2 / ESC3 | ⏳ not yet run live | now planted on ESSOS-CA (the CA plants the whole essos forest esc set); the Step 1 enumeration below predates their addition |
 
 ## Step 1 - Enumerate the CA + templates
 <!-- lab-requires: meereen -->
@@ -70,7 +71,9 @@ are N/A on this build.
   `✅` Found **ESSOS-CA** (Web Enrollment disabled; SAN
   enabled; Request Disposition Issue), vulnerable to **ESC6** ("does not work
   after May 2022") and **ESC11**; template **ESC4** where `khal.drogo` has Full
-  Control. Template set: ESC4 + **ESC13** (not mayfly's ESC1/2/3).
+  Control. Template set at the time of this run: ESC4 + **ESC13**. (The essos CA
+  now also plants ESC1/2/3 from the forest esc set; this enumeration predates
+  that change, so a re-run is needed to confirm the current template set.)
 
 ## Step 2 - ESC4 → Domain Admin (the win)
 <!-- lab-requires: meereen -->
