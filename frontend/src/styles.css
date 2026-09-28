@@ -102,8 +102,12 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
-.rg-brand { font-size: var(--fs-4); letter-spacing: -0.2px; }
+.rg-brand { font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }
 .rg-brand b { font-weight: 700; }
+/* The PRO carries the mode color: red for Offense (ARTIE), blue for Defense (HAVEN). */
+.rg-brand-pro { font-weight: 700; }
+.rg-mode-artie .rg-brand-pro { color: var(--danger-2); }
+.rg-mode-haven .rg-brand-pro { color: var(--info); }
 
 .rg-spacer { flex: 1; }
 

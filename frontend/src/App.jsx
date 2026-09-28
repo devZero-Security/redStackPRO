@@ -1462,7 +1462,7 @@ function Editor() {
     <div className={`rg-app rg-mode-${document.mode || "artie"}`}>
       <header className="rg-header">
         <span className="rg-brand">
-          red<b>Stack</b>PRO
+          red<b>Stack</b><span className="rg-brand-pro">PRO</span>
         </span>
         <div className="rg-mode-switch" role="tablist" aria-label="Canvas">
           <button
@@ -1473,7 +1473,7 @@ function Editor() {
             title="ARTIE: attack infrastructure (C2, redirectors, operators)"
             onClick={() => chooseMode("artie")}
           >
-            ARTIE
+            Offense (ARTIE)
           </button>
           <button
             type="button"
@@ -1483,7 +1483,7 @@ function Editor() {
             title="HAVEN: defense ranges (AD forests, hosts, SIEM)"
             onClick={() => chooseMode("haven")}
           >
-            HAVEN
+            Defense (HAVEN)
           </button>
         </div>
         <TopologyPicker
