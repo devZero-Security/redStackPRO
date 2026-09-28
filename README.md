@@ -313,43 +313,6 @@ target ranges on the same canvas.
 
 ---
 
-## ✅ Checks
-
-CI runs these on every push and pull request.
-
-<details>
-<summary>CI checks</summary>
-
-All of them run locally except the Ansible ones, which need a Linux control node.
-
-    pytest -q                                     the compiler, validator, and API
-    redstackpro validate --hostname <name>        the worked examples
-    python -m redstackpro.tools.check_conventions the house rules in the project conventions
-    cd frontend && npm test && npm run build      the canvas
-
-The rest run against a compiled export rather than against the generator,
-because a working directory a person unzips and runs is the thing being claimed:
-
-    redstackpro compile src/redstackpro/schema/topology/examples/0.7.0/redstack.json --hostname <name> -o export
-    terraform -chdir=export/terraform fmt -check -recursive
-    terraform -chdir=export/terraform validate
-    ansible-playbook -i export/ansible/inventory.yml export/ansible/site.yml --syntax-check
-    python -m redstackpro.tools.check_roles export/ansible
-
-`--hostname` fills in the one field nothing else can invent: a redirector is the
-host that answers to the internet by name, and a domain has to be registered and
-pointed at it by a human. Every shipped example carrying a redirector ships one
-field short on purpose, the validator says so (RDR001), and the compiler refuses
-without it. Pass any domain you control, the same way you would in the canvas
-inspector before pressing Compile.
-
-`check_roles.py` exists because a syntax check never opens a file reached by
-`include_tasks` with a templated name, which is every branch the roles have.
-
-</details>
-
----
-
 ## License
 
 MIT. See LICENSE.
