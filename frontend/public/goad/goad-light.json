@@ -3,7 +3,7 @@
   "mode": "haven",
   "name": "GOAD-Light",
   "prefix": "hvn",
-  "description": "GOAD-Light: two domains in one forest, sevenkingdoms.local and its child north.sevenkingdoms.local, across three machines on 192.168.56.0/24. Drops the essos forest, its cross-forest trust, MSSQL links, and ADCS. Recreated natively on the Defense canvas and deployed by redStackPRO's own Terraform and Ansible, not imported or wrapped; a nod to the GOAD project. A read-only template.",
+  "description": "GOAD-Light: two domains in one forest, sevenkingdoms.local and its child north.sevenkingdoms.local, across three machines on 192.168.56.0/24. Drops the essos forest, its cross-forest trust, MSSQL links, and ADCS. A redStackPRO topology; a nod to the GOAD project. A read-only template.",
   "auto_stop": {
     "enabled": true,
     "after_hours": 8,

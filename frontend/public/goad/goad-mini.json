@@ -3,7 +3,7 @@
   "mode": "haven",
   "name": "GOAD-Mini",
   "prefix": "hvn",
-  "description": "GOAD-Mini: the smallest of the family. A single domain, sevenkingdoms.local, on one domain controller (kingslanding), with the full Lannister and Baratheon cast and the ACL escalation chain that reaches Domain Admin. Recreated natively on the Defense canvas and deployed by redStackPRO's own Terraform and Ansible, not imported or wrapped; a nod to the GOAD project. An editable baseline.",
+  "description": "GOAD-Mini: the smallest of the family. A single domain, sevenkingdoms.local, on one domain controller (kingslanding), with the full Lannister and Baratheon cast and the ACL escalation chain that reaches Domain Admin. A redStackPRO topology; a nod to the GOAD project. An editable baseline.",
   "auto_stop": {
     "enabled": true,
     "after_hours": 8,

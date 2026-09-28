@@ -154,9 +154,8 @@ export const UNGROUPED_LABEL = "redStackPRO";
 
 export const GROUP_NOTES = {
   GOAD:
-    "Recreated natively on the Defense canvas as redStack nodes and edges, " +
-    "deployed by redStackPRO's own pipeline, not imported or wrapped. A nod to " +
-    "the GOAD project.",
+    "The Game of Active Directory labs as redStackPRO topologies. " +
+    "A nod to the GOAD project.",
 };
 
 // Templates grouped by their `group` for the picker, so a family like GOAD reads
