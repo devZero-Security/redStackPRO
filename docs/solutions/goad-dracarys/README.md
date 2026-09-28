@@ -135,7 +135,7 @@ proxychains -q secretsdump.py 'dracarys.lab/drogon:<pass>@balerion.dracarys.lab'
 
 ## How redStackPRO reproduces it
 
-Every element above is built by the canvas template, not hand-placed:
+Every element above is built by the canvas blueprint, not hand-placed:
 
 | element | how |
 |---------|-----|

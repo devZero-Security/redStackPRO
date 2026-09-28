@@ -13,7 +13,7 @@ a filter that keeps a step when the lab has the host it names drops the whole pa
 here. Steps filter by the host they name, not by the capability they need - the
 known limit, of which this is the concrete instance.
 
-> **Status: authored from the lab's own template and the roles that plant it, not
+> **Status: authored from the lab's own blueprint and the roles that plant it, not
 > yet run against a live range.** Every fact below was read out of
 > `frontend/public/goad/nha.json` and the compiled artifact. The commands follow
 > the series' usual shape but carry no "Live verification" block, and should not

@@ -9,7 +9,7 @@ end. The short version: a weak, sprayable password gets you onto the workstation
 a Domain Admin's scheduled bot reaches that workstation over CredSSP every minute,
 and CredSSP hands you the admin's plaintext credential.
 
-> **Status: authored from the lab's own template, not yet run against a live
+> **Status: authored from the lab's own blueprint, not yet run against a live
 > range.** Every host, user, credential and scheduled task below was read out of
 > `frontend/public/goad/minilab.json`. The commands follow the usual redStackPRO
 > shape but carry no "Live verification" block and should not be trusted the way

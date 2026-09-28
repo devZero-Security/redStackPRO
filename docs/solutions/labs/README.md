@@ -43,7 +43,7 @@ variety, not difficulty or host count.
 ## Which labs get a full solution
 
 Every range now has an authored solution folder. Some follow an
-upstream write-up; the rest are hand-authored from the lab's own template and
+upstream write-up; the rest are hand-authored from the lab's own blueprint and
 carry an "authored, not yet run live" banner until a live pass covers them. The
 coverage pages in this folder stay as the technique and detection checklists the
 solutions build on, so the per-lab pages here are not replaced.
@@ -55,8 +55,8 @@ solutions build on, so the per-lab pages here are not replaced.
 | goad-mini | [goad-mini](../goad-mini/README.md) | hand-written coverage; single domain, ESC1 and the sevenkingdoms ACL chain |
 | sccm | [goad-sccm](../goad-sccm/README.md) | mayfly SCCM-LAB part0x0-0x3 |
 | dracarys | [goad-dracarys](../goad-dracarys/README.md) | reconstructed (mayfly publishes no solution) |
-| nha | [goad-nha](../goad-nha/README.md) | hand-authored from the template |
-| minilab | [goad-minilab](../goad-minilab/README.md) | hand-authored from the template |
+| nha | [goad-nha](../goad-nha/README.md) | hand-authored from the blueprint |
+| minilab | [goad-minilab](../goad-minilab/README.md) | hand-authored from the blueprint |
 | goad-wazuh | [goad-wazuh](../goad-wazuh/README.md) | hand-authored, the detection axis is the point |
 | harbor | [harbor](../harbor/README.md) | redStackPRO original, not a GOAD lab |
 

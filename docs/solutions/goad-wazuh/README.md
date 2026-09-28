@@ -10,7 +10,7 @@ together. The technique-by-technique detail, including what has been verified
 live, is on [the coverage and detection page](../labs/goad-wazuh.md); this page is
 the operator walkthrough over it.
 
-> **Status: authored from the lab's own template, with the detection axis
+> **Status: authored from the lab's own blueprint, with the detection axis
 > partially verified live (2026-09-09) and recorded on the coverage page.** The
 > attack steps below follow the validated [GOAD series](../goad/README.md) but the
 > attack-to-alert pairing for this specific lab is largely a prediction until a
