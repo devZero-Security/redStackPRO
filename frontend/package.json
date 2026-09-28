@@ -12,13 +12,13 @@
     "test:render": "vitest run"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "reactflow": "^11.11.4"
+    "@xyflow/react": "^12.12.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",
-    "@testing-library/react": "^16.3.2",
+    "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.4",
     "@vitejs/plugin-react": "^4.3.4",
     "jsdom": "^29.1.1",

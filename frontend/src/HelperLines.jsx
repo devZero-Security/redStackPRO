@@ -1,5 +1,5 @@
 import React from "react";
-import { useStore } from "reactflow";
+import { useStore } from "@xyflow/react";
 
 // The guide lines the alignment engine asks for, drawn across the whole pane so
 // they read as "this edge lines up with that one" rather than a short tick. They

@@ -12,10 +12,16 @@
 // The bounds a comparison needs, derived from a node's absolute position and
 // measured size.
 export function bounds(node) {
-  const left = node.positionAbsolute?.x ?? node.position?.x ?? 0;
-  const top = node.positionAbsolute?.y ?? node.position?.y ?? 0;
-  const width = node.width ?? node.style?.width ?? 0;
-  const height = node.height ?? node.style?.height ?? 0;
+  // React Flow v12 moved absolute position to node.internals.positionAbsolute
+  // and measured size to node.measured. Callers must hand in the internal node
+  // (getInternalNode / nodeLookup) for these to be present; the later fallbacks
+  // are for the pre-measure shape and the plain rects the tests pass, not for a
+  // public node, which would silently snap to relative position.
+  const abs = node.internals?.positionAbsolute ?? node.positionAbsolute;
+  const left = abs?.x ?? node.position?.x ?? 0;
+  const top = abs?.y ?? node.position?.y ?? 0;
+  const width = node.measured?.width ?? node.width ?? node.style?.width ?? 0;
+  const height = node.measured?.height ?? node.height ?? node.style?.height ?? 0;
   return {
     left,
     top,

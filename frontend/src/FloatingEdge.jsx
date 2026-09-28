@@ -5,7 +5,7 @@ import {
   Position,
   useReactFlow,
   useStore,
-} from "reactflow";
+} from "@xyflow/react";
 import {
   edgePoints,
   roundedPath,
@@ -65,10 +65,13 @@ function edgeTitle(edge) {
 // drops a bend it is drawn as straight segments through the waypoints with the
 // corners rounded, because manual routing should go exactly where it was put.
 
+// `node` here is always a v12 internal node (from nodeLookup): its absolute
+// position lives on node.internals.positionAbsolute and its measured size on
+// node.measured.
 function center(node) {
   return {
-    x: node.positionAbsolute.x + node.width / 2,
-    y: node.positionAbsolute.y + node.height / 2,
+    x: node.internals.positionAbsolute.x + node.measured.width / 2,
+    y: node.internals.positionAbsolute.y + node.measured.height / 2,
   };
 }
 
@@ -83,10 +86,10 @@ function attach(node, point) {
   const c = center(node);
   const dx = point.x - c.x;
   const dy = point.y - c.y;
-  const left = node.positionAbsolute.x;
-  const right = left + node.width;
-  const top = node.positionAbsolute.y;
-  const bottom = top + node.height;
+  const left = node.internals.positionAbsolute.x;
+  const right = left + node.measured.width;
+  const top = node.internals.positionAbsolute.y;
+  const bottom = top + node.measured.height;
   const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
 
   if (Math.abs(dy) >= Math.abs(dx)) {
@@ -104,9 +107,11 @@ function attach(node, point) {
 }
 
 export function FloatingEdge({ id, source, target, selected, markerEnd, markerStart, style, data }) {
-  const sourceNode = useStore(useCallback((s) => s.nodeInternals.get(source), [source]));
-  const targetNode = useStore(useCallback((s) => s.nodeInternals.get(target), [target]));
-  const nodeInternals = useStore((s) => s.nodeInternals);
+  // v12 renamed the store's node map from nodeInternals to nodeLookup; its
+  // values are internal nodes (measured size + internals.positionAbsolute).
+  const sourceNode = useStore(useCallback((s) => s.nodeLookup.get(source), [source]));
+  const targetNode = useStore(useCallback((s) => s.nodeLookup.get(target), [target]));
+  const nodeLookup = useStore((s) => s.nodeLookup);
   const { screenToFlowPosition } = useReactFlow();
 
   // A pointer drag on a handle: `onStart` runs once at pointer down (so a bend is
@@ -131,7 +136,7 @@ export function FloatingEdge({ id, source, target, selected, markerEnd, markerSt
 
   // Until React Flow has measured both nodes there is no geometry to draw from,
   // which is also the case in a headless test where nothing has a size.
-  if (!sourceNode?.width || !targetNode?.width) return null;
+  if (!sourceNode?.measured?.width || !targetNode?.measured?.width) return null;
 
   const waypoints = data?.waypoints || [];
   const first = waypoints[0] || center(targetNode);
@@ -152,17 +157,18 @@ export function FloatingEdge({ id, source, target, selected, markerEnd, markerSt
     // its own source and target boxes (and their ancestors), so those are left
     // out of the obstacles; every other network and segment is a wall.
     const boxes = [];
-    for (const n of nodeInternals.values()) {
+    for (const n of nodeLookup.values()) {
       const kind = n.data?.node?.kind;
-      if ((kind === "network" || kind === "segment") && n.width && n.positionAbsolute) {
+      const abs = n.internals?.positionAbsolute;
+      if ((kind === "network" || kind === "segment") && n.measured?.width && abs) {
         boxes.push({
           id: n.id,
-          parentId: n.parentId ?? n.parentNode,
+          parentId: n.parentId,
           kind,
-          x: n.positionAbsolute.x,
-          y: n.positionAbsolute.y,
-          w: n.width,
-          h: n.height,
+          x: abs.x,
+          y: abs.y,
+          w: n.measured.width,
+          h: n.measured.height,
         });
       }
     }

@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { Handle, NodeToolbar, Position, useReactFlow } from "reactflow";
+import { Handle, NodeToolbar, Position, useReactFlow } from "@xyflow/react";
 import { Icon } from "./icons.jsx";
 
 // The resize frame around a selected container: eight zones on its border, each

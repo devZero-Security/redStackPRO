@@ -78,6 +78,14 @@ function rect(x, y, w, h) {
 // bounds() reads a React Flow node's absolute position and measured size, and
 // falls back to relative position and style width when those are absent.
 {
+  // v12 internal-node shape: absolute position on internals, size on measured.
+  const v12 = bounds({
+    internals: { positionAbsolute: { x: 10, y: 20 } },
+    measured: { width: 100, height: 40 },
+  });
+  assert.equal(v12.right, 110);
+  assert.equal(v12.centerY, 40);
+  // The pre-v12 shape still reads through the fallbacks.
   const b = bounds({ positionAbsolute: { x: 10, y: 20 }, width: 100, height: 40 });
   assert.equal(b.right, 110);
   assert.equal(b.centerY, 40);

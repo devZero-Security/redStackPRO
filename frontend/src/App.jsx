@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ReactFlow, {
+import {
+  ReactFlow,
   Background,
   ConnectionMode,
   Controls,
@@ -7,7 +8,7 @@ import ReactFlow, {
   Panel,
   ReactFlowProvider,
   useReactFlow,
-} from "reactflow";
+} from "@xyflow/react";
 
 import { api } from "./api.js";
 import { FindingBadge } from "./FindingBadge.jsx";
@@ -999,11 +1000,13 @@ function Editor() {
       const dragged = flow.getNode(change.id);
       if (!dragged) return;
       const parentId = dragged.parentId || undefined;
+      // v12: absolute position lives on the internal node, measured size too.
       const parentAbs = parentId
-        ? flow.getNode(parentId)?.positionAbsolute || { x: 0, y: 0 }
+        ? flow.getInternalNode(parentId)?.internals.positionAbsolute || { x: 0, y: 0 }
         : { x: 0, y: 0 };
-      const width = dragged.width ?? 0;
-      const height = dragged.height ?? 0;
+      const draggedMeasured = flow.getInternalNode(change.id)?.measured;
+      const width = draggedMeasured?.width ?? 0;
+      const height = draggedMeasured?.height ?? 0;
       const left = parentAbs.x + change.position.x;
       const top = parentAbs.y + change.position.y;
       const active = {
@@ -1019,7 +1022,8 @@ function Editor() {
       const siblings = flow
         .getNodes()
         .filter((n) => n.id !== change.id && (n.parentId || undefined) === parentId)
-        .map(bounds);
+        // bounds needs the internal node for its absolute position and measured size.
+        .map((n) => bounds(flow.getInternalNode(n.id) ?? n));
       const snap = alignment(active, siblings, 6);
       if (snap.x !== undefined) {
         change.position = { ...change.position, x: snap.x - parentAbs.x };
@@ -1214,9 +1218,11 @@ function Editor() {
             .getNodes()
             .filter((n) => n.id !== dragged.id && kinds[n.id] === wants)
             .find((n) => {
-              const origin = flow.getNode(n.id)?.positionAbsolute || n.position;
-              const width = n.width || n.style?.width || 0;
-              const height = n.height || n.style?.height || 0;
+              // v12: absolute position and measured size come off the internal node.
+              const internal = flow.getInternalNode(n.id);
+              const origin = internal?.internals.positionAbsolute || n.position;
+              const width = internal?.measured?.width || n.style?.width || 0;
+              const height = internal?.measured?.height || n.style?.height || 0;
               return (
                 point.x >= origin.x &&
                 point.x <= origin.x + width &&
@@ -1234,9 +1240,13 @@ function Editor() {
         // container makes the position absolute again. Without this, nesting a
         // subnet then a host compounds the offsets and flings nodes thousands of
         // pixels away, which then blows up a container's fit on resize.
-        const abs = dragged.positionAbsolute || dragged.position || { x: 0, y: 0 };
+        // v12: the drag callback's node has no positionAbsolute; read it off the
+        // internal node.
+        const abs =
+          flow.getInternalNode(dragged.id)?.internals.positionAbsolute ||
+          dragged.position || { x: 0, y: 0 };
         const parentAbs = container
-          ? flow.getNode(container.id)?.positionAbsolute || { x: 0, y: 0 }
+          ? flow.getInternalNode(container.id)?.internals.positionAbsolute || { x: 0, y: 0 }
           : { x: 0, y: 0 };
         const position = {
           x: Math.round(abs.x - parentAbs.x),
@@ -1658,7 +1668,7 @@ function Editor() {
             deleteKeyCode={readOnly ? null : "Backspace"}
             nodesDraggable={!readOnly}
             nodesConnectable={!readOnly}
-            edgesUpdatable={!readOnly}
+            edgesReconnectable={!readOnly}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
