@@ -159,7 +159,7 @@ export function toFlow(document, palette) {
   // to network. Range adds a domain layer inside it: network to subnet to domain
   // to machine. A machine nests in its domain (joins edge), a domain in the
   // subnet its machines sit in, and the subnet in its network. See 0047.
-  const isRange = document.mode === "haven";
+  const isRange = document.mode === "defense";
   const parentOf = {};
   if (isRange) {
     const attachOf = {};
@@ -306,7 +306,7 @@ export function toFlow(document, palette) {
         display: kinds[node.kind] || { label: node.kind, color: "#868e96" },
         // Range templates keep their canonical GOAD names, so the prefix is not
         // composed onto them; ops names are prefix plus id. See 0047.
-        name: document.mode === "haven" ? node.id : `${document.prefix}-${node.id}`,
+        name: document.mode === "defense" ? node.id : `${document.prefix}-${node.id}`,
         public: isPubliclyReachable(node, byId[parentOf[node.id]]),
         solo: node.kind === "network" && soloNetwork,
         manages: managesFrom[node.id] || [],
@@ -530,14 +530,14 @@ export function updateEdge(document, id, patch) {
   };
 }
 
-// The default prefix per canvas: ARTIE names run art-, HAVEN ranges hvn-.
-export const MODE_PREFIX = { artie: "art", haven: "hvn" };
+// The default prefix per canvas: offense names run off-, defense ranges def-.
+export const MODE_PREFIX = { offense: "off", defense: "def" };
 
-export const emptyDocument = (mode = "artie") => ({
-  schema_version: "0.6.0",
+export const emptyDocument = (mode = "offense") => ({
+  schema_version: "0.7.0",
   mode,
   name: "Untitled",
-  prefix: MODE_PREFIX[mode] || "art",
+  prefix: MODE_PREFIX[mode] || "off",
   nodes: [],
   edges: [],
 });

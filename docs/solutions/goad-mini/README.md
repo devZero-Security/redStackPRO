@@ -7,7 +7,7 @@ carries. Edit the source pages, not these.
 
 The `goad-mini` lab carries **2 techniques** and reaches
 **5 of the 14 parts**. Read your deploy's own
-`HAVEN-BRIEFING.md` for the hosts, addresses and credentials, which are
+`DEFENSE-BRIEFING.md` for the hosts, addresses and credentials, which are
 per deploy and not in these pages.
 
 | part | on this lab | note |

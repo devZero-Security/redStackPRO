@@ -227,7 +227,7 @@ def test_the_editable_tfvars_lives_at_the_root_and_deploy_copies_it():
 def test_a_no_jumpbox_export_keeps_terraform_tfvars_in_place():
     """Without a jumpbox there is no deploy.sh to copy the root file, so the tfvars
     stays under terraform/ for a direct terraform run."""
-    document = {"schema_version": "0.6.0", "mode": "artie", "name": "no jumpbox",
+    document = {"schema_version": "0.7.0", "mode": "offense", "name": "no jumpbox",
                 "nodes": [], "edges": []}
     files = compile_topology(document, Registry(), provider="gcp")
     assert "deploy.tfvars" not in files
@@ -237,7 +237,7 @@ def test_a_no_jumpbox_export_keeps_terraform_tfvars_in_place():
 def test_a_topology_with_no_jumpbox_gets_neither_wrapper_nor_keys():
     """Both only mean anything alongside a deploy, and a topology with no jumpbox
     has nothing to deploy through."""
-    document = {"schema_version": "0.6.0", "mode": "artie", "name": "no jumpbox",
+    document = {"schema_version": "0.7.0", "mode": "offense", "name": "no jumpbox",
                 "nodes": [], "edges": []}
     files = compile_topology(document, Registry(), provider="gcp")
     assert "deploy.sh" not in files
@@ -554,7 +554,7 @@ def test_MANAGE_ps1_wraps_git_bash_and_forwards_the_subcommand(tmp_path):
 def test_manage_scripts_ship_only_alongside_the_deploy():
     """Both only mean anything once something has been deployed through a
     jumpbox, exactly like deploy.sh/deploy.ps1."""
-    doc = {"schema_version": "0.6.0", "mode": "artie", "name": "no jumpbox",
+    doc = {"schema_version": "0.7.0", "mode": "offense", "name": "no jumpbox",
            "nodes": [], "edges": []}
     files = compile_topology(doc, Registry(), provider="gcp")
     assert "manage.sh" not in files

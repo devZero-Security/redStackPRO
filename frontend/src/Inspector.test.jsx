@@ -49,8 +49,8 @@ const SCHEMA = {
 
 function baseDocument() {
   return {
-    schema_version: "0.6.0",
-    mode: "haven",
+    schema_version: "0.7.0",
+    mode: "defense",
     prefix: "hv",
     nodes: [
       { id: "dc01", kind: "domain", overlay: { fqdn: "sk.local", users: [] } },
@@ -180,15 +180,15 @@ describe("account techniques on the host vuln picker", () => {
   });
 });
 
-// A locked haven template (readOnly, before "Unlock to edit") must still show
+// A locked defense template (readOnly, before "Unlock to edit") must still show
 // the planted domain users and ACL edges: that is the content a person wants
 // to preview before deciding to unlock. Only vulns/hardening stayed visible
 // before this change; users/acls used to be omitted outright when readOnly.
 describe("users and acls on a locked (readOnly) domain", () => {
   function lockedDomainDocument() {
     return {
-      schema_version: "0.6.0",
-      mode: "haven",
+      schema_version: "0.7.0",
+      mode: "defense",
       prefix: "hv",
       nodes: [
         {

@@ -1,8 +1,8 @@
 {
-  "schema_version": "0.6.0",
-  "mode": "haven",
+  "schema_version": "0.7.0",
+  "mode": "defense",
   "name": "GOAD",
-  "prefix": "hvn",
+  "prefix": "def",
   "description": "GOAD: the full Game of Active Directory. Three domains across two forests, sevenkingdoms.local with its child north.sevenkingdoms.local, and essos.local, on five machines on 192.168.56.0/24, with a parent-child trust and a cross-forest trust. A redStackPRO topology; a nod to the GOAD project. A read-only template.",
   "auto_stop": {
     "enabled": true,

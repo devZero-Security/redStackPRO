@@ -14,7 +14,7 @@ import {
 // test does not depend on the cwd it runs from.
 const HERE = dirname(fileURLToPath(import.meta.url));
 const schema = JSON.parse(
-  readFileSync(join(HERE, "../../src/redstackpro/schema/topology/0.6.0.json"), "utf8"));
+  readFileSync(join(HERE, "../../src/redstackpro/schema/topology/0.7.0.json"), "utf8"));
 const USER_SCHEMA = schema.$defs.overlay_domain.properties.users.items;
 const PRIVILEGES = new Set(USER_SCHEMA.properties.privilege.enum);
 const FLAWS = new Set(USER_SCHEMA.properties.flaws.items.enum);
@@ -134,7 +134,7 @@ test("planting kerberoasting adds a user marked planted_by with the mapped flaws
 
 test("every account technique maps to schema-valid flaws", () => {
   const schema = JSON.parse(
-    readFileSync(join(HERE, "../../src/redstackpro/schema/topology/0.6.0.json"), "utf8"));
+    readFileSync(join(HERE, "../../src/redstackpro/schema/topology/0.7.0.json"), "utf8"));
   const flawEnum = new Set(
     schema.$defs.overlay_domain.properties.users.items.properties.flaws.items.enum);
   const domain = { overlay: { fqdn: "sk.local", users: [] } };

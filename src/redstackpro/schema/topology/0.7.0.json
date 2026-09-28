@@ -1,0 +1,1315 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://redstackpro.dev/schema/topology/0.7.0.json",
+  "title": "redStackPRO topology",
+  "description": "Provider-agnostic topology document. No provider vocabulary appears at this layer. Derived overlay fields and per-kind requirements live in the node kind registry, not in this document. Version 0.1.0 covers ops mode only.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "mode",
+    "name",
+    "prefix",
+    "nodes",
+    "edges"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "0.7.0",
+      "description": "Pinned. One schema file per version. Migrations move documents between versions."
+    },
+    "mode": {
+      "enum": [
+        "offense",
+        "defense"
+      ],
+      "description": "The canvas: offense is redStackPRO (red team infrastructure), defense is Cyber Ranges (an AD forest to attack). Gates the palette, prefix, and chrome, not the compiler. Fixed at creation. Renamed from artie/haven in 0.7.0. See 0047."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "prefix": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]{0,7}$",
+      "description": "Instance prefix, composed with every node id to form the rendered name. off-myth-ts01 is prefix off and id myth-ts01. Defaults to off for offense and def for defense, and the person can change it. Per graph rather than per node, because rendering the same template for several operators is a change to one field. Kept short: prefix plus id must fit the 15 character NetBIOS limit."
+    },
+    "description": {
+      "type": "string"
+    },
+    "region": {
+      "type": "string",
+      "description": "Optional cloud region the deploy targets, e.g. us-east-1 for AWS or us-east4 for GCP. A deploy hint rather than topology, so it names a location and never a provider: it sets the region variable's default and the compile --region overrides it. Ignored by on-prem providers. See 0053."
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/node"
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/edge"
+      }
+    },
+    "domains": {
+      "type": "array",
+      "description": "Canvas convenience: the operator's own registered domains, used by the redirector cover profiles to build hostnames on names they control. Not deployed; the compiler ignores them.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "base_cidr": {
+      "$ref": "#/$defs/cidr",
+      "description": "Canvas convenience: the address root the allocator carves networks and subnets from, default 10.0.0.0/8. Lets an operator pin the deployment into a mandated block. Optional; the compiler only sees the ranges it produces. See 0046."
+    },
+    "auto_stop": {
+      "type": "object",
+      "description": "When the range turns itself off. A range exists to be attacked for an afternoon and nothing otherwise stops it, so the operator has to remember; forgetting has cost real money. Per graph, because the whole range stops together. Optional and off by default: a range that disappears underneath someone is worse than one that bills, so this is opted into. Instances are STOPPED, not destroyed, so the provisioned forest comes back on boot; disks and reserved addresses keep billing, so this saves most of the cost and not all of it. See 0057.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Off unless set. Nothing is scheduled when false."
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+          "description": "A daily wall clock stop time, 24 hour HH:MM. This is what the cloud schedulers express natively, and it targets the real failure mode, a range left running overnight. Predictable: it never stops a range mid afternoon."
+        },
+        "after_hours": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 168,
+          "description": "A hard cap on how long a range may run, in hours. Approximate by construction: the schedulers are cron shaped, so the compiler turns this into a daily stop time computed from the apply, and a re-apply moves it. Use it to bound a range started at an odd hour, where a fixed nightly time would let it run all day."
+        },
+        "timezone": {
+          "type": "string",
+          "description": "IANA zone the times are read in, default UTC. Named rather than an offset so a range does not drift an hour at a daylight saving boundary."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "maxLength": 64
+    },
+    "cidr": {
+      "type": "string",
+      "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+    },
+    "ipv4": {
+      "type": "string",
+      "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}$"
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "public_address": {
+      "type": "boolean",
+      "x-redstackpro-source": "user",
+      "description": "Whether this host holds a public address. The segment's exposure is the ceiling: a host can only take an address in a segment with exposure internet, and EXP005 rejects the contradiction. Defaults per kind, true for a jumpbox and a redirector and false for everything else, because those two are what something outside is meant to reach."
+    },
+    "position": {
+      "type": "object",
+      "description": "Canvas layout only. The compiler ignores this.",
+      "required": [
+        "x",
+        "y"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      }
+    },
+    "node": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/node_base"
+        }
+      ],
+      "oneOf": [
+        {
+          "$ref": "#/$defs/node_network"
+        },
+        {
+          "$ref": "#/$defs/node_segment"
+        },
+        {
+          "$ref": "#/$defs/node_redirector"
+        },
+        {
+          "$ref": "#/$defs/node_teamserver"
+        },
+        {
+          "$ref": "#/$defs/node_collector"
+        },
+        {
+          "$ref": "#/$defs/node_jumpbox"
+        },
+        {
+          "$ref": "#/$defs/node_operator"
+        },
+        {
+          "$ref": "#/$defs/node_domain"
+        },
+        {
+          "$ref": "#/$defs/node_dc"
+        },
+        {
+          "$ref": "#/$defs/node_srv"
+        },
+        {
+          "$ref": "#/$defs/node_wks"
+        },
+        {
+          "$ref": "#/$defs/node_fw"
+        },
+        {
+          "$ref": "#/$defs/node_siem"
+        },
+        {
+          "$ref": "#/$defs/node_appliance"
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "node_base": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier",
+          "description": "Canonical identifier and the only name a node has. Lowercase kebab, a purpose slug then the kind tag then a two digit ordinal: myth-ts01, main-net01, c2-sub01. The slug is optional (ts01). The rendered name is prefix plus id. Terraform module labels replace hyphens with underscores. Rule NAM001 checks the kind tag against the node kind and NAM002 checks the ordinal. The slug is derived from what the node holds unless the person renames it. See 0016.",
+          "maxLength": 24
+        },
+        "kind": {
+          "enum": [
+            "network",
+            "segment",
+            "redirector",
+            "teamserver",
+            "collector",
+            "jumpbox",
+            "operator",
+            "domain",
+            "dc",
+            "srv",
+            "wks",
+            "fw",
+            "siem",
+            "appliance"
+          ]
+        },
+        "position": {
+          "$ref": "#/$defs/position"
+        },
+        "width": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Canvas size for a container. Layout only; the compiler ignores it."
+        },
+        "height": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Canvas size for a container. Layout only; the compiler ignores it."
+        },
+        "pinned": {
+          "type": "boolean",
+          "description": "The person renamed this node's id by hand, so the derived id scheme leaves it alone rather than re-deriving the slug from its contents. Authoring state only; the compiler ignores it. See 0043 and 0044."
+        }
+      }
+    },
+    "node_network": {
+      "properties": {
+        "kind": {
+          "const": "network"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_network"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_segment": {
+      "properties": {
+        "kind": {
+          "const": "segment"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_segment"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_redirector": {
+      "properties": {
+        "kind": {
+          "const": "redirector"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_redirector"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_teamserver": {
+      "properties": {
+        "kind": {
+          "const": "teamserver"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_teamserver"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_collector": {
+      "properties": {
+        "kind": {
+          "const": "collector"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_collector"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_jumpbox": {
+      "properties": {
+        "kind": {
+          "const": "jumpbox"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_jumpbox"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_operator": {
+      "properties": {
+        "kind": {
+          "const": "operator"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_operator"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_domain": {
+      "properties": {
+        "kind": {
+          "const": "domain"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_domain"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_dc": {
+      "properties": {
+        "kind": {
+          "const": "dc"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_range_host"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_srv": {
+      "properties": {
+        "kind": {
+          "const": "srv"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_range_host"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_wks": {
+      "properties": {
+        "kind": {
+          "const": "wks"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_range_host"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_fw": {
+      "properties": {
+        "kind": {
+          "const": "fw"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_range_host"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_siem": {
+      "properties": {
+        "kind": {
+          "const": "siem"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_siem"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "node_appliance": {
+      "properties": {
+        "kind": {
+          "const": "appliance"
+        },
+        "overlay": {
+          "$ref": "#/$defs/overlay_range_host"
+        }
+      },
+      "required": [
+        "overlay"
+      ]
+    },
+    "overlay_siem": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A defensive telemetry server on a range: a Wazuh or ELK box that collects from agents on the range hosts. Not domain joined; it sits on the subnet. See the GOAD wazuh and elk extensions.",
+      "properties": {
+        "product": {
+          "enum": [
+            "wazuh",
+            "elk",
+            "splunk"
+          ],
+          "x-redstackpro-source": "user",
+          "description": "The telemetry stack this box runs. wazuh and elk are the GOAD extensions."
+        },
+        "os": {
+          "type": "string",
+          "x-redstackpro-source": "user",
+          "description": "Operating system image, e.g. ubuntu_2204."
+        },
+        "hostname": {
+          "type": "string",
+          "x-redstackpro-source": "user",
+          "description": "The machine's canonical name, e.g. wazuh."
+        },
+        "notes": {
+          "type": "string",
+          "x-redstackpro-source": "user",
+          "description": "Free-form provenance for this box."
+        },
+        "internal_ip": {
+          "$ref": "#/$defs/ipv4",
+          "x-redstackpro-source": "user",
+          "description": "A pinned private address inside this host's segment. Absent lets the provider assign one at apply time."
+        }
+      }
+    },
+    "overlay_network": {
+      "type": "object",
+      "description": "A routing domain. Members reach each other privately. Compiles to a VPC, a VNet, or a Proxmox bridge domain.",
+      "additionalProperties": false,
+      "properties": {
+        "cidr": {
+          "$ref": "#/$defs/cidr",
+          "x-redstackpro-source": "user",
+          "description": "Optional because not every provider assigns a range at the network level."
+        },
+        "provider": {
+          "enum": [
+            "gcp",
+            "aws",
+            "proxmox"
+          ],
+          "x-redstackpro-source": "user",
+          "description": "Optional. Absent means this network compiles to whatever target the compile call names, which is the only supported behaviour today. Present pins the network, which is the placement mixed-provider topologies will need. Nothing reads it yet."
+        }
+      }
+    },
+    "overlay_segment": {
+      "type": "object",
+      "description": "A subnet inside exactly one network.",
+      "required": [
+        "cidr",
+        "egress",
+        "exposure"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "cidr": {
+          "$ref": "#/$defs/cidr",
+          "x-redstackpro-source": "user"
+        },
+        "egress": {
+          "enum": [
+            "allowed",
+            "none"
+          ],
+          "x-redstackpro-source": "user",
+          "description": "Outbound reachability for members. Independent of exposure. A teamserver segment is egress allowed and exposure local, meaning apt and docker work but nothing outside can reach it. The proxied value is reserved."
+        },
+        "exposure": {
+          "enum": [
+            "internet",
+            "local",
+            "none"
+          ],
+          "x-redstackpro-source": "user",
+          "description": "Inbound reachability, and the ceiling for the hosts in it. internet means members may hold a public address, local means reachable only from within the deployment network, none means isolated. Providers render this differently: a route to the gateway on GCP and AWS, a bridge with an upstream route on Proxmox. A segment with exposure internet does not mean every member is exposed; each host says whether it takes an address, so a jumpbox and the operator boxes it fronts can share one segment."
+        },
+        "tier": {
+          "enum": [
+            "edge",
+            "redirector",
+            "c2",
+            "collector",
+            "management"
+          ],
+          "x-redstackpro-source": "user",
+          "description": "Advisory label. Drives canvas layout and warnings. The compiler ignores it."
+        }
+      }
+    },
+    "overlay_redirector": {
+      "type": "object",
+      "required": [
+        "server"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "server": {
+          "enum": [
+            "apache",
+            "nginx"
+          ],
+          "x-redstackpro-source": "user"
+        },
+        "hostname": {
+          "type": "string",
+          "title": "Domain (FQDN)",
+          "x-redstackpro-source": "user",
+          "x-redstackpro-placeholder": "cdn.your-domain.com",
+          "description": "Public name this redirector answers on. Required: a compile is refused until you set a domain you control, because nothing can invent one for you."
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cert_source": {
+              "enum": [
+                "letsencrypt",
+                "provided",
+                "self_signed"
+              ],
+              "x-redstackpro-source": "user"
+            }
+          }
+        },
+        "gating": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "What separates a beacon from a scanner. A request missing the header or the prefix gets the decoy page, never the teamserver.",
+          "properties": {
+            "header_name": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9-]*$",
+              "x-redstackpro-source": "user",
+              "description": "Validation header the beacon sends."
+            },
+            "header_value": {
+              "type": "string",
+              "x-redstackpro-source": "user",
+              "x-redstackpro-placeholder": "leave blank for a random value",
+              "description": "Expected value. Left blank, the compiler rolls a fresh random token, which is what you want: a value shipped in a template is a value everyone already knows. Reaches the teamserver through the fronts edge, so the C2 profile and the redirector cannot disagree."
+            },
+            "redirect_rules": {
+              "type": "boolean",
+              "default": true,
+              "x-redstackpro-source": "user",
+              "description": "Block known scanners, AV vendors, and TOR exit nodes. Off for lab and CTF work where the noise is the point."
+            },
+            "decoy": {
+              "enum": [
+                "cdn",
+                "maintenance",
+                "webserver",
+                "healthcare",
+                "finance",
+                "education",
+                "news",
+                "ecommerce",
+                "food",
+                "it",
+                "sports",
+                "travel",
+                "none"
+              ],
+              "default": "cdn",
+              "x-redstackpro-source": "user",
+              "description": "What an unqualified request gets instead. Each value serves a believable but fictional cover page for the vertical it names."
+            },
+            "decoy_asset_pack": {
+              "type": "string",
+              "x-redstackpro-source": "user",
+              "description": "Directory on the redirector holding your own cover imagery, named per slot (hero.jpg, intro.jpg, service-0.jpg, face-0.jpg, video.mp4). Used ahead of anything fetched. Slots you leave out are filled automatically."
+            },
+            "decoy_video": {
+              "type": "boolean",
+              "default": false,
+              "x-redstackpro-source": "user",
+              "description": "Loop a video behind the cover page headline. Only an asset pack can supply one, as video.mp4 or video.webm; without a pack the hero stays a still. Adds the clip's full weight to the page."
+            }
+          }
+        },
+        "public_address": {
+          "$ref": "#/$defs/public_address",
+          "default": true
+        }
+      }
+    },
+    "overlay_teamserver": {
+      "type": "object",
+      "required": [
+        "c2"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "c2": {
+          "enum": [
+            "mythic",
+            "sliver",
+            "adaptix",
+            "none"
+          ],
+          "x-redstackpro-source": "user",
+          "description": "none is the plain Debian catchall for custom C2 such as OC2."
+        },
+        "version": {
+          "type": "string",
+          "x-redstackpro-source": "user"
+        },
+        "public_address": {
+          "$ref": "#/$defs/public_address",
+          "default": false
+        }
+      }
+    },
+    "overlay_collector": {
+      "type": "object",
+      "required": [
+        "sink"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "sink": {
+          "enum": [
+            "opensearch",
+            "elasticsearch",
+            "splunk"
+          ],
+          "x-redstackpro-source": "user"
+        },
+        "shipper": {
+          "enum": [
+            "filebeat"
+          ],
+          "default": "filebeat",
+          "x-redstackpro-source": "user",
+          "description": "Declared on the collector because it defines the wire protocol senders must use."
+        },
+        "ingest_port": {
+          "$ref": "#/$defs/port",
+          "default": 5044,
+          "x-redstackpro-source": "user"
+        },
+        "tls": {
+          "type": "boolean",
+          "default": true,
+          "x-redstackpro-source": "user",
+          "description": "False is legal and produces a validator warning."
+        },
+        "public_address": {
+          "$ref": "#/$defs/public_address",
+          "default": false
+        }
+      }
+    },
+    "overlay_jumpbox": {
+      "type": "object",
+      "required": [
+        "services"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "services": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "ssh",
+              "guacamole",
+              "wireguard",
+              "openvpn"
+            ]
+          },
+          "x-redstackpro-source": "user"
+        },
+        "certificate_authority": {
+          "type": "boolean",
+          "default": true,
+          "x-redstackpro-source": "user",
+          "description": "Generates the CA covering VPN and log shipping."
+        },
+        "public_address": {
+          "$ref": "#/$defs/public_address",
+          "default": true
+        },
+        "internal_ip": {
+          "$ref": "#/$defs/ipv4",
+          "x-redstackpro-source": "user",
+          "description": "A pinned private address inside this host's segment. Absent lets the provider assign one at apply time."
+        },
+        "offensive_toolkit": {
+          "type": "boolean",
+          "x-redstackpro-source": "user",
+          "description": "Installs the foothold toolchain (impacket, certipy, coercer, netexec, bloodhound-python, hashcat). On by default for a range jumpbox, off for an ops bastion, where the tooling lives on the operator box instead. Opens no ports."
+        },
+        "access_mode": {
+          "enum": [
+            "public",
+            "wireguard",
+            "openvpn"
+          ],
+          "default": "public",
+          "x-redstackpro-source": "user",
+          "description": "How operators reach this box. public is the shared portal on the public address. wireguard or openvpn instead puts each operator on a personal VPN credential generated at apply. VPN access is an offense concept; setting it on a defense range triggers a validator warning."
+        },
+        "vpn_port": {
+          "$ref": "#/$defs/port",
+          "x-redstackpro-source": "user",
+          "description": "The VPN listen port. Defaults to 51820 for wireguard and 1194 for openvpn; set it to use a different port, e.g. 443 through a restrictive network."
+        },
+        "vpn_protocol": {
+          "enum": [
+            "udp",
+            "tcp"
+          ],
+          "default": "udp",
+          "x-redstackpro-source": "user",
+          "description": "Transport for the VPN listener. wireguard is udp only; openvpn takes either, trading throughput for reach through networks that block udp."
+        },
+        "operators": {
+          "type": "array",
+          "uniqueItems": true,
+          "x-redstackpro-source": "user",
+          "description": "The human operators on this range, one entry per person. Each becomes its own portal account and, on a VPN access_mode, its own VPN credential, generated at apply. Empty or absent leaves the single shared break-glass admin as the only account. Distinct from the operator NODE kind, which is the Kali box: these are people, not machines. Handles are unique per range (VPN004).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "handle"
+            ],
+            "properties": {
+              "handle": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*$",
+                "maxLength": 32,
+                "description": "The operator's login handle, lowercase. Keys the portal account and the VPN credential, so it is unique within the range. Interpolated into shell, filenames and SQL at apply, so the charset is strict (VPN005)."
+              },
+              "role": {
+                "type": "string",
+                "pattern": "^[^\\r\\n|]+$",
+                "maxLength": 64,
+                "description": "Optional free-form label for the operator, e.g. lead or trainee. Advisory only for now. A single line, no pipe character (it lands in the briefing table and the portal seed): VPN006."
+              }
+            }
+          }
+        }
+      }
+    },
+    "overlay_operator": {
+      "type": "object",
+      "required": [
+        "os"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "os": {
+          "enum": [
+            "windows",
+            "kali",
+            "debian"
+          ],
+          "x-redstackpro-source": "user",
+          "description": "windows raises a windows_image requirement against the target provider."
+        },
+        "public_address": {
+          "$ref": "#/$defs/public_address",
+          "default": false
+        },
+        "desktop": {
+          "type": "boolean",
+          "default": false,
+          "x-redstackpro-source": "user",
+          "description": "Installs a desktop environment and xrdp so this operator can be driven over a Guacamole RDP tile instead of SSH, for a web UI C2 without a Windows operator."
+        }
+      }
+    },
+    "overlay_domain": {
+      "type": "object",
+      "required": [
+        "fqdn"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "fqdn": {
+          "type": "string",
+          "x-redstackpro-source": "user",
+          "description": "Fully qualified domain name, e.g. sevenkingdoms.local."
+        },
+        "netbios": {
+          "type": "string",
+          "x-redstackpro-source": "user",
+          "description": "NetBIOS short name, e.g. SEVENKINGDOMS."
+        },
+        "users": {
+          "type": "array",
+          "x-redstackpro-source": "user",
+          "description": "The domain's user accounts, for populating an AD lab. A user may hold a privilege and a set of misconfigurations that seed an attack path. The canvas can generate a realistic set. See 0049.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "username"
+            ],
+            "properties": {
+              "username": {
+                "type": "string",
+                "description": "sAMAccountName, e.g. jaime.lannister."
+              },
+              "display_name": {
+                "type": "string",
+                "description": "Full name, e.g. Jaime Lannister."
+              },
+              "email": {
+                "type": "string",
+                "description": "Usually username@fqdn."
+              },
+              "groups": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Group memberships, e.g. Domain Admins, IT."
+              },
+              "privilege": {
+                "enum": [
+                  "user",
+                  "local_admin",
+                  "domain_admin",
+                  "enterprise_admin"
+                ],
+                "description": "Effective privilege the account is meant to hold in the lab. user is an ordinary member; the admin tiers are the escalation targets."
+              },
+              "flaws": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "enum": [
+                    "kerberoastable",
+                    "asrep_roastable",
+                    "password_in_description",
+                    "password_never_expires",
+                    "weak_password",
+                    "reversible_encryption",
+                    "no_preauth",
+                    "spn_set",
+                    "constrained_delegation",
+                    "account_is_sensitive"
+                  ]
+                },
+                "description": "Account misconfigurations that seed an attack path, e.g. kerberoastable (an SPN is set) or asrep_roastable (preauth disabled)."
+              },
+              "enabled": {
+                "type": "boolean",
+                "description": "Whether the account is enabled. Absent means enabled."
+              },
+              "assumed_breach": {
+                "type": "boolean",
+                "description": "Marks this account as the range's assumed-breach foothold (patient zero): the low-priv identity an operator starts from, per the external red-team access model. The range briefing names it. Absent means not the foothold."
+              },
+              "description": {
+                "type": "string",
+                "description": "AD description field. A planted secret sometimes lives here; see the password_in_description flaw."
+              },
+              "spns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Service principal names set on the account (kerberoastable, or delegation source SPNs)."
+              },
+              "delegate_to": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "msDS-AllowedToDelegateTo targets for a constrained-delegation account."
+              },
+              "weak_password": {
+                "type": "string",
+                "description": "A specific weak/sprayable password to set (with the weak_password flaw); default otherwise."
+              },
+              "password": {
+                "type": "string",
+                "description": "The account's own password. Set it to reproduce a lab's real per-user credentials (so its documented cred paths -- spray, AS-REP/Kerberoast cracking, a description hint -- actually resolve). Absent means the shared lab password."
+              },
+              "ou": {
+                "type": "string",
+                "description": "The OU (at the domain root) the user is placed in; default Users container."
+              },
+              "planted_by": {
+                "type": "string",
+                "description": "Canvas marker for a user auto-created by planting an account technique on a host (hostId:technique), so the canvas can find and remove it. Advisory; the compiler ignores it."
+              }
+            }
+          }
+        },
+        "acls": {
+          "type": "array",
+          "x-redstackpro-source": "user",
+          "description": "The dangerous access-control rights between principals that make the lab an attack graph: who can act on whom. Each entry is a right one principal holds over another object, the same shape GOAD carries and BloodHound walks. This is the escalation chain a domain's users and groups sit inside. See 0052.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "principal",
+              "target",
+              "right"
+            ],
+            "properties": {
+              "principal": {
+                "type": "string",
+                "description": "Who holds the right, a user or a group, e.g. tywin.lannister or Small Council."
+              },
+              "target": {
+                "type": "string",
+                "description": "The object the right is over: a user, a group, a computer (name$), or an OU."
+              },
+              "right": {
+                "type": "string",
+                "description": "The right held, e.g. GenericAll, GenericWrite, WriteDacl, WriteOwner, or ForceChangePassword. Kept as a free string so any right an import carries survives."
+              }
+            }
+          }
+        },
+        "gmsa": {
+          "type": "array",
+          "description": "Group-managed service accounts a member computer can read (a readable gMSA attack path).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "dns": {
+                "type": "string"
+              },
+              "spns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "hosts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Computer names allowed to retrieve the managed password."
+              }
+            }
+          }
+        },
+        "laps_readers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Principals delegated read of the LAPS local-admin password."
+        },
+        "group_members": {
+          "type": "object",
+          "description": "Group-in-group nesting: {parent group: [member groups]} (e.g. Domain Admins: [QueenProtector]).",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "ous": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Organizational units created at the domain root (e.g. Crownlands, Westerlands)."
+        }
+      }
+    },
+    "overlay_range_host": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Shared overlay for the range host kinds (dc, srv, wks, fw).",
+      "properties": {
+        "os": {
+          "enum": ["windows_server_2019", "windows_server_2022", "windows_10", "windows_11", "linux"],
+          "x-redstackpro-source": "user",
+          "description": "Operating system image for this host. linux is a generic Debian box."
+        },
+        "hostname": {
+          "type": "string",
+          "x-redstackpro-source": "user",
+          "description": "The machine's canonical name, e.g. kingslanding."
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-redstackpro-source": "user",
+          "description": "Roles the host runs, e.g. mssql, iis, adcs."
+        },
+        "role": {
+          "enum": [
+            "generic",
+            "sql",
+            "web",
+            "fileshare",
+            "adcs",
+            "mecm"
+          ],
+          "x-redstackpro-source": "user",
+          "description": "A server's primary role, which drives its badge and, later, its provisioning. Mainly meaningful for a srv."
+        },
+        "edr": {
+          "enum": [
+            "none",
+            "defender",
+            "elastic",
+            "wazuh",
+            "crowdstrike",
+            "sentinelone"
+          ],
+          "x-redstackpro-source": "user",
+          "description": "Endpoint detection and response running on this host. defender, elastic, and wazuh deploy for real; the rest are labels for now."
+        },
+        "defender_enabled": {
+          "type": "boolean",
+          "default": false,
+          "x-redstackpro-source": "user",
+          "description": "Keep Windows Defender real-time protection on for this host. Off by default. Windows hosts only."
+        },
+        "endpoint_telemetry": {
+          "type": "boolean",
+          "default": false,
+          "x-redstackpro-source": "user",
+          "description": "Installs Sysmon and turns on command-line and directory-service auditing, so a SIEM-monitored host emits the events detections need. Off by default, Windows hosts only."
+        },
+        "vulns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "x-redstackpro-source": "user",
+          "description": "Attack-path misconfigurations and CVEs planted on this host, from the GOAD-derived catalog. See vulns.js."
+        },
+        "hardening": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "asr",
+              "runasppl",
+              "lsa_protection",
+              "credential_guard",
+              "constrained_powershell",
+              "applocker",
+              "defender_tamper_protection",
+              "smb_signing",
+              "llmnr_disabled"
+            ]
+          },
+          "uniqueItems": true,
+          "x-redstackpro-source": "user",
+          "description": "Defensive controls applied to this host, for practising against a locked-down endpoint rather than a weak one."
+        },
+        "notes": {
+          "type": "string",
+          "x-redstackpro-source": "user",
+          "description": "Free-form notes for this host, for anything not covered by another field."
+        },
+        "public_address": {
+          "$ref": "#/$defs/public_address",
+          "default": false
+        },
+        "internal_ip": {
+          "$ref": "#/$defs/ipv4",
+          "x-redstackpro-source": "user",
+          "description": "A pinned private address inside this host's segment, e.g. 192.168.56.10. Absent lets the provider assign one at apply time. Set it when the deploy needs a fixed, predictable address."
+        },
+        "vulns_vars": {
+          "type": "object",
+          "description": "Per-vuln parameters for this host's declared vulns, e.g. a file share path or a delegation target.",
+          "additionalProperties": true
+        },
+        "sudo_groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Domain groups granted sudo on a Linux member (e.g. LinuxAdmins)."
+        },
+        "ssh_groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Domain groups permitted SSH on a Linux member; empty means all."
+        }
+      }
+    },
+    "edge": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/edge_base"
+        }
+      ],
+      "oneOf": [
+        {
+          "$ref": "#/$defs/edge_attached"
+        },
+        {
+          "$ref": "#/$defs/edge_fronts"
+        },
+        {
+          "$ref": "#/$defs/edge_logs_to"
+        },
+        {
+          "$ref": "#/$defs/edge_manages"
+        },
+        {
+          "$ref": "#/$defs/edge_peers"
+        },
+        {
+          "$ref": "#/$defs/edge_joins"
+        },
+        {
+          "$ref": "#/$defs/edge_trusts"
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "edge_base": {
+      "type": "object",
+      "required": [
+        "id",
+        "role",
+        "source",
+        "target"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "role": {
+          "enum": [
+            "attached",
+            "fronts",
+            "logs_to",
+            "manages",
+            "peers",
+            "joins",
+            "trusts"
+          ]
+        },
+        "source": {
+          "$ref": "#/$defs/identifier"
+        },
+        "target": {
+          "$ref": "#/$defs/identifier"
+        },
+        "waypoints": {
+          "type": "array",
+          "description": "Canvas layout only: hand-drawn bend points that route this line, in flow coordinates. The compiler ignores them.",
+          "items": {
+            "$ref": "#/$defs/position"
+          }
+        }
+      }
+    },
+    "edge_attached": {
+      "description": "Membership. Host to segment, or segment to network. A segment attaches to exactly one network.",
+      "properties": {
+        "role": {
+          "const": "attached"
+        },
+        "primary": {
+          "type": "boolean",
+          "default": true,
+          "x-redstackpro-source": "user",
+          "description": "For multihomed hosts. Exactly one attachment per host is primary."
+        }
+      }
+    },
+    "edge_fronts": {
+      "description": "Redirector to teamserver. The source receives the target address. Many sources to one target is the rollover pool, which the compiler emits as a Terraform output for the operator to work into a C2 profile.",
+      "properties": {
+        "role": {
+          "const": "fronts"
+        },
+        "protocol": {
+          "enum": [
+            "http",
+            "https",
+            "dns",
+            "tcp"
+          ],
+          "x-redstackpro-source": "user"
+        },
+        "listen_port": {
+          "$ref": "#/$defs/port",
+          "x-redstackpro-source": "user"
+        },
+        "upstream_port": {
+          "$ref": "#/$defs/port",
+          "x-redstackpro-source": "user"
+        },
+        "uri_prefix": {
+          "type": "string",
+          "pattern": "^/[a-z0-9][a-z0-9/_-]*$",
+          "x-redstackpro-source": "user",
+          "description": "Path prefix the redirector routes to this teamserver. Two fronts edges from one redirector must not collide. Ignored for the dns protocol."
+        }
+      },
+      "required": [
+        "protocol",
+        "listen_port"
+      ]
+    },
+    "edge_logs_to": {
+      "description": "Sender to collector. The source receives the target address. Port and TLS come from the collector overlay so they cannot diverge per sender. The collector ingress rule is derived from the set of these edges, not from a segment range.",
+      "properties": {
+        "role": {
+          "const": "logs_to"
+        }
+      }
+    },
+    "edge_manages": {
+      "description": "Jumpbox to network or segment. Members of the target receive the source address as a ProxyJump in the generated inventory. A host is excluded from its own proxy path.",
+      "properties": {
+        "role": {
+          "const": "manages"
+        }
+      }
+    },
+    "edge_peers": {
+      "description": "Network to network. The two networks are peered so hosts in one can reach hosts in the other on private addresses, which is what lets a jumpbox or a collector serve across a routing domain boundary. Same cloud only, and the two networks must not have overlapping CIDRs. Bidirectional: one edge peers both ways.",
+      "properties": {
+        "role": {
+          "const": "peers"
+        }
+      }
+    },
+    "edge_joins": {
+      "description": "Range host to domain. The host is joined to the domain the edge points at. Logical membership, drawn as a badge rather than nesting, because a host is physically in a subnet and logically in a domain at once. See 0047.",
+      "properties": {
+        "role": {
+          "const": "joins"
+        }
+      }
+    },
+    "edge_trusts": {
+      "description": "Domain to domain. Carries the trust direction, type, and transitivity. A two way trust is one edge with direction bidirectional, which the compiler expands to both sides. See 0047.",
+      "properties": {
+        "role": {
+          "const": "trusts"
+        },
+        "direction": {
+          "enum": [
+            "inbound",
+            "outbound",
+            "bidirectional"
+          ],
+          "default": "bidirectional",
+          "x-redstackpro-source": "user"
+        },
+        "trust_type": {
+          "enum": [
+            "parent_child",
+            "tree_root",
+            "external",
+            "forest"
+          ],
+          "x-redstackpro-source": "user"
+        },
+        "transitive": {
+          "type": "boolean",
+          "default": true,
+          "x-redstackpro-source": "user"
+        }
+      }
+    }
+  }
+}

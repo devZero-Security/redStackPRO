@@ -16,7 +16,7 @@ from redstackpro.api import create_app, db, retention
 from shipped import example
 
 ROOT = Path(__file__).resolve().parent.parent
-EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.6.0"
+EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.7.0"
 V1 = "/api/v1"
 
 

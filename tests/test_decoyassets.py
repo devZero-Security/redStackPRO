@@ -581,7 +581,7 @@ def _topology(decoy="healthcare"):
     return {
         "version": "0.4.0",
         "name": "assets",
-        "prefix": "art",
+        "prefix": "off",
         "nodes": [
             {"id": "net01", "kind": "network", "overlay": {"cidr": "10.30.0.0/16"}},
             {"id": "sub01", "kind": "segment",
@@ -598,7 +598,7 @@ def _topology(decoy="healthcare"):
 
 
 def test_a_redirector_is_given_an_asset_plan():
-    vars_ = AnsiblePlan(_topology()).host_vars["art-rd01"]
+    vars_ = AnsiblePlan(_topology()).host_vars["off-rd01"]
     assert vars_["redstackpro_decoy_assets"]["slots"]
     # The drawn artwork is still shipped: it is the floor the photographs fall
     # back to, not the thing they replace.
@@ -606,11 +606,11 @@ def test_a_redirector_is_given_an_asset_plan():
 
 
 def test_a_redirector_with_no_cover_site_is_given_no_plan():
-    vars_ = AnsiblePlan(_topology("none")).host_vars["art-rd01"]
+    vars_ = AnsiblePlan(_topology("none")).host_vars["off-rd01"]
     assert "redstackpro_decoy_assets" not in vars_
 
 
 def test_two_builds_of_one_topology_plan_different_photographs():
-    first = AnsiblePlan(_topology()).host_vars["art-rd01"]["redstackpro_decoy_assets"]
-    second = AnsiblePlan(_topology()).host_vars["art-rd01"]["redstackpro_decoy_assets"]
+    first = AnsiblePlan(_topology()).host_vars["off-rd01"]["redstackpro_decoy_assets"]
+    second = AnsiblePlan(_topology()).host_vars["off-rd01"]["redstackpro_decoy_assets"]
     assert first != second

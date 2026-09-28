@@ -44,7 +44,7 @@ backends declare fewer network capabilities (`src/redstackpro/schema/registry/pr
 | host firewall | per-VM firewall | proxmox has one, esxi has none (layer-2 VLAN isolation only) |
 
 - **Range access.** On cloud the jumpbox has an allocated (per-deploy, ephemeral)
-  public address, read from `HAVEN-BRIEFING.md`. On on-prem there is no allocated
+  public address, read from `DEFENSE-BRIEFING.md`. On on-prem there is no allocated
   external IP: reach the jumpbox over the operator's own network or VPN.
 - **Name resolution.** On cloud the range can resolve through managed private DNS.
   On on-prem there is no managed zone, so populate static hosts entries from the
@@ -61,11 +61,11 @@ not.
 
 | host | AD name | address | role |
 |------|---------|---------|------|
-| hvn-jumpbox | - | 192.168.56.2 | foothold, Guacamole, ssh |
-| hvn-mecm | MECM | 192.168.56.3 | site server, MECM primary site |
-| hvn-client | CLIENT | 192.168.56.4 | Windows 10 client |
-| hvn-dc | DC | 192.168.56.5 | domain controller |
-| hvn-mssql | MSSQL | 192.168.56.6 | remote site database |
+| def-jumpbox | - | 192.168.56.2 | foothold, Guacamole, ssh |
+| def-mecm | MECM | 192.168.56.3 | site server, MECM primary site |
+| def-client | CLIENT | 192.168.56.4 | Windows 10 client |
+| def-dc | DC | 192.168.56.5 | domain controller |
+| def-mssql | MSSQL | 192.168.56.6 | remote site database |
 
 The separate site database matters: it is what makes TAKEOVER-1 and TAKEOVER-2
 reachable, because the site server authenticates to a **different** host.

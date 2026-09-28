@@ -239,7 +239,7 @@ def generate_deploy_script(topology, registry=None, provider=None):
     jumpbox = _jumpbox_name(ctx)
     if not jumpbox:
         return None
-    is_range = topology.get("mode") == "haven"
+    is_range = topology.get("mode") == "defense"
 
     cloud_preflight = ""
     if provider == "gcp":
@@ -467,7 +467,7 @@ export REDSTACKPRO_LAB_PASSWORD
 
 say "fill inventory addresses from terraform output"
 "$PY" tf_inventory.py
-# Scan the whole ansible tree (and the mode briefing, HAVEN-/ARTIE-BRIEFING.md),
+# Scan the whole ansible tree (and the mode briefing, DEFENSE-/OFFENSE-BRIEFING.md),
 # not a fixed pair of subdirectories: an ops export has no ansible/vars, which made
 # the old grep exit non-zero on the missing path and skip the check entirely. Pipe
 # to grep -q so the result is decided by whether any file still holds a token, not

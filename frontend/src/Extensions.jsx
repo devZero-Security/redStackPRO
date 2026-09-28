@@ -10,7 +10,7 @@ export function Extensions({ document, readOnly, onToggle, onDismiss }) {
   return (
     <div className="rg-modal-backdrop" onClick={onDismiss}>
       <div
-        className="rg-modal rg-mode-haven rg-extensions"
+        className="rg-modal rg-mode-defense rg-extensions"
         role="dialog"
         aria-label="GOAD extensions"
         onClick={(event) => event.stopPropagation()}

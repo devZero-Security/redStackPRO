@@ -4,7 +4,7 @@
     python -m redstackpro.tools.registry                      capability matrix
     python -m redstackpro.tools.registry --provider proxmox   one provider, verbose
     python -m redstackpro.tools.registry --palette            what the canvas offers
-    python -m redstackpro.tools.registry --palette haven
+    python -m redstackpro.tools.registry --palette defense
 
 The registry itself lives in the package at redstackpro/schema/registry/ as data.
 See 0013.
@@ -82,7 +82,7 @@ def check(reg, topology, provider):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--provider", help="check one provider verbosely")
-    ap.add_argument("--palette", metavar="MODE", nargs="?", const="artie",
+    ap.add_argument("--palette", metavar="MODE", nargs="?", const="offense",
                     help="print the canvas palette for a mode")
     args = ap.parse_args()
 

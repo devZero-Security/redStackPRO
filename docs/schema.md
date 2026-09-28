@@ -1,12 +1,12 @@
 # Topology schema
 
-Status: written. Version 0.6.0 covers `artie` mode. 0.1.0 through 0.5.0
+Status: written. Version 0.7.0 covers `offense` mode. 0.1.0 through 0.5.0
 and their examples stay in the repo as migration fixtures.
 
 The schema is the artifact, not this file.
 
-- `src/redstackpro/schema/topology/0.6.0.json` is the document schema
-- `src/redstackpro/schema/topology/examples/0.6.0/` holds four worked examples that
+- `src/redstackpro/schema/topology/0.7.0.json` is the document schema
+- `src/redstackpro/schema/topology/examples/0.7.0/` holds four worked examples that
   double as test fixtures
 - `docs/validation.md` holds the rules JSON Schema cannot express
 - Decision 0007 is why the model is shaped the way it is, 0021 is why exposure is
@@ -14,12 +14,12 @@ The schema is the artifact, not this file.
 
 ## Shape in one paragraph
 
-One node collection and one edge collection. The artie node kinds are `network`,
+One node collection and one edge collection. The offense node kinds are `network`,
 `segment`, `redirector`, `teamserver`, `collector`, `jumpbox`, and `operator`;
-haven mode (`mode: haven`) adds `domain`, `dc`, `srv`, `wks`, `fw`, `siem`, and
+defense mode (`mode: defense`) adds `domain`, `dc`, `srv`, `wks`, `fw`, `siem`, and
 `appliance` (see the range model below). Segments and networks are nodes, so
 every edge endpoint is a bare node id. Edges carry a `role` of `attached`,
-`fronts`, `logs_to`, `manages`, `peers`, and, in haven mode, `joins` (host to
+`fronts`, `logs_to`, `manages`, `peers`, and, in defense mode, `joins` (host to
 domain) and `trusts` (domain to domain), with role-specific fields via a
 `oneOf`. Overlays are per-node parameters; user-supplied fields carry an
 `x-redstackpro-source` annotation and derived fields do not appear in the document
@@ -61,7 +61,7 @@ guard between two files that would otherwise diverge.
 
 ## Range model
 
-Haven mode (`mode: haven`) is the Cyber Ranges canvas. A `domain` is a
+Defense mode (`mode: defense`) is the Cyber Ranges canvas. A `domain` is a
 container node the way a segment is; a host joins it with a `joins` edge and
 nests inside its box. Domains link to each other with a `trusts` edge carrying
 `direction`, `trust_type` (`parent_child`, `tree_root`, `external`, `forest`),
@@ -113,7 +113,7 @@ Anticipated, not decided. None of these is an ADR yet.
   RDP tile, which satisfies CAR008's GUI requirement for a web-UI C2 without a
   Windows operator. Additive and default false, so the migration from 0.4.0 is a
   version bump and nothing else
-- `tunnel` as a standalone role if haven mode produces a pivot host case where
+- `tunnel` as a standalone role if defense mode produces a pivot host case where
   the transport is the entire relationship
 - Mixed-provider compilation, reading the optional `provider` field on networks.
   The field exists in the schema but nothing reads it yet, so it is a seam for a

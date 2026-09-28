@@ -18,7 +18,7 @@ from shipped import example
 from sqlalchemy import select
 
 ROOT = Path(__file__).resolve().parent.parent
-EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.6.0"
+EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.7.0"
 V1 = "/api/v1"
 
 
@@ -68,7 +68,7 @@ def test_create_and_read(client, document):
     assert body["visibility"] == "private"
 
     got = client.get(V1 + "/topologies/" + body["id"]).json()
-    assert got["document"]["schema_version"] == "0.6.0"
+    assert got["document"]["schema_version"] == "0.7.0"
 
 
 def test_document_without_schema_version_is_rejected(client):
@@ -291,7 +291,7 @@ def test_palette_is_served_from_the_registry(client):
 
 
 def test_range_palette_carries_the_range_kinds(client):
-    groups = client.get(V1 + "/registry/palette?mode=haven").json()["groups"]
+    groups = client.get(V1 + "/registry/palette?mode=defense").json()["groups"]
     kinds = {e["kind"] for g in groups.values() for e in g}
     assert {"domain", "dc", "srv", "wks", "fw"} <= kinds
     assert "teamserver" not in kinds

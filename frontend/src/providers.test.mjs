@@ -34,15 +34,15 @@ assert.equal(labelFor("openstack"), "openstack");
 // THE BUG THIS MODULE EXISTS FOR: the toolbar hardcoded four range providers and
 // left esxi out, though the compiler has accepted it since the native range
 // landed. Derived from the capability, esxi is offered.
-assert.ok(providersFor("haven", REGISTRY).includes("esxi"));
-assert.equal(providersFor("haven", REGISTRY).length, 5);
+assert.ok(providersFor("defense", REGISTRY).includes("esxi"));
+assert.equal(providersFor("defense", REGISTRY).length, 5);
 
 // A provider with no Windows image cannot build a defense range, and is offered
 // for offense only.
 const noWindows = [...REGISTRY, { name: "toy", capabilities: ["compute"] }];
 assert.equal(hostsRange({ name: "toy", capabilities: ["compute"] }), false);
-assert.ok(!providersFor("haven", noWindows).includes("toy"));
-assert.ok(providersFor("artie", noWindows).includes("toy"));
+assert.ok(!providersFor("defense", noWindows).includes("toy"));
+assert.ok(providersFor("offense", noWindows).includes("toy"));
 
 // Familiarity first, and an unranked provider sorts last rather than vanishing.
 assert.deepEqual(sortProviders(["esxi", "aws", "gcp"]), ["gcp", "aws", "esxi"]);
@@ -52,35 +52,35 @@ assert.deepEqual(
 );
 
 // A chosen provider this mode can build is left alone.
-assert.equal(resolveProvider("haven", REGISTRY, "proxmox"), "proxmox");
+assert.equal(resolveProvider("defense", REGISTRY, "proxmox"), "proxmox");
 
 // One it cannot lands on something real. The toolbar used to correct only what it
 // drew, leaving the state pointed at a target the API would refuse, so the canvas
 // showed one provider and compiled for another.
-assert.equal(resolveProvider("haven", noWindows, "toy"), "gcp");
+assert.equal(resolveProvider("defense", noWindows, "toy"), "gcp");
 
 // With no registry loaded yet, the chosen provider survives rather than being
 // reset to nothing on the first render.
-assert.equal(resolveProvider("artie", [], "gcp"), "gcp");
+assert.equal(resolveProvider("offense", [], "gcp"), "gcp");
 
 // Only GCP and AWS have had a range deployed on them, so only those two are
 // choosable. The other three still LIST -- the compiler genuinely builds them,
 // and hiding that would understate the product.
-assert.deepEqual(selectableProviders("artie", REGISTRY), ["gcp", "aws"]);
-assert.deepEqual(selectableProviders("haven", REGISTRY), ["gcp", "aws"]);
-assert.equal(providersFor("artie", REGISTRY).length, 5);
+assert.deepEqual(selectableProviders("offense", REGISTRY), ["gcp", "aws"]);
+assert.deepEqual(selectableProviders("defense", REGISTRY), ["gcp", "aws"]);
+assert.equal(providersFor("offense", REGISTRY).length, 5);
 
 // Declaring nothing means preview. Claiming proven by omission is the wrong way
 // round: a backend added tomorrow should not present itself as deployment-proven
 // because someone forgot a line.
 assert.equal(isProven({ name: "openstack", capabilities: [] }), false);
-assert.ok(!selectableProviders("artie", noWindows).includes("toy"));
+assert.ok(!selectableProviders("offense", noWindows).includes("toy"));
 
 // A mode switch lands on a proven target, never a greyed one.
-assert.equal(resolveProvider("haven", noWindows, "toy"), "gcp");
+assert.equal(resolveProvider("defense", noWindows, "toy"), "gcp");
 
 // But a provider someone deliberately chose and saved is left alone. Greying is
 // about where the canvas steers people, not about overriding their choice.
-assert.equal(resolveProvider("artie", REGISTRY, "azure"), "azure");
+assert.equal(resolveProvider("offense", REGISTRY, "azure"), "azure");
 
 console.log("providers ok");

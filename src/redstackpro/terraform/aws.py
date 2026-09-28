@@ -819,10 +819,10 @@ def _firewall(plan):
         # ssh (22) is always open to operator_source_ranges: the admin deploys and
         # manages over it, and a VPN access mode cannot replace it because the
         # tunnel is stood up over this very ssh (the first deploy has no tunnel
-        # yet). In a VPN access mode (artie only) the jumpbox also opens its VPN
+        # yet). In a VPN access mode (offense only) the jumpbox also opens its VPN
         # listen port, and the Guacamole portal is NOT exposed publicly: operators
         # reach it over the tunnel instead. In public mode (the default, and every
-        # haven range) the portal is opened on 443 as before. The jumpbox keeps its
+        # defense range) the portal is opened on 443 as before. The jumpbox keeps its
         # stable public IP either way, since it is the VPN endpoint. See
         # vpn-multiuser-spec.
         name = "mgmt_in_%s" % plan.ref(jump)

@@ -12,7 +12,7 @@
 // end to end to find any one of them.
 //
 // The ids here MUST match the schema enum at
-// src/redstackpro/schema/topology/0.6.0.json -> $defs.overlay_range_host.properties.hardening;
+// src/redstackpro/schema/topology/0.7.0.json -> $defs.overlay_range_host.properties.hardening;
 // hardening.test.mjs reads the schema and holds this file to it, so a control
 // added in one place cannot go missing from the other.
 

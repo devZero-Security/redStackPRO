@@ -140,7 +140,7 @@ class TerraformPlan:
     # -- range / AD selection
 
     def is_range(self):
-        return self.topology.get("mode") == "haven"
+        return self.topology.get("mode") == "defense"
 
     @property
     def admin_account(self):
@@ -335,7 +335,7 @@ class TerraformPlan:
         """The VPN listener for this jumpbox, or None when access is the public
         portal. Returns (mode, port, protocol).
 
-        Only meaningful on an artie topology: a haven range ignores the fields and
+        Only meaningful on an offense topology: a defense range ignores the fields and
         keeps the public portal, so this returns None there. In a VPN mode the
         jumpbox exposes only its VPN port and management (ssh plus the Guacamole
         portal) rides the tunnel rather than the public 22/443. WireGuard is udp

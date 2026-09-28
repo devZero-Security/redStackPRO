@@ -14,7 +14,7 @@ config-based techniques (not patch-dependent), so they land cleanly.
 Full GOAD has two: **castelblack** (`192.168.56.22`) in north and **braavos**
 (`192.168.56.23`) in essos, which is what makes the cross-forest linked-server
 hop in Step 5 possible. GOAD-Light has castelblack only. Your deploy's
-`HAVEN-BRIEFING.md` has the addresses.
+`DEFENSE-BRIEFING.md` has the addresses.
 
 > **Status legend:** ✅ PASS · ❌ blocked · ⚠ partial/fidelity · ⏳ not run.
 

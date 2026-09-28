@@ -16,7 +16,7 @@ const test = (name, fn) => { fn(); passed += 1; console.log("  ok", name); };
 // name matters now: extensions offer by lab compatibility.
 const base = (name = "GOAD-Mini") => ({
   name,
-  mode: "haven",
+  mode: "defense",
   nodes: [
     { id: "net01", kind: "network", overlay: { cidr: "192.168.0.0/16" } },
     { id: "sub01", kind: "segment", overlay: { cidr: "192.168.56.0/24", egress: "allowed", exposure: "local" } },
@@ -84,7 +84,7 @@ test("applying twice is idempotent", () => {
 test("a domain extension cannot be added to a range with no domain", () => {
   const noDomain = {
     name: "GOAD-Mini",
-    mode: "haven",
+    mode: "defense",
     nodes: [
       { id: "net01", kind: "network", overlay: { cidr: "10.0.0.0/16" } },
       { id: "sub01", kind: "segment", overlay: { cidr: "10.0.10.0/24", egress: "allowed", exposure: "local" } },

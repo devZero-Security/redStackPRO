@@ -6,7 +6,7 @@ import { UNGROUPED_LABEL, groupedTemplates } from "./templates.js";
 // so a person picks a lab and makes it theirs. The picker shows only the current
 // canvas's set. See 0047 and 0051.
 export function TemplatePicker({ mode, onPick, onDismiss }) {
-  const isRange = mode === "haven";
+  const isRange = mode === "defense";
   const groups = groupedTemplates(mode);
   // An ungrouped template rendered with no header sits directly under the
   // previous section's, so Harbor read as a ninth GOAD lab. It needs a label of
@@ -17,7 +17,7 @@ export function TemplatePicker({ mode, onPick, onDismiss }) {
   return (
     <div className="rg-modal-backdrop" onClick={onDismiss}>
       <div
-        className={`rg-modal is-chooser rg-mode-${isRange ? "haven" : "artie"}`}
+        className={`rg-modal is-chooser rg-mode-${isRange ? "defense" : "offense"}`}
         role="dialog"
         aria-label="Load a template"
         onClick={(event) => event.stopPropagation()}

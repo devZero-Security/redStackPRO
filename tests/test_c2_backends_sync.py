@@ -24,7 +24,7 @@ from redstackpro.tools.check_roles import BRANCHES
 
 ROOT = Path(__file__).resolve().parent.parent
 
-_SCHEMA = ROOT / "src/redstackpro/schema/topology/0.6.0.json"
+_SCHEMA = ROOT / "src/redstackpro/schema/topology/0.7.0.json"
 _TEAMSERVER_TASKS = (ROOT / "src/redstackpro/assets/ansible/roles"
                      / "redstackpro.teamserver/tasks")
 

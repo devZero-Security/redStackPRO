@@ -27,8 +27,8 @@ def test_compile_ships_a_deploy_script_for_a_topology_with_a_jumpbox(redstack, r
 def test_deploy_script_is_mode_aware(registry):
     jb = {"id": "jump", "kind": "jumpbox",
           "overlay": {"services": ["ssh", "guacamole"]}}
-    rng = generate_deploy_script(_topology("haven", [jb]), registry)
-    ops = generate_deploy_script(_topology("artie", [jb]), registry)
+    rng = generate_deploy_script(_topology("defense", [jb]), registry)
+    ops = generate_deploy_script(_topology("offense", [jb]), registry)
     # A range waits for an authenticated win_ping before promoting a fresh Windows
     # host and leaves the jumpbox out of the AD plays; an offense platform neither
     # gates on win_ping nor limits the jumpbox out.
@@ -45,7 +45,7 @@ def test_MANAGE_deploy_script_provisions_the_jumpbox_in_a_pass_of_its_own(regist
     # range, so it cannot wait on a Windows box finishing its boot.
     jb = {"id": "jump", "kind": "jumpbox",
           "overlay": {"services": ["ssh", "guacamole"]}}
-    rng = generate_deploy_script(_topology("haven", [jb]), registry)
+    rng = generate_deploy_script(_topology("defense", [jb]), registry)
     assert "--limit jumpboxes" in rng
     assert rng.index("--limit jumpboxes") < rng.index("win_ping")
 
@@ -53,7 +53,7 @@ def test_MANAGE_deploy_script_provisions_the_jumpbox_in_a_pass_of_its_own(regist
 def test_deploy_script_absent_without_a_jumpbox(registry):
     # Nothing to stage a provision through, so no deploy.sh is emitted.
     ts = {"id": "ts", "kind": "teamserver", "overlay": {}}
-    assert generate_deploy_script(_topology("artie", [ts]), registry) is None
+    assert generate_deploy_script(_topology("offense", [ts]), registry) is None
 
 
 @pytest.mark.parametrize("provider", ["aws", "gcp"])
@@ -76,7 +76,7 @@ def test_gcp_deploy_script_checks_cloud_credentials(redstack, registry):
 def _stopping_topology(registry_nodes=None):
     jb = {"id": "jump", "kind": "jumpbox",
           "overlay": {"services": ["ssh", "guacamole"]}}
-    doc = _topology("haven", registry_nodes or [jb])
+    doc = _topology("defense", registry_nodes or [jb])
     doc["auto_stop"] = {"enabled": True, "at": "02:00", "timezone": "UTC"}
     return doc
 
@@ -117,7 +117,7 @@ def test_no_ttl_means_no_stop_preflight(registry):
     """A topology that never asked for a TTL should not meet a check about one."""
     jb = {"id": "jump", "kind": "jumpbox",
           "overlay": {"services": ["ssh", "guacamole"]}}
-    body = generate_deploy_script(_topology("haven", [jb]), registry, provider="gcp")
+    body = generate_deploy_script(_topology("defense", [jb]), registry, provider="gcp")
     assert "RSP_STOP_LEAD" not in body
 
 
@@ -133,7 +133,7 @@ def test_the_dns_action_shows_what_the_name_resolves_to_today(registry):
                       "tls": {"cert_source": "letsencrypt"}}}
     jb = {"id": "jump", "kind": "jumpbox",
           "overlay": {"services": ["ssh", "guacamole"]}}
-    body = generate_deploy_script(_topology("artie", [jb, rd]), registry, provider="gcp")
+    body = generate_deploy_script(_topology("offense", [jb, rd]), registry, provider="gcp")
     assert "socket.gethostbyname" in body, "the live value must be looked up"
     assert "STALE, from an earlier deploy" in body
     # And it must stay quiet when there is genuinely nothing to do, or the notice

@@ -1,4 +1,4 @@
-# Validator rules, schema 0.6.0, artie mode
+# Validator rules, schema 0.7.0, offense mode
 
 JSON Schema covers document shape only. Everything below is topology semantics and
 belongs in the topology layer validator, not in the compiler. Every rule carries a
@@ -155,7 +155,7 @@ Names are composed from the topology `prefix` and the node `id`, never stored. S
 
 ## VPN access
 
-The multi-user VPN access layer, an artie concept: how operators reach the range
+The multi-user VPN access layer, an offense concept: how operators reach the range
 and who they are. The fields live on the jumpbox overlay: `access_mode`
 (`public`, `wireguard`, `openvpn`), `vpn_port`, `vpn_protocol` (`udp`, `tcp`),
 and `operators` (a roster of `{handle, role?}`). Credentials are generated at
@@ -165,11 +165,11 @@ apply, never in the export. See vpn-multiuser-spec.
   `vpn_protocol: tcp`. WireGuard runs over udp only, so this names a listener
   that cannot exist and the export would render an unreachable tunnel. Use
   `access_mode: openvpn` for tcp.
-- `VPN002` warning. A haven jumpbox that declares a VPN `access_mode` or a
+- `VPN002` warning. A defense jumpbox that declares a VPN `access_mode` or a
   non-empty `operators` roster. The VPN access layer and the operator roster are
-  artie features; a haven range keeps the public portal, so the fields are
+  offense features; a defense range keeps the public portal, so the fields are
   ignored there. A warning rather than an error, since they do no harm.
-- `VPN003` warning, artie only. A jumpbox on a VPN `access_mode` with no
+- `VPN003` warning, offense only. A jumpbox on a VPN `access_mode` with no
   `operators` declared. The tunnel stands up, but only the shared break-glass
   admin holds a credential, so no per-user access is provisioned. A valid
   single-admin range, just probably not what a team meant to build.
@@ -266,7 +266,7 @@ than the ordering logic.
 
 ## Range model
 
-These fire only in haven mode (`mode: haven`); the artie rules above are gated
+These fire only in defense mode (`mode: defense`); the offense rules above are gated
 off there, since a lab jumpbox on a local subnet is correct and the `cyb` naming
 scheme is deferred for templates. See 0047. The shipped GOAD templates are clean
 of all four.

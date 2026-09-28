@@ -166,7 +166,7 @@ def _compile(document, provider, region=None):
 # ---------------------------------------------------------------- registry
 
 @router.get("/registry/palette", tags=["registry"])
-def get_palette(mode: str = Query("artie")):
+def get_palette(mode: str = Query("offense")):
     """What the canvas offers. Read from the registry rather than hardcoded, so
     pro adds a node kind by dropping a file in. See 0013."""
     return {"mode": mode, "groups": registry.palette(mode)}
@@ -249,7 +249,7 @@ def create_topology(body: TopologyCreate,
         org_id=principal.org_id,
         owner_id=principal.id,
         name=body.name,
-        mode=document.get("mode", "artie"),
+        mode=document.get("mode", "offense"),
         visibility=body.visibility,
         schema_version=document["schema_version"],
         version=1,

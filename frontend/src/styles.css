@@ -13,7 +13,7 @@
   --warning: #f59f00;
   --ok: #2f9e44;
   --accent: #1971c2;
-  --accent-artie-text: #d98b8b;
+  --accent-offense-text: #d98b8b;
   /* Semantic palette, former ad-hoc hex named by meaning. */
   --info: #74c0fc;      /* domain, manages */
   --good: #38d9a9;      /* edr, hardened */
@@ -49,7 +49,7 @@
 /* redStackPRO: dark, shades of red. The container accent is a muted red so the
    nested boxes read as red structure rather than competing with the host
    card colours; the host icons stay the only bright accents. */
-.rg-mode-artie {
+.rg-mode-offense {
   --bg: #1a1416;
   --panel: #21191c;
   --panel-2: #271e21;
@@ -60,10 +60,14 @@
   --container-bg-net: rgba(224, 49, 49, 0.02);
   --container-head: #241a1e;
   --container-head-net: #1f1619;
+  /* Offense reads red: the accent drives selection, handles, focus ring, the
+     primary button, the templates box, waypoints, and the provider menu. This
+     red passes AA (>=4.5:1) behind the white primary label. */
+  --accent: #c0392b;
 }
 
 /* Cyber Ranges: dark and cool, shades of blue. */
-.rg-mode-haven {
+.rg-mode-defense {
   --bg: #12161b;
   --panel: #171d24;
   --panel-2: #1b222b;
@@ -74,6 +78,8 @@
   --container-bg-net: rgba(28, 126, 214, 0.035);
   --container-head: #17202b;
   --container-head-net: #141c26;
+  /* Defense reads blue: the same accent role, in the project blue. */
+  --accent: #1971c2;
 }
 
 * { box-sizing: border-box; }
@@ -104,10 +110,11 @@ body {
 
 .rg-brand { font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }
 .rg-brand b { font-weight: 700; }
-/* The PRO carries the mode color: red for Offense (ARTIE), blue for Defense (HAVEN). */
+/* The PRO carries the mode color: red for Offense, blue for Defense. A bright
+   tint reads on the dark header; the darker accent itself is for fills, not text. */
 .rg-brand-pro { font-weight: 700; }
-.rg-mode-artie .rg-brand-pro { color: var(--danger-2); }
-.rg-mode-haven .rg-brand-pro { color: var(--info); }
+.rg-mode-offense .rg-brand-pro { color: var(--danger-2); }
+.rg-mode-defense .rg-brand-pro { color: var(--info); }
 
 .rg-spacer { flex: 1; }
 
@@ -291,11 +298,10 @@ button:disabled { opacity: 0.5; cursor: default; }
   z-index: 3;
 }
 .rg-palette-labs > h3 { margin-top: 0; }
-/* Templates box and heading carry the mode color: red on offense, blue on defense. */
-.rg-mode-artie .rg-palette-labs { border-color: var(--danger-2); }
-.rg-mode-haven .rg-palette-labs { border-color: var(--info); }
-.rg-mode-artie .rg-palette-labs > h3 { color: var(--danger-2); }
-.rg-mode-haven .rg-palette-labs > h3 { color: var(--info); }
+/* Templates box border follows the accent (red on offense, blue on defense) from
+   the rule above. The heading keeps a bright tint so the text stays legible. */
+.rg-mode-offense .rg-palette-labs > h3 { color: var(--danger-2); }
+.rg-mode-defense .rg-palette-labs > h3 { color: var(--info); }
 .rg-palette-lab {
   flex-direction: column;
   align-items: stretch;
@@ -980,11 +986,6 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 .rg-legend-item { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
 .rg-legend-swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
-/* The active mode spelled out on the canvas, sitting on its own line above the
-   legend swatches, in the mode color (red for Offense, blue for Defense). */
-.rg-legend-mode { flex-basis: 100%; font-weight: 700; }
-.rg-mode-artie .rg-legend-mode { color: var(--danger-2); }
-.rg-mode-haven .rg-legend-mode { color: var(--info); }
 
 /* The resize affordance on a selected container: an accent boundary, corner
    squares, and eight border zones that carry window-style resize cursors. Drag
@@ -1378,14 +1379,14 @@ button:disabled { opacity: 0.5; cursor: default; }
   border-color: var(--container-accent);
   background: var(--container-bg);
 }
-/* The active ARTIE label needs a stronger foreground: its container-accent
-   (muted red) is only ~3:1. HAVEN's blue already passes. The segment carries the
-   mode class directly (App.jsx), so this is a compound selector, not a
+/* The active Offense label needs a stronger foreground: its container-accent
+   (muted red) is only ~3:1. The Defense blue already passes. The segment carries
+   the mode class directly (App.jsx), so this is a compound selector, not a
    descendant. */
-.rg-mode-seg.rg-mode-artie.is-active { color: var(--accent-artie-text); }
+.rg-mode-seg.rg-mode-offense.is-active { color: var(--accent-offense-text); }
 
 .rg-modal.is-chooser { width: 580px; max-width: 92vw; }
-.rg-modal.is-chooser.rg-mode-haven { width: 720px; }
+.rg-modal.is-chooser.rg-mode-defense { width: 720px; }
 .rg-goad-grid { grid-template-columns: 1fr 1fr 1fr; }
 .rg-template-group { margin-top: 10px; }
 .rg-template-group-name { margin: 0 0 6px; font-size: var(--fs-2); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }

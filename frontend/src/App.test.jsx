@@ -29,9 +29,9 @@ const PALETTE = {
 // what comes back is what went in.
 const SAVED_DOCUMENT = {
   schema_version: "0.2.0",
-  mode: "artie",
+  mode: "offense",
   name: "Saved range",
-  prefix: "art",
+  prefix: "off",
   nodes: [
     { id: "c2-net01", kind: "network", overlay: { cidr: "10.30.0.0/16" },
       position: { x: 0, y: 0 }, width: 700, height: 300 },
@@ -50,7 +50,7 @@ const SAVED_DOCUMENT = {
 };
 
 const SUMMARY = {
-  id: "g1", name: "Saved range", mode: "artie", visibility: "private",
+  id: "g1", name: "Saved range", mode: "offense", visibility: "private",
   schema_version: "0.2.0", version: 3, owner_id: "u1",
   is_blueprint: false, editable: true,
 };
@@ -132,7 +132,7 @@ describe("loading", () => {
 
     // This is the reload. Nothing was carried over in memory; the id in the
     // URL is the only thing that survived.
-    expect(await screen.findByText("art-myth-ts01")).toBeTruthy();
+    expect(await screen.findByText("off-myth-ts01")).toBeTruthy();
     expect(screen.getByLabelText("Topology name").value).toBe("Saved range");
   });
 
@@ -140,7 +140,7 @@ describe("loading", () => {
     openUrl("?topology=g1");
     fakeBackend();
     render(<App />);
-    await screen.findByText("art-myth-ts01");
+    await screen.findByText("off-myth-ts01");
 
     expect(screen.getByText(/Saved, version 3/)).toBeTruthy();
   });
@@ -163,7 +163,7 @@ describe("saving", () => {
       const calls = fakeBackend();
       const user = userEvent.setup();
       render(<App />);
-      await screen.findByText("art-myth-ts01");
+      await screen.findByText("off-myth-ts01");
 
       await user.type(screen.getByLabelText("Topology name"), "!");
       expect(await screen.findByText("Unsaved changes")).toBeTruthy();
@@ -187,7 +187,7 @@ describe("saving", () => {
     const calls = fakeBackend();
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByText("art-myth-ts01");
+    await screen.findByText("off-myth-ts01");
 
     await user.type(screen.getByLabelText("Topology name"), "!");
     await user.click(screen.getByRole("button", { name: "Save" }));
@@ -250,22 +250,22 @@ describe("undo and redo", () => {
     fakeBackend();
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByText("art-myth-ts01");
+    await screen.findByText("off-myth-ts01");
 
     // A plain click, not userEvent's full pointer sequence: a real mousedown
     // hands the node to React Flow's own drag setup, which this jsdom has no
     // layout engine for. All that is wanted here is the click that selects it.
-    fireEvent.click(screen.getByText("art-myth-ts01"));
+    fireEvent.click(screen.getByText("off-myth-ts01"));
     await user.click(await screen.findByRole("button", { name: "Delete node" }));
-    expect(screen.queryByText("art-myth-ts01")).toBeNull();
+    expect(screen.queryByText("off-myth-ts01")).toBeNull();
     expect(screen.getByRole("button", { name: "Undo" }).disabled).toBe(false);
 
     await user.click(screen.getByRole("button", { name: "Undo" }));
-    expect(await screen.findByText("art-myth-ts01")).toBeTruthy();
+    expect(await screen.findByText("off-myth-ts01")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Redo" }).disabled).toBe(false);
 
     await user.click(screen.getByRole("button", { name: "Redo" }));
-    await waitFor(() => expect(screen.queryByText("art-myth-ts01")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("off-myth-ts01")).toBeNull());
   });
 
   test("typing a name coalesces into one undo step, via the toolbar button",
@@ -274,7 +274,7 @@ describe("undo and redo", () => {
       fakeBackend();
       const user = userEvent.setup();
       render(<App />);
-      await screen.findByText("art-myth-ts01");
+      await screen.findByText("off-myth-ts01");
 
       const nameInput = screen.getByLabelText("Topology name");
       await user.type(nameInput, "!!!");
@@ -292,7 +292,7 @@ describe("undo and redo", () => {
       fakeBackend();
       const user = userEvent.setup();
       render(<App />);
-      await screen.findByText("art-myth-ts01");
+      await screen.findByText("off-myth-ts01");
 
       const nameInput = screen.getByLabelText("Topology name");
       await user.type(nameInput, "!");
@@ -313,7 +313,7 @@ describe("undo and redo", () => {
     fakeBackend();
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByText("art-myth-ts01");
+    await screen.findByText("off-myth-ts01");
 
     await user.type(screen.getByLabelText("Topology name"), "!");
     expect(screen.getByRole("button", { name: "Undo" }).disabled).toBe(false);
@@ -333,7 +333,7 @@ describe("two tabs", () => {
     fakeBackend({ putResult: "conflict" });
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByText("art-myth-ts01");
+    await screen.findByText("off-myth-ts01");
 
     await user.type(screen.getByLabelText("Topology name"), "!");
     await user.click(screen.getByRole("button", { name: "Save" }));
@@ -354,7 +354,7 @@ describe("two tabs", () => {
       const calls = fakeBackend({ putResult: "conflict" });
       const user = userEvent.setup();
       render(<App />);
-      await screen.findByText("art-myth-ts01");
+      await screen.findByText("off-myth-ts01");
 
       await user.type(screen.getByLabelText("Topology name"), "!");
       await user.click(screen.getByRole("button", { name: "Save" }));
@@ -376,7 +376,7 @@ describe("two tabs", () => {
     fakeBackend({ putResult: "conflict" });
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByText("art-myth-ts01");
+    await screen.findByText("off-myth-ts01");
 
     await user.type(screen.getByLabelText("Topology name"), "!");
     await user.click(screen.getByRole("button", { name: "Save" }));

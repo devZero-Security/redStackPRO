@@ -29,7 +29,7 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-  palette: (mode = "artie") => request(`/registry/palette?mode=${mode}`),
+  palette: (mode = "offense") => request(`/registry/palette?mode=${mode}`),
   schema: () => request("/registry/schema"),
   providers: () => request("/registry/providers"),
 

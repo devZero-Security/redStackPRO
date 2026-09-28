@@ -21,11 +21,11 @@ PLACEHOLDER = "<<tf:%s:%s>>"
 
 
 def briefing_filename(mode):
-    """The hand-off file's name, chosen by mode: HAVEN-BRIEFING.md for a haven
-    range, ARTIE-BRIEFING.md for an artie stack. tf_inventory and the deploy
+    """The hand-off file's name, chosen by mode: DEFENSE-BRIEFING.md for a defense
+    range, OFFENSE-BRIEFING.md for an offense stack. tf_inventory and the deploy
     script find it by the *-BRIEFING.md glob, so both names carry the same
     address tokens. See 0047."""
-    return "ARTIE-BRIEFING.md" if mode == "artie" else "HAVEN-BRIEFING.md"
+    return "OFFENSE-BRIEFING.md" if mode == "offense" else "DEFENSE-BRIEFING.md"
 
 _KIND_ROLE = {
     "dc": "Domain Controller",
@@ -171,13 +171,13 @@ def range_briefing(document, registry=None):
         "Get it with `terraform output -raw lab_password`.",
     ]
 
-    # -- Operators and VPN access (artie only). The roster and the VPN access mode
-    # are artie concepts; a haven range ignores them (VPN002), so the section is
-    # rendered only for an artie stack that declared either. Each operator gets a
+    # -- Operators and VPN access (offense only). The roster and the VPN access mode
+    # are offense concepts; a defense range ignores them (VPN002), so the section is
+    # rendered only for an offense stack that declared either. Each operator gets a
     # personal portal account, and on a VPN access mode a personal credential the
     # jumpbox generates at apply; this names where to fetch each one. See
     # vpn-multiuser-spec.
-    if jump and document.get("mode") == "artie":
+    if jump and document.get("mode") == "offense":
         jov = jump.get("overlay", {}) or {}
         operators = jov.get("operators") or []
         vpn_mode = jov.get("access_mode", "public")

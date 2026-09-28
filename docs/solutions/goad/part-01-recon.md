@@ -8,7 +8,7 @@ mayfly runs this from a Kali sitting on the `192.168.56.0/24` lab LAN. We run it
 > **Status legend:** ✅ PASS · ❌ FAIL · ⏳ not yet run · ➖ N/A.
 > Fill the live IPs and results during the first pass; log every ❌ to the PAI.
 
-## Range facts - read your `HAVEN-BRIEFING.md` first
+## Range facts - read your `DEFENSE-BRIEFING.md` first
 
 The table below is the **canonical full-GOAD** topology. Internal range IPs are
 deterministic (redStack pins each core host's last octet via the `internal_ip`
@@ -20,7 +20,7 @@ each apply, so re-fetch them from your own deploy (see the
 published here, both because they change and because a real address tied to a
 live C2 redirector does not belong in a solution.
 
-> **Read `HAVEN-BRIEFING.md` before this page.** Every deploy writes it into the
+> **Read `DEFENSE-BRIEFING.md` before this page.** Every deploy writes it into the
 > export, filled in after `terraform apply` with **this deploy's** real public
 > addresses, the exact user / password / flaw table, and patient zero. Where this
 > page and the briefing disagree, the briefing is right - it was generated from

@@ -277,7 +277,7 @@ def render_index(lab: str, rows: list[tuple[str, str, str]], surface: set[str]) 
         "",
         f"The `{lab}` lab carries **{len(surface)} techniques** and reaches",
         f"**{applies} of the {len(rows)} parts**. Read your deploy's own",
-        "`HAVEN-BRIEFING.md` for the hosts, addresses and credentials, which are",
+        "`DEFENSE-BRIEFING.md` for the hosts, addresses and credentials, which are",
         "per deploy and not in these pages.",
         "",
         "| part | on this lab | note |",

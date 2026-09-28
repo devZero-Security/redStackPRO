@@ -128,7 +128,7 @@ def test_rng009_user_flaw_declaart_as_host_vuln_warns():
     warns rather than silently planting nothing. It stays valid: a warning, not
     an error. See F-dual-modeling."""
     topology = {
-        "schema_version": "0.6.0", "mode": "haven", "name": "T", "prefix": "hvn",
+        "schema_version": "0.7.0", "mode": "defense", "name": "T", "prefix": "def",
         "nodes": [
             {"id": "net01", "kind": "network", "overlay": {"cidr": "192.168.0.0/16"}},
             {"id": "sub01", "kind": "segment",
@@ -322,7 +322,7 @@ def _two_networks(cidr_a="10.10.0.0/16", cidr_b="10.20.0.0/16"):
     that NET002 and LOG001 are the interesting findings; other rules may also
     fire, so the tests check membership rather than the full set."""
     return {
-        "schema_version": "0.6.0", "mode": "artie", "name": "t", "prefix": "rt",
+        "schema_version": "0.7.0", "mode": "offense", "name": "t", "prefix": "rt",
         "nodes": [
             {"id": "network-a", "kind": "network", "overlay": {"cidr": cidr_a}},
             {"id": "network-b", "kind": "network", "overlay": {"cidr": cidr_b}},
@@ -448,7 +448,7 @@ def _range():
     """A tiny valid range: one network, one subnet, one domain with a DC that
     joins it. Clean under the RNG rules, a base to break one at a time."""
     return {
-        "schema_version": "0.6.0", "mode": "haven", "name": "r", "prefix": "hvn",
+        "schema_version": "0.7.0", "mode": "defense", "name": "r", "prefix": "def",
         "nodes": [
             {"id": "net01", "kind": "network", "overlay": {"cidr": "10.0.0.0/16"}},
             {"id": "sub01", "kind": "segment",
@@ -541,9 +541,9 @@ def test_rng001_member_joins_no_domain():
 
 
 def test_rng001_is_range_only():
-    # An artie document never runs the range rules, even with an unjoined host.
+    # An offense document never runs the range rules, even with an unjoined host.
     g = _range()
-    g["mode"] = "artie"
+    g["mode"] = "offense"
     g["nodes"].append({"id": "srv01", "kind": "srv", "overlay": {}})
     assert "RNG001" not in codes(g)
 
@@ -638,7 +638,7 @@ def test_the_range_templates_are_clean_of_range_errors():
     # Recursive: the GOAD range templates live in the goad/ subdirectory.
     for f in glob.glob(os.path.join(root, "frontend/public/**/*.json"), recursive=True):
         doc = json.loads(open(f).read())
-        if doc.get("mode") != "haven":
+        if doc.get("mode") != "defense":
             continue
         errs = [c for c in errors(doc) if c.startswith("RNG")]
         assert errs == [], f"{os.path.basename(f)} has range errors: {errs}"
@@ -722,7 +722,7 @@ def test_every_shipped_redirector_example_demands_a_hostname_first():
     import glob
     import os
     seen = 0
-    for pattern in ("frontend/public/*.json", "src/redstackpro/schema/topology/examples/0.6.0/*.json"):
+    for pattern in ("frontend/public/*.json", "src/redstackpro/schema/topology/examples/0.7.0/*.json"):
         root = os.path.join(os.path.dirname(__file__), "..", pattern)
         for path in sorted(glob.glob(root)):
             name = os.path.basename(path)
@@ -743,12 +743,12 @@ def test_every_shipped_redirector_example_demands_a_hostname_first():
     assert seen, "no shipped example carries a redirector"
 
 
-# -- multi-user VPN access (artie)
+# -- multi-user VPN access (offense)
 
 def _topology_schema():
     import os
     path = os.path.join(os.path.dirname(__file__), "..",
-                        "src/redstackpro/schema/topology/0.6.0.json")
+                        "src/redstackpro/schema/topology/0.7.0.json")
     return json.loads(open(path, encoding="utf-8").read())
 
 
@@ -756,8 +756,8 @@ def _jumpbox(doc):
     return next(n for n in doc["nodes"] if n["kind"] == "jumpbox")
 
 
-def test_vpn_fields_validate_on_an_artie_jumpbox(minimal):
-    """The new fields are legal on an artie jumpbox: schema shape and topology
+def test_vpn_fields_validate_on_an_offense_jumpbox(minimal):
+    """The new fields are legal on an offense jumpbox: schema shape and topology
     semantics both clean. Two operators, wireguard on its default udp."""
     import jsonschema
     jb = _jumpbox(minimal)
@@ -784,8 +784,8 @@ def test_vpn001_wireguard_tcp_is_an_error(minimal):
     assert "VPN001" not in codes(minimal)
 
 
-def test_vpn002_vpn_access_on_haven_warns():
-    """The VPN access layer is an artie feature; declared on a haven range it is
+def test_vpn002_vpn_access_on_defense_warns():
+    """The VPN access layer is an offense feature; declared on a defense range it is
     ignored, so it warns rather than errors."""
     g = _range()
     g["nodes"].append({"id": "jump-bx01", "kind": "jumpbox", "overlay": {
@@ -794,7 +794,7 @@ def test_vpn002_vpn_access_on_haven_warns():
     g["edges"].append({"id": "ej", "role": "attached",
                        "source": "jump-bx01", "target": "sub01"})
     assert "VPN002" in codes(g)
-    assert "VPN002" not in errors(g), "artie-only fields on haven are a warning"
+    assert "VPN002" not in errors(g), "offense-only fields on defense are a warning"
 
 
 def test_vpn003_vpn_without_operators_warns(minimal):
@@ -852,7 +852,7 @@ def test_shipped_examples_have_no_vpn_findings():
     import glob
     import os
     for pattern in ("frontend/public/**/*.json",
-                    "src/redstackpro/schema/topology/examples/0.6.0/*.json"):
+                    "src/redstackpro/schema/topology/examples/0.7.0/*.json"):
         root = os.path.join(os.path.dirname(__file__), "..", pattern)
         for path in sorted(glob.glob(root, recursive=True)):
             topology = json.loads(open(path, encoding="utf-8").read())

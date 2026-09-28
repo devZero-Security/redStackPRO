@@ -24,16 +24,16 @@ const PALETTE = {
 
 const DOC = {
   schema_version: "0.2.0",
-  mode: "artie",
+  mode: "offense",
   name: "Cloned",
-  prefix: "art",
+  prefix: "off",
   nodes: [{ id: "myth-ts01", kind: "teamserver", overlay: { c2: "mythic" },
     position: { x: 10, y: 10 } }],
   edges: [],
 };
 
 const summary = (over) => ({
-  id: "g", name: "Topology", mode: "artie", visibility: "private",
+  id: "g", name: "Topology", mode: "offense", visibility: "private",
   schema_version: "0.2.0", version: 1, owner_id: "u1",
   is_blueprint: false, editable: true, ...over,
 });
@@ -160,7 +160,7 @@ describe("browsing", () => {
       // URL names it so a reload comes back to it.
       await waitFor(() =>
         expect(backend.calls.some((c) => c.url.includes("/clone"))).toBe(true));
-      expect(await screen.findByText("art-myth-ts01")).toBeTruthy();
+      expect(await screen.findByText("off-myth-ts01")).toBeTruthy();
       await waitFor(() => expect(window.location.search).toMatch(/topology=c\d+/));
       expect(screen.queryByRole("dialog", { name: "Library" })).toBeNull();
     });

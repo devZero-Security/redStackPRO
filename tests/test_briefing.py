@@ -33,8 +33,8 @@ def test_briefing_covers_boxes_accounts_users_trusts_and_siem():
     assert "/guacamole" in md
     assert "terraform output -raw lab_password" in md
     # Addresses are tokens tf_inventory fills after apply.
-    assert "<<tf:hvn-jumpbox:public_address>>" in md
-    assert "<<tf:hvn-kingslanding:private_address>>" in md
+    assert "<<tf:def-jumpbox:public_address>>" in md
+    assert "<<tf:def-kingslanding:private_address>>" in md
     # The lab's substance: a controller, a domain, a user from the cast, a trust,
     # and the ACL attack chain.
     assert "Domain Controller" in md
@@ -71,22 +71,22 @@ def test_briefing_states_the_password_the_dc_role_actually_seeds():
 
 
 def test_briefing_filename_is_mode_specific():
-    # A haven range emits HAVEN-BRIEFING.md; an artie stack emits ARTIE-BRIEFING.md.
+    # A defense range emits DEFENSE-BRIEFING.md; an offense stack emits OFFENSE-BRIEFING.md.
     # The old fixed RANGE-BRIEFING.md name is gone from both.
     files = compile_topology(_goad(), Registry(), provider="aws")
-    assert "HAVEN-BRIEFING.md" in files
-    assert "Range Briefing" in files["HAVEN-BRIEFING.md"]
+    assert "DEFENSE-BRIEFING.md" in files
+    assert "Range Briefing" in files["DEFENSE-BRIEFING.md"]
     assert "RANGE-BRIEFING.md" not in files
 
     redstack = load(ROOT / "frontend/public/redstack.json")
     ops_files = compile_topology(redstack, Registry(), provider="aws")
-    assert "ARTIE-BRIEFING.md" in ops_files
-    assert "HAVEN-BRIEFING.md" not in ops_files
+    assert "OFFENSE-BRIEFING.md" in ops_files
+    assert "DEFENSE-BRIEFING.md" not in ops_files
 
 
-# -- the artie operators / VPN access section (vpn-multiuser-spec)
+# -- the offense operators / VPN access section (vpn-multiuser-spec)
 
-def _artie_with_operators(access_mode=None, operators=None, **vpn):
+def _offense_with_operators(access_mode=None, operators=None, **vpn):
     doc = json.loads(
         (ROOT / "frontend/public/redstack.json").read_text(encoding="utf-8"))
     for n in doc["nodes"]:
@@ -101,7 +101,7 @@ def _artie_with_operators(access_mode=None, operators=None, **vpn):
 
 
 def test_briefing_lists_each_operator_and_their_wireguard_credential():
-    md = range_briefing(_artie_with_operators(
+    md = range_briefing(_offense_with_operators(
         access_mode="wireguard",
         operators=[{"handle": "alice"}, {"handle": "bob", "role": "lead"}]))
     assert "## Operators & VPN access" in md
@@ -115,7 +115,7 @@ def test_briefing_lists_each_operator_and_their_wireguard_credential():
 
 
 def test_briefing_openvpn_uses_the_custom_port_protocol_and_ovpn_extension():
-    md = range_briefing(_artie_with_operators(
+    md = range_briefing(_offense_with_operators(
         access_mode="openvpn", vpn_protocol="tcp", vpn_port=5124,
         operators=[{"handle": "carol"}]))
     assert "public_address>>:5124/tcp" in md
@@ -123,7 +123,7 @@ def test_briefing_openvpn_uses_the_custom_port_protocol_and_ovpn_extension():
 
 
 def test_briefing_omits_the_operator_section_without_vpn_or_roster():
-    """A plain artie stack (no access_mode, no operators) gets no section, the
+    """A plain offense stack (no access_mode, no operators) gets no section, the
     same as before the feature."""
-    md = range_briefing(_artie_with_operators(operators=[]))
+    md = range_briefing(_offense_with_operators(operators=[]))
     assert "## Operators & VPN access" not in md

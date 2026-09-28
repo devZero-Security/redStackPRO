@@ -82,7 +82,7 @@ SELECT e.entity_id, p
 ON CONFLICT DO NOTHING;
 {% endfor %}
 
--- Per-operator accounts (the artie multi-user roster). Each declared operator
+-- Per-operator accounts (the offense multi-user roster). Each declared operator
 -- gets its own portal login on the shared lab password; per-user passwords are
 -- an Enterprise concern (ADR 0056). No system permissions: an operator drives
 -- the range, it does not administer the portal. The connection grant below is

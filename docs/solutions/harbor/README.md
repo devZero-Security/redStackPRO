@@ -43,7 +43,7 @@ backends declare fewer network capabilities (`src/redstackpro/schema/registry/pr
 | host firewall | per-VM firewall | proxmox has one, esxi has none (layer-2 VLAN isolation only) |
 
 - **Range access.** On cloud the jumpbox has an allocated (per-deploy, ephemeral)
-  public address, read from `HAVEN-BRIEFING.md`. On on-prem there is no allocated
+  public address, read from `DEFENSE-BRIEFING.md`. On on-prem there is no allocated
   external IP: reach the jumpbox over the operator's own network or VPN.
 - **Name resolution.** On cloud the range can resolve through managed private DNS.
   On on-prem there is no managed zone, so populate static hosts entries from the
@@ -91,7 +91,7 @@ App Maintainers  --ForceChangePassword-->       eric.vance        (child DA)
 
 ## The chain
 
-Read passwords and exact names from this deploy's `HAVEN-BRIEFING.md`; the names
+Read passwords and exact names from this deploy's `DEFENSE-BRIEFING.md`; the names
 below are the template's. Steps are numbered from 0, the order patient zero
 actually meets them.
 

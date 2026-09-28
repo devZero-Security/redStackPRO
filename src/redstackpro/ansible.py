@@ -556,7 +556,7 @@ class AnsiblePlan:
         return dict(sorted(out.items()))
 
     def _is_range(self):
-        return self.ctx.topology.get("mode") == "haven"
+        return self.ctx.topology.get("mode") == "defense"
 
     def _provider_vulns(self, vulns):
         """A declared vulns list, dropping any id VULN_PROVIDERS restricts to
@@ -887,7 +887,7 @@ class AnsiblePlan:
         service task and pins the port the role listens on, so the value Terraform
         opens (plan.vpn_access) and the value Ansible binds are the same one.
 
-        Left to public mode this does nothing. A haven range ignores the fields
+        Left to public mode this does nothing. A defense range ignores the fields
         and keeps the public portal (VPN002), but the compiler honors them
         wherever they are set rather than second-guessing the mode, the same way
         plan.vpn_access does. The default port lives in the role, so vpn_port is

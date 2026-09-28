@@ -15,11 +15,11 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC = ROOT / "frontend/public"
-SCHEMA = json.loads((ROOT / "src/redstackpro/schema/topology/0.6.0.json").read_text())
+SCHEMA = json.loads((ROOT / "src/redstackpro/schema/topology/0.7.0.json").read_text())
 
 RANGE_HOST_KINDS = {"dc", "srv", "wks", "fw"}
 SIEM_EDRS = {"wazuh", "elastic"}
-MODE_PREFIX = {"artie": "art", "haven": "hvn"}
+MODE_PREFIX = {"offense": "off", "defense": "def"}
 
 
 def _templates():
@@ -61,14 +61,14 @@ def test_template_is_referentially_sound(doc):
 
 @pytest.mark.parametrize("doc", TEMPLATES)
 def test_mode_and_prefix_agree(doc):
-    mode = doc.get("mode", "artie")
+    mode = doc.get("mode", "offense")
     assert doc["prefix"] == MODE_PREFIX[mode]
 
 
 @pytest.mark.parametrize("doc", TEMPLATES)
 def test_a_range_has_a_jumpbox_to_operate_it(doc):
-    if doc.get("mode") != "haven":
-        pytest.skip("artie template")
+    if doc.get("mode") != "defense":
+        pytest.skip("offense template")
     assert any(n["kind"] == "jumpbox" for n in doc["nodes"])
 
 

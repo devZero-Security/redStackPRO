@@ -12,8 +12,8 @@ display:
   color: "#1c7ed6"
 
 modes:
-  - artie
-  - haven
+  - offense
+  - defense
 
 derived:
   - name: private_address

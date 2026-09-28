@@ -12,7 +12,7 @@ display:
   color: "#3b5bdb"
 
 modes:
-  - haven
+  - defense
 
 derived:
   - name: private_address

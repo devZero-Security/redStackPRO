@@ -605,7 +605,7 @@ function DomainAcls({ node, onChange, readOnly }) {
   );
 }
 
-// The operator roster on an artie jumpbox: the people who reach the range. Each
+// The operator roster on an offense jumpbox: the people who reach the range. Each
 // becomes a portal account and, on a VPN access mode, gets a personal VPN
 // credential generated on the jumpbox at apply. Reuses the acls row styling. See
 // vpn-multiuser-spec.
@@ -1263,7 +1263,7 @@ export function Inspector({
         />
       ) : null}
 
-      {document.mode === "haven" && !readOnly && (onJoinDomain || onPlaceSubnet) ? (
+      {document.mode === "defense" && !readOnly && (onJoinDomain || onPlaceSubnet) ? (
         <RangePlacement
           node={node}
           document={document}
@@ -1272,7 +1272,7 @@ export function Inspector({
         />
       ) : null}
 
-      {node.kind === "jumpbox" && document?.mode === "artie" && !readOnly ? (
+      {node.kind === "jumpbox" && document?.mode === "offense" && !readOnly ? (
         <p className="rg-hint">
           This jumpbox can front a team. Set <code>access_mode</code> to
           wireguard or openvpn and add operators below: each gets a portal login

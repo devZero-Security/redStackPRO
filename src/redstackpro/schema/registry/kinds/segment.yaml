@@ -11,8 +11,8 @@ display:
   color: "#868e96"
 
 modes:
-  - artie
-  - haven
+  - offense
+  - defense
 
 derived:
   - name: subnet_id

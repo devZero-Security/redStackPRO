@@ -1,8 +1,8 @@
 {
-  "schema_version": "0.6.0",
-  "mode": "haven",
+  "schema_version": "0.7.0",
+  "mode": "defense",
   "name": "GOAD-Light",
-  "prefix": "hvn",
+  "prefix": "def",
   "description": "GOAD-Light: two domains in one forest, sevenkingdoms.local and its child north.sevenkingdoms.local, across three machines on 192.168.56.0/24. Drops the essos forest, its cross-forest trust, MSSQL links, and ADCS. A redStackPRO topology; a nod to the GOAD project. A read-only template.",
   "auto_stop": {
     "enabled": true,

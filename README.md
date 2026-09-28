@@ -22,8 +22,8 @@
 > Expect rough edges, and pin to a released version if you need stability.
 
 redStackPRO puts attack infrastructure and target ranges on the same canvas. The two
-canvas modes are **ARTIE** (attack infrastructure) and **HAVEN** (defense ranges); the
-export names its hand-off `ARTIE-BRIEFING.md` or `HAVEN-BRIEFING.md` to match.
+canvas modes are **Offense** (attack infrastructure) and **Defense** (defense ranges); the
+export names its hand-off `OFFENSE-BRIEFING.md` or `DEFENSE-BRIEFING.md` to match.
 
 Split horizon C2, attack infrastructure: two front doors that do not share a fate,
 Apache fronting Sliver and Nginx fronting Mythic, each redirector on its own peered
@@ -131,7 +131,7 @@ line, same compiler, same output:
 The command line defaults to GCP. Pass `--provider aws` for AWS.
 
 That writes about **200 files**: Terraform for the cloud, Ansible for everything
-that happens on the boxes, a `deploy.sh`, and a `HAVEN-BRIEFING.md` telling you the
+that happens on the boxes, a `deploy.sh`, and a `DEFENSE-BRIEFING.md` telling you the
 credentials and what is planted where. `goad-light` is a two-domain Active
 Directory range: `sevenkingdoms` and its child `north`, a parent-child trust in
 one forest, two domain controllers and a member server, plus a jumpbox.
@@ -308,7 +308,7 @@ All of them run locally except the Ansible ones, which need a Linux control node
 The rest run against a compiled export rather than against the generator,
 because a working directory a person unzips and runs is the thing being claimed:
 
-    redstackpro compile src/redstackpro/schema/topology/examples/0.6.0/redstack.json --hostname <name> -o export
+    redstackpro compile src/redstackpro/schema/topology/examples/0.7.0/redstack.json --hostname <name> -o export
     terraform -chdir=export/terraform fmt -check -recursive
     terraform -chdir=export/terraform validate
     ansible-playbook -i export/ansible/inventory.yml export/ansible/site.yml --syntax-check

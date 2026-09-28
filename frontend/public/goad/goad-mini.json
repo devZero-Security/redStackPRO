@@ -1,8 +1,8 @@
 {
-  "schema_version": "0.6.0",
-  "mode": "haven",
+  "schema_version": "0.7.0",
+  "mode": "defense",
   "name": "GOAD-Mini",
-  "prefix": "hvn",
+  "prefix": "def",
   "description": "GOAD-Mini: the smallest of the family. A single domain, sevenkingdoms.local, on one domain controller (kingslanding), with the full Lannister and Baratheon cast and the ACL escalation chain that reaches Domain Admin. A redStackPRO topology; a nod to the GOAD project. An editable baseline.",
   "auto_stop": {
     "enabled": true,

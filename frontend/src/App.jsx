@@ -163,7 +163,7 @@ function Editor() {
   // The template a loaded document came from, while its summary card is on
   // screen. Cleared when the card is dismissed, so it is not document state.
   const [summary, setSummary] = useState(null);
-  const readOnly = document.mode === "haven" && templateView;
+  const readOnly = document.mode === "defense" && templateView;
 
   // Copy the full diagnostics (recent events, document shape, environment) to the
   // clipboard, or log them if the clipboard is unavailable, so a canvas problem
@@ -211,7 +211,7 @@ function Editor() {
   useEffect(() => {
     // Range naming is deferred: the GOAD templates keep their canonical names,
     // so the auto-rename runs on ops only. See 0047.
-    if (document.mode === "haven") return;
+    if (document.mode === "defense") return;
     const { document: next, renamed } = retitle(document, pinned.current);
     const moved = Object.keys(renamed);
     if (moved.length === 0) return;
@@ -347,7 +347,7 @@ function Editor() {
     });
   }, [dirty, confirm]);
 
-  const resetToEmpty = useCallback((mode = "artie") => {
+  const resetToEmpty = useCallback((mode = "offense") => {
     const doc = emptyDocument(mode);
     history.reset(doc); // a new topology is a session boundary, not an undo step
     setSaved(doc);
@@ -1209,7 +1209,7 @@ function Editor() {
         // subnet and never the domain drawn on top of it. Trying domain first is
         // what lets a host dropped inside a domain box land in the domain.
         if (kinds[dragged.id] === "network") return current;
-        const rangeHost = current.mode === "haven" && isRangeHost(kinds[dragged.id]);
+        const rangeHost = current.mode === "defense" && isRangeHost(kinds[dragged.id]);
         const wantsKinds =
           kinds[dragged.id] === "segment" ? ["network"] : rangeHost ? ["domain", "segment"] : ["segment"];
         let container;
@@ -1406,7 +1406,7 @@ function Editor() {
       // A GOAD range loads locked so the baseline stays intact while you explore
       // it; unlock (or add an extension) to customise. Ops templates open
       // editable. See 0047 and 0051.
-      setTemplateView(doc.mode === "haven");
+      setTemplateView(doc.mode === "defense");
       setSaved(emptyDocument(doc.mode));
       setDomainsText((doc.domains || []).join(", "));
       setTopology(null);
@@ -1459,7 +1459,7 @@ function Editor() {
   const warnings = findings.filter((f) => f.severity === "warning");
 
   return (
-    <div className={`rg-app rg-mode-${document.mode || "artie"}`}>
+    <div className={`rg-app rg-mode-${document.mode || "offense"}`}>
       <header className="rg-header">
         <span className="rg-brand">
           red<b>Stack</b><span className="rg-brand-pro">PRO</span>
@@ -1468,22 +1468,22 @@ function Editor() {
           <button
             type="button"
             role="tab"
-            aria-selected={document.mode !== "haven"}
-            className={`rg-mode-seg rg-mode-artie ${document.mode !== "haven" ? "is-active" : ""}`}
-            title="ARTIE: Automated Red Team Infrastructure Environment (C2, redirectors, operators)"
-            onClick={() => chooseMode("artie")}
+            aria-selected={document.mode !== "defense"}
+            className={`rg-mode-seg rg-mode-offense ${document.mode !== "defense" ? "is-active" : ""}`}
+            title="Offense: attack infrastructure (C2, redirectors, operators)"
+            onClick={() => chooseMode("offense")}
           >
-            Offense (ARTIE)
+            Offense
           </button>
           <button
             type="button"
             role="tab"
-            aria-selected={document.mode === "haven"}
-            className={`rg-mode-seg rg-mode-haven ${document.mode === "haven" ? "is-active" : ""}`}
-            title="HAVEN: Hardened Adversarial Validation Environment Network (AD forests, hosts, SIEM)"
-            onClick={() => chooseMode("haven")}
+            aria-selected={document.mode === "defense"}
+            className={`rg-mode-seg rg-mode-defense ${document.mode === "defense" ? "is-active" : ""}`}
+            title="Defense: defense ranges (AD forests, hosts, SIEM)"
+            onClick={() => chooseMode("defense")}
           >
-            Defense (HAVEN)
+            Defense
           </button>
         </div>
         <TopologyPicker
@@ -1505,13 +1505,13 @@ function Editor() {
         />
         <label
           className="rg-prefix"
-          title="Prepended to every host's name, e.g. art for ARTIE or hvn for HAVEN"
+          title="Prepended to every host's name, e.g. off for Offense or def for Defense"
         >
           prefix
           <input
             value={document.prefix}
             size={6}
-            title="Prepended to every host's name, e.g. art for ARTIE or hvn for HAVEN"
+            title="Prepended to every host's name, e.g. off for Offense or def for Defense"
             onChange={(e) =>
               history.coalesce("prefix", (current) => ({ ...current, prefix: e.target.value }))
             }
@@ -1523,7 +1523,7 @@ function Editor() {
           selectable={selectableProviders(document.mode, providers)}
           onChange={setProvider}
           title={
-            document.mode === "haven"
+            document.mode === "defense"
               ? "Deploy target. Every target listed compiles the range natively."
               : "Deploy target"
           }
@@ -1563,7 +1563,7 @@ function Editor() {
           Redo
         </button>
         <button onClick={() => setTemplatePickerOpen(true)}>Load template</button>
-        {document.mode === "haven" ? (
+        {document.mode === "defense" ? (
           <button onClick={() => setExtensionsOpen(true)} title="Add GOAD extensions">
             Extensions
           </button>
@@ -1601,7 +1601,7 @@ function Editor() {
             <section className="rg-palette-labs">
               <h3>Range templates</h3>
               <LabList
-                mode="haven"
+                mode="defense"
                 onLoad={(file) => loadDocFromUrl(`/${file}.json`)}
               />
             </section>
@@ -1694,13 +1694,8 @@ function Editor() {
             maxZoom={1.75}
             proOptions={{ hideAttribution: true }}
           >
-            <Background color={document.mode === "haven" ? "#37424e" : "#4a373b"} gap={18} />
+            <Background color={document.mode === "defense" ? "#37424e" : "#4a373b"} gap={18} />
             <Panel position="top-left" className="rg-legend">
-              <span className="rg-legend-mode">
-                {document.mode === "haven"
-                  ? "HAVEN: Hardened Adversarial Validation Environment Network"
-                  : "ARTIE: Automated Red Team Infrastructure Environment"}
-              </span>
               {legendItems(document).map((item) => (
                 <span key={item.key} className="rg-legend-item">
                   <span className="rg-legend-swatch" style={{ background: item.color }} />
@@ -1748,13 +1743,13 @@ function Editor() {
           </CanvasErrorBoundary>
           {!readOnly && document.nodes.length === 0 ? (
             <div className="rg-empty-hint">
-              <p className="rg-empty-title">Start your {document.mode === "haven" ? "range" : "topology"}</p>
+              <p className="rg-empty-title">Start your {document.mode === "defense" ? "range" : "topology"}</p>
               <p>
                 Drag a <b>Network</b> from the palette onto the canvas, then drop
                 subnets and hosts inside it.
               </p>
               <p className="rg-muted">
-                Or pick a {document.mode === "haven" ? "GOAD lab" : "template"} from the top of the palette.
+                Or pick a {document.mode === "defense" ? "GOAD lab" : "template"} from the top of the palette.
               </p>
             </div>
           ) : null}
@@ -1785,7 +1780,7 @@ function Editor() {
           document={document}
           readOnly={readOnly}
           kindLabels={kindLabels}
-          provider={document.mode === "haven" ? provider : undefined}
+          provider={document.mode === "defense" ? provider : undefined}
           findings={selection ? findingsFor(selection.id) : []}
           onOverlayChange={(id, overlay) =>
             history.coalesce(`overlay:${id}`, (current) => updateOverlay(current, id, overlay))

@@ -1,8 +1,8 @@
 {
-  "schema_version": "0.6.0",
-  "mode": "haven",
+  "schema_version": "0.7.0",
+  "mode": "defense",
   "name": "Harbor two domain forest",
-  "prefix": "hvn",
+  "prefix": "def",
   "description": "A small corporate forest rather than a transcription of someone else's lab: a root domain that holds the enterprise admins and a child domain that holds the people who actually work there, joined by the parent child trust every real forest has. The attack path is the ordinary one, which is why it is worth defending: a phished workstation user finds a kerberoastable service account, that account can write to a group it should not, the group owns a delegation-trusted application server, and the child domain admin it yields walks the trust into the root. Four Windows hosts and a jumpbox, one flat subnet, on a private range that is nothing like 192.168.56 so nothing in the pipeline can be quietly assuming it.",
   "auto_stop": {
     "enabled": true,

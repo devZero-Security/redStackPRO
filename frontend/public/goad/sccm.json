@@ -1,8 +1,8 @@
 {
-  "schema_version": "0.6.0",
-  "mode": "haven",
+  "schema_version": "0.7.0",
+  "mode": "defense",
   "name": "SCCM",
-  "prefix": "hvn",
+  "prefix": "def",
   "auto_stop": {
     "enabled": true,
     "after_hours": 8,

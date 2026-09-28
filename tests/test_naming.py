@@ -142,6 +142,25 @@ def test_migration_moves_0_1_0_forward():
     assert {n["id"] for n in new["nodes"]} >= {"myth-ts01", "apache-rd01", "c2-sub01"}
 
 
+def test_migration_0_6_0_to_0_7_0_renames_the_mode_values():
+    from redstackpro.migrate import _0_6_0_to_0_7_0
+    base = {"schema_version": "0.6.0", "name": "t", "prefix": "off",
+            "nodes": [], "edges": []}
+
+    off = _0_6_0_to_0_7_0(dict(base, mode="artie"))
+    assert off["schema_version"] == "0.7.0"
+    assert off["mode"] == "offense"
+
+    dfn = _0_6_0_to_0_7_0(dict(base, mode="haven"))
+    assert dfn["schema_version"] == "0.7.0"
+    assert dfn["mode"] == "defense"
+
+    # No mode: only the version bumps, nothing is invented.
+    none = _0_6_0_to_0_7_0(dict(base))
+    assert none["schema_version"] == "0.7.0"
+    assert "mode" not in none
+
+
 def test_migration_rewrites_edge_endpoints():
     old = json.loads(
         (ROOT / "src/redstackpro/schema/topology/examples/0.1.0/minimal.json").read_text())
@@ -182,17 +201,17 @@ def test_every_kind_has_display_metadata(registry):
 
 
 def test_palette_groups_by_declaart_group(registry):
-    palette = registry.palette("artie")
+    palette = registry.palette("offense")
     assert set(palette) == {
         "topology", "redirector", "teamservers", "management", "operator"}
     kinds = {e["kind"] for group in palette.values() for e in group}
     ops_kinds = {k for k, s in registry.kinds.items()
-                 if "artie" in s.get("modes", ["artie"])}
+                 if "offense" in s.get("modes", ["offense"])}
     assert kinds == ops_kinds
 
 
 def test_range_palette_carries_the_range_kinds(registry):
-    palette = registry.palette("haven")
+    palette = registry.palette("defense")
     kinds = {e["kind"] for group in palette.values() for e in group}
     # the range-specific kinds, plus the shared containers
     assert {"domain", "dc", "srv", "wks", "fw"} <= kinds
@@ -206,8 +225,8 @@ def test_platform_account_is_one_name_per_canvas_by_mode():
     """The single platform account (P1.7): blueop on a defensive range, redop on
     an offensive ops platform, redop as the conservative default for an unset or
     unknown mode."""
-    assert platform_account("haven") == "blueop"
-    assert platform_account("artie") == "redop"
+    assert platform_account("defense") == "blueop"
+    assert platform_account("offense") == "redop"
     assert platform_account(None) == "redop"
     assert platform_account("anything-else") == "redop"
 

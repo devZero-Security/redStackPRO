@@ -41,7 +41,7 @@ test("containers precede their children", () => {
 
 test("the drawn name is the prefix plus the id", () => {
   const { nodes } = toFlow(doc, palette);
-  assert.equal(nodes.find((n) => n.id === "myth-ts01").data.name, "art-myth-ts01");
+  assert.equal(nodes.find((n) => n.id === "myth-ts01").data.name, "off-myth-ts01");
 });
 
 test("manages is an annotation on the node, not a drawn line", () => {
@@ -238,7 +238,7 @@ test("a range jumpbox and SIEM nest in the subnet, not a domain", () => {
 });
 
 test("a host preset arrives with its role and services filled in", () => {
-  const empty = { schema_version: "0.6.0", mode: "haven", prefix: "hvn", nodes: [], edges: [] };
+  const empty = { schema_version: "0.7.0", mode: "defense", prefix: "def", nodes: [], edges: [] };
   const sql = HOST_PRESETS.find((p) => p.key === "sql");
   const next = addHostPreset(empty, sql, { x: 0, y: 0 });
   assert.equal(next.nodes.length, 1);
