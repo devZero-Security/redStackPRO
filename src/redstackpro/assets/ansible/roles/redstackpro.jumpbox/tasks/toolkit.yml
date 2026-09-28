@@ -3,7 +3,7 @@
 # assumed-breach foothold and patient zero ([[range-access-model]]), so the operator
 # works FROM here: this is the box the GOAD solution runs from. Arming it is what
 # makes the solution zero-touch. Opt out with `offensive_toolkit: false` on the
-# jumpbox overlay; ops-mode bastions never get it, since there the tooling belongs
+# jumpbox overlay; offense bastions never get it, since there the tooling belongs
 # on the kali/operator box rather than the perimeter host.
 #
 # Nothing here opens a port, so this does not widen the jumpbox's internet surface

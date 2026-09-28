@@ -18,7 +18,7 @@ server {
 
 {% if redstackpro_collector_address | default('') | length > 0 %}
     # The collector's dashboard, reached through the portal rather than a second
-    # public door. The collector holds no public address and in ops mode the
+    # public door. The collector holds no public address and in offense mode the
     # plan's networks are internally open, so this hop is jumpbox to collector on
     # a private address and the internet never sees 5601. Dashboards is
     # configured with the matching server.basePath, without which every asset

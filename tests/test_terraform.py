@@ -227,7 +227,7 @@ def test_redirector_and_jumpbox_reserve_a_static_ip(redstack):
     """The redirector and jumpbox reserve a static external IP so a stop/start
     keeps the same public address: the redirector's C2 callback domain must keep
     resolving and the jumpbox is the Guacamole/SSH entry point. Private hosts do
-    not reserve one. See the ephemeral-IP finding."""
+    not reserve one."""
     mods = modules(redstack)
     assert mods["off_apache_rd01"]["reserve_ip"] in (True, "true")   # redirector
     assert mods["off_jump_bx01"]["reserve_ip"] in (True, "true")     # jumpbox
@@ -249,7 +249,7 @@ def test_offense_windows_operator_takes_the_setup_at_boot(redstack):
     metadata key and a hosts block naming the range. No other host does, and the
     hosts block names each host by its canvas id plus the conventional alias the
     MobaXterm sessions use (mythic/sliver/adaptix/redirector/kali/guac). See
-    operator_setup.ps1 and the /etc/hosts PAI item."""
+    operator_setup.ps1."""
     mods = modules(redstack)
     winop = mods["off_win_op01"]
     assert winop["operator_setup"] is True
@@ -529,7 +529,7 @@ def test_parallel_chains_rules_land_in_the_right_networks(parallel_chains):
 # In a VPN access mode the jumpbox exposes only its VPN listen port to the
 # operators and management (ssh plus the Guacamole portal) rides the tunnel, so
 # the public 22/443 rules are gone. In public mode nothing changes. See
-# vpn-multiuser-spec and plan.vpn_access.
+# plan.vpn_access.
 
 def _vpn_jumpbox(redstack, **access):
     """A deepcopy of the offense fixture with VPN access fields on its jumpbox.
@@ -1478,8 +1478,8 @@ def test_aws_stops_the_MANAGE_with_a_schedule_and_no_lambda():
 
 
 def test_the_stop_permission_is_a_role_not_a_credential_on_a_host():
-    """The jumpbox is the range's only public box and stays credential free
-    (minimize-jumpbox-web-surface). EventBridge assumes the role itself, so no
+    """The jumpbox is the range's only public box and stays credential free.
+    EventBridge assumes the role itself, so no
     key material lands anywhere, and the policy names one action.
     """
     main = files(_stopping_MANAGE_doc(), provider="aws")["terraform/main.tf"]

@@ -3,8 +3,7 @@
 # detections need. A default range ships none of this (quieter, GOAD parity), so
 # a Wazuh/ELK agent sees only the native Security log and is blind to
 # process/command-line and object-change activity. Opting in here installs Sysmon
-# and turns on command-line (4688) and directory-service (5136) auditing. See the
-# goad-wazuh detection page and PAI F-wazuh-telemetry.
+# and turns on command-line (4688) and directory-service (5136) auditing.
 
 - name: Enable command-line auditing (4688 with the process command line)
   ansible.windows.win_powershell:

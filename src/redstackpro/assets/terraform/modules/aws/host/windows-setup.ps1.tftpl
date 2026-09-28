@@ -40,7 +40,7 @@ Start-Service -Name TermService
 # promoted this local account becomes the domain Administrator with the same
 # password, so the connection survives the promotion. The range is an isolated
 # subnet, so the listener is self signed and the control node does not validate
-# it. See redStackPRO goad-native-recreation.
+# it.
 Set-LocalUser -Name "Administrator" -Password $pass
 Enable-LocalUser -Name "Administrator"
 
@@ -78,7 +78,7 @@ if (-not (Get-NetFirewallRule -Name "redstackpro-winrm-https" -ErrorAction Silen
 # brings the payload to ~5.3KB and the whole thing to ~10KB. GCP carries the
 # same script in a metadata key with a 256KB budget and needs no such trick, so
 # this compression is an AWS-local concern.
-# See operator_setup.ps1 and the /etc/hosts PAI item.
+# See operator_setup.ps1.
 $rspDone = "C:\Windows\Temp\operator-setup.done"
 if (-not (Test-Path $rspDone)) {
     try {

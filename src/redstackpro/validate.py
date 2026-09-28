@@ -49,7 +49,7 @@ class Context:
         # machine: it becomes AD configuration on a controller, never a host in
         # the inventory. Excluding it here keeps it out of every host view at
         # once, so the Ansible groups, host_vars, and play order never try to
-        # provision it. See goad-native-recreation.
+        # provision it.
         return self.kind(node_id) not in ("network", "segment", "domain", None)
 
     def hosts(self):
@@ -440,7 +440,7 @@ def car008_ui_c2_needs_gui_operator(ctx):
     over a Guacamole RDP tile), so a topology whose teamserver runs Mythic or
     Adaptix but has no Windows operator and no desktop Kali operator has no way to
     drive the C2 as shipped. A warning, not an error: the range still deploys, the
-    operator just cannot open the UI. See minimal-uses-sliver."""
+    operator just cannot open the UI."""
     ui_c2 = {"mythic", "adaptix"}
     driven = [n for n in ctx.of_kind("teamserver")
               if ((n.get("overlay") or {}).get("c2")) in ui_c2]
@@ -529,8 +529,7 @@ def net003_cross_network_fronts(ctx):
 def net004_internal_ip_outside_segment(ctx):
     """A host's pinned internal_ip must fall inside the cidr of the segment it
     sits in, or the address terraform is told to assign is not even reachable
-    from its own subnet at apply time. See goad-fidelity-build (P1.6, locking
-    range internal IPs to GOAD's canonical octets)."""
+    from its own subnet at apply time."""
     for n in ctx.hosts():
         ip = ctx.overlay(n["id"], "internal_ip")
         if not ip:
@@ -723,7 +722,7 @@ def rdr002_decoy_video_without_a_pack(ctx):
 
 # The multi-user VPN access layer: how operators reach an offense range and who
 # they are. Fields live on the jumpbox overlay (access_mode, vpn_port,
-# vpn_protocol, operators). See vpn-multiuser-spec.
+# vpn_protocol, operators).
 
 def _jumpbox_access(node):
     ov = node.get("overlay") or {}
@@ -930,7 +929,7 @@ def exp001_underexposed(ctx):
     """
     # A range is an isolated lab: its jumpbox sits on a local subnet and is
     # reached through the provider, not a public address. The exposure rules are
-    # an ops concept, so they do not apply to range mode.
+    # an offense concept, so they do not apply to defense mode.
     if ctx.topology.get("mode") == "defense":
         return
     for n in ctx.hosts():
@@ -982,7 +981,7 @@ def exp005_address_the_segment_forbids(ctx):
     unreachable, which is the failure the ceiling was meant to prevent rather
     than introduce.
     """
-    # Range mode is an isolated lab; exposure is an ops concept. See exp001.
+    # Defense mode is an isolated lab; exposure is an offense concept. See exp001.
     if ctx.topology.get("mode") == "defense":
         return
     for n in ctx.hosts():
@@ -1175,9 +1174,8 @@ def rng003_self_trust(ctx):
 # Techniques that are properties of a domain ACCOUNT, not tasks a host applies.
 # They are realized by flagging a user (users[].flaws), so declaring them in a
 # host's overlay.vulns plants nothing: the host role has no task for them and the
-# dc role only reads the user flaws. goad-wazuh shipped kerberoasting and
-# weak_password on hosts this way, and the lab's headline detections silently
-# never deployed. Keep this set in step with the catalog's user:* goad mappings.
+# dc role only reads the user flaws. Keep this set in step with the catalog's
+# user:* goad mappings.
 USER_FLAW_VULNS = {
     "kerberoasting", "asreproasting", "weak_password", "password_in_description",
 }
@@ -1187,7 +1185,7 @@ def rng009_user_flaw_as_host_vuln(ctx):
     """A host declares a technique that only exists as a user flaw. It is a
     no-op there and plants nothing; the technique must be set on a domain user's
     flaws instead. Caught as a warning because the run still succeeds, just
-    without the attack the author intended. See PAI F-dual-modeling."""
+    without the attack the author intended."""
     if ctx.topology.get("mode") != "defense":
         return
     for n in ctx.hosts():

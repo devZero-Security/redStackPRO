@@ -147,7 +147,7 @@ export const VULN_LABEL = Object.fromEntries(
 // tests/test_vuln_providers_sync.py) filters a host's declared vulns by this
 // same map before planting them, so a template can declare an id everywhere and
 // have it silently no-op on a provider it cannot land on; the canvas greys the
-// checkbox the same way. See current-activity-list (provider-aware toggles).
+// checkbox the same way.
 export const VULN_PROVIDERS = Object.fromEntries(
   VULN_CATALOG.flatMap((g) => g.items)
     .filter((i) => i.providers)

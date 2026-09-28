@@ -1,7 +1,7 @@
 # {{ ansible_managed }}
 #
 # Bound to every interface, which is safe here and only here: the collector holds
-# no public address (EXP002 forbids one) and in ops mode the plan's networks are
+# no public address (EXP002 forbids one) and in offense mode the plan's networks are
 # internally open, so the reachable set is the operator's own stack. The operator
 # arrives through the portal on the jumpbox, which proxies this under /dashboards.
 server.host: "0.0.0.0"

@@ -33,8 +33,7 @@ def _redstackpro_version():
 # failed or broken deploy has a single artifact to attach to a GitHub issue and we
 # can see what went wrong. Secrets are scrubbed on exit so the file is safe to
 # share on a public tracker. Built here rather than inline in the template so the
-# bash keeps single braces (the template goes through str.format). See the deploy
-# log PAI item and 0022.
+# bash keeps single braces (the template goes through str.format). See 0022.
 _LOGGING_SETUP = r'''
 mkdir -p logs
 LOG="logs/deploy-$(date -u +%Y%m%d-%H%M%SZ).log"
@@ -370,7 +369,7 @@ _TEMPLATE = r"""#!/usr/bin/env bash
 # ships with Git for Windows, macOS and any Linux, so this runs the same way on
 # all three. On Windows run it from Git Bash, or use deploy.ps1 beside this file.
 #
-#   1. cd terraform && fill terraform.tfvars, then cd ..
+#   1. fill deploy.tfvars in this directory
 #   2. bash deploy.sh
 #
 # Re-running is safe: Terraform reconciles and the playbook is idempotent.
@@ -388,7 +387,7 @@ for t in terraform ssh tar; do
 done
 
 {find_python}
-# The PRIVATE key whose public half is in terraform/terraform.tfvars
+# The PRIVATE key whose public half is in deploy.tfvars
 # (ssh_public_key), looked for where a person would expect it:
 #   1. $REDSTACKPRO_SSH_KEY, when you set it
 #   2. a key you dropped in keys/, beside this script
@@ -424,7 +423,7 @@ SSH="ssh -i $KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
   echo
   echo "  make one:  ssh-keygen -t ed25519 -f keys/id_ed25519 -N \"\""
   echo "  then put the contents of keys/id_ed25519.pub into"
-  echo "  terraform/terraform.tfvars as ssh_public_key, and re-run."
+  echo "  deploy.tfvars as ssh_public_key, and re-run."
   exit 1
 }}
 

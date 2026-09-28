@@ -3,8 +3,7 @@
 A defend range compiles through the same native pipeline as an attack range, not
 a GOAD package: the controllers, domains, trusts, groups, and users are stood up
 by redStackPRO's own roles over psrp. These assert the parts that exist nowhere
-else and would fail silently at deploy if they drifted. See
-goad-native-recreation.
+else and would fail silently at deploy if they drifted.
 """
 
 import json

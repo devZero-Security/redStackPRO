@@ -2,8 +2,7 @@
 `providers` field in frontend/src/vulns.js (what greys the checkbox on the
 canvas) and redstackpro.ansible.VULN_PROVIDERS (what the compiler actually
 filters at generate time). A one-sided edit would silently desync what the
-canvas promises from what a compile plants. See current-activity-list
-(provider-aware toggles) and goad-fidelity-build.
+canvas promises from what a compile plants.
 """
 
 import json

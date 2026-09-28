@@ -68,6 +68,6 @@ def slug_of(node_id):
 
 
 def too_long(prefix, node_id):
-    """Windows NetBIOS truncates at 15. Range mode will hit this before ops
+    """Windows NetBIOS truncates at 15. Defense mode will hit this before offense
     mode does, but the limit is the same either way."""
     return len(compose(prefix, node_id)) > NETBIOS_LIMIT

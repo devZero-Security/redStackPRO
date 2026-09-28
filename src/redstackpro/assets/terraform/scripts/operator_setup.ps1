@@ -3,7 +3,7 @@
 # and run once at first boot on the offense Windows operator only. It installs
 # the operator kit and pre-configures MobaXterm and the browser, so the box is a
 # ready operator workstation the moment someone RDPs in -- a faithful port of the
-# original redStack windows_setup. See PAI / range-access-model.
+# original redStack windows_setup.
 #
 # Two things are passed in through the environment by the caller (the boot
 # script), so this file stays static:

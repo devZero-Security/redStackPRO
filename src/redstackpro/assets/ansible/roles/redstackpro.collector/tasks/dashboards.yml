@@ -7,7 +7,7 @@
 # first login rather than after an afternoon of building panels.
 #
 # It binds on the private address only. The collector has no public address --
-# EXP002 forbids one -- and in ops mode every network in the plan is internally
+# EXP002 forbids one -- and in offense mode every network in the plan is internally
 # open (d6a00cc), so the jumpbox reaches it without a rule of its own and the
 # internet cannot reach it at all. The operator arrives through the portal's 443,
 # which is the one public door the range already had.

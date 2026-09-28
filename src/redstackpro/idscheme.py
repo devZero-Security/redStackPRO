@@ -25,7 +25,7 @@ KIND_TAG = {
     "jumpbox": "bx",
     "redirector": "rd",
     "collector": "log",
-    # range mode (0047)
+    # defense mode (0047)
     "domain": "dom",
     "dc": "dc",
     "srv": "srv",
@@ -57,7 +57,7 @@ SUBTYPE = {
         "elasticsearch": "elk",
         "splunk": "splk",
     }),
-    # range mode: a member server reads its role and a SIEM its product, so a
+    # defense mode: a member server reads its role and a SIEM its product, so a
     # dropped host names itself the way a Red Infra box does (sql-srv01,
     # wazuh-siem01), not a bare srv01.
     "srv": ("role", {

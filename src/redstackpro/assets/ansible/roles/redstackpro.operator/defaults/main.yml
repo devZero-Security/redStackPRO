@@ -91,7 +91,7 @@ redstackpro_operator_git_tools:
 # is the operator's SSH client to every lab box, VS Code the editor. NOTE: the
 # offense win-op01 self-provisions at boot and has no WinRM, so this list only
 # reaches a Windows operator that IS managed (a range operator, or win-op once it
-# gets a WinRM listener); the boot-script port covers win-op01 itself. See PAI.
+# gets a WinRM listener); the boot-script port covers win-op01 itself.
 redstackpro_operator_windows_packages:
   - mobaxterm
   - vscode

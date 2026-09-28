@@ -59,7 +59,7 @@ WINDOWS_CONNECTION = {
 # local Administrator into the domain Administrator with the same password, so
 # the connection survives the promotion. The password is never written into the
 # export: it is supplied at run time from the terraform output, read from the
-# environment. See goad-native-recreation.
+# environment.
 RANGE_WINDOWS_CONNECTION = {
     "ansible_connection": "psrp",
     "ansible_port": 5986,
@@ -93,8 +93,7 @@ class GenerationError(Exception):
 # before planting them, so a template can declare an id on every host and have
 # it silently no-op on a provider it cannot land on -- the same id the canvas
 # greys out there. Kept in sync with the `providers` field in
-# frontend/src/vulns.js by tests/test_vuln_providers_sync.py. See
-# current-activity-list (provider-aware toggles) and goad-fidelity-build.
+# frontend/src/vulns.js by tests/test_vuln_providers_sync.py.
 VULN_PROVIDERS = {
     # The relay payoff (mitm6/WPAD, or coercion into a CVE-2019-1040-vulnerable
     # relay) needs a real L2 broadcast/multicast domain. Proxmox/ESXi put the
@@ -366,7 +365,7 @@ class AnsiblePlan:
                 # hosts-file play can give each host a friendly alias -- the id
                 # the user set (and can rename) on the canvas, not a hardcoded
                 # mythic/sliver. AD hosts also get an FQDN below. See the
-                # redstackpro.hosts role and range-access-model.
+                # redstackpro.hosts role.
                 "redstackpro_host_shortname": nid,
                 # The host's PRIVATE address, for the /etc/hosts block -- NOT
                 # ansible_host, which is the public address for a jumpbox or
@@ -388,7 +387,7 @@ class AnsiblePlan:
             # list and pins the listen port so Ansible and Terraform agree on it.
             # Per-operator peers and client credentials are generated at apply from
             # redstackpro_jumpbox_operators, which the overlay already emitted. See
-            # vpn-multiuser-spec and plan.vpn_access.
+            # plan.vpn_access.
             if node["kind"] == "jumpbox":
                 self._jumpbox_vpn_vars(node, vars_)
 
@@ -397,7 +396,7 @@ class AnsiblePlan:
             # member (the dc role seeds the domain side). Note the local account
             # no longer opens an SSH session -- sshd here is key-only as of
             # 2026-09-10 -- but the account is still what makes the breach real on
-            # this host. See range-access-model and P2.5.
+            # this host.
             if self._is_range() and node["kind"] == "jumpbox":
                 breach = [u["username"] for u in self._assumed_breach_users()]
                 if breach:
@@ -422,9 +421,9 @@ class AnsiblePlan:
                 # And it carries the offensive toolchain by default, because in a
                 # range this host IS the assumed-breach foothold the solution is
                 # run from: leaving it bare would mean every operator hand-installs
-                # the same tools before step one. An ops-mode bastion gets nothing,
+                # the same tools before step one. An offense bastion gets nothing,
                 # since there the tooling belongs on the operator box. The overlay
-                # wins if it says either way. Opens no ports. See PZ-2.
+                # wins if it says either way. Opens no ports.
                 vars_.setdefault("redstackpro_jumpbox_offensive_toolkit", True)
 
             # A redirector carries two things for its cover site, and the split
@@ -498,8 +497,7 @@ class AnsiblePlan:
                 # anyway would look like a management path that works. See 0019.
                 # A range's Windows host is provisioned over psrp as the local
                 # Administrator; an ops range's Windows box self-provisions and
-                # is only ever reached by the winrm_ca bootstrap. See
-                # goad-native-recreation.
+                # is only ever reached by the winrm_ca bootstrap.
                 vars_.update(RANGE_WINDOWS_CONNECTION if self._is_range()
                              else WINDOWS_CONNECTION)
                 # A Windows operator is internal and reached at its private
@@ -528,7 +526,7 @@ class AnsiblePlan:
                 # it by fully-qualified name as well as by its canvas alias
                 # (redstackpro_host_shortname, set for every host above). The
                 # address is a placeholder resolved at apply, carried in
-                # ansible_host; here we only need the name. See range-access-model.
+                # ansible_host; here we only need the name.
                 fqdn = self._host_fqdn(node)
                 if fqdn:
                     vars_["redstackpro_host_fqdn"] = fqdn
@@ -581,7 +579,7 @@ class AnsiblePlan:
         """Every domain user flagged assumed_breach: the range's patient-zero
         foothold identities. Each is a low-priv domain user (seeded by the dc
         role) the jumpbox also creates as a local admin so an operator can SSH in
-        as it. See range-access-model and P2.5."""
+        as it."""
         out = []
         for node in self.ctx.nodes.values():
             if node.get("kind") != "domain":
@@ -956,7 +954,6 @@ class AnsiblePlan:
             "{{ lookup('env', 'REDSTACKPRO_LAB_PASSWORD') }}"
         if self._is_range():
             # The account the range's Windows hosts are provisioned as.
-            # See goad-native-recreation.
             all_["redstackpro_range_admin_user"] = "Administrator"
             # Per-user passwords, for a lab that seeds real per-account
             # credentials (GOAD's documented passwords). A task that logs on as,
@@ -986,7 +983,7 @@ class AnsiblePlan:
             # differ by platform branch on this rather than sharing one path, so
             # a fix proven on one provider cannot regress another. Defaults to
             # "generic" when the compile did not name a provider. See
-            # goad-native-recreation and the dc role's promotion branch.
+            # the dc role's promotion branch.
             all_["redstackpro_platform"] = self.provider or "generic"
             # The SIEM addresses a Windows host's agents report to. A host reports
             # to every SIEM box the range has, so this maps each SIEM box's
@@ -1281,8 +1278,7 @@ def _render_site(plan):
         # (the account, the password, and RDP are set at first boot), so a group
         # that holds one excludes it from the play. A range inverts this: its
         # Windows hosts are the domain controllers and members the play exists to
-        # provision, so they stay in and are driven over psrp. See 0019, 0022 and
-        # goad-native-recreation.
+        # provision, so they stay in and are driven over psrp. See 0019, 0022.
         host_pattern = group
         if group_windows and not range_mode:
             host_pattern = "%s:!windows" % group
@@ -1377,7 +1373,7 @@ def _render_site(plan):
     # self-provisions at boot), so it is NOT an ansible recipient -- its hosts
     # block rides the boot script instead (operator_setup.ps1 / RSP_HOSTS). That
     # is why the Windows play is range-only: only a range's Windows hosts are
-    # reachable over psrp. See range-access-model and the /etc/hosts PAI item.
+    # reachable over psrp.
     ad_groups = [g for g in ("domain_controllers", "servers", "workstations")
                  if g in plan.groups]
     ad_hosts = set().union(*(set(plan.groups[g]) for g in ad_groups)) \

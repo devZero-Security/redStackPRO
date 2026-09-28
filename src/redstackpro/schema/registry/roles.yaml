@@ -121,7 +121,7 @@ roles:
         target: network
     injects: []
 
-  # Range mode (0047, goad-native-recreation). Joins is domain membership;
+  # Defense mode (0047, goad-native-recreation). Joins is domain membership;
   # trusts is between domains. A joins edge carries the domain's identity onto
   # the joining host: a controller learns the domain it anchors, a member learns
   # the domain it joins. Both are overlay fields on the domain, known at compile

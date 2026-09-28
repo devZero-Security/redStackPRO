@@ -200,7 +200,7 @@ resource "azurerm_virtual_machine_extension" "winrm" {
 # is either a range Windows box or the ops operator, never both), so the VM never
 # carries two CustomScript extensions. The script is base64 (it uses PowerShell
 # here-strings), RSP_HOSTS names the range, and RSP_OPERATOR is the account whose
-# profile the kit lands in. See operator_setup.ps1 and the /etc/hosts PAI item.
+# profile the kit lands in. See operator_setup.ps1.
 resource "azurerm_virtual_machine_extension" "operator_setup" {
   count                = (var.windows && var.operator_setup) ? 1 : 0
   name                 = "redstackpro-operator-setup"
