@@ -23,6 +23,15 @@
 # that needs no relaxation at all (verified live on the same host). That is a
 # major version bump with its own configuration consequences, so it is a
 # deliberate decision rather than a fix smuggled in beside this one.
+# The back-ends directory is not present on a bare trixie image, and copy does
+# not create parent directories, so create it first (found live, the copy failed
+# with "Destination directory /etc/crypto-policies/back-ends does not exist").
+- name: Ensure the crypto-policies back-ends directory exists
+  ansible.builtin.file:
+    path: /etc/crypto-policies/back-ends
+    state: directory
+    mode: "0755"
+
 - name: Let apt verify a repository whose key is bound with SHA-1
   ansible.builtin.copy:
     dest: /etc/crypto-policies/back-ends/sequoia.config
