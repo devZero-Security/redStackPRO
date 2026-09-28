@@ -274,11 +274,10 @@ function Editor() {
   // The summary card is orientation, and orientation stops being wanted the
   // moment somebody starts working, so the first edit takes it away.
   //
-  // Keyed on the document's identity rather than on `dirty`: loading a template
-  // makes the document dirty against an empty baseline immediately, so `dirty`
-  // is already true while the card is still wanted and never changes again.
-  // Every edit replaces the document object, which is the signal that fires
-  // once per change.
+  // Keyed on the document's identity rather than on `dirty`: a freshly loaded
+  // template is not dirty (it is its own baseline), so dirty cannot signal the
+  // first edit. Every edit replaces the document object, which is the signal
+  // that fires once per change.
   const summaryDocRef = useRef(null);
   useEffect(() => {
     if (summary && document !== summaryDocRef.current) setSummary(null);
@@ -1407,7 +1406,10 @@ function Editor() {
       // it; unlock (or add an extension) to customise. Ops templates open
       // editable. See 0047 and 0051.
       setTemplateView(doc.mode === "defense");
-      setSaved(emptyDocument(doc.mode));
+      // The loaded blueprint is its own clean baseline: picking one to look at is
+      // not an edit, so switching to another does not nag to discard. The first
+      // real edit flips dirty as usual, and then leaving warns.
+      setSaved(doc);
       setDomainsText((doc.domains || []).join(", "));
       setTopology(null);
       setConflict(null);
@@ -1562,7 +1564,7 @@ function Editor() {
         >
           Redo
         </button>
-        <button onClick={() => setTemplatePickerOpen(true)}>Load template</button>
+        <button onClick={() => setTemplatePickerOpen(true)}>Load blueprint</button>
         {document.mode === "defense" ? (
           <button onClick={() => setExtensionsOpen(true)} title="Add GOAD extensions">
             Extensions
@@ -1597,9 +1599,8 @@ function Editor() {
         <div className={`rg-drawer-left ${drawer === "left" ? "is-open" : ""}`}>
         {readOnly ? (
           <aside className="rg-panel rg-palette rg-readonly-note">
-            <h2>Palette</h2>
             <section className="rg-palette-labs">
-              <h3>Range templates</h3>
+              <h3>Blueprints</h3>
               <LabList
                 mode="defense"
                 onLoad={(file) => loadDocFromUrl(`/${file}.json`)}
@@ -1620,7 +1621,7 @@ function Editor() {
             presets={presetsFor(document.mode)}
             onAddPreset={(preset) => addPreset(preset)}
             labsMode={document.mode}
-            labsTitle="Templates"
+            labsTitle="Blueprints"
             onLoadLab={(file) => loadDocFromUrl(`/${file}.json`)}
           />
         )}

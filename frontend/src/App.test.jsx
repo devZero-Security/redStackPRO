@@ -229,7 +229,7 @@ describe("fresh canvas", () => {
     // There is one edition, so a fresh canvas is immediately editable rather
     // than gated behind an entry choice.
     await screen.findByRole("button", { name: "Save" });
-    expect(screen.getByRole("button", { name: "Load template" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Load blueprint" })).toBeTruthy();
     expect(screen.queryByText("Start a topology")).toBeNull();
   });
 });

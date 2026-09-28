@@ -12,10 +12,9 @@ const HIDE_GENERIC = new Set(["operator", "redirector"]);
 
 // Read from the registry, never hardcoded. A pro node kind is a file dropped
 // into schema/registry/kinds, with no change here. See 0013.
-export function Palette({ groups, onAdd, presets = [], onAddPreset, labsMode, labsTitle = "Templates", onLoadLab }) {
+export function Palette({ groups, onAdd, presets = [], onAddPreset, labsMode, labsTitle = "Blueprints", onLoadLab }) {
   return (
     <aside className="rg-panel rg-palette">
-      <h2>Palette</h2>
       {labsMode ? (
         <section className="rg-palette-labs">
           <h3>{labsTitle}</h3>

@@ -22,7 +22,7 @@ export function TemplatePicker({ mode, onPick, onDismiss }) {
         aria-label="Load a template"
         onClick={(event) => event.stopPropagation()}
       >
-        <h2>{isRange ? "Load a range template" : "Load a Red Infra template"}</h2>
+        <h2>{isRange ? "Load a Defense blueprint" : "Load an Offense blueprint"}</h2>
         <p className="rg-muted">
           {isRange
             ? "Pick a range to start from and customise it for yourself."

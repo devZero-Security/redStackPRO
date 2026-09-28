@@ -130,7 +130,7 @@ export function Library({
           {loading ? (
             <p className="rg-muted rg-loading">Loading.</p>
           ) : topologies.length === 0 ? (
-            <p className="rg-muted">Nothing saved yet. Use Load template in the toolbar to start from a shipped topology, or build one and Save it.</p>
+            <p className="rg-muted">Nothing saved yet. Use Load blueprint in the toolbar to start from a shipped topology, or build one and Save it.</p>
           ) : (
             <ul className="rg-library-list">
               {topologies.map((topology) => (
@@ -198,7 +198,7 @@ export function Library({
           {loading ? (
             <p className="rg-muted rg-loading">Loading.</p>
           ) : blueprints.length === 0 ? (
-            <p className="rg-muted">No blueprints yet. Shipped starting points are under Load template in the toolbar. Publish one of your own topologies to add it here.</p>
+            <p className="rg-muted">No blueprints yet. Shipped starting points are under Load blueprint in the toolbar. Publish one of your own topologies to add it here.</p>
           ) : (
             <ul className="rg-library-list">
               {blueprints.map((blueprint) => (
