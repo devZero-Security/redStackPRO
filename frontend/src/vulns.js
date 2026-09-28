@@ -40,7 +40,7 @@ export const VULN_CATALOG = [
     // computer (member vulns). Declaring them in a host's vulns list is a no-op
     // that plants nothing -- set the user flaw / computer vuln instead. The goad
     // key (user:spn, user:no_preauth, computer:delegation) names the real
-    // mechanism. See dracarys-fidelity-gap and PAI F-dual-modeling.
+    // mechanism.
     group: "Kerberos",
     items: [
       { id: "kerberoasting", label: "Kerberoasting", blurb: "An SPN is set on a user account, so its hash can be requested and cracked. Realized as a user flaw (kerberoastable + spns), not a host task.", goad: "user:spn" },

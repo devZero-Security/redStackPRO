@@ -111,7 +111,7 @@ export function generateUsers(count, fqdn, rng = Math.random, existing = []) {
   return users;
 }
 
-// -- user-class archetypes (P2.5)
+// -- user-class archetypes
 //
 // Ready-made user templates a person drops onto a domain with one click, so a
 // custom range gets a low-priv member, an admin, a kerberoastable service
@@ -119,7 +119,7 @@ export function generateUsers(count, fqdn, rng = Math.random, existing = []) {
 // Each builds on makeUser and pre-fills the same overlay.users fields a person
 // could set by hand (privilege, groups, flaws, assumed_breach); the DC role
 // derives a workable SPN for a kerberoastable account with no explicit spns.
-// See the P2.5 item and rangeUsers above.
+// See rangeUsers above.
 
 function svcUsername(rng, taken) {
   let candidate = `svc_${pick(rng, DEPARTMENTS).toLowerCase()}`;
