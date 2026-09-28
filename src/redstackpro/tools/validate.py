@@ -14,13 +14,14 @@ from pathlib import Path
 
 from redstackpro import Registry, validate
 from redstackpro.authoring import set_redirector_hostname
+from redstackpro.migrate import LATEST
 
 from . import _report
 
 # Resolved from the package: the shipped examples travel with the install, so the
 # default run no longer depends on the CWD being the repo root.
 EXAMPLES = str(Path(__file__).resolve().parents[1]
-               / "schema" / "topology" / "examples" / "0.6.0" / "*.json")
+               / "schema" / "topology" / "examples" / LATEST / "*.json")
 
 
 def configure(ap):
