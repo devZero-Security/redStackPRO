@@ -1,6 +1,6 @@
-# SCCM part 2 - exploit with a low user
+# SCCM Part 2 - Exploit With a Low User
 
-Adapts mayfly's SCCM LAB part 0x2. With one low privileged domain user and the
+Adapts mayfly's SCCM LAB part 0x2. With one low-privileged domain user and the
 site map from [part 1](part-01-recon-and-pxe.md), coerce the site server into
 authenticating and relay that authentication to the site database. The site
 server runs as its machine account `MECM$`, which is a sysadmin on the site

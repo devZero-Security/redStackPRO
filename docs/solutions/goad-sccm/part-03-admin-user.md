@@ -1,4 +1,4 @@
-# SCCM part 3 - admin user and post exploitation
+# SCCM Part 3 - Admin User and Post Exploitation
 
 Adapts mayfly's SCCM LAB part 0x3. Two starting points: local admin on the
 client, and a full SCCM admin account (reached in [part 2](part-02-low-user.md)).
@@ -61,7 +61,7 @@ configuration.
 
 EXEC-1 and EXEC-2. As an SCCM admin, deploy an application or a PowerShell script
 to a device collection. This is the intended management function turned into
-fleet wide code execution as SYSTEM on every targeted client.
+fleet-wide code execution as SYSTEM on every targeted client.
 
 ### Cred 5 - site database credentials
 
@@ -83,7 +83,7 @@ domain compromise entirely through SCCM.
   `192.168.56.4`. In this build that is reached via the lab password on the
   client's local administrator, or by a domain path from parts 1 and 2.
 - **Site database decrypt.** CRED-5 depends on the site storing a recoverable
-  high privilege account. Confirm what the sccm role provisions as the site
+  high-privilege account. Confirm what the sccm role provisions as the site
   account and whether it is DA grade; if not, note the ceiling.
 - **Everything through the beacon.** Per the standing mandate, prefer running
   CMPivot and script deployment through a beacon on the site server rather than

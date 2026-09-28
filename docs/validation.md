@@ -162,7 +162,7 @@ The multi-user VPN access layer, an offense concept: how operators reach the ran
 and who they are. The fields live on the jumpbox overlay: `access_mode`
 (`public`, `wireguard`, `openvpn`), `vpn_port`, `vpn_protocol` (`udp`, `tcp`),
 and `operators` (a roster of `{handle, role?}`). Credentials are generated at
-apply, never in the export. See vpn-multiuser-spec.
+apply, never in the export.
 
 - `VPN001` error. A jumpbox with `access_mode: wireguard` and
   `vpn_protocol: tcp`. WireGuard runs over udp only, so this names a listener

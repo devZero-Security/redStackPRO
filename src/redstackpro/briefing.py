@@ -116,12 +116,27 @@ def range_briefing(document, registry=None):
     # -- The access model, stated up front so the briefing reads the same on
     # every provider.
     if jump and is_offense:
+        # A redirector on an internet-exposed segment takes a public address too,
+        # so the jumpbox is not the only public host when one is present.
+        public_rdr = any(ctx.public_address(r["id"])
+                         for r in ctx.of_kind("redirector"))
+        if public_rdr:
+            intro = (
+                "This is your attack infrastructure. The jumpbox and the "
+                "redirectors are the internet-facing hosts: the jumpbox is your "
+                "way in and each redirector is a public C2 front door. The "
+                "teamservers, collector and operator boxes are private (no public "
+                "IP), reachable only from the jumpbox or from inside the stack's "
+                "own subnet.")
+        else:
+            intro = (
+                "This is your attack infrastructure. The jumpbox is the only host "
+                "with a public address and your way in; the teamservers, collector "
+                "and operator boxes are private (no public IP), reachable only "
+                "from the jumpbox or from inside the stack's own subnet.")
         lines += [
             "", "## The access model", "",
-            "This is your attack infrastructure. The jumpbox is the only host "
-            "with a public address and your way in; the teamservers, collector "
-            "and operator boxes are private (no public IP), reachable only from "
-            "the jumpbox or from inside the stack's own subnet.",
+            intro,
             "",
             "- **Get in** at the Guacamole portal: every box is a tile, Windows "
             "over RDP and Linux over SSH, each one a click. Jumpbox SSH stays "
@@ -343,8 +358,9 @@ def range_briefing(document, registry=None):
                              % addr)
             elif product == "wazuh":
                 lines.append("- **Wazuh dashboard:** https://%s - login `admin` "
-                             "(the lab password with any symbol outside `.*+?-` "
-                             "replaced by `-`, per Wazuh's charset rule)" % addr)
+                             "(the lab password with every character that is not "
+                             "a letter, digit, or one of `. * + ? -` replaced by "
+                             "`-`, per Wazuh's password charset rule)" % addr)
             else:
                 lines.append("- **%s:** %s" % (product or "SIEM", addr))
         lines.append("- Every Windows host ships to each SIEM the range has "

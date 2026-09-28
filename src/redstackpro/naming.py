@@ -68,6 +68,7 @@ def slug_of(node_id):
 
 
 def too_long(prefix, node_id):
-    """Windows NetBIOS truncates at 15. Defense mode will hit this before offense
-    mode does, but the limit is the same either way."""
+    """Windows NetBIOS truncates at 15. The rendered name, prefix plus id, must
+    fit, and the default off and def prefixes are the same length, so the limit
+    is the same for both modes."""
     return len(compose(prefix, node_id)) > NETBIOS_LIMIT
