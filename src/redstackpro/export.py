@@ -183,7 +183,10 @@ ssh {jumpuser}@<jumpbox> 'tail -f ~/provision/run.log'
 
 `RUN EXITED ok=1` means it is done. Then open the portal at
 `https://<jumpbox>/guacamole`, with
-`terraform -chdir=terraform output guacamole` for the credentials.
+`terraform -chdir=terraform output guacamole` for the credentials. On a
+`wireguard` or `openvpn` access mode the portal is closed to the internet and
+reached over the tunnel instead, so bring your VPN up first; `OFFENSE-BRIEFING.md`
+has the per-operator VPN credentials and the tunnel details.
 
 Every run also writes a full log to `logs/deploy-<timestamp>.log`. If a deploy
 fails or a range comes up wrong, that file is what to attach to a GitHub issue: it
