@@ -719,18 +719,6 @@ def rdr002_decoy_video_without_a_pack(ctx):
             name=ctx.name(node["id"]))
 
 
-def boot001_wireguard_bootstrap(ctx):
-    for n in ctx.of_kind("jumpbox"):
-        if ctx.overlay(n["id"], "transport", "ssh") != "wireguard":
-            continue
-        yield finding(
-            "BOOT001", "warning", [n["id"]],
-            "{name} manages over WireGuard, so the export needs a two stage play order. "
-            "Ansible cannot configure WireGuard over WireGuard.",
-            remedy="Bootstrap runs on private addresses; the tunnel is the path afterward.",
-            name=self_name(ctx, n))
-
-
 # ---------------------------------------------------------------- vpn access
 
 # The multi-user VPN access layer: how operators reach an artie range and who
@@ -1371,7 +1359,6 @@ RULES = [
     net003_cross_network_fronts,
     net004_internal_ip_outside_segment,
     net005_duplicate_internal_ip,
-    boot001_wireguard_bootstrap,
     vpn001_wireguard_tcp,
     vpn002_vpn_access_is_artie_only,
     vpn003_vpn_without_operators,

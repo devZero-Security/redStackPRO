@@ -707,15 +707,6 @@
           "x-redstackpro-source": "user",
           "description": "Generates the CA covering VPN and log shipping."
         },
-        "transport": {
-          "enum": [
-            "ssh",
-            "wireguard"
-          ],
-          "default": "ssh",
-          "x-redstackpro-source": "user",
-          "description": "How this jumpbox reaches the hosts it manages, once configured. Initial bootstrap always goes over direct SSH or ProxyJump, since WireGuard cannot configure itself."
-        },
         "public_address": {
           "$ref": "#/$defs/public_address",
           "default": true

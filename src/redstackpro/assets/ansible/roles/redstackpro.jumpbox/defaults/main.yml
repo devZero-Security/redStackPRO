@@ -6,11 +6,6 @@ redstackpro_jumpbox_services:
   - ssh
 redstackpro_jumpbox_certificate_authority: true
 
-# How this jumpbox reaches what it manages. Peer expansion for the wireguard
-# value is a compiler concern that is not built; the role configures the server
-# side either way. See schema.md.
-redstackpro_jumpbox_transport: ssh
-
 redstackpro_jumpbox_user: "{{ ansible_user }}"
 # The account service-ssh.yml ensures exists. It is the single platform account
 # (redop for ops, blueop for a range), the same identity ansible connects as and
