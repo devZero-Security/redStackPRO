@@ -74,15 +74,20 @@ def test_all_output_is_parseable_hcl(redstack):
         parse(text)
 
 
-def test_a_check_warns_when_operator_source_ranges_is_wide_open(redstack):
+def test_terraform_fails_the_apply_when_operator_source_ranges_is_wide_open(redstack):
     """operator_source_ranges is a tfvars value the topology validator never sees,
     so a wide-open default (ssh and the portal open to the internet) is caught at
-    apply by a Terraform check block. A failed check warns, it does not fail the
-    apply. Emitted once per main.tf, for both providers. See operator_source_ranges_check."""
+    apply by a Terraform precondition that FAILS the apply, unless allow_open_ingress
+    is set on purpose. A precondition is skipped on destroy, so teardown is never
+    blocked. Emitted once per main.tf, for both providers. See
+    operator_source_ranges_check."""
     for provider in ("gcp", "aws"):
         main = files(redstack, provider=provider)["terraform/main.tf"]
-        assert main.count('check "operator_source_ranges_is_narrowed"') == 1
-        assert '!contains(var.operator_source_ranges, "0.0.0.0/0")' in main
+        assert main.count('resource "terraform_data" "operator_source_ranges_is_narrowed"') == 1
+        assert "precondition {" in main
+        assert ('!contains(var.operator_source_ranges, "0.0.0.0/0") || var.allow_open_ingress'
+                in main)
+        assert main.count('variable "allow_open_ingress"') == 1
 
 
 def test_region_resolves_from_the_argument_then_the_document_then_a_default(redstack):

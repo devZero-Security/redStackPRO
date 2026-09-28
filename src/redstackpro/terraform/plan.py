@@ -448,22 +448,43 @@ def time_provider(plan):
 
 
 def operator_source_ranges_check():
-    """A Terraform check block that warns when management ingress is left wide open.
+    """A Terraform guard that FAILS the apply when management ingress is left wide
+    open, unless allow_open_ingress is set on purpose.
 
     operator_source_ranges is a tfvars value, not a topology field, so the topology
     validator never sees it: left at the default 0.0.0.0/0 it opens the jumpbox ssh
-    (22) and the Guacamole portal (443) to the whole internet. A failed check
-    assertion warns, it does not fail the apply, so this is a non-blocking nudge at
-    deploy time. required_version >= 1.5 on both backends, so check blocks exist.
-    Emitted once per generated main.tf; the name is fixed, so callers add it once.
+    (22) and the Guacamole portal (443) to the whole internet. A terraform_data
+    precondition fails the apply (a check block only warns), so a direct
+    `terraform apply` that bypasses deploy.sh still fails closed. Preconditions are
+    skipped on destroy, so teardown is never blocked. deploy.sh sets
+    allow_open_ingress from REDSTACKPRO_ALLOW_OPEN_INGRESS to keep the
+    intentional-open escape hatch. required_version >= 1.5 covers terraform_data
+    (1.4+). Emitted once per generated main.tf; the names are fixed, so callers add
+    it once.
     """
     return [
         "",
-        '# Non-blocking: warns (does not fail) when management ingress is wide open.',
-        'check "operator_source_ranges_is_narrowed" {',
-        "  assert {",
-        '    condition     = !contains(var.operator_source_ranges, "0.0.0.0/0")',
-        '    error_message = "operator_source_ranges is 0.0.0.0/0, so ssh and the Guacamole portal are open to the whole internet. Narrow it in terraform.tfvars to the addresses operators connect from."',
+        "# Fail closed: an apply that leaves ssh (22) and the Guacamole portal (443)",
+        "# open to the whole internet is refused. deploy.sh sets allow_open_ingress",
+        "# from REDSTACKPRO_ALLOW_OPEN_INGRESS for the intentional case; a direct",
+        "# terraform apply must narrow operator_source_ranges instead. Skipped on",
+        "# destroy, so teardown is never blocked.",
+        'variable "allow_open_ingress" {',
+        *align([
+            ("type", "bool"),
+            ("default", "false"),
+            ("description", '"Allow 0.0.0.0/0 in operator_source_ranges on purpose. deploy.sh sets it from REDSTACKPRO_ALLOW_OPEN_INGRESS."'),
+        ]),
+        "}",
+        "",
+        'resource "terraform_data" "operator_source_ranges_is_narrowed" {',
+        "  lifecycle {",
+        "    precondition {",
+        *align([
+            ("condition", '!contains(var.operator_source_ranges, "0.0.0.0/0") || var.allow_open_ingress'),
+            ("error_message", '"operator_source_ranges is 0.0.0.0/0, so ssh and the Guacamole portal would be open to the whole internet. Narrow it in terraform.tfvars to the addresses operators connect from, or set allow_open_ingress = true to intend it."'),
+        ], indent="      "),
+        "    }",
         "  }",
         "}",
     ]

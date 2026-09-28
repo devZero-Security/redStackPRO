@@ -437,6 +437,8 @@ SSH="ssh -i $KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
 if grep -Eq 'operator_source_ranges[^#]*"0\.0\.0\.0/0"' deploy.tfvars 2>/dev/null; then
   if [ "${{REDSTACKPRO_ALLOW_OPEN_INGRESS:-0}}" = "1" ]; then
     echo "WARNING: operator_source_ranges is 0.0.0.0/0 (ssh and the portal are open to the whole internet). Narrow it in deploy.tfvars."
+    # Let the Terraform precondition through too (it fails closed by default).
+    export TF_VAR_allow_open_ingress=true
   else
     echo "operator_source_ranges is 0.0.0.0/0, which exposes ssh and the portal to the"
     echo "entire internet. This range may contain deliberately vulnerable hosts, so an"
