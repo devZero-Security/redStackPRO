@@ -323,4 +323,4 @@ distributed under GPLv3, with the license and attribution in that directory. The
 are data, not code: the canvas loads them as native ranges that compile through
 redStackPRO's own terraform and ansible. The rest of the project is MIT.
 
-A devZero Security LLC project.
+A devZero Security Project.
