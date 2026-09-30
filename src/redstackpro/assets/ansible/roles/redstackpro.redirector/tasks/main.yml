@@ -196,6 +196,15 @@
 - name: Configure the redirector
   ansible.builtin.include_tasks: "{{ redstackpro_redirector_server }}.yml"
 
+# The operator's on-box eyeball check: sudo rsp-check confirms the web server,
+# the decoy, per-teamserver gating, and backend reachability. The scripted
+# pass/fail equivalent is `python -m redstackpro.tools.verify` from the export.
+- name: Install the redirector check command
+  ansible.builtin.template:
+    src: rsp-check.j2
+    dest: /usr/local/sbin/rsp-check
+    mode: "0750"
+
 # Let's Encrypt issuance. The web server already answers the acme-challenge path
 # on port 80 from /var/www/redstackpro-acme, so start it (flush the pending
 # restart) before certbot reaches for the challenge, obtain the certificate, then

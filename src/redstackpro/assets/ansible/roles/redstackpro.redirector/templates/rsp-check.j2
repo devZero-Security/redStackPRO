@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+# rsp-check: full-stack check for this redirector, run on the box by the operator
+# (sudo rsp-check). Confirms the web server is up, the decoy answers an ungated
+# request, each fronted teamserver forwards ONLY with the gating header, and each
+# backend is reachable from here. Adapted from redStack's test_redirector.sh.
+#
+# This is the eyeball tool that lives on the host. The export also ships
+# `python -m redstackpro.tools.verify doors|stack` for a scripted pass/fail check.
+set -u
+
+# redirect.rules bounces curl's default agent, so a probe that sends it measures
+# the bouncer rather than the route. Same reason verify.py sets a browser agent.
+UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+HOST="{{ redstackpro_redirector_hostname | default(inventory_hostname, true) }}"
+HEADER_NAME="{{ redstackpro_redirector_gating.header_name }}"
+HEADER_VALUE="{{ redstackpro_redirector_gating.header_value }}"
+{% set svc = 'apache2' if redstackpro_redirector_server == 'apache' else 'nginx' %}
+
+echo "===== redStackPRO redirector check ($HOST) ====="
+echo
+
+echo "[*] web server ({{ svc }}):"
+systemctl --no-pager --lines=0 status {{ svc }} 2>/dev/null | head -3 || echo "  {{ svc }} not running"
+echo
+{% if redstackpro_redirector_server == 'apache' %}
+echo "[*] apache modules:"
+apache2ctl -M 2>/dev/null | grep -E "proxy|rewrite|ssl|headers|deflate" || echo "  none of the expected modules are loaded"
+echo
+{% endif %}
+echo "[*] listeners (expect 80 and 443):"
+ss -ltn 2>/dev/null | grep -E ':(80|443)\b' || echo "  neither 80 nor 443 is listening"
+echo
+
+echo "[*] decoy (no header, root path, should be the cover site):"
+curl -k -s -m 10 -A "$UA" -H "Host: $HOST" https://localhost/ | head -3
+echo
+
+echo "[*] gating header for payloads:  $HEADER_NAME: $HEADER_VALUE"
+echo
+
+# Each fronted teamserver: the header must flip the response (forward vs decoy),
+# and the backend must be reachable from this redirector.
+{% for up in upstreams %}
+{% set prefix = '/' ~ (up.uri_prefix | regex_replace('^/', '') | regex_replace('/$', '')) %}
+echo "[*] {{ up.name }}  ({{ prefix }}/  ->  {{ up.address }}:{{ up.port | default(443) }})"
+gated="$(mktemp)"; plain="$(mktemp)"
+gcode=$(curl -k -s -m 10 -A "$UA" -H "Host: $HOST" -H "$HEADER_NAME: $HEADER_VALUE" -o "$gated" -w '%{http_code}' "https://localhost{{ prefix }}/healthz")
+pcode=$(curl -k -s -m 10 -A "$UA" -H "Host: $HOST" -o "$plain" -w '%{http_code}' "https://localhost{{ prefix }}/healthz")
+echo "    with header  -> HTTP $gcode"
+echo "    no header    -> HTTP $pcode"
+if cmp -s "$gated" "$plain"; then
+  echo "    gating       -> WARNING: same response with and without the header"
+else
+  echo "    gating       -> OK (the header changes the response)"
+fi
+if curl -k -sI -m 5 -A "$UA" "{{ up.protocol | default('https') }}://{{ up.address }}:{{ up.port | default(443) }}/" >/dev/null 2>&1; then
+  echo "    backend      -> reachable"
+else
+  echo "    backend      -> UNREACHABLE from this redirector"
+fi
+rm -f "$gated" "$plain"
+echo
+{% endfor %}
+echo "Payload recipe: call https://$HOST{{ '{prefix}' }}/... with the header above,"
+echo "where {prefix} is the teamserver's prefix shown for each entry."
