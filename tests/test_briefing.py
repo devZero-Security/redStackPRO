@@ -2,8 +2,10 @@
 with the terraform address tokens into one operator hand-off. See briefing.py."""
 
 import json
+import re
 from pathlib import Path
 
+from redstackpro.authoring import set_redirector_hostname
 from redstackpro.briefing import range_briefing
 from redstackpro.export import compile_topology
 from redstackpro.registry import Registry
@@ -15,6 +17,35 @@ ROOT = Path(__file__).resolve().parent.parent
 def _goad():
     return json.loads(
         (ROOT / "frontend/public/goad/goad.json").read_text(encoding="utf-8"))
+
+
+def test_offense_briefing_gives_the_c2_payload_recipe():
+    """A beacon needs the callback domain, the gating header, and each teamserver's
+    URI prefix to reach a front door. The briefing must carry all three, and the
+    gating value it prints has to be the SAME one the Ansible host_vars gate on, or
+    a payload built from the briefing would be turned away as an intruder."""
+    doc = json.loads(
+        (ROOT / "frontend/public/redstack.json").read_text(encoding="utf-8"))
+    set_redirector_hostname(doc, "c2.acmecorp.net")
+    files = compile_topology(doc, Registry(), provider="gcp")
+    md = [v for k, v in files.items() if k.endswith("OFFENSE-BRIEFING.md")][0]
+
+    assert "## C2 redirectors & payloads" in md
+    assert "c2.acmecorp.net" in md
+    m = re.search(r"Gating header:\*\* `([^:]+): ([^`]+)`", md)
+    assert m, "the briefing states no gating header"
+    header_name, token = m.group(1), m.group(2)
+    assert header_name == "X-Request-Id"
+    # A route line, with the ready-to-call URL for a teamserver prefix.
+    assert re.search(r"call `https://c2\.acmecorp\.net/[^`]+/\.\.\.`", md)
+
+    # The value in the briefing is the value the redirector and its teamservers gate
+    # on: same token everywhere, or the recipe is wrong.
+    gated = [v for k, v in files.items()
+             if "host_vars" in k and "header_value" in v]
+    assert gated, "no host_vars carried a gating value"
+    for contents in gated:
+        assert token in contents
 
 
 def test_briefing_covers_boxes_accounts_users_trusts_and_siem():

@@ -9,9 +9,10 @@ They are still ordinary version controlled files, reviewable and editable, just
 under src/redstackpro/assets/ rather than at the repo root.
 """
 
+import copy
 from pathlib import Path
 
-from .ansible import generate as generate_ansible
+from .ansible import generate as generate_ansible, _randomize_gating
 from .deploy import generate_deploy_script, generate_manage_script
 from .naming import platform_account
 from .registry import Registry
@@ -199,6 +200,24 @@ If a redirector uses Let's Encrypt, `deploy.sh` prints the exact DNS A record to
 create the moment the address exists. Create it while the build runs: issuance
 waits about 15 minutes, then carries on with a self-signed certificate that
 `sudo rsp-issue-cert` can replace later without redeploying.
+
+## Checking the redirectors
+
+`OFFENSE-BRIEFING.md` lists, per redirector, the domain to call, each teamserver's
+URI prefix, and the gating header your payload must send. Two checks confirm the
+route actually works:
+
+```bash
+python verify.py doors .
+```
+
+probes each front door from outside: it confirms the redirector forwards a request
+carrying the gating header and serves the decoy to one that does not. It reads this
+export, so it needs no arguments beyond the directory (`.`) and PyYAML
+(`pip install pyyaml`). `python verify.py stack .` runs the from-jumpbox checks.
+
+On the redirector itself, `sudo rsp-check` is the on-box eyeball version: web
+server, decoy, per-teamserver gating, and backend reachability, in one command.
 
 ## Notes that save an hour
 
@@ -451,6 +470,12 @@ def static_files(provider="gcp"):
     tool = ASSETS / "tf_inventory.py"
     if tool.is_file():
         files["tf_inventory.py"] = tool.read_text(encoding="utf-8")
+    # The scripted redirector/stack check. Self contained (stdlib + PyYAML), reads
+    # the export it ships in, so it runs as `python verify.py doors .`. See verify.py
+    # and the on-box `rsp-check` the redirector role installs.
+    checker = ASSETS.parent / "tools" / "verify.py"
+    if checker.is_file():
+        files["verify.py"] = checker.read_text(encoding="utf-8")
     return files
 
 
@@ -480,6 +505,12 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
             "provider." % (", ".join(RANGE_PROVIDERS), provider))
 
     registry = registry or Registry()
+    # Materialize the per-redirector gating token once, on a copy we own, so the
+    # briefing and the Ansible host_vars carry the SAME value. generate_ansible
+    # randomizes its own deepcopy too, but that is idempotent once the value is set
+    # here, so both reads agree. See ansible._randomize_gating.
+    document = copy.deepcopy(document or {})
+    _randomize_gating(document)
     files = {}
     files.update(generate_terraform(document, registry, provider=provider,
                                     region=region))

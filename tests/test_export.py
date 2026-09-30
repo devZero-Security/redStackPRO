@@ -164,6 +164,14 @@ def test_static_files_include_the_role_library_and_the_inventory_tool():
     assert any(p.startswith("ansible/roles/") for p in files)
 
 
+def test_static_files_ship_the_verify_checker():
+    # The export carries its own redirector/stack checker so an operator with only
+    # the download can run `python verify.py doors .`. See verify.py.
+    files = static_files("gcp")
+    assert "verify.py" in files
+    assert "def check_doors" in files["verify.py"]
+
+
 def test_static_files_ship_an_ansible_cfg_with_a_task_timeout_ceiling():
     # The export root is where the README runs ansible-playbook, so ansible.cfg
     # sits there. task_timeout caps any single task so a wedged installer fails

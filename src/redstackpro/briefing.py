@@ -206,6 +206,41 @@ def range_briefing(document, registry=None):
         "Get it with `terraform output -raw lab_password`.",
     ]
 
+    # -- C2 redirectors and payload details (offense only). Everything an operator
+    # needs to point a beacon at a front door: the callback domain, the gating
+    # header the payload must carry to be forwarded rather than shown the decoy, and
+    # each teamserver's URI prefix. The gating value is materialized at compile in
+    # export.compile_topology, so it matches the value in ansible/host_vars. Confirm
+    # the route with `python verify.py doors .` or `sudo rsp-check` on the redirector.
+    redirectors = ctx.of_kind("redirector") if is_offense else []
+    if redirectors:
+        lines += ["", "## C2 redirectors & payloads", ""]
+        lines.append(
+            "A beacon reaches a teamserver by calling a redirector's domain under a "
+            "teamserver's URI prefix while carrying the gating header below. A "
+            "request missing either is served the decoy site and never forwarded, so "
+            "a payload has to set all three.")
+        for rdr in redirectors:
+            rid = rdr["id"]
+            domain = ctx.overlay(rid, "hostname", "") or "(set the redirector domain on the canvas)"
+            gating = ctx.overlay(rid, "gating", {}) or {}
+            header_name = gating.get("header_name") or "X-Request-Id"
+            header_value = gating.get("header_value") or "(generated at apply)"
+            routes = [(ctx.name(e["target"]), e.get("uri_prefix"))
+                      for e in ctx.by_role.get("fronts", [])
+                      if e["source"] == rid and e.get("uri_prefix")]
+            lines += ["", "### %s" % ctx.name(rid), ""]
+            lines += [
+                "- **Callback domain:** `%s`" % domain,
+                "- **Gating header:** `%s: %s`" % (header_name, header_value),
+            ]
+            if routes:
+                lines.append("- **Routes:**")
+                for name, prefix in sorted(routes):
+                    prefix = "/" + prefix.strip("/")
+                    lines.append("  - `%s/` -> %s  (call `https://%s%s/...`)"
+                                 % (prefix, name, domain, prefix))
+
     # -- Operators and VPN access (offense only). The roster and the VPN access mode
     # are offense concepts; a defense range ignores them (VPN002), so the section is
     # rendered only for an offense stack that declared either. Each operator gets a
