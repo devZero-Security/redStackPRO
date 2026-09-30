@@ -426,15 +426,25 @@ fi
   exit 1
 }}
 
-# SSH refuses a group/world-readable private key (StrictModes) and drops to a
-# password the later non-interactive scp/ssh cannot answer. On a Windows drive
-# mounted in WSL, perms report 0777 and chmod does not stick, so copy the resolved
-# key to a 600 path on a real filesystem and connect with that copy. $KEY stays the
-# path shown in the hints below; $KEYSAFE (removed on exit by finish) is what
-# ssh/scp actually use.
-KEYSAFE="$(mktemp "${{TMPDIR:-/tmp}}/rsp-key.XXXXXX")"
-cp "$KEY" "$KEYSAFE" && chmod 600 "$KEYSAFE"
-SSH="ssh -i $KEYSAFE -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
+# SSH enforces private-key perms on Linux and macOS (StrictModes): a group- or
+# world-readable key is refused and it drops to a password the later non-interactive
+# scp/ssh cannot answer. On a Windows drive mounted in WSL the key reports 0777 and
+# chmod does not stick, so copy it to a 600 path on a real filesystem and connect
+# with that copy. $KEY stays the path shown in the hints below; the copy is removed
+# on exit by finish. Git Bash (MSYS/MinGW) governs perms by ACL, does not enforce
+# the unix mode, and its temp dirs are NTFS where chmod cannot make 600, so there
+# the copy neither helps nor is needed: use $KEY as is.
+KEYSAFE=""
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *)
+    KEYBASE="${{TMPDIR:-/tmp}}"; case "$KEYBASE" in *" "*) KEYBASE="/tmp" ;; esac
+    KEYSAFE="$(mktemp "$KEYBASE/rsp-key.XXXXXX")"
+    cp "$KEY" "$KEYSAFE" && chmod 600 "$KEYSAFE"
+    ;;
+esac
+SSHKEY="${{KEYSAFE:-$KEY}}"
+SSH="ssh -i $SSHKEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
 
 {cloud_preflight}# Refuse to apply when management ingress is open to the whole internet.
 # operator_source_ranges is a tfvars value the topology validator never sees, so
@@ -517,7 +527,7 @@ mkdir -p ~/provision ~/.ssh && chmod 700 ~/.ssh
 BOOT
 
 say "stage the ansible tree and the connection key onto the jumpbox"
-scp -i "$KEYSAFE" -o StrictHostKeyChecking=accept-new "$KEYSAFE" "$JUMPUSER@$JUMP:.ssh/deploy-key" >/dev/null
+scp -i "$SSHKEY" -o StrictHostKeyChecking=accept-new "$SSHKEY" "$JUMPUSER@$JUMP:.ssh/deploy-key" >/dev/null
 $SSH "$JUMPUSER@$JUMP" 'chmod 600 ~/.ssh/deploy-key'
 # Staged with tar over ssh rather than rsync. rsync is not on a stock Windows box
 # and there is no rsync package in chocolatey or winget, so requiring it meant the
