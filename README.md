@@ -17,7 +17,7 @@
 > your own machine. **redStackPRO never holds your cloud credentials.**
 
 > [!IMPORTANT]
-> **redStackPRO is in prerelease (beta).** The schema and features are still moving.
+> **redStackPRO is in prerelease (beta).** Features are still moving before 1.0.
 > GCP and AWS are tested end to end; Azure, Proxmox, and ESXi are on the roadmap.
 > Expect rough edges, and pin to a released version if you need stability.
 >
@@ -75,7 +75,7 @@ the reference range the written solution follows.
 
 ## 🧭 Status
 
-Pre-release, and the topology schema is still moving. The pipeline itself works end
+Pre-release, with more to come before 1.0. The pipeline itself works end
 to end: a topology compiles to Terraform and Ansible, and the export deploys.
 
 | Provider | State |
