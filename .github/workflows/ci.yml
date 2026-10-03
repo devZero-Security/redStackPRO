@@ -116,7 +116,7 @@ jobs:
         # peered carries the peers role, so the AWS and GCP peering codegen is
         # checked on the artifact rather than only in the generator. See 0029.
         example: [redstack, peered]
-        provider: [gcp, aws]
+        provider: [gcp, aws, azure]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6

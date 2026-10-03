@@ -635,8 +635,11 @@ def outputs(plan):
                 lines.append("      name = module.%s.name" % ref)
                 lines.append("      zone = var.zone")
             else:  # azure
-                lines.append("      name = module.%s.name" % ref)
-                lines.append("      resource_group = var.resource_group")
+                # Two keys of different widths in one block, so align the = the way
+                # terraform fmt would (gcp's name/zone happen to be equal width).
+                lines.append("      %s = module.%s.name" % ("name".ljust(14), ref))
+                lines.append("      %s = var.resource_group"
+                             % "resource_group".ljust(14))
             lines.append("    }")
         lines += ["  }", "}"]
 
