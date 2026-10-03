@@ -246,8 +246,14 @@ variable "auto_stop_timezone" {
   default     = "UTC"
 }
 
+variable "auto_stop_enabled" {
+  description = "Create the daily shutdown schedule. Static so count is known at plan; auto_stop_at is apply-computed in TTL mode and cannot gate count."
+  type        = bool
+  default     = false
+}
+
 resource "azurerm_dev_test_global_vm_shutdown_schedule" "this" {
-  count              = var.auto_stop_at == "" ? 0 : 1
+  count              = var.auto_stop_enabled ? 1 : 0
   location           = var.location
   virtual_machine_id = var.windows ? azurerm_windows_virtual_machine.this[0].id : azurerm_linux_virtual_machine.this[0].id
   enabled            = true

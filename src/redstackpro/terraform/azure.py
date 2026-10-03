@@ -392,6 +392,12 @@ def _main(plan):
         # above) is the translation, with an unmapped IANA zone already refused. See 0057.
         if stop:
             pairs += [
+                # A static bool so the schedule's count is known at plan. In TTL
+                # mode auto_stop_at is local.rsp_stop_hhmm, computed at apply, and
+                # a count keyed on `auto_stop_at == ""` cannot be resolved at plan
+                # ("Invalid count argument"). Whether a schedule exists is known
+                # now, so the module counts on this instead.
+                ("auto_stop_enabled", "true"),
                 # HHMM with no separator, so it needs zero padding the cron
                 # schedules do not: "${h}${m}" would render 1 and 5 as "15"
                 # rather than "0105". Padded in a local, or a literal when the
