@@ -20,10 +20,4 @@ capabilities:
   - windows_image
   - public_address
   - outbound_routing
-
-unsupported:
-  - name: network_peering
-    reason: >
-      Azure supports virtual network peering, but the peering module is not
-      built yet, so a peers edge has nothing to compile to. GOAD ranges do not
-      peer; this follows.
+  - network_peering

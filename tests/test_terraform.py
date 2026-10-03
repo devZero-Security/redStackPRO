@@ -287,9 +287,9 @@ def test_offense_windows_operator_takes_the_setup_on_aws_and_azure(redstack):
     of its own), GCP fetches it from the metadata server. All three name the
     range in operator_hosts and gate on the offense Windows operator."""
     for provider in ("aws", "azure"):
-        # Azure's peering capability trips on this ops fixture (CAP004), which is
-        # unrelated to the boot wiring under test; skip validation to exercise the
-        # codegen. AWS validates cleanly and is checked the same way.
+        # skip_validation: this ops fixture leaves the redirector hostname unset
+        # (RDR001), unrelated to the boot wiring under test. Azure now renders
+        # peering, so CAP004 no longer applies. AWS is checked the same way.
         winop = _modules_for(redstack, provider=provider,
                              skip_validation=True)["off_win_op01"]
         assert winop["operator_setup"] is True, provider
@@ -1576,8 +1576,8 @@ def test_after_hours_emits_the_offset_and_reads_it_on_every_provider(redstack):
 
     gcp = generate(redstack, provider="gcp")
     aws = generate(redstack, provider="aws")
-    # Azure refuses an ops topology on CAP004 (no peering module), which is
-    # correct and not what this test is about.
+    # skip_validation: the fixture leaves the redirector hostname unset (RDR001).
+    # Azure now renders peering, so CAP004 no longer applies here.
     azure = generate(redstack, provider="azure", skip_validation=True)
 
     for files in (gcp, aws, azure):
@@ -1607,8 +1607,8 @@ def test_a_fixed_at_is_still_a_literal_and_pulls_in_no_provider(redstack):
 
     gcp = generate(redstack, provider="gcp")
     aws = generate(redstack, provider="aws")
-    # Azure refuses an ops topology on CAP004 (no peering module), which is
-    # correct and not what this test is about.
+    # skip_validation: the fixture leaves the redirector hostname unset (RDR001).
+    # Azure now renders peering, so CAP004 no longer applies here.
     azure = generate(redstack, provider="azure", skip_validation=True)
 
     for files in (gcp, aws, azure):
@@ -1618,6 +1618,22 @@ def test_a_fixed_at_is_still_a_literal_and_pulls_in_no_provider(redstack):
     assert 'schedule = "0 22 * * *"' in gcp["terraform/main.tf"]
     assert 'cron(0 22 * * ? *)' in aws["terraform/main.tf"]
     assert 'auto_stop_at       = "2200"' in azure["terraform/main.tf"]
+
+
+def test_azure_renders_peering_and_an_offense_portal(redstack):
+    """Azure offense used to refuse on CAP004 (no peering module) and, past that,
+    emitted no lab_password output because guac/portal were gated on is_range. It
+    now renders the peering module and, because a jumpbox is present, provisions the
+    shared password and the portal outputs in offense too."""
+    set_redirector_hostname(redstack, "cdn.redops.design")
+    azure = generate(redstack, provider="azure")  # full validation: no CAP004
+    main = azure["terraform/main.tf"]
+    assert "./modules/azure/peering" in main
+    assert 'output "lab_password"' in main
+    assert 'output "guacamole"' in main
+    peering = ROOT / "src/redstackpro/assets/terraform/modules/azure/peering/main.tf"
+    assert peering.is_file()
+    assert "azurerm_virtual_network_peering" in peering.read_text(encoding="utf-8")
 
 
 def test_with_both_fields_the_earlier_still_wins_but_in_hcl(redstack):

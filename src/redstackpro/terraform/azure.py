@@ -195,6 +195,12 @@ def _host_ips(plan):
 
 def _main(plan):
     is_range = plan.is_range()
+    # The jumpbox runs Guacamole and keys into every box for the portal tiles in
+    # both modes, so its password and key pair are provisioned whenever a jumpbox
+    # exists, not only for ranges (mirrors gcp/aws). Without this an offense export
+    # emitted no lab_password output and deploy.sh's `terraform output -raw
+    # lab_password` failed.
+    has_jumpbox = any(n["kind"] == "jumpbox" for n in plan.hosts())
     host_ip = _host_ips(plan)
 
     lines = [
@@ -211,7 +217,7 @@ def _main(plan):
     # Once at the root, above the module blocks that read the locals it defines.
     lines += plan.auto_stop_block()
 
-    if is_range:
+    if has_jumpbox:
         lines += [
             "",
             "# One shared lab password, generated at apply unless the operator set one.",
@@ -306,9 +312,13 @@ def _main(plan):
                 ("auto_stop_at", stop["hhmm_expr"]),
                 ("auto_stop_timezone", '"%s"' % stop["timezone"]),
             ]
-        if is_range:
+        if has_jumpbox:
             pairs += [
-                ("enable_winrm", "true" if windows else "false"),
+                # WinRM is the range's Windows provisioning path (the boot script
+                # stands up an HTTPS listener for Ansible). An offense Windows
+                # operator self-provisions at boot and is never managed over WinRM,
+                # so the listener is range-only.
+                ("enable_winrm", "true" if (is_range and windows) else "false"),
                 ("lab_password", "local.lab_password"),
                 ("guac_public_key", "tls_private_key.guacamole.public_key_openssh"),
                 ("guac_private_key",
@@ -337,7 +347,23 @@ def _main(plan):
             ]
         lines += ["", 'module "%s" {' % plan.ref(node["id"])] + align(pairs) + ["}"]
 
-    if is_range:
+    # peers: a VNet peering, both directions. Azure needs one resource per
+    # direction (like gcp), each created in its own VNet naming the other's id;
+    # routes exchange on their own once both exist. NSGs do not cross a peering, so
+    # cross-peering firewall paths match by subnet CIDR, the same as gcp.
+    for edge in plan.ctx.by_role.get("peers", []):
+        a, b = edge["source"], edge["target"]
+        lines += ["", 'module "%s" {' % plan.ref(edge["id"])] + align([
+            ("source", '"./modules/azure/peering"'),
+            ("name", '"%s"' % plan.tag(edge["id"])),
+            ("resource_group", "azurerm_resource_group.this.name"),
+            ("vnet_a_name", "module.%s.name" % plan.ref(a)),
+            ("vnet_a_id", "module.%s.id" % plan.ref(a)),
+            ("vnet_b_name", "module.%s.name" % plan.ref(b)),
+            ("vnet_b_id", "module.%s.id" % plan.ref(b)),
+        ]) + ["}"]
+
+    if has_jumpbox:
         jumps = [n for n in plan.hosts() if n["kind"] == "jumpbox"]
         if jumps:
             jref = plan.ref(jumps[0]["id"])
