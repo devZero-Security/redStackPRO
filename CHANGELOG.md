@@ -14,6 +14,23 @@ versioning, and dates are UTC.
 - SSH key permissions on Windows drives. A key on a WSL-mounted drive reports 0777,
   which StrictModes rejects, dropping the deploy to password auth. The deploy now
   connects with a 0600 copy on a real filesystem, and skips that copy on Git Bash.
+- deploy.sh now stops at the real error when a step fails. It had no top-level
+  `set -e`, so a failed `terraform apply` ran on and ended on a misleading "unfilled
+  address placeholders remain"; it now aborts at the failure with its own message,
+  and empty terraform outputs no longer provision a blank credential or an empty host.
+- Interrupting a deploy no longer leaves instances teardown cannot remove.
+  `manage.sh teardown --force` sweeps the range's instances (ones an interrupted
+  apply created but never wrote to state) so `terraform destroy` can finish.
+
+### Changed
+
+- deploy.sh derives `ssh_public_key` from your private key when the tfvars field is
+  left empty, so you no longer copy the public half in by hand.
+- `operator_source_ranges` now ships unset and fails closed (it was `0.0.0.0/0`); the
+  deploy stops until you set it, so a range is never exposed by default.
+- AWS deploys check credentials (`aws sts get-caller-identity`) before apply and flag
+  Elastic IP / vCPU quota and the Kali Marketplace subscription up front, rather than
+  failing late.
 
 ### Added
 
