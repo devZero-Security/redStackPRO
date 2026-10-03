@@ -588,7 +588,7 @@ def test_status_start_stop_never_run_before_the_teardown_check(manage_script):
     """teardown must not fall through into the instance lookup meant for the
     other three subcommands: it has its own exit, before either one is reached."""
     teardown_at = manage_script.index('"$cmd" = "teardown"')
-    exit_at = manage_script.index("exit $?", teardown_at)
+    exit_at = manage_script.index("exit $rc", teardown_at)
     status_at = manage_script.index('"$cmd" = "status"', teardown_at)
     instances_at = manage_script.index("redstackpro_instances", teardown_at)
     assert teardown_at < exit_at < status_at < instances_at
@@ -615,6 +615,20 @@ def test_gcp_targets_instances_by_name_and_zone():
     # single call ("$cmd" is start or stop) instead of one blocking call each.
     assert 'gcloud compute instances describe "$name" --zone "$zone"' in gcp
     assert 'gcloud compute instances "$cmd" $names --zone "$zone"' in gcp
+
+
+def test_teardown_force_sweeps_orphan_instances_before_destroy():
+    """Found on a live GCP deploy: an interrupted apply orphaned instances (created
+    but never in state), which terraform destroy could not clean and which blocked
+    it. teardown --force deletes redStackPRO instances by label/tag first, scoped to
+    the deploy, so the destroy can finish. A failed destroy also points here."""
+    gcp = generate_manage_script(example("redstack.json"), Registry(), provider="gcp")
+    aws = generate_manage_script(example("redstack.json"), Registry(), provider="aws")
+    for s in (gcp, aws):
+        assert '"${2:-}" = "--force"' in s, "teardown --force is recognized"
+        assert "manage.sh teardown --force" in s, "a failed destroy points at --force"
+    assert "labels.redstackpro_kind" in gcp and "gcloud compute instances delete" in gcp
+    assert "tag:redstackpro,Values=true" in aws and "aws ec2 terminate-instances" in aws
     assert "aws ec2" not in gcp
 
 

@@ -502,7 +502,7 @@ cp deploy.tfvars terraform/terraform.tfvars
 set -e
 say "terraform apply"
 terraform -chdir=terraform init -input=false -upgrade >/dev/null || {{ echo "terraform init failed -- check the provider download and your network"; exit 1; }}
-terraform -chdir=terraform apply -auto-approve -input=false || {{ echo "terraform apply failed (its error is above) -- nothing was provisioned; fix it and re-run"; exit 1; }}
+terraform -chdir=terraform apply -auto-approve -input=false || {{ echo "terraform apply failed (its error is above) -- nothing was provisioned."; echo "If it reports resources that already exist, an earlier run was interrupted and left them outside the state. Reconcile with: bash manage.sh teardown --force   (then re-run deploy.sh)."; exit 1; }}
 
 # Both modes. Terraform calls this "the shared password for the admin account,
 # the Windows operator, and the portal" and emits it either way, but only a range
@@ -643,10 +643,12 @@ _MANAGE_HEAD = r'''#!/usr/bin/env bash
 #   bash manage.sh status
 #   bash manage.sh start
 #   bash manage.sh stop
-#   bash manage.sh teardown
+#   bash manage.sh teardown [--force]
 #
 # status, start and stop act on exactly this range's own instances, never the
-# whole cloud account or project. teardown runs terraform destroy.
+# whole cloud account or project. teardown runs terraform destroy; add --force to
+# first delete redStackPRO instances the cloud still has (e.g. from an interrupted
+# apply) so orphaned instances cannot block the destroy.
 #
 # On Windows run it from Git Bash, or use manage.ps1 beside this file.
 set -uo pipefail
@@ -658,7 +660,7 @@ cmd="${1:-}"
 case "$cmd" in
   status|start|stop|teardown) ;;
   *)
-    echo "usage: bash manage.sh status|start|stop|teardown"
+    echo "usage: bash manage.sh status|start|stop|teardown [--force]"
     exit 1
     ;;
 esac
@@ -667,17 +669,60 @@ command -v terraform >/dev/null 2>&1 || { echo "terraform not found on PATH -- i
 
 '''
 
-_MANAGE_TEARDOWN = r'''
+# teardown has two halves so a per-provider instance sweep can be injected between
+# them for `--force`. The sweep deletes instances created by an interrupted apply
+# but never written to state: terraform destroy cannot see them, and because they
+# still hold a subnet/policy terraform does own, they make the plain destroy fail
+# with resourceInUseByAnotherResource. Deleting them first unblocks it.
+_MANAGE_TEARDOWN_HEAD = r'''
 if [ "$cmd" = "teardown" ]; then
   # Same handoff as deploy.sh: the editable config lives at the export root as
   # deploy.tfvars and terraform auto-loads terraform/terraform.tfvars, so copy
   # it into place first, or destroy runs with no vars at all.
   [ -f deploy.tfvars ] || { echo "deploy.tfvars not found next to this script."; exit 1; }
   cp deploy.tfvars terraform/terraform.tfvars
+  if [ "${2:-}" = "--force" ]; then
+'''
+
+_MANAGE_SWEEP = {
+    "gcp": r'''    say "force teardown: sweeping redStackPRO instances in the cloud first"
+    PROJECT="$(grep -E '^[[:space:]]*project[[:space:]]*=' deploy.tfvars 2>/dev/null | head -1 | sed -E 's/[^=]*=[[:space:]]*"?([^"]*)"?.*/\1/')"
+    PROJ_ARG=""; [ -n "$PROJECT" ] && PROJ_ARG="--project $PROJECT"
+    gcloud compute instances list $PROJ_ARG --filter="labels.redstackpro_kind:*" --format="value(name,zone)" 2>/dev/null \
+      | while IFS=$'\t' read -r sweep_name sweep_zone; do
+          [ -n "$sweep_name" ] || continue
+          echo "  deleting $sweep_name ($sweep_zone)"
+          gcloud compute instances delete "$sweep_name" --zone "$sweep_zone" $PROJ_ARG --quiet 2>/dev/null || true
+        done
+''',
+    "aws": r'''    say "force teardown: sweeping redStackPRO instances in the cloud first"
+    REGION="$(grep -E '^[[:space:]]*region[[:space:]]*=' deploy.tfvars 2>/dev/null | head -1 | sed -E 's/[^=]*=[[:space:]]*"?([^"]*)"?.*/\1/')"
+    REG_ARG=""; [ -n "$REGION" ] && REG_ARG="--region $REGION"
+    SWEEP_IDS="$(aws ec2 describe-instances $REG_ARG --filters Name=tag:redstackpro,Values=true Name=instance-state-name,Values=pending,running,stopping,stopped --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null)"
+    if [ -n "$SWEEP_IDS" ]; then
+      echo "  terminating: $SWEEP_IDS"
+      aws ec2 terminate-instances $REG_ARG --instance-ids $SWEEP_IDS >/dev/null 2>&1 || true
+      aws ec2 wait instance-terminated $REG_ARG --instance-ids $SWEEP_IDS 2>/dev/null || true
+    fi
+''',
+}
+
+# Providers without a wired sweep still accept --force; it just means "plain
+# destroy" for them rather than failing on an unknown flag.
+_MANAGE_SWEEP_NONE = r'''    echo "note: a --force instance sweep is not wired for this provider; running a plain destroy."
+'''
+
+_MANAGE_TEARDOWN_TAIL = r'''  fi
   say "terraform destroy"
   terraform -chdir=terraform init -input=false -upgrade >/dev/null
   terraform -chdir=terraform destroy -auto-approve
-  exit $?
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "teardown did not finish cleanly."
+    echo "If it said an instance still holds a subnet or policy, an interrupted apply left"
+    echo "instances outside the state; clear them with:  bash manage.sh teardown --force"
+  fi
+  exit $rc
 fi
 
 '''
@@ -776,7 +821,9 @@ def generate_manage_script(topology, registry=None, provider=None):
     if not _jumpbox_name(ctx):
         return None
     provider_block = _MANAGE_PROVIDER_BLOCK.get(provider, _MANAGE_NO_LIVE_CONTROL)
-    return (_MANAGE_HEAD + _FIND_PYTHON + _MANAGE_TEARDOWN + _MANAGE_STATUS_PORTAL
+    sweep = _MANAGE_SWEEP.get(provider, _MANAGE_SWEEP_NONE)
+    teardown = _MANAGE_TEARDOWN_HEAD + sweep + _MANAGE_TEARDOWN_TAIL
+    return (_MANAGE_HEAD + _FIND_PYTHON + teardown + _MANAGE_STATUS_PORTAL
             + provider_block)
 
 
