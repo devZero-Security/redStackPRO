@@ -168,7 +168,16 @@ terraform {
 }""" % time_provider(plan) + """
 
 provider "azurerm" {
-  features {}
+  features {
+    # A range is one dedicated resource group, and teardown deletes that whole group.
+    # The default (true) refuses to delete a group that still holds resources, which
+    # strands a failed or interrupted deploy: terraform removes what it tracked, then
+    # cannot delete the group because untracked leftovers remain (seen live). Deleting
+    # the dedicated group and everything in it is the intent here. See 0001.
+    resource_group {
+      prevent_deletion_if_contains_resources = false
+    }
+  }
   subscription_id = var.subscription_id
 }
 """

@@ -1178,6 +1178,16 @@ def test_MANAGE_azure_emits_vms_nsg_rules_and_winrm():
     assert "foothold" in fw                              # jumpbox foothold ingress
 
 
+def test_azure_provider_lets_teardown_delete_a_nonempty_resource_group():
+    """A range is one dedicated resource group and teardown deletes it whole. azurerm
+    defaults prevent_deletion_if_contains_resources to true, which refuses the RG
+    delete when a failed or interrupted apply left untracked resources behind, and
+    strands the deploy (seen live: destroy removed what it tracked, then could not
+    delete the group). The provider turns it off so destroy always clears the group."""
+    versions = files(_MANAGE_doc(), provider="azure")["terraform/versions.tf"]
+    assert "prevent_deletion_if_contains_resources = false" in versions
+
+
 def test_MANAGE_esxi_uses_vsphere_datasources_static_ips_and_no_firewall():
     """The ESXi range: vSphere data sources resolved once, VMs with static
     addresses (Linux from an OVA, Windows cloned from a template), and no
