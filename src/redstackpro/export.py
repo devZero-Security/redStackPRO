@@ -26,6 +26,7 @@ ASSETS = Path(__file__).resolve().parent / "assets"
 TFVARS_TO_FILL = {
     "gcp": "project, ssh_public_key, operator_source_ranges",
     "aws": "ssh_public_key, operator_source_ranges, region",
+    "azure": "subscription_id, ssh_public_key, operator_source_ranges, location",
 }
 
 # Things the account has to have done before apply, which an export cannot do

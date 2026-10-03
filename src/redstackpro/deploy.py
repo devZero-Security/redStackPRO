@@ -260,6 +260,14 @@ def generate_deploy_script(topology, registry=None, provider=None):
             "Kali operator needs a one-time Marketplace subscription; see "
             'DEPLOYMENT-GUIDE.md if apply hits a limit or an OptInRequired error."\n'
         )
+    elif provider == "azure":
+        cloud_preflight = (
+            "if ! az account show >/dev/null 2>&1; then\n"
+            '  echo "Azure credentials are not set or not working. Run:  az login  '
+            "(or set ARM_CLIENT_ID/ARM_CLIENT_SECRET/ARM_TENANT_ID/ARM_SUBSCRIPTION_ID "
+            'for a service principal)"; exit 1\n'
+            "fi\n"
+        )
 
     # Resolved through TerraformPlan rather than re-read from the topology, so the
     # clock this checks is the same one the generated schedule was built from.
@@ -715,6 +723,16 @@ _MANAGE_SWEEP = {
       aws ec2 wait instance-terminated $REG_ARG --instance-ids $SWEEP_IDS 2>/dev/null || true
     fi
 ''',
+    "azure": r'''    say "force teardown: sweeping redStackPRO instances in the cloud first"
+    RG="$(grep -E '^[[:space:]]*resource_group[[:space:]]*=' deploy.tfvars 2>/dev/null | head -1 | sed -E 's/[^=]*=[[:space:]]*"?([^"]*)"?.*/\1/')"
+    RG="${RG:-redstackpro-range}"
+    az vm list -g "$RG" --query "[].name" -o tsv 2>/dev/null \
+      | while read -r sweep_name; do
+          [ -n "$sweep_name" ] || continue
+          echo "  deleting $sweep_name ($RG)"
+          az vm delete -g "$RG" -n "$sweep_name" --yes 2>/dev/null || true
+        done
+''',
 }
 
 # Providers without a wired sweep still accept --force; it just means "plain
@@ -808,6 +826,27 @@ for zone, names in z.items():
     print(zone, ' '.join(names))")
   [ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
 fi
+''',
+    "azure": r'''INSTANCES="$(terraform -chdir=terraform output -json redstackpro_instances 2>/dev/null)"
+if [ -z "$INSTANCES" ] || [ "$INSTANCES" = "null" ]; then
+  echo "no redstackpro_instances output found -- has terraform applied yet?"
+  exit 1
+fi
+# Target this range's own VMs by name + resource group (from the output). stop
+# uses deallocate, which halts billing; a plain `az vm stop` would keep charging.
+RSP_ANY=0
+while IFS=' ' read -r vm rg; do
+  [ -n "$vm" ] || continue
+  RSP_ANY=1
+  case "$cmd" in
+    status) az vm show -g "$rg" -n "$vm" -d --query "{name:name,state:powerState,ip:publicIps}" -o table ;;
+    start)  az vm start -g "$rg" -n "$vm" ;;
+    stop)   az vm deallocate -g "$rg" -n "$vm" ;;
+  esac
+done < <(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
+for v in json.load(sys.stdin).values():
+    print(v['name'], v['resource_group'])")
+[ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
 ''',
 }
 

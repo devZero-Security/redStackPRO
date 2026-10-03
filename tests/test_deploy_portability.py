@@ -658,13 +658,25 @@ def test_aws_auto_stop_warns_about_iam_before_apply():
 
 
 def test_an_untested_provider_still_gets_teardown_but_says_so_for_the_rest():
-    """Only aws and gcp are wired for live status/start/stop. A provider without
+    """aws, gcp and azure are wired for live status/start/stop. A provider without
     that support must not block the export or the teardown path, which is
     provider agnostic; it just has to say plainly that the rest is not there."""
-    other = generate_manage_script(example("redstack.json"), Registry(), provider="azure")
+    other = generate_manage_script(example("redstack.json"), Registry(), provider="proxmox")
     assert other is not None
     assert "terraform -chdir=terraform destroy -auto-approve" in other
     assert "not implemented" in other
+
+
+def test_azure_is_wired_for_live_control_and_a_credential_preflight():
+    """Azure gained status/start/stop (stop via deallocate so it halts billing), a
+    --force instance sweep, and an `az account show` credential preflight it did
+    not have before (deploy.sh emitted an empty preflight for azure)."""
+    manage = generate_manage_script(example("redstack.json"), Registry(), provider="azure")
+    assert "az vm start" in manage and "az vm deallocate" in manage
+    assert "az vm list" in manage  # the --force sweep
+    assert "not implemented" not in manage
+    deploy = generate_deploy_script(example("redstack.json"), Registry(), provider="azure")
+    assert "az account show" in deploy
 
 
 def test_MANAGE_sh_is_syntactically_valid_bash(manage_script):

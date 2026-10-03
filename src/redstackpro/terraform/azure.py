@@ -14,7 +14,8 @@ import base64
 import ipaddress
 
 from .plan import (  # noqa: F401  GenerationError re-exported
-    GenerationError, align, operator_hosts_hcl, time_provider)
+    GenerationError, align, operator_hosts_hcl,
+    operator_source_ranges_check, time_provider)
 
 # Marketplace image (publisher, offer, sku, version) per build.
 WINDOWS_IMAGES = {
@@ -134,12 +135,16 @@ variable "resource_group" {
 variable "ssh_public_key" {
   description = "Authorized key for the admin account, supplied at run time."
   type        = string
+  validation {
+    condition     = can(regex("^(ssh-|ecdsa-|sk-)", var.ssh_public_key))
+    error_message = "ssh_public_key must be an SSH public key line (a key type, the base64 key, then a comment). deploy.sh fills it from your private key; or paste keys/<name>.pub into deploy.tfvars."
+  }
 }
 
 variable "operator_source_ranges" {
   description = "Where management access is accepted from. Narrow this."
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = []
 }
 
 variable "lab_password" {
@@ -156,14 +161,14 @@ def _tfvars(plan):
 # Never commit this file with real values. See the project conventions.
 
 subscription_id = ""
-location        = "eastus"
+location        = "%s"
 resource_group  = "redstackpro-range"
 ssh_public_key  = ""
 
-# Narrow this to the addresses operators connect from. You can list several:
-# add one /32 per operator, or a CIDR, e.g. ["203.0.113.5/32", "198.51.100.7/32"].
-operator_source_ranges = ["0.0.0.0/0"]
-"""
+# REQUIRED: the addresses operators connect from. deploy.sh aborts until you set
+# this, so a range is never exposed by default. One /32 per operator, or a CIDR:
+# operator_source_ranges = ["203.0.113.5/32", "198.51.100.7/32"]
+""" % plan.region
 
 
 # ---------------------------------------------------------------- addressing
@@ -213,6 +218,8 @@ def _main(plan):
         "  location = var.location",
         "}",
     ]
+    # Fail closed on wide-open management ingress, same precondition as gcp/aws.
+    lines += operator_source_ranges_check()
 
     # Once at the root, above the module blocks that read the locals it defines.
     lines += plan.auto_stop_block()

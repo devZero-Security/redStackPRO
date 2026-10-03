@@ -31,7 +31,7 @@ class GenerationError(Exception):
 
 # A default region per cloud provider, used when neither the compile nor the
 # document names one. Proxmox has no region.
-DEFAULT_REGION = {"aws": "us-east-1", "gcp": "us-east4"}
+DEFAULT_REGION = {"aws": "us-east-1", "gcp": "us-east4", "azure": "eastus"}
 
 # Operator-facing control-plane ports per C2 product on a teamserver. An
 # operator drives the teamserver over these from an operator box; the beacon
@@ -615,10 +615,10 @@ def outputs(plan):
 
     # Per-host identifiers for manage.sh (status/start/stop), so those act on
     # exactly this range's own instances and never the whole account or
-    # project. Only aws and gcp are wired: aws targets an instance by id, gcp
-    # by name plus zone, and every host module already exposes what its
+    # project. aws targets an instance by id, gcp by name plus zone, azure by
+    # name plus resource group; every host module already exposes what its
     # provider needs. See deploy.py generate_manage_script.
-    if plan.provider in ("aws", "gcp"):
+    if plan.provider in ("aws", "gcp", "azure"):
         lines += [
             "",
             "# Consumed by manage.sh (status/start/stop). Not the whole account",
@@ -631,9 +631,12 @@ def outputs(plan):
             lines.append('    "%s" = {' % plan.tag(node["id"]))
             if plan.provider == "aws":
                 lines.append("      instance_id = module.%s.instance_id" % ref)
-            else:
+            elif plan.provider == "gcp":
                 lines.append("      name = module.%s.name" % ref)
                 lines.append("      zone = var.zone")
+            else:  # azure
+                lines.append("      name = module.%s.name" % ref)
+                lines.append("      resource_group = var.resource_group")
             lines.append("    }")
         lines += ["  }", "}"]
 
