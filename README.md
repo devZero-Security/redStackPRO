@@ -200,6 +200,17 @@ Every run writes a timestamped, secret-scrubbed log to
 comes up wrong, attach the newest one to a GitHub issue; `deploy.sh` prints
 its path and a link when something goes wrong.
 
+**Check it worked.** The export ships `verify.py` next to `deploy.sh`. Run it
+against the deployed range to confirm the path end to end:
+
+    python verify.py doors .     # redirector front doors, from outside
+    python verify.py stack .     # the range over SSH from the jumpbox
+
+Each exits 0 when every check passes. On an offense range, the generated
+`OFFENSE-BRIEFING.md` holds the C2 payload recipe (callback domain, URI prefix,
+and gating header per redirector), and `sudo rsp-check` on a redirector checks
+the same path from the box itself.
+
 **Manage and tear down.** The export also ships lifecycle scripts, `manage.sh`
 (and `manage.ps1` on Windows), for the running range. They take `status`,
 `start`, `stop`, and `teardown`: `stop` pauses billing without destroying the
