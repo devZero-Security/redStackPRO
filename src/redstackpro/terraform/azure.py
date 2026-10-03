@@ -427,15 +427,29 @@ def _firewall(plan):
             {"name": name, "port": port, "source": source, "dest": dest,
              "proto": proto})
 
+    def az_proto(p):
+        return {"tcp": "Tcp", "udp": "Udp", "all": "*", "*": "*"}.get(p, "Tcp")
+
+    def ip_list(ids):
+        return "[%s]" % ", ".join('"%s"' % host_ip[i] for i in ids)
+
     for edge in ctx.by_role.get("manages", []):
         jump = edge["source"]
         jseg = seg_of(jump)
         add(jseg, "operator_ssh_%s" % plan.ref(jump), "22",
             "var.operator_source_ranges", '["%s"]' % host_ip[jump])
-        # Guacamole runs on the jumpbox in every mode (range and offense), so open
-        # 443 to the portal regardless of range/ops.
-        add(jseg, "operator_guacamole_%s" % plan.ref(jump), "443",
-            "var.operator_source_ranges", '["%s"]' % host_ip[jump])
+        # In a VPN access mode (offense) the jumpbox opens its VPN listen port and
+        # the Guacamole portal rides the tunnel rather than being exposed on 443;
+        # otherwise the portal is open on 443. Mirrors gcp/aws.
+        vpn = plan.vpn_access(ctx.nodes[jump])
+        if vpn:
+            _mode, vport, vproto = vpn
+            add(jseg, "operator_vpn_%s" % plan.ref(jump), str(vport),
+                "var.operator_source_ranges", '["%s"]' % host_ip[jump],
+                proto=az_proto(vproto))
+        else:
+            add(jseg, "operator_guacamole_%s" % plan.ref(jump), "443",
+                "var.operator_source_ranges", '["%s"]' % host_ip[jump])
         # The jumpbox is the range foothold: it must receive traffic range hosts
         # initiate back to it (coerced/relayed NTLM to an operator listener, a
         # pivoted callback). Internal (segment) surface only; its internet
@@ -450,11 +464,64 @@ def _firewall(plan):
                 "mgmt_%s" % plan.ref(host["id"]),
                 str(plan.management_port(host)),
                 '["%s"]' % host_ip[jump], '["%s"]' % host_ip[host["id"]])
-            # guacd on the jumpbox reaches a Windows box's RDP tile on 3389.
-            if plan.is_windows(host):
+            # guacd on the jumpbox reaches a Windows box's RDP tile (or a
+            # desktop-mode Kali operator's) on 3389.
+            if plan.is_windows(host) or plan.is_gui_operator(host):
                 add(seg_of(host["id"]),
                     "mgmt_rdp_%s" % plan.ref(host["id"]), "3389",
                     '["%s"]' % host_ip[jump], '["%s"]' % host_ip[host["id"]])
+
+    # The operator's own stack, internally open (offense only). Every segment
+    # accepts all traffic from every stack network's CIDR, so a peered redirector,
+    # teamserver, and operator all reach each other. Azure matches by CIDR, which
+    # carries across a peering, so there is no same-net-vs-peered split to make. A
+    # range keeps strictly edge-derived rules, so this does not apply there.
+    if not plan.is_range():
+        stack_cidrs = [c for c in (ctx.overlay(n["id"], "cidr")
+                                   for n in plan.networks()) if c]
+        src = "[%s]" % ", ".join('"%s"' % c for c in stack_cidrs)
+        for seg in plan.segments():
+            add(seg["id"], "intra_%s" % plan.ref(seg["id"]), "*",
+                src, '["%s"]' % ctx.overlay(seg["id"], "cidr"), proto="*")
+
+    # fronts: public ingress to the redirector, then redirector to teamserver.
+    for edge in ctx.by_role.get("fronts", []):
+        rdir, ts = edge["source"], edge["target"]
+        proto = az_proto("tcp" if edge["protocol"] != "dns" else "udp")
+        listen = edge["listen_port"]
+        upstream = edge.get("upstream_port", listen)
+        add(seg_of(rdir), "in_%s_%s" % (plan.ref(rdir), listen), str(listen),
+            '["0.0.0.0/0"]', '["%s"]' % host_ip[rdir], proto=proto)
+        add(seg_of(ts), "fwd_%s_%s" % (plan.ref(rdir), plan.ref(ts)), str(upstream),
+            ip_list([rdir]), '["%s"]' % host_ip[ts], proto=proto)
+
+    # A redirector keeps 80 open to the internet for Certbot's ACME http-01
+    # challenge, whatever its cert source, so renewals keep working.
+    for node in plan.hosts():
+        if ctx.kind(node["id"]) != "redirector":
+            continue
+        add(seg_of(node["id"]), "acme_in_%s" % plan.ref(node["id"]), "80",
+            '["0.0.0.0/0"]', '["%s"]' % host_ip[node["id"]])
+
+    # ctl: an operator drives a teamserver from inside over the C2 control port(s).
+    # The beacon channel itself rides the fronts edge through the redirector; this
+    # is the separate operator -> teamserver management path. One rule per port.
+    operators = sorted(plan.operators(), key=lambda h: h["id"])
+    if operators:
+        op_src = ip_list([o["id"] for o in operators])
+        for ts in sorted(plan.hosts(), key=lambda h: h["id"]):
+            for port in plan.control_ports(ts) or []:
+                add(seg_of(ts["id"]), "ctl_%s_%s" % (plan.ref(ts["id"]), port),
+                    str(port), op_src, '["%s"]' % host_ip[ts["id"]])
+
+    # logs_to: senders reach the collector on its ingest port and nothing else.
+    sinks = {}
+    for edge in ctx.by_role.get("logs_to", []):
+        sinks.setdefault(edge["target"], []).append(edge["source"])
+    for collector, senders in sorted(sinks.items()):
+        port = ctx.overlay(collector, "ingest_port", 5044)
+        add(seg_of(collector), "log_%s" % plan.ref(collector), str(port),
+            ip_list(sorted(senders)), '["%s"]' % host_ip[collector])
 
     for host in plan.intra_segment_hosts():
         add(seg_of(host["id"]), "ad_intra_%s" % plan.ref(host["id"]), "*",
@@ -478,12 +545,9 @@ def _firewall(plan):
                 ("source_port_range", '"*"'),
                 ("destination_port_range", '"%s"' % r["port"]),
             ]
-            # A source that is a variable list is emitted as an expression; a
-            # literal address list is emitted as an HCL list.
-            if r["source"].startswith("var."):
-                body.append(("source_address_prefixes", r["source"]))
-            else:
-                body.append(("source_address_prefixes", r["source"]))
+            # source is already valid HCL: either a variable list expression
+            # (var.operator_source_ranges) or a literal list of addresses/CIDRs.
+            body.append(("source_address_prefixes", r["source"]))
             body.append(("destination_address_prefixes", r["dest"]))
             lines += align(body) + ["}"]
 

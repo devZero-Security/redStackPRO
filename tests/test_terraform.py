@@ -1636,6 +1636,27 @@ def test_azure_renders_peering_and_an_offense_portal(redstack):
     assert "azurerm_virtual_network_peering" in peering.read_text(encoding="utf-8")
 
 
+def test_azure_offense_firewall_covers_the_families_with_unique_priorities(redstack):
+    """Azure's NSG rules used to cover only manages + ad_intra. They now emit the
+    full offense set (fronts ingress + forward, ACME 80, C2 control ports, log
+    shipping, and the internally-open stack rule), and every rule carries a priority
+    unique within its NSG, which Azure requires."""
+    set_redirector_hostname(redstack, "cdn.redops.design")
+    fw = generate(redstack, provider="azure")["terraform/firewall.tf"]
+    for prefix in ("in_off_apache_rd01", "fwd_off_apache_rd01",
+                   "acme_in_off_apache_rd01", "ctl_off_", "log_off_", "intra_off_"):
+        assert prefix in fw, prefix
+    seen = set()
+    for b in re.split(r'resource "azurerm_network_security_rule"', fw)[1:]:
+        nsg = re.search(r"network_security_group_name\s*=\s*(.+)", b)
+        pri = re.search(r"priority\s*=\s*(\d+)", b)
+        if nsg and pri:
+            key = (nsg.group(1).strip(), pri.group(1))
+            assert key not in seen, "duplicate NSG priority %s" % (key,)
+            seen.add(key)
+    assert len(seen) >= 20
+
+
 def test_with_both_fields_the_earlier_still_wins_but_in_hcl(redstack):
     """The comparison cannot happen at compile any more, because one side is not
     known until apply. It moves into HCL unchanged rather than quietly becoming
