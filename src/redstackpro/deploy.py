@@ -113,11 +113,19 @@ trap finish EXIT
 _TTL_PREFLIGHT = """# Refuse to start a build that would stop itself before it finishes.
 RSP_STOP_LEAD=$("$PY" -c '
 import datetime as dt
+TZ = "%(timezone)s"
 try:
     from zoneinfo import ZoneInfo
-    tz = ZoneInfo("%(timezone)s")
+    tz = ZoneInfo(TZ)
 except Exception:
-    tz = dt.timezone.utc
+    # A missing IANA tz database still lets an IANA name mean UTC closely enough to
+    # guard on; a non-IANA id (an Azure Windows zone like "GMT Standard Time")
+    # cannot, so the lead is left uncomputed and the "could not run" branch below
+    # handles it honestly rather than guessing the stop time in the wrong zone.
+    if "/" in TZ or TZ == "UTC":
+        tz = dt.timezone.utc
+    else:
+        raise SystemExit(1)
 now = dt.datetime.now(tz)
 stop = now.replace(hour=%(hour)d, minute=%(minute)d, second=0, microsecond=0)
 if stop <= now:

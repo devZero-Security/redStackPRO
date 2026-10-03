@@ -1675,6 +1675,19 @@ def test_azure_segment_gets_a_nat_gateway_for_private_egress(redstack):
     assert "azurerm_subnet_nat_gateway_association" in body
 
 
+def test_azure_auto_stop_refuses_an_iana_timezone(redstack):
+    """Azure's shutdown schedule needs a Windows timezone id; an IANA name (what the
+    schema describes, recognisable by its "/") is refused at compile with a clear
+    message rather than emitting HCL that fails at apply. UTC and a Windows id both
+    compile (the latter is covered by the pass-through test above)."""
+    redstack["auto_stop"] = {"enabled": True, "at": "22:00",
+                             "timezone": "America/New_York"}
+    with pytest.raises(GenerationError, match="Windows timezone"):
+        generate(redstack, provider="azure", skip_validation=True)
+    redstack["auto_stop"]["timezone"] = "UTC"
+    generate(redstack, provider="azure", skip_validation=True)  # no raise
+
+
 def test_with_both_fields_the_earlier_still_wins_but_in_hcl(redstack):
     """The comparison cannot happen at compile any more, because one side is not
     known until apply. It moves into HCL unchanged rather than quietly becoming
