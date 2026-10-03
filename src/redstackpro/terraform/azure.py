@@ -438,10 +438,18 @@ def _firewall(plan):
     def seg_cidr(host_id):
         return ctx.overlay(seg_of(host_id), "cidr")
 
-    # Accumulate rules per segment NSG so priorities are unique within it.
+    # Accumulate rules per segment NSG so priorities are unique within it. A rule
+    # name is also the azurerm resource name, which terraform requires to be unique
+    # per module, so the same name is emitted once (first wins): a redirector that
+    # fronts three teamservers yields one public-ingress rule, not three, and a
+    # host reachable from several manages edges is opened once. Mirrors gcp's seen.
     by_seg = {}
+    seen = set()
 
     def add(seg_id, name, port, source, dest, proto="Tcp"):
+        if name in seen:
+            return
+        seen.add(name)
         by_seg.setdefault(seg_id, []).append(
             {"name": name, "port": port, "source": source, "dest": dest,
              "proto": proto})

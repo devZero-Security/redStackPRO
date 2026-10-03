@@ -1646,6 +1646,11 @@ def test_azure_offense_firewall_covers_the_families_with_unique_priorities(redst
     for prefix in ("in_off_apache_rd01", "fwd_off_apache_rd01",
                    "acme_in_off_apache_rd01", "ctl_off_", "log_off_", "intra_off_"):
         assert prefix in fw, prefix
+    # Resource names must be unique per module (terraform validate rejects a
+    # collision): a redirector fronting three teamservers emits one ingress rule,
+    # not three. Caught live by terraform validate; locked in here.
+    names = re.findall(r'resource "azurerm_network_security_rule" "([^"]+)"', fw)
+    assert names and len(names) == len(set(names)), "duplicate NSG rule name"
     seen = set()
     for b in re.split(r'resource "azurerm_network_security_rule"', fw)[1:]:
         nsg = re.search(r"network_security_group_name\s*=\s*(.+)", b)
