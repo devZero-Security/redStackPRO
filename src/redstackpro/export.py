@@ -270,6 +270,14 @@ To pause overnight and keep the cost down, use `manage.sh stop` and then
 anything, so the same deployment comes back. Save `teardown` for when you are
 finished with it.
 
+**Recovering from an interrupted deploy.** If you stop `deploy.sh` partway (Ctrl-C,
+or a closed terminal), the cloud can hold instances Terraform created but did not
+record in its state. A plain `teardown` cannot see those, and may fail trying to
+destroy a network they still sit in. Run `manage.sh teardown --force` (or
+`.\\manage.ps1 teardown --force`): it deletes this deployment's instances in the
+cloud first, then destroys the rest, so nothing is left billing. Once a teardown
+finishes cleanly, re-running `deploy.sh` starts fresh.
+
 ## What redStackPRO did not do
 
 It did not run Terraform, hold a credential, or reach any environment. It
