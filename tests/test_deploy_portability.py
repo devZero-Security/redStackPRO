@@ -475,6 +475,52 @@ def test_an_empty_lab_password_aborts_before_provisioning_a_blank_credential(sta
     assert "lab_password came back empty" in done.stdout, done.stdout + done.stderr
 
 
+@pytest.fixture
+def azure_staged(tmp_path):
+    """A compiled AZURE export plus a stub PATH, no cloud credentials anywhere.
+    Azure's deploy.sh preflight (az account show) and its fail-closed ingress are
+    exercised the same executed way as the gcp path above."""
+    files = compile_topology(example("redstack.json"), Registry(), provider="azure")
+    export = tmp_path / "export"
+    for path, contents in files.items():
+        target = export / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(contents, encoding="utf-8", newline="\n")
+    (export / "keys").mkdir(exist_ok=True)
+    (export / "keys/id_ed25519").write_text("not a real key", encoding="utf-8")
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    for tool in ("terraform", "ssh", "tar"):
+        _stub(stubs, tool, "exit 0")
+    return export, stubs
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_azure_deploy_aborts_without_az_credentials(azure_staged):
+    """deploy.sh emitted no credential preflight for azure before; a missing az
+    login now aborts early with a one-line fix, not a terraform stack trace."""
+    export, stubs = azure_staged
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    # az is absent from the stub PATH, so `az account show` fails -> abort.
+    done = _run(export, stubs)
+    assert done.returncode == 1
+    assert "Azure credentials are not set" in done.stdout, done.stdout + done.stderr
+    assert "terraform apply" not in done.stdout
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_azure_deploy_aborts_on_unset_ingress(azure_staged):
+    """The azure tfvars ships operator_source_ranges commented out (fail closed), so
+    a run past the az credential check stops until the operator sets it."""
+    export, stubs = azure_staged
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    _stub(stubs, "az", "exit 0")  # pass the credential preflight
+    done = _run(export, stubs)
+    assert done.returncode == 1
+    assert "operator_source_ranges is not set" in done.stdout, done.stdout
+    assert "terraform apply" not in done.stdout
+
+
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
 def test_unset_operator_source_ranges_aborts_until_set(staged):
     """The export now ships operator_source_ranges commented out (fail closed), so a
