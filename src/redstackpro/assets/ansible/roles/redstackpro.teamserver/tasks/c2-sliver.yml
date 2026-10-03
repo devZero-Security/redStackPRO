@@ -109,7 +109,7 @@
 # listener dies with the daemon and has to be re-applied on every start, or a
 # reboot silently leaves the range with no C2.
 # The client picks its config from the INVOKING USER's client directory and has no
-# --config flag. That makes the number of configs there load-bearing: with more than
+# --config flag. That makes the number of configs there significant: with more than
 # one the console prompts for which to use, stdin is closed, it reads EOF and exits
 # SILENTLY having started nothing. No output, no listener, indistinguishable from
 # success unless you check the port.

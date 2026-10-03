@@ -460,7 +460,7 @@ def test_the_operator_source_ranges_reach_the_jumpbox(redstack):
 
 
 def test_a_world_open_range_is_never_exempted_from_the_jail():
-    """The load bearing half of the ignoreip change. operator_source_ranges
+    """The essential half of the ignoreip change. operator_source_ranges
     DEFAULTS to 0.0.0.0/0, so exempting it verbatim would set ignoreip to the
     whole internet and leave the jail enabled, healthy looking, and a no-op.
     Dropping this filter is a silent downgrade, so it is guarded here."""

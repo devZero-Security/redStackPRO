@@ -235,7 +235,7 @@ def check_doors(export, plan_only=False):
                         % (d["hostname"], status))
     _check_covers_differ(reachable, covers, report)
 
-    report.heading("the gate is load bearing")
+    report.heading("the gate is enforced")
     for d in reachable:
         _check_gate(d, report)
 
@@ -336,10 +336,10 @@ def _check_gate(door, report):
                        gated[0], gated[1]))
         if ungated == gated:
             report.fail("%s %s answers the same with and without %s, so the "
-                        "gate is not load bearing on this route"
+                        "the gate is not enforced on this route"
                         % (door["hostname"], path, door["header_name"]))
         else:
-            report.pass_("%s %s: the gate is load bearing (%s/%s -> %s/%s)"
+            report.pass_("%s %s: the gate is enforced (%s/%s -> %s/%s)"
                          % (door["hostname"], path, ungated[0], ungated[1],
                             gated[0], gated[1]))
 

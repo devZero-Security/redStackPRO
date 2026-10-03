@@ -108,7 +108,7 @@
     # .NET build); a flaky fetch or a wedged build would otherwise hang the play
     # with no bound. timeout + retries make it recover on its own.
     #
-    # -f is load bearing, not tidiness. The image already carries http and apollo
+    # -f is required, not tidiness. The image already carries http and apollo
     # under InstalledServices, so install finds an older copy and PROMPTS to
     # overwrite. A command task has no stdin to answer with, so it blocks for the
     # full 1500s, gets killed, and retries twice more: about seventy-five minutes

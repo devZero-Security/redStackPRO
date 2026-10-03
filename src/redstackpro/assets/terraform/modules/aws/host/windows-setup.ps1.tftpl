@@ -71,7 +71,7 @@ if (-not (Get-NetFirewallRule -Name "redstackpro-winrm-https" -ErrorAction Silen
 # and run once, guarded by a marker so <persist> does not reinstall on reboot.
 # RSP_HOSTS names the range hosts so MobaXterm sessions and bookmarks resolve.
 #
-# GZIPPED, not plain base64, and that is load bearing on AWS specifically:
+# GZIPPED, not plain base64, and that matters on AWS specifically:
 # user_data is capped at 16384 bytes. Plain base64 of the setup script is 13808
 # of them, which plus this wrapper is ~18.6KB and fails apply outright with
 # "expected length of user_data to be in the range (0 - 16384)". base64gzip

@@ -329,7 +329,7 @@ def _stub(directory, name, body):
 def staged(tmp_path):
     """A compiled export plus a stub PATH, with no cloud credentials anywhere.
 
-    The absence of gcloud is deliberate and load bearing: it is the checkpoint
+    The absence of gcloud is deliberate and essential: it is the checkpoint
     immediately after the interpreter probe, so a run that reaches it has proved
     the probe passed, and no run can ever reach `terraform apply`.
     """
@@ -417,6 +417,17 @@ def test_a_missing_key_says_how_to_make_one(staged):
     assert done.returncode == 1
     assert "ssh-keygen -t ed25519 -f keys/id_ed25519" in done.stdout, done.stdout
     assert "ssh_public_key" in done.stdout
+
+
+def test_each_provider_checks_its_credentials_before_apply():
+    """GCP blocked early on ADC; AWS had no credential preflight and failed late.
+    Both now verify credentials before terraform apply."""
+    gcp = generate_deploy_script(example("redstack.json"), Registry(), provider="gcp")
+    aws = generate_deploy_script(example("redstack.json"), Registry(), provider="aws")
+    assert "gcloud auth application-default print-access-token" in gcp
+    assert gcp.index("application-default print-access-token") < gcp.index('say "terraform apply"')
+    assert "aws sts get-caller-identity" in aws
+    assert aws.index("aws sts get-caller-identity") < aws.index('say "terraform apply"')
 
 
 def _past_preflight_tfvars(export):

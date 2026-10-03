@@ -250,6 +250,16 @@ def generate_deploy_script(topology, registry=None, provider=None):
             'gcloud auth application-default login"; exit 1\n'
             "fi\n"
         )
+    elif provider == "aws":
+        cloud_preflight = (
+            "if ! aws sts get-caller-identity >/dev/null 2>&1; then\n"
+            '  echo "AWS credentials are not set or not working. Run:  aws configure  '
+            '(then check:  aws sts get-caller-identity)"; exit 1\n'
+            "fi\n"
+            'echo "note: an AWS range needs Elastic IP and vCPU quota headroom, and a '
+            "Kali operator needs a one-time Marketplace subscription; see "
+            'DEPLOYMENT-GUIDE.md if apply hits a limit or an OptInRequired error."\n'
+        )
 
     # Resolved through TerraformPlan rather than re-read from the topology, so the
     # clock this checks is the same one the generated schedule was built from.
