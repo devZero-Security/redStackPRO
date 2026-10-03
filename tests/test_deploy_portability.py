@@ -522,6 +522,20 @@ def test_azure_deploy_aborts_on_unset_ingress(azure_staged):
 
 
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_azure_service_principal_env_passes_the_credential_preflight(azure_staged):
+    """The deploy accepts a service principal (ARM_* env) in place of an az login
+    session: with ARM_CLIENT_ID set the preflight passes even when az is absent, so
+    the run gets past credentials to the ingress check."""
+    export, stubs = azure_staged
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    # az absent from PATH, but a service principal is in the environment.
+    done = _run(export, stubs,
+                env_extra={"ARM_CLIENT_ID": "00000000-0000-0000-0000-000000000000"})
+    assert "Azure credentials are not set" not in done.stdout, done.stdout
+    assert "operator_source_ranges is not set" in done.stdout, done.stdout
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
 def test_unset_operator_source_ranges_aborts_until_set(staged):
     """The export now ships operator_source_ranges commented out (fail closed), so a
     real run must stop and say to set it, rather than deploy an unreachable range or

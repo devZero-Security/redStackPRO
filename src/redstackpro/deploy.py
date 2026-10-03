@@ -269,11 +269,14 @@ def generate_deploy_script(topology, registry=None, provider=None):
             'DEPLOYMENT-GUIDE.md if apply hits a limit or an OptInRequired error."\n'
         )
     elif provider == "azure":
+        # Accept either auth path: an `az login` session (az account show) OR a
+        # service principal in the environment (ARM_CLIENT_ID et al, which the
+        # azurerm provider reads directly and which az account show does not see).
         cloud_preflight = (
-            "if ! az account show >/dev/null 2>&1; then\n"
-            '  echo "Azure credentials are not set or not working. Run:  az login  '
-            "(or set ARM_CLIENT_ID/ARM_CLIENT_SECRET/ARM_TENANT_ID/ARM_SUBSCRIPTION_ID "
-            'for a service principal)"; exit 1\n'
+            'if ! az account show >/dev/null 2>&1 && [ -z "${ARM_CLIENT_ID:-}" ]; then\n'
+            '  echo "Azure credentials are not set. Run:  az login  (or set '
+            "ARM_CLIENT_ID/ARM_CLIENT_SECRET/ARM_TENANT_ID/ARM_SUBSCRIPTION_ID for a "
+            'service principal)"; exit 1\n'
             "fi\n"
         )
 
