@@ -31,7 +31,7 @@ class GenerationError(Exception):
 
 # A default region per cloud provider, used when neither the compile nor the
 # document names one. Proxmox has no region.
-DEFAULT_REGION = {"aws": "us-east-1", "gcp": "us-east4", "azure": "eastus"}
+DEFAULT_REGION = {"aws": "us-east-1", "gcp": "us-east4", "azure": "eastus2"}
 
 # Operator-facing control-plane ports per C2 product on a teamserver. An
 # operator drives the teamserver over these from an operator box; the beacon

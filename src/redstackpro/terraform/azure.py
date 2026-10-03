@@ -44,13 +44,17 @@ LINUX_IMAGES = {
     "kali": ("Debian", "debian-13", "13-gen2", "latest"),
 }
 
+# AMD v5 generation (Dasv5/Basv2). Newer than the Dsv3 that eastus chronically
+# capacity-restricts (SkuNotAvailable), broadly available across regions, and
+# usually cheaper. Gen2 images (debian-13-gen2, 2022-datacenter-azure-edition)
+# run on these. wks is burstable, sized like the gcp/aws small default.
 DEFAULT_MACHINE = {
-    "collector": "Standard_D2s_v3",
-    "operator": "Standard_D2s_v3",
-    "dc": "Standard_D2s_v3",
-    "srv": "Standard_D2s_v3",
-    "wks": "Standard_B2s",
-    "siem": "Standard_D4s_v3",
+    "collector": "Standard_D2as_v5",
+    "operator": "Standard_D2as_v5",
+    "dc": "Standard_D2as_v5",
+    "srv": "Standard_D2as_v5",
+    "wks": "Standard_B2as_v2",
+    "siem": "Standard_D4as_v5",
 }
 
 # IANA -> Windows timezone id for Azure's shutdown schedule, which (unlike gcp/aws)
@@ -368,7 +372,7 @@ def _main(plan):
              "true" if (plan.is_public(node)
                         or (is_range and node["kind"] == "jumpbox"))
              else "false"),
-            ("size", '"%s"' % DEFAULT_MACHINE.get(node["kind"], "Standard_D2s_v3")),
+            ("size", '"%s"' % DEFAULT_MACHINE.get(node["kind"], "Standard_D2as_v5")),
             ("windows", "true" if windows else "false"),
             ("image_publisher", '"%s"' % pub),
             ("image_offer", '"%s"' % off),
