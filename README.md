@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-MIT-3B9EFF" alt="MIT license">
-  <img src="https://img.shields.io/badge/version-0.9.0-CF2127" alt="version 0.9.0">
+  <img src="https://img.shields.io/badge/version-0.9.1-CF2127" alt="version 0.9.1">
   <img src="https://img.shields.io/badge/providers-GCP%20%7C%20AWS-3B9EFF" alt="providers GCP and AWS">
   <img src="https://img.shields.io/badge/status-prerelease%20beta-A97BFF" alt="status prerelease beta">
   <img src="https://img.shields.io/badge/exports-Terraform%20%2B%20Ansible-844FBA?logo=terraform&logoColor=white" alt="Terraform and Ansible">
@@ -94,7 +94,7 @@ The whole canvas in one container, the API and the web app on one port:
 Or pull the published image instead of building it:
 
     docker run -p 8000:8000 -v redstackpro-data:/data \
-      ghcr.io/devzero-security/redstackpro:0.9.0
+      ghcr.io/devzero-security/redstackpro:0.9.1
 
 The canvas listens on 8000 inside the container. To serve it on a different host
 port, change the left half of the mapping (`-p 8787:8000`), or set

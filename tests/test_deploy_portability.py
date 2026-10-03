@@ -431,7 +431,7 @@ def test_the_deploy_tees_a_scrubbed_log_and_points_a_failure_at_the_tracker(scri
     assert 'tee -a "$LOG"' in script
     # A header for triage: version and provider.
     assert "redStackPRO deploy log" in script
-    assert "version:   0.9.0" in script
+    assert "version:   0.9.1" in script
     assert "provider:  gcp" in script
     # Scrubbed on exit: private keys and secret assignments do not reach the file.
     assert "redacted private key" in script

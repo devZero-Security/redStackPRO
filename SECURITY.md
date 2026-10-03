@@ -29,5 +29,5 @@ and are shipped on purpose.
 
 ## Supported versions
 
-redStackPRO is 0.9.0, a pre-release. Fixes land on the latest `main`. There is no
+redStackPRO is 0.9.1, a pre-release. Fixes land on the latest `main`. There is no
 long term support branch yet.
