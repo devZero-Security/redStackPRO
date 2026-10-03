@@ -53,18 +53,77 @@ DEFAULT_MACHINE = {
     "siem": "Standard_D4s_v3",
 }
 
+# IANA -> Windows timezone id for Azure's shutdown schedule, which (unlike gcp/aws)
+# does not accept IANA names. The CLDR default per zone. Only the common zones an
+# operator is likely to pick; an unmapped IANA zone is refused at compile rather
+# than guessed, and UTC or an already-Windows id passes through untouched.
+_WINDOWS_TZ = {
+    "UTC": "UTC", "Etc/UTC": "UTC",
+    "America/New_York": "Eastern Standard Time",
+    "America/Toronto": "Eastern Standard Time",
+    "America/Chicago": "Central Standard Time",
+    "America/Denver": "Mountain Standard Time",
+    "America/Phoenix": "US Mountain Standard Time",
+    "America/Los_Angeles": "Pacific Standard Time",
+    "America/Anchorage": "Alaskan Standard Time",
+    "America/Halifax": "Atlantic Standard Time",
+    "America/Sao_Paulo": "E. South America Standard Time",
+    "Europe/London": "GMT Standard Time",
+    "Europe/Dublin": "GMT Standard Time",
+    "Europe/Lisbon": "GMT Standard Time",
+    "Europe/Berlin": "W. Europe Standard Time",
+    "Europe/Amsterdam": "W. Europe Standard Time",
+    "Europe/Rome": "W. Europe Standard Time",
+    "Europe/Stockholm": "W. Europe Standard Time",
+    "Europe/Zurich": "W. Europe Standard Time",
+    "Europe/Vienna": "W. Europe Standard Time",
+    "Europe/Paris": "Romance Standard Time",
+    "Europe/Madrid": "Romance Standard Time",
+    "Europe/Brussels": "Romance Standard Time",
+    "Europe/Warsaw": "Central European Standard Time",
+    "Europe/Prague": "Central European Standard Time",
+    "Europe/Budapest": "Central European Standard Time",
+    "Europe/Athens": "GTB Standard Time",
+    "Europe/Bucharest": "GTB Standard Time",
+    "Europe/Helsinki": "FLE Standard Time",
+    "Europe/Kyiv": "FLE Standard Time", "Europe/Kiev": "FLE Standard Time",
+    "Europe/Moscow": "Russian Standard Time",
+    "Asia/Jerusalem": "Israel Standard Time",
+    "Asia/Dubai": "Arabian Standard Time",
+    "Asia/Kolkata": "India Standard Time",
+    "Asia/Singapore": "Singapore Standard Time",
+    "Asia/Shanghai": "China Standard Time",
+    "Asia/Hong_Kong": "China Standard Time",
+    "Asia/Tokyo": "Tokyo Standard Time",
+    "Asia/Seoul": "Korea Standard Time",
+    "Australia/Sydney": "AUS Eastern Standard Time",
+    "Australia/Melbourne": "AUS Eastern Standard Time",
+    "Australia/Perth": "W. Australia Standard Time",
+    "Pacific/Auckland": "New Zealand Standard Time",
+}
 
-def is_windows(node):
-    os_ = node.get("overlay", {}).get("os", "")
-    if node["kind"] == "operator":
-        return os_.startswith("windows")
-    return os_ in WINDOWS_IMAGES or (
-        node["kind"] in ("dc", "srv", "wks") and not os_.startswith(("debian", "ubuntu", "linux")))
+
+def _windows_tz(tz):
+    """IANA zone -> Windows timezone id for Azure's shutdown schedule. UTC and an
+    already-Windows id (no "/") pass through; a mapped IANA zone is translated; an
+    unmapped IANA zone is refused rather than guessed into the wrong zone."""
+    if "/" not in tz:  # UTC or an already-Windows id
+        return tz
+    win = _WINDOWS_TZ.get(tz)
+    if win:
+        return win
+    raise GenerationError(
+        "azure auto_stop: no Windows timezone mapping for the IANA zone %r. Use "
+        "UTC, one of the common zones redStackPRO maps, or a Windows id directly "
+        '(for example "GMT Standard Time"); or use gcp or aws for this range.' % tz)
 
 
-def image_for(node):
+def image_for(plan, node):
+    # One source of truth for OS classification: plan.is_windows, the same call the
+    # firewall and gcp/aws use, rather than a second module-level rule that could
+    # drift from it. Mirrors aws.image_for(plan, node).
     overlay = node.get("overlay", {})
-    if is_windows(node):
+    if plan.is_windows(node):
         return WINDOWS_IMAGES.get(overlay.get("os"), _DEFAULT_WINDOWS)
     return LINUX_IMAGES.get(overlay.get("os", "debian"), LINUX_IMAGES["debian"])
 
@@ -226,18 +285,10 @@ def _main(plan):
     has_jumpbox = any(n["kind"] == "jumpbox" for n in plan.hosts())
     host_ip = _host_ips(plan)
 
-    # Azure's shutdown schedule reads a WINDOWS timezone id (UTC, "GMT Standard
-    # Time"), not the IANA name gcp/aws want. A Windows id or UTC passes through; an
-    # IANA name (the kind the schema describes, recognisable by its "/") cannot, and
-    # a hand-built IANA->Windows map would risk a silently wrong zone, so refuse it
-    # at compile with a clear message rather than emit HCL that fails at apply.
+    # Azure's shutdown schedule reads a WINDOWS timezone id, not the IANA name
+    # gcp/aws want, so translate it (common zones mapped, unmapped ones refused).
     stop = plan.auto_stop
-    if stop and "/" in stop.get("timezone", "UTC"):
-        raise GenerationError(
-            "azure auto_stop needs a Windows timezone id, not the IANA name %r the "
-            "topology carries. Set auto_stop.timezone to UTC or a Windows id (for "
-            'example "GMT Standard Time"), drop auto_stop, or use gcp or aws for '
-            "this range." % stop["timezone"])
+    az_timezone = _windows_tz(stop["timezone"]) if stop else None
 
     lines = [
         "# Generated by redStackPRO. Do not edit.",
@@ -299,8 +350,8 @@ def _main(plan):
 
     for node in plan.hosts():
         segment = plan.primary_segment(node)
-        windows = is_windows(node)
-        pub, off, sku, ver = image_for(node)
+        windows = plan.is_windows(node)
+        pub, off, sku, ver = image_for(plan, node)
         pairs = [
             ("source", '"./modules/azure/host"'),
             ("name", '"%s"' % plan.tag(node["id"])),
@@ -336,12 +387,9 @@ def _main(plan):
         services = node.get("overlay", {}).get("services") or []
         disk = 128 if ("exchange" in services or windows) else 40
         pairs.append(("disk_size", str(disk)))
-        # Auto stop, when the canvas asked for one. Azure takes HHmm and a
-        # WINDOWS timezone id rather than the IANA name GCP wants, so the value
-        # is passed through as given rather than translated: the two vocabularies
-        # agree only on UTC, and guessing a mapping would fail silently at 2am.
-        # See 0057.
-        stop = plan.auto_stop
+        # Auto stop, when the canvas asked for one. Azure takes HHmm and a WINDOWS
+        # timezone id rather than the IANA name GCP wants; az_timezone (computed
+        # above) is the translation, with an unmapped IANA zone already refused. See 0057.
         if stop:
             pairs += [
                 # HHMM with no separator, so it needs zero padding the cron
@@ -349,7 +397,7 @@ def _main(plan):
                 # rather than "0105". Padded in a local, or a literal when the
                 # clock is fixed.
                 ("auto_stop_at", stop["hhmm_expr"]),
-                ("auto_stop_timezone", '"%s"' % stop["timezone"]),
+                ("auto_stop_timezone", '"%s"' % az_timezone),
             ]
         if has_jumpbox:
             pairs += [

@@ -1675,17 +1675,19 @@ def test_azure_segment_gets_a_nat_gateway_for_private_egress(redstack):
     assert "azurerm_subnet_nat_gateway_association" in body
 
 
-def test_azure_auto_stop_refuses_an_iana_timezone(redstack):
-    """Azure's shutdown schedule needs a Windows timezone id; an IANA name (what the
-    schema describes, recognisable by its "/") is refused at compile with a clear
-    message rather than emitting HCL that fails at apply. UTC and a Windows id both
-    compile (the latter is covered by the pass-through test above)."""
+def test_azure_auto_stop_translates_iana_to_a_windows_timezone(redstack):
+    """Azure's shutdown schedule needs a Windows timezone id. A common IANA zone is
+    translated (America/New_York -> Eastern Standard Time), so a non-UTC auto_stop
+    works; an unmapped IANA zone is refused rather than guessed into the wrong zone.
+    UTC and an already-Windows id pass through (the latter in the test above)."""
     redstack["auto_stop"] = {"enabled": True, "at": "22:00",
                              "timezone": "America/New_York"}
-    with pytest.raises(GenerationError, match="Windows timezone"):
+    main = generate(redstack, provider="azure",
+                    skip_validation=True)["terraform/main.tf"]
+    assert 'auto_stop_timezone = "Eastern Standard Time"' in main
+    redstack["auto_stop"]["timezone"] = "Antarctica/Troll"  # not in the map
+    with pytest.raises(GenerationError, match="no Windows timezone mapping"):
         generate(redstack, provider="azure", skip_validation=True)
-    redstack["auto_stop"]["timezone"] = "UTC"
-    generate(redstack, provider="azure", skip_validation=True)  # no raise
 
 
 def test_with_both_fields_the_earlier_still_wins_but_in_hcl(redstack):
