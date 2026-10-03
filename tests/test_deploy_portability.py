@@ -188,6 +188,24 @@ def test_each_jumpbox_prerequisite_is_checked_on_its_own(script):
     assert "command -v rsync" not in boot
 
 
+def test_ssh_to_the_jumpbox_never_falls_back_to_a_password(script):
+    """Found on a live deploy (six retries, all stalled at the jumpbox).
+
+    A fresh box answers port 22 before cloud-init has written the operator user's
+    authorized_keys, so the key is briefly refused. Without BatchMode, ssh then
+    prompts for a password: the wait-for-ssh probe stalls on that prompt instead of
+    retrying, and the first heredoc step dies with `Permission denied, please try
+    again`. Every operator-side ssh and scp that targets the jumpbox must set
+    BatchMode=yes so a not-yet-ready key fails fast and the retry loop rides out the
+    cloud-init race, the job that loop was written to do.
+    """
+    code = _code(script)
+    ssh_def = [ln for ln in code.splitlines() if ln.strip().startswith("SSH=")]
+    assert ssh_def and all("BatchMode=yes" in ln for ln in ssh_def), ssh_def
+    scp_lines = [ln for ln in code.splitlines() if ln.strip().startswith("scp ")]
+    assert scp_lines and all("BatchMode=yes" in ln for ln in scp_lines), scp_lines
+
+
 def test_pip_is_invoked_as_a_python_module(script):
     """`pip` is not always on PATH for a non-root user even once python3-pip is
     installed; `python3 -m pip` is."""

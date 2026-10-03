@@ -444,7 +444,13 @@ case "$(uname -s)" in
     ;;
 esac
 SSHKEY="${{KEYSAFE:-$KEY}}"
-SSH="ssh -i $SSHKEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
+# BatchMode=yes: never fall back to an interactive password prompt. Without it, a
+# fresh jumpbox whose cloud-init has not yet written redop's authorized_keys answers
+# port 22 but refuses the key, ssh prompts for a password, and the "wait for ssh"
+# probe below stalls on that prompt instead of retrying (and the first heredoc step
+# dies with "Permission denied, please try again"). With it, the probe fails fast and
+# rides out the cloud-init race, which is what its retry loop was written to do.
+SSH="ssh -i $SSHKEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes"
 
 {cloud_preflight}# Refuse to apply when management ingress is open to the whole internet.
 # operator_source_ranges is a tfvars value the topology validator never sees, so
@@ -527,7 +533,7 @@ mkdir -p ~/provision ~/.ssh && chmod 700 ~/.ssh
 BOOT
 
 say "stage the ansible tree and the connection key onto the jumpbox"
-scp -i "$SSHKEY" -o StrictHostKeyChecking=accept-new "$SSHKEY" "$JUMPUSER@$JUMP:.ssh/deploy-key" >/dev/null
+scp -i "$SSHKEY" -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$SSHKEY" "$JUMPUSER@$JUMP:.ssh/deploy-key" >/dev/null
 $SSH "$JUMPUSER@$JUMP" 'chmod 600 ~/.ssh/deploy-key'
 # Staged with tar over ssh rather than rsync. rsync is not on a stock Windows box
 # and there is no rsync package in chocolatey or winget, so requiring it meant the
