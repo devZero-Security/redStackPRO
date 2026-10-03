@@ -577,10 +577,19 @@ def test_explicit_open_ingress_aborts_and_the_override_reaches_apply(staged):
 def test_an_empty_ssh_public_key_is_derived_from_the_private_key(script):
     """The operator need not copy keys/<name>.pub into deploy.tfvars: when it is left
     empty, deploy.sh derives the public half from the private key it already found,
-    so the two halves cannot drift and a manual copy step disappears."""
+    so the two halves cannot drift and a manual copy step disappears.
+
+    The derived key must land where terraform actually reads it. A tfvars value beats
+    a TF_VAR_ env var, so exporting TF_VAR_ssh_public_key (the old approach) was silently
+    overridden by the empty ssh_public_key in the copied terraform.tfvars and apply
+    failed the variable validation. The key is written to a *.auto.tfvars instead, which
+    terraform loads after terraform.tfvars and so wins, and which persists for teardown."""
     code = _code(script)
     assert "ssh-keygen -y -f" in code
-    assert "TF_VAR_ssh_public_key" in code
+    # Written to an auto-loaded overriding tfvars, not exported as an env var that loses.
+    assert ".auto.tfvars" in code
+    assert "ssh_public_key = " in code
+    assert "TF_VAR_ssh_public_key" not in code
 
 
 # -- the deployment log (issue-triage artifact)

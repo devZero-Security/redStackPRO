@@ -515,16 +515,22 @@ fi
 # deploy.tfvars is the one config file you edit, here in the export root. Terraform
 # auto-loads terraform/terraform.tfvars, so copy it into place for apply and destroy.
 [ -f deploy.tfvars ] || {{ echo "deploy.tfvars not found next to this script. Fill it in first (see DEPLOYMENT-GUIDE.md)."; exit 1; }}
+cp deploy.tfvars terraform/terraform.tfvars
 # If ssh_public_key is left empty, derive it from the private key resolved above so
 # the operator never hand-copies it and the two halves cannot drift. A value the
-# operator set is kept. stdin from /dev/null so an unexpectedly passphrased key
-# fails fast instead of prompting. TF_VAR_ overrides the empty tfvars value.
+# operator set is kept. A tfvars value beats a TF_VAR_ env var, so the derived key
+# cannot ride in the environment: the empty ssh_public_key in terraform.tfvars would
+# win. Write it to a *.auto.tfvars instead, which terraform loads AFTER
+# terraform.tfvars and so overrides the empty value. The file persists in terraform/,
+# so a later `manage.sh teardown` (which re-copies the empty deploy.tfvars, and has no
+# key to re-derive from) still destroys cleanly. stdin from /dev/null so a passphrased
+# key fails fast instead of prompting.
+rm -f terraform/zz-derived.auto.tfvars
 if grep -Eq '^[[:space:]]*ssh_public_key[[:space:]]*=[[:space:]]*""[[:space:]]*$' deploy.tfvars; then
-  TF_VAR_ssh_public_key="$(ssh-keygen -y -f "$SSHKEY" </dev/null 2>/dev/null)" || {{ echo "ssh_public_key is empty and deriving it from $KEY failed -- paste keys/<name>.pub into deploy.tfvars"; exit 1; }}
-  export TF_VAR_ssh_public_key
+  RSP_PUBKEY="$(ssh-keygen -y -f "$SSHKEY" </dev/null 2>/dev/null)" || {{ echo "ssh_public_key is empty and deriving it from $KEY failed -- paste keys/<name>.pub into deploy.tfvars"; exit 1; }}
+  printf 'ssh_public_key = "%s"\n' "$RSP_PUBKEY" > terraform/zz-derived.auto.tfvars
   echo "note: ssh_public_key was empty in deploy.tfvars; derived it from $KEY"
 fi
-cp deploy.tfvars terraform/terraform.tfvars
 # Fail fast from here on. Without this a failed apply ran on and the user saw a
 # misleading "unfilled address placeholders remain" instead of the real error;
 # the tolerant spots below guard themselves (|| true, trailing true, if/&&).
