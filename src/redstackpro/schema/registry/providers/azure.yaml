@@ -21,3 +21,4 @@ capabilities:
   - public_address
   - outbound_routing
   - network_peering
+  - mixed_exposure_segment

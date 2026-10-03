@@ -198,6 +198,24 @@ def _host_ips(plan):
 
 # ---------------------------------------------------------------- root module
 
+def _needs_nat(plan, segment_id):
+    """Whether a subnet needs a NAT gateway of its own. Azure's NAT gateway serves
+    the instances without a public IP and coexists with the ones that have one
+    (like GCP Cloud NAT, unlike an AWS route table), so an internet-exposed subnet
+    still gives its private members (a collector, an operator) their own egress. A
+    segment needs it when egress is allowed and it holds any member that took no
+    public address. Mirrors gcp._needs_nat; without it a private collector in an
+    exposed subnet has no route out and its package install hangs."""
+    seg = plan.ctx.nodes[segment_id]
+    if seg["overlay"].get("egress") != "allowed":
+        return False
+    members = [h for h in plan.hosts()
+               if segment_id in plan.ctx.segments_of(h["id"])]
+    if not members:
+        return True
+    return any(not plan.is_public(h) for h in members)
+
+
 def _main(plan):
     is_range = plan.is_range()
     # The jumpbox runs Guacamole and keys into every box for the portal tiles in
@@ -263,6 +281,7 @@ def _main(plan):
             ("location", "azurerm_resource_group.this.location"),
             ("vnet_name", "module.%s.name" % plan.ref(network)),
             ("cidr", '"%s"' % node["overlay"]["cidr"]),
+            ("nat", "true" if _needs_nat(plan, node["id"]) else "false"),
         ]) + ["}"]
 
     for node in plan.hosts():

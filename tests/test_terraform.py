@@ -1657,6 +1657,19 @@ def test_azure_offense_firewall_covers_the_families_with_unique_priorities(redst
     assert len(seen) >= 20
 
 
+def test_azure_segment_gets_a_nat_gateway_for_private_egress(redstack):
+    """A private host (no public IP) in an egress-allowed segment needs a route out.
+    Azure's segment module gains a count-gated NAT gateway, decided by the compiler
+    the same way gcp decides Cloud NAT (it coexists with public IPs)."""
+    set_redirector_hostname(redstack, "cdn.redops.design")
+    main = generate(redstack, provider="azure")["terraform/main.tf"]
+    assert re.search(r"nat\s*=\s*true", main), "a segment should need a NAT gateway"
+    seg = ROOT / "src/redstackpro/assets/terraform/modules/azure/segment/main.tf"
+    body = seg.read_text(encoding="utf-8")
+    assert "azurerm_nat_gateway" in body
+    assert "azurerm_subnet_nat_gateway_association" in body
+
+
 def test_with_both_fields_the_earlier_still_wins_but_in_hcl(redstack):
     """The comparison cannot happen at compile any more, because one side is not
     known until apply. It moves into HCL unchanged rather than quietly becoming
