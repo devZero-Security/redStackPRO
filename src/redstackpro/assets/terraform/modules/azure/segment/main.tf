@@ -11,7 +11,13 @@ variable "cidr" { type = string }
 variable "nat" {
   type        = bool
   default     = false
-  description = "Give this subnet's private hosts outbound through a NAT gateway. The compiler decides it (a host with no public IP in an egress-allowed segment)."
+  description = "Route this subnet's private hosts out through the VNet's shared NAT gateway. The compiler decides it (a host with no public IP in an egress-allowed segment)."
+}
+
+variable "nat_gateway_id" {
+  type        = string
+  default     = ""
+  description = "Id of the VNet's shared NAT gateway (output by the network module). Used only when nat = true."
 }
 
 resource "azurerm_subnet" "this" {
@@ -21,38 +27,13 @@ resource "azurerm_subnet" "this" {
   address_prefixes     = [var.cidr]
 }
 
-# Egress for hosts with no public IP. A NAT gateway coexists with instances that
-# do have a public address (like GCP Cloud NAT, unlike an AWS route table), so an
-# internet-exposed subnet still gives its private members (a collector, an
-# operator) a route out. Azure is retiring default outbound, so this is the
-# explicit path. count-gated on var.nat.
-resource "azurerm_public_ip" "nat" {
-  count               = var.nat ? 1 : 0
-  name                = "${lower(var.name)}-nat-ip"
-  resource_group_name = var.resource_group
-  location            = var.location
-  allocation_method   = "Static"
-  sku                 = "Standard"
-}
-
-resource "azurerm_nat_gateway" "this" {
-  count               = var.nat ? 1 : 0
-  name                = "${lower(var.name)}-nat"
-  resource_group_name = var.resource_group
-  location            = var.location
-  sku_name            = "Standard"
-}
-
-resource "azurerm_nat_gateway_public_ip_association" "this" {
-  count                = var.nat ? 1 : 0
-  nat_gateway_id       = azurerm_nat_gateway.this[0].id
-  public_ip_address_id = azurerm_public_ip.nat[0].id
-}
-
+# Associate this subnet to the VNet's shared NAT gateway for egress. The gateway
+# (and its one public IP) lives in the network module so a VNet uses a single IP
+# rather than one per subnet; see modules/azure/network. count-gated on var.nat.
 resource "azurerm_subnet_nat_gateway_association" "this" {
   count          = var.nat ? 1 : 0
   subnet_id      = azurerm_subnet.this.id
-  nat_gateway_id = azurerm_nat_gateway.this[0].id
+  nat_gateway_id = var.nat_gateway_id
 }
 
 resource "azurerm_network_security_group" "this" {

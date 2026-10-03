@@ -1664,15 +1664,23 @@ def test_azure_offense_firewall_covers_the_families_with_unique_priorities(redst
 
 def test_azure_segment_gets_a_nat_gateway_for_private_egress(redstack):
     """A private host (no public IP) in an egress-allowed segment needs a route out.
-    Azure's segment module gains a count-gated NAT gateway, decided by the compiler
-    the same way gcp decides Cloud NAT (it coexists with public IPs)."""
+    The NAT gateway is created ONCE per VNet (the network module, create_nat) and
+    shared by its subnets, mirroring the AWS network-level NAT: Azure caps public IPs
+    per region, so one gateway per subnet (one IP each) busted the cap. The segment
+    only associates to the VNet's shared gateway. gcp decides egress the same way
+    (Cloud NAT coexists with public IPs)."""
     set_redirector_hostname(redstack, "cdn.redops.design")
     main = generate(redstack, provider="azure")["terraform/main.tf"]
-    assert re.search(r"nat\s*=\s*true", main), "a segment should need a NAT gateway"
-    seg = ROOT / "src/redstackpro/assets/terraform/modules/azure/segment/main.tf"
-    body = seg.read_text(encoding="utf-8")
-    assert "azurerm_nat_gateway" in body
-    assert "azurerm_subnet_nat_gateway_association" in body
+    assert re.search(r"nat\s*=\s*true", main), "a segment should need egress"
+    assert re.search(r"create_nat\s*=\s*true", main), "its VNet should create a NAT gateway"
+    assert "nat_gateway_id = module." in main, "the segment reads the VNet's shared gateway"
+    # The gateway and its single public IP live on the network module, not the segment.
+    net = (ROOT / "src/redstackpro/assets/terraform/modules/azure/network/main.tf").read_text(encoding="utf-8")
+    assert "azurerm_nat_gateway" in net
+    assert "azurerm_public_ip" in net
+    seg = (ROOT / "src/redstackpro/assets/terraform/modules/azure/segment/main.tf").read_text(encoding="utf-8")
+    assert "azurerm_subnet_nat_gateway_association" in seg
+    assert "azurerm_nat_gateway" not in seg, "the gateway moved to the network module"
 
 
 def test_azure_auto_stop_translates_iana_to_a_windows_timezone(redstack):

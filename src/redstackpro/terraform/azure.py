@@ -279,6 +279,15 @@ def _needs_nat(plan, segment_id):
     return any(not plan.is_public(h) for h in members)
 
 
+def _network_needs_nat(plan, network_id):
+    """A VNet gets one shared NAT gateway when any of its segments needs egress.
+    Azure caps public IPs per region, so the gateway is created once per VNet (the
+    AWS network-level NAT model) and every private subnet associates to it, rather
+    than one gateway and one public IP per subnet, which busted the cap."""
+    return any(_needs_nat(plan, s["id"]) for s in plan.segments()
+               if plan.ctx.network_of_segment(s["id"]) == network_id)
+
+
 def _main(plan):
     is_range = plan.is_range()
     # The jumpbox runs Guacamole and keys into every box for the portal tiles in
@@ -338,6 +347,7 @@ def _main(plan):
             ("resource_group", "azurerm_resource_group.this.name"),
             ("location", "azurerm_resource_group.this.location"),
             ("cidr", '"%s"' % node["overlay"]["cidr"]),
+            ("create_nat", "true" if _network_needs_nat(plan, node["id"]) else "false"),
         ]) + ["}"]
 
     for node in plan.segments():
@@ -350,6 +360,9 @@ def _main(plan):
             ("vnet_name", "module.%s.name" % plan.ref(network)),
             ("cidr", '"%s"' % node["overlay"]["cidr"]),
             ("nat", "true" if _needs_nat(plan, node["id"]) else "false"),
+            # The shared NAT gateway lives on the VNet; associate only when this
+            # subnet needs egress (nat = true). Mirrors aws.py's nat_gateway_id.
+            ("nat_gateway_id", "module.%s.nat_gateway_id" % plan.ref(network)),
         ]) + ["}"]
 
     for node in plan.hosts():
