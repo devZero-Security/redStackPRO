@@ -740,15 +740,24 @@ _MANAGE_SWEEP = {
       aws ec2 wait instance-terminated $REG_ARG --instance-ids $SWEEP_IDS 2>/dev/null || true
     fi
 ''',
-    "azure": r'''    say "force teardown: sweeping redStackPRO instances in the cloud first"
+    "azure": r'''    say "force teardown: deleting the whole resource group (clears anything a failed apply left behind)"
+    # A range is one dedicated resource group, so the sure way to clear an interrupted
+    # deploy is to delete the group itself. terraform destroy alone stalls when a failed
+    # apply left a resource it does not fully track (a stranded NIC pins its subnet, which
+    # pins the VNet), and azurerm will not delete a group that still holds resources. az
+    # group delete removes the group and everything in it server side, in dependency
+    # order. The plain `teardown` (no --force) still uses terraform destroy, which is
+    # enough after a clean apply.
     RG="$(grep -E '^[[:space:]]*resource_group[[:space:]]*=' deploy.tfvars 2>/dev/null | head -1 | sed -E 's/[^=]*=[[:space:]]*"?([^"]*)"?.*/\1/')"
     RG="${RG:-redstackpro-range}"
-    az vm list -g "$RG" --query "[].name" -o tsv 2>/dev/null \
-      | while read -r sweep_name; do
-          [ -n "$sweep_name" ] || continue
-          echo "  deleting $sweep_name ($RG)"
-          az vm delete -g "$RG" -n "$sweep_name" --yes 2>/dev/null || true
-        done
+    if command -v az >/dev/null 2>&1; then
+      echo "  deleting resource group $RG and every resource in it"
+      az group delete -n "$RG" --yes 2>/dev/null || echo "  az group delete did not finish; terraform destroy will try next"
+    else
+      echo "  the az CLI is not installed, so a forced resource-group delete is not available here."
+      echo "  terraform destroy runs next; if it stalls on resources a partial apply left untracked,"
+      echo "  install az and re-run, or delete the resource group $RG in the portal."
+    fi
 ''',
 }
 
