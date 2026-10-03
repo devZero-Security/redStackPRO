@@ -188,22 +188,44 @@ def test_each_jumpbox_prerequisite_is_checked_on_its_own(script):
     assert "command -v rsync" not in boot
 
 
-def test_ssh_to_the_jumpbox_never_falls_back_to_a_password(script):
-    """Found on a live deploy (six retries, all stalled at the jumpbox).
+# Every shipped example carries a jumpbox, so each produces a deploy script.
+JUMPBOX_EXAMPLES = ["minimal.json", "parallel-chains.json", "peered.json", "redstack.json"]
+
+
+@pytest.mark.parametrize("name", JUMPBOX_EXAMPLES)
+@pytest.mark.parametrize("provider", ["gcp", "aws"])
+def test_ssh_to_the_jumpbox_is_non_interactive_everywhere(provider, name):
+    """Found on a live AWS deploy (six retries, all stalled at the jumpbox).
 
     A fresh box answers port 22 before cloud-init has written the operator user's
     authorized_keys, so the key is briefly refused. Without BatchMode, ssh then
     prompts for a password: the wait-for-ssh probe stalls on that prompt instead of
     retrying, and the first heredoc step dies with `Permission denied, please try
-    again`. Every operator-side ssh and scp that targets the jumpbox must set
-    BatchMode=yes so a not-yet-ready key fails fast and the retry loop rides out the
-    cloud-init race, the job that loop was written to do.
+    again`.
+
+    The jumpbox SSH path is shared, the provider only swaps the preflight and the
+    DNS reminder, never the connection, so the guarantee is asserted across both
+    providers and every jumpbox-bearing blueprint: every operator-side ssh goes
+    through $SSH, which sets BatchMode, every scp sets it too, and nothing runs a
+    bare `ssh` that could fall back to a password. A not-yet-ready key then fails
+    fast and the retry loop rides out the cloud-init race, the job it was written for.
     """
-    code = _code(script)
-    ssh_def = [ln for ln in code.splitlines() if ln.strip().startswith("SSH=")]
-    assert ssh_def and all("BatchMode=yes" in ln for ln in ssh_def), ssh_def
-    scp_lines = [ln for ln in code.splitlines() if ln.strip().startswith("scp ")]
-    assert scp_lines and all("BatchMode=yes" in ln for ln in scp_lines), scp_lines
+    script = generate_deploy_script(example(name), Registry(), provider=provider)
+    assert script, (name, provider, "a jumpbox topology must produce a deploy script")
+    # Operator-side only: the BOOT/RUNNER heredocs run locally on the jumpbox, where
+    # a prompt cannot happen and is not the failure this guards.
+    lines = _code(script, local_only=True).splitlines()
+
+    ssh_def = [ln for ln in lines if ln.strip().startswith("SSH=")]
+    assert ssh_def and all("BatchMode=yes" in ln for ln in ssh_def), (name, provider, ssh_def)
+
+    scp_lines = [ln for ln in lines if ln.strip().startswith("scp ")]
+    assert scp_lines and all("BatchMode=yes" in ln for ln in scp_lines), (name, provider, scp_lines)
+
+    # No executed ssh bypasses $SSH. The SSH= assignment and the echoed "watch it"
+    # hints do not start with "ssh ", so only a bare executed ssh would trip this.
+    bare = [ln for ln in lines if ln.strip().startswith("ssh ")]
+    assert not bare, (name, provider, bare)
 
 
 def test_pip_is_invoked_as_a_python_module(script):
