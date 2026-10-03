@@ -419,6 +419,51 @@ def test_a_missing_key_says_how_to_make_one(staged):
     assert "ssh_public_key" in done.stdout
 
 
+def _past_preflight_tfvars(export):
+    """Overwrite deploy.tfvars so a run gets past the ingress/key preflight to
+    terraform. Narrow ingress and a plausible public key keep every guard happy."""
+    (export / "deploy.tfvars").write_text(
+        'project = "p"\nregion = "us-central1"\nzone = "us-central1-a"\n'
+        'ssh_public_key = "ssh-ed25519 AAAATEST test"\n'
+        'operator_source_ranges = ["203.0.113.5/32"]\n',
+        encoding="utf-8", newline="\n")
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_a_failed_apply_stops_with_its_own_error_not_the_placeholder_message(staged):
+    """Found on a live GCP deploy. With no `set -e`, a failed `terraform apply` ran
+    on and the run ended on the MISLEADING "unfilled address placeholders remain",
+    burying the real error. It must stop at the apply with the apply's own message."""
+    export, stubs = staged
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    _stub(stubs, "gcloud", "echo token")  # pass the GCP ADC preflight
+    _stub(stubs, "terraform", 'case "$*" in *apply*) exit 1;; *) exit 0;; esac')
+    _past_preflight_tfvars(export)
+
+    done = _run(export, stubs)
+    assert done.returncode == 1
+    assert "terraform apply failed" in done.stdout, done.stdout + done.stderr
+    assert "unfilled address placeholders" not in done.stdout, done.stdout
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_an_empty_lab_password_aborts_before_provisioning_a_blank_credential(staged):
+    """An empty `terraform output -raw lab_password` (a partial/odd apply) would
+    otherwise provision the Windows hosts and the portal with a blank credential.
+    The run must stop instead of carrying an empty secret forward."""
+    export, stubs = staged
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    _stub(stubs, "gcloud", "echo token")
+    # apply "succeeds" but lab_password comes back empty.
+    _stub(stubs, "terraform",
+          'case "$*" in *"output -raw lab_password"*) echo "";; *) exit 0;; esac')
+    _past_preflight_tfvars(export)
+
+    done = _run(export, stubs)
+    assert done.returncode == 1
+    assert "lab_password came back empty" in done.stdout, done.stdout + done.stderr
+
+
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
 def test_open_ingress_aborts_the_run_and_the_override_lets_it_through(staged):
     """Executed. The shipped example's tfvars carries operator_source_ranges

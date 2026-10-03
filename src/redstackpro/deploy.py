@@ -316,7 +316,7 @@ def generate_deploy_script(topology, registry=None, provider=None):
         pairs = " ".join('"%s|%s"' % (name, host) for name, host in dns_targets)
         dns_actions = (
             'say "DNS action required before the redirector certificate can issue"\n'
-            'RSP_ADDRS="$(terraform -chdir=terraform output -json redstackpro_addresses)"\n'
+            'RSP_ADDRS="$(terraform -chdir=terraform output -json redstackpro_addresses)" || { echo "   >> could not read addresses for the DNS reminder -- set the redirector A record by hand once the box is up"; RSP_ADDRS=""; }\n'
             "for pair in " + pairs + "; do\n"
             '  rsp_host="${pair##*|}"\n'
             "  rsp_ip=\"$(printf '%s' \"$RSP_ADDRS\" | \"$PY\" -c "
@@ -479,20 +479,27 @@ fi
 # auto-loads terraform/terraform.tfvars, so copy it into place for apply and destroy.
 [ -f deploy.tfvars ] || {{ echo "deploy.tfvars not found next to this script. Fill it in first (see DEPLOYMENT-GUIDE.md)."; exit 1; }}
 cp deploy.tfvars terraform/terraform.tfvars
+# Fail fast from here on. Without this a failed apply ran on and the user saw a
+# misleading "unfilled address placeholders remain" instead of the real error;
+# the tolerant spots below guard themselves (|| true, trailing true, if/&&).
+set -e
 say "terraform apply"
-terraform -chdir=terraform init -input=false -upgrade >/dev/null
-terraform -chdir=terraform apply -auto-approve -input=false
+terraform -chdir=terraform init -input=false -upgrade >/dev/null || {{ echo "terraform init failed -- check the provider download and your network"; exit 1; }}
+terraform -chdir=terraform apply -auto-approve -input=false || {{ echo "terraform apply failed (its error is above) -- nothing was provisioned; fix it and re-run"; exit 1; }}
 
 # Both modes. Terraform calls this "the shared password for the admin account,
 # the Windows operator, and the portal" and emits it either way, but only a range
 # used to read it back, so nothing an ops stack provisioned could reach the one
 # credential the operator is actually given. A teamserver that wants to put that
 # password in its own config had no way to learn it.
-REDSTACKPRO_LAB_PASSWORD="$(terraform -chdir=terraform output -raw lab_password)"
+REDSTACKPRO_LAB_PASSWORD="$(terraform -chdir=terraform output -raw lab_password)" || {{ echo "could not read lab_password from terraform output -- did apply finish?"; exit 1; }}
+# An empty value here would provision the Windows hosts and the portal with a
+# blank credential, so stop rather than carry it forward.
+[ -n "$REDSTACKPRO_LAB_PASSWORD" ] || {{ echo "lab_password came back empty -- apply looks incomplete; re-run before provisioning"; exit 1; }}
 export REDSTACKPRO_LAB_PASSWORD
 
 say "fill inventory addresses from terraform output"
-"$PY" tf_inventory.py
+"$PY" tf_inventory.py || {{ echo "filling the inventory from terraform output failed"; exit 1; }}
 # Scan the whole ansible tree (and the mode briefing, DEFENSE-/OFFENSE-BRIEFING.md),
 # not a fixed pair of subdirectories: an ops export has no ansible/vars, which made
 # the old grep exit non-zero on the missing path and skip the check entirely. Pipe
@@ -503,13 +510,16 @@ if grep -rl "<<tf:" ansible *-BRIEFING.md 2>/dev/null | grep -q .; then
 fi
 
 JUMP=$(terraform -chdir=terraform output -json redstackpro_addresses \
-  | "$PY" -c "import json,sys;print(json.load(sys.stdin)['$JUMPBOX']['public_address'])")
+  | "$PY" -c "import json,sys;print(json.load(sys.stdin)['$JUMPBOX']['public_address'])") || {{ echo "could not read the jumpbox address from terraform output"; exit 1; }}
+[ -n "$JUMP" ] || {{ echo "the jumpbox address is empty -- apply may not have created it"; exit 1; }}
 say "jumpbox public address: $JUMP"
 {dns_actions}
 
 say "wait for the jumpbox to accept ssh"
 ssh-keygen -f "$HOME/.ssh/known_hosts" -R "$JUMP" >/dev/null 2>&1 || true
-for i in $(seq 1 30); do $SSH "$JUMPUSER@$JUMP" true 2>/dev/null && break; sleep 10; done
+ok_ssh=0
+for i in $(seq 1 30); do $SSH "$JUMPUSER@$JUMP" true 2>/dev/null && {{ ok_ssh=1; break; }}; sleep 10; done
+[ "$ok_ssh" = 1 ] || {{ echo "jumpbox $JUMP never accepted ssh after ~5 min -- check it booted and 22 is open to your operator_source_ranges"; exit 1; }}
 
 say "install prerequisites on the jumpbox"
 $SSH "$JUMPUSER@$JUMP" 'bash -s' <<'BOOT'
@@ -543,7 +553,7 @@ $SSH "$JUMPUSER@$JUMP" 'chmod 600 ~/.ssh/deploy-key'
 # longer emits, and ansible would happily run them.
 tar czf - ansible ansible.cfg \
   | $SSH "$JUMPUSER@$JUMP" 'rm -rf ~/provision/ansible ~/provision/ansible.cfg; mkdir -p ~/provision; tar xzf - -C ~/provision'
-$SSH "$JUMPUSER@$JUMP" 'export PATH="$HOME/.local/bin:$PATH"; for i in 1 2 3 4 5; do ansible-galaxy collection install -r ~/provision/ansible/requirements.yml > ~/provision/galaxy.log 2>&1 && break; echo "galaxy install attempt $i failed; retry in 20s" | tee -a ~/provision/galaxy.log; sleep 20; done'
+$SSH "$JUMPUSER@$JUMP" 'export PATH="$HOME/.local/bin:$PATH"; for i in 1 2 3 4 5; do ansible-galaxy collection install -r ~/provision/ansible/requirements.yml > ~/provision/galaxy.log 2>&1 && exit 0; echo "galaxy install attempt $i failed; retry in 20s" | tee -a ~/provision/galaxy.log; sleep 20; done; exit 1' || {{ echo "ansible-galaxy failed on the jumpbox after 5 tries -- see ~/provision/galaxy.log on $JUMP"; exit 1; }}
 
 # The jumpbox provisions itself over a LOCAL connection: a cloud VM cannot ssh to
 # its own public address, so its own play must not go over the network.
@@ -582,7 +592,7 @@ RUNNER
 # the launching shell. The bracketed patterns ([r], [p]) keep pgrep from matching
 # its own command line either.
 $SSH "$JUMPUSER@$JUMP" 'screen -S provision -X quit 2>/dev/null; for p in $(pgrep -f "ansible-[p]laybook -i ansible/inventory.yml"); do kill -9 "$p" 2>/dev/null; done; for p in $(pgrep -f "provision/[r]un.sh"); do kill -9 "$p" 2>/dev/null; done; true'
-$SSH "$JUMPUSER@$JUMP" 'chmod +x ~/provision/run.sh; screen -dmS provision ~/provision/run.sh; sleep 2; screen -ls | grep -i provision'
+$SSH "$JUMPUSER@$JUMP" 'chmod +x ~/provision/run.sh; screen -dmS provision ~/provision/run.sh; sleep 2; screen -ls | grep -qi provision' || {{ echo "the provision screen did not start on the jumpbox"; exit 1; }}
 
 say "provisioning launched under screen 'provision' on the jumpbox"
 echo "   watch it:   ssh -i $KEY $JUMPUSER@$JUMP   then   screen -r provision"
