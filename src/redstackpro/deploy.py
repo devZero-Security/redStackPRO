@@ -459,6 +459,14 @@ SSH="ssh -i $SSHKEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o 
 # the same way the auto-stop guard does, with an explicit override. Subnet-scoped
 # values do not trip it: only the literal 0.0.0.0/0 does. The pattern is loose on
 # spacing and quoting and catches 0.0.0.0/0 as one entry among several.
+# First: it must be set at all. The export ships it commented, so a range is never
+# exposed by default; the deploy stops here until the operator names their range.
+if [ -f deploy.tfvars ] && ! grep -Eq '^[[:space:]]*operator_source_ranges[[:space:]]*=[[:space:]]*\[[^]]*"' deploy.tfvars; then
+  echo "operator_source_ranges is not set in deploy.tfvars."
+  echo '  Set it to the IP/CIDR operators connect from, for example ["203.0.113.5/32"].'
+  echo "  A range is never exposed by default, so the deploy stops until you set this."
+  exit 1
+fi
 if grep -Eq 'operator_source_ranges[^#]*"0\.0\.0\.0/0"' deploy.tfvars 2>/dev/null; then
   if [ "${{REDSTACKPRO_ALLOW_OPEN_INGRESS:-0}}" = "1" ]; then
     echo "WARNING: operator_source_ranges is 0.0.0.0/0 (ssh and the portal are open to the whole internet). Narrow it in deploy.tfvars."
@@ -478,6 +486,15 @@ fi
 # deploy.tfvars is the one config file you edit, here in the export root. Terraform
 # auto-loads terraform/terraform.tfvars, so copy it into place for apply and destroy.
 [ -f deploy.tfvars ] || {{ echo "deploy.tfvars not found next to this script. Fill it in first (see DEPLOYMENT-GUIDE.md)."; exit 1; }}
+# If ssh_public_key is left empty, derive it from the private key resolved above so
+# the operator never hand-copies it and the two halves cannot drift. A value the
+# operator set is kept. stdin from /dev/null so an unexpectedly passphrased key
+# fails fast instead of prompting. TF_VAR_ overrides the empty tfvars value.
+if grep -Eq '^[[:space:]]*ssh_public_key[[:space:]]*=[[:space:]]*""[[:space:]]*$' deploy.tfvars; then
+  TF_VAR_ssh_public_key="$(ssh-keygen -y -f "$SSHKEY" </dev/null 2>/dev/null)" || {{ echo "ssh_public_key is empty and deriving it from $KEY failed -- paste keys/<name>.pub into deploy.tfvars"; exit 1; }}
+  export TF_VAR_ssh_public_key
+  echo "note: ssh_public_key was empty in deploy.tfvars; derived it from $KEY"
+fi
 cp deploy.tfvars terraform/terraform.tfvars
 # Fail fast from here on. Without this a failed apply ran on and the user saw a
 # misleading "unfilled address placeholders remain" instead of the real error;

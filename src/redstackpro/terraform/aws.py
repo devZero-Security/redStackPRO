@@ -183,6 +183,10 @@ variable "availability_zone" {
 variable "ssh_public_key" {
   description = "Authorized key for the admin account, supplied at run time."
   type        = string
+  validation {
+    condition     = can(regex("^(ssh-|ecdsa-|sk-)", var.ssh_public_key))
+    error_message = "ssh_public_key must be an SSH public key line (a key type, the base64 key, then a comment). deploy.sh fills it from your private key; or paste keys/<name>.pub into deploy.tfvars."
+  }
 }
 
 variable "key_name" {
@@ -194,7 +198,7 @@ variable "key_name" {
 variable "operator_source_ranges" {
   description = "Where management access is accepted from. Narrow this."
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = []
 }
 
 variable "lab_password" {
@@ -213,9 +217,9 @@ def _tfvars(plan):
 region         = "%s"
 ssh_public_key = ""
 
-# Narrow this to the addresses operators connect from. You can list several:
-# add one /32 per operator, or a CIDR, e.g. ["203.0.113.5/32", "198.51.100.7/32"].
-operator_source_ranges = ["0.0.0.0/0"]
+# REQUIRED: the addresses operators connect from. deploy.sh aborts until you set
+# this, so a range is never exposed by default. One /32 per operator, or a CIDR:
+# operator_source_ranges = ["203.0.113.5/32", "198.51.100.7/32"]
 """ % plan.region
 
 

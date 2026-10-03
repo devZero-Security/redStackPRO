@@ -465,25 +465,51 @@ def test_an_empty_lab_password_aborts_before_provisioning_a_blank_credential(sta
 
 
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
-def test_open_ingress_aborts_the_run_and_the_override_lets_it_through(staged):
-    """Executed. The shipped example's tfvars carries operator_source_ranges
-    0.0.0.0/0, so a real run must abort at the ingress check, and only the explicit
-    override may carry it past."""
+def test_unset_operator_source_ranges_aborts_until_set(staged):
+    """The export now ships operator_source_ranges commented out (fail closed), so a
+    real run must stop and say to set it, rather than deploy an unreachable range or
+    an open one."""
     export, stubs = staged
     _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
-    # gcloud must succeed so the run reaches the ingress check that follows it.
+    _stub(stubs, "gcloud", "exit 0")  # reach the ingress check after the creds check
+
+    done = _run(export, stubs)
+    assert done.returncode == 1
+    assert "operator_source_ranges is not set" in done.stdout, done.stdout
+    assert "terraform apply" not in done.stdout
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_explicit_open_ingress_aborts_and_the_override_reaches_apply(staged):
+    """A literal 0.0.0.0/0 the operator set themselves is a blocking abort, and only
+    the explicit override carries it past."""
+    export, stubs = staged
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
     _stub(stubs, "gcloud", "exit 0")
+    _stub(stubs, "terraform", "exit 0")
+    (export / "deploy.tfvars").write_text(
+        'project = "p"\nregion = "us-central1"\nzone = "us-central1-a"\n'
+        'ssh_public_key = "ssh-ed25519 AAAATEST test"\n'
+        'operator_source_ranges = ["0.0.0.0/0"]\n',
+        encoding="utf-8", newline="\n")
 
     blocked = _run(export, stubs)
     assert blocked.returncode == 1
-    assert "operator_source_ranges is 0.0.0.0/0" in blocked.stdout, blocked.stdout
+    assert "which exposes ssh and the portal" in blocked.stdout, blocked.stdout
     assert "terraform apply" not in blocked.stdout
 
     allowed = _run(export, stubs, env_extra={"REDSTACKPRO_ALLOW_OPEN_INGRESS": "1"})
-    # The abort message names the exposure; the warning does not. Only the abort
-    # must be gone, and the run must reach apply.
     assert "which exposes ssh and the portal" not in allowed.stdout, allowed.stdout
     assert "terraform apply" in allowed.stdout, allowed.stdout + allowed.stderr
+
+
+def test_an_empty_ssh_public_key_is_derived_from_the_private_key(script):
+    """The operator need not copy keys/<name>.pub into deploy.tfvars: when it is left
+    empty, deploy.sh derives the public half from the private key it already found,
+    so the two halves cannot drift and a manual copy step disappears."""
+    code = _code(script)
+    assert "ssh-keygen -y -f" in code
+    assert "TF_VAR_ssh_public_key" in code
 
 
 # -- the deployment log (issue-triage artifact)
