@@ -161,6 +161,15 @@ resource "azurerm_windows_virtual_machine" "this" {
   admin_password        = local.windows_password
   network_interface_ids = [azurerm_network_interface.this.id]
 
+  # The operator kit is too large to pass on the extension command line (Windows
+  # caps it near 8 KB and the script blew past it), and the Windows CustomScript
+  # extension has no `script` property to pass it out of band (that is Linux only).
+  # So the operator carries its base64 script in custom_data, which the azure-edition
+  # agent decodes to C:\AzureData\CustomData.bin, and the extension below reads it
+  # from there instead of inlining it. operator_setup_script_b64 is already base64 of
+  # the script, so Azure writes the decoded script to that path.
+  custom_data = (var.operator_setup && var.operator_setup_script_b64 != "") ? var.operator_setup_script_b64 : null
+
   os_disk {
     caching              = "ReadWrite"
     storage_account_type = "StandardSSD_LRS"
@@ -209,8 +218,12 @@ resource "azurerm_virtual_machine_extension" "operator_setup" {
   type                 = "CustomScriptExtension"
   type_handler_version = "1.10"
 
+  # The script itself rides in custom_data (see the VM above), so it is NOT inlined
+  # here: only the small per-host values (operator name, hosts file, ssh key) are, and
+  # the command reads the script from where the agent decoded custom_data. This keeps
+  # the command line under the Windows limit the inlined script used to exceed.
   settings = jsonencode({
-    commandToExecute = "powershell -ExecutionPolicy Bypass -Command \"$env:RSP_OPERATOR='${var.operator_username}'; $env:RSP_HOSTS=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${base64encode(var.operator_hosts)}')); $env:RSP_SSH_KEY=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${base64encode(var.operator_ssh_key)}')); [IO.File]::WriteAllBytes('C:\\\\redstackpro-operator-setup.ps1',[Convert]::FromBase64String('${var.operator_setup_script_b64}')); powershell -ExecutionPolicy Bypass -File C:\\\\redstackpro-operator-setup.ps1\""
+    commandToExecute = "powershell -ExecutionPolicy Bypass -Command \"$env:RSP_OPERATOR='${var.operator_username}'; $env:RSP_HOSTS=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${base64encode(var.operator_hosts)}')); $env:RSP_SSH_KEY=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${base64encode(var.operator_ssh_key)}')); Copy-Item 'C:\\\\AzureData\\\\CustomData.bin' 'C:\\\\redstackpro-operator-setup.ps1'; powershell -ExecutionPolicy Bypass -File C:\\\\redstackpro-operator-setup.ps1\""
   })
 }
 

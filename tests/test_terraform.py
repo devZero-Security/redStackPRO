@@ -323,6 +323,22 @@ def test_the_aws_operator_boot_script_fits_in_user_data():
         "(payload %d + wrapper %d)" % (total, payload, len(wrapper)))
 
 
+def test_azure_operator_script_rides_in_custom_data_not_the_command_line():
+    """Windows caps a CustomScript extension's commandToExecute near 8 KB, and the
+    operator kit's base64 is ~13.8KB, so inlining it there failed apply with "The
+    command line is too long" (seen live). The Windows CustomScript extension has no
+    `script` property (that is Linux only), so the script rides in the VM's custom_data,
+    which the azure-edition agent decodes to C:\\AzureData\\CustomData.bin, and the
+    command reads it from there. Keep the big blob out of the command line."""
+    host = (ROOT / "src/redstackpro/assets/terraform/modules/azure/host/main.tf").read_text(encoding="utf-8")
+    # The Windows VM carries the script in custom_data.
+    assert "custom_data" in host and "operator_setup_script_b64" in host
+    # The command reads the decoded script from disk, it does not inline it.
+    assert "CustomData.bin" in host
+    # The old bug: the whole script base64 inlined into commandToExecute.
+    assert "FromBase64String('${var.operator_setup_script_b64}')" not in host
+
+
 def test_setup_script_is_shipped_for_every_provider(redstack):
     """The generated terraform reads operator_setup.ps1 with file(), so it must be
     in the export tree or terraform init fails. static_files ships it for each."""
