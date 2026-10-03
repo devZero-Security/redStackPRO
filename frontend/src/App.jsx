@@ -126,6 +126,9 @@ function Editor() {
   const [palette, setPalette] = useState({});
   const [schema, setSchema] = useState(null);
   const [providers, setProviders] = useState([]);
+  // The running server version, shown in a corner of the canvas. Empty until the
+  // health call answers, and stays empty if it does not, so it never shows an error.
+  const [appVersion, setAppVersion] = useState("");
   const [provider, setProvider] = useState("gcp");
   const [selection, setSelection] = useState(null);
   const [findings, setFindings] = useState([]);
@@ -243,6 +246,10 @@ function Editor() {
     api
       .providers()
       .then((body) => setProviders(body.providers))
+      .catch(() => {});
+    api
+      .health()
+      .then((body) => setAppVersion(body.app_version || ""))
       .catch(() => {});
   }, []);
 
@@ -1463,9 +1470,14 @@ function Editor() {
   return (
     <div className={`rg-app rg-mode-${document.mode || "offense"}`}>
       <header className="rg-header">
-        <span className="rg-brand">
-          red<b>Stack</b><span className="rg-brand-pro">PRO</span>
-        </span>
+        <div className="rg-brand-wrap">
+          <span className="rg-brand">
+            red<b>Stack</b><span className="rg-brand-pro">PRO</span>
+          </span>
+          {appVersion ? (
+            <span className="rg-version" title="Running server version">v{appVersion}</span>
+          ) : null}
+        </div>
         <div className="rg-mode-switch" role="tablist" aria-label="Canvas">
           <button
             type="button"
@@ -1829,7 +1841,7 @@ function Editor() {
         <div className="rg-findings">
           {findings.length === 0 ? (
             <span className="rg-hint">
-              No findings. redStackPRO generates code and never deploys it.
+              No findings.
             </span>
           ) : (
             findings.map((finding, index) => (

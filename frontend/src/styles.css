@@ -108,8 +108,12 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
+.rg-brand-wrap { display: flex; flex-direction: column; justify-content: center; line-height: 1; }
 .rg-brand { font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }
 .rg-brand b { font-weight: 700; }
+/* Running server version, under the wordmark. Muted so it reads as a build stamp,
+   not a control. */
+.rg-version { font-size: var(--fs-1); font-weight: 400; color: var(--muted); letter-spacing: 0.02em; margin-top: 3px; }
 /* The PRO carries the mode color: red for Offense, blue for Defense. A bright
    tint reads on the dark header; the darker accent itself is for fills, not text. */
 .rg-brand-pro { font-weight: 700; }

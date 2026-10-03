@@ -6,6 +6,8 @@ credentials, runs Terraform, or reaches a target environment. See 0001.
 
 import os
 from contextlib import contextmanager
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -58,6 +60,15 @@ def _static_dir():
     return candidate if candidate.is_dir() else None
 
 
+def app_version():
+    """The running package version, which equals the container image tag by the
+    release process. Read at request time so it needs no build step."""
+    try:
+        return _pkg_version("redstackpro")
+    except PackageNotFoundError:
+        return "unknown"
+
+
 def create_app(database_url=None, principal=None):
     engine = db.make_engine(database_url)
     _ensure_schema(engine)
@@ -66,7 +77,7 @@ def create_app(database_url=None, principal=None):
 
     app = FastAPI(
         title="redStackPRO",
-        version="0.5.0",
+        version=app_version(),
         description=(
             "Composition layer for red team infrastructure and cyber ranges. "
             "Build a topology from nodes and edges, get back a complete working "
@@ -107,7 +118,8 @@ def create_app(database_url=None, principal=None):
 
     @app.get("/api/v1/health", tags=["system"])
     def health():
-        return {"status": "ok", "schema_version": LATEST}
+        return {"status": "ok", "schema_version": LATEST,
+                "app_version": app_version()}
 
     # Mounted last so the API router and /docs keep precedence.
     static_dir = _static_dir()

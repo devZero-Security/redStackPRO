@@ -57,7 +57,11 @@ def as_principal(app, **kwargs):
 # -- basics
 
 def test_health(client):
-    assert client.get(V1 + "/health").json()["status"] == "ok"
+    body = client.get(V1 + "/health").json()
+    assert body["status"] == "ok"
+    # The running package version, surfaced so the canvas can show it. It is the
+    # installed metadata, never "unknown" in a test where the package is present.
+    assert body["app_version"] and body["app_version"] != "unknown"
 
 
 def test_create_and_read(client, document):

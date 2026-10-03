@@ -79,6 +79,9 @@ function fakeBackend({ putResult, documents } = {}) {
     if (url.includes("/registry/providers")) {
       return respond(200, { providers: [{ name: "gcp" }, { name: "aws" }] });
     }
+    if (url.includes("/health")) {
+      return respond(200, { status: "ok", schema_version: "0.2.0", app_version: "9.9.9" });
+    }
     if (url.endsWith("/validate")) {
       return respond(200, { valid: true, errors: 0, warnings: 0, findings: [] });
     }
@@ -152,6 +155,12 @@ describe("loading", () => {
     const picker = await screen.findByLabelText("Open topology");
     await waitFor(() =>
       expect(within(picker).getByText(/Someone else's \(read only\)/)).toBeTruthy());
+  });
+
+  test("the running server version shows under the wordmark", async () => {
+    fakeBackend();
+    render(<App />);
+    expect(await screen.findByText("v9.9.9")).toBeTruthy();
   });
 });
 

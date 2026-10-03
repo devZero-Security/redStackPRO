@@ -32,6 +32,8 @@ export const api = {
   palette: (mode = "offense") => request(`/registry/palette?mode=${mode}`),
   schema: () => request("/registry/schema"),
   providers: () => request("/registry/providers"),
+  // Running server version, shown on the canvas. {status, schema_version, app_version}.
+  health: () => request("/health"),
 
   // Paged, newest first. The default matches the API's own default, so a caller
   // that wants the first page keeps calling with no arguments. See 0026.
