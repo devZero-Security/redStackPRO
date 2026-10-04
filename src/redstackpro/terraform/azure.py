@@ -17,13 +17,18 @@ from .plan import (  # noqa: F401  GenerationError re-exported
     GenerationError, align, operator_hosts_hcl,
     operator_source_ranges_check, time_provider)
 
-# Marketplace image (publisher, offer, sku, version) per build.
+# Marketplace image (publisher, offer, sku, version) per build. These must be the
+# Gen2 (hypervisor generation 2) SKUs: the default sizes (the AMD Dasv5 family and
+# newer) are Gen2 only, so a Gen1 SKU (plain "2019-Datacenter", "win10-22h2-pro")
+# fails apply with "cannot boot Hypervisor Generation 1". The Gen2 SKU is the one
+# suffixed -gensecond or -g2 (2022-datacenter-azure-edition and win11 are Gen2
+# already). Caught on the first live azure defense deploy.
 WINDOWS_IMAGES = {
     # 2016 is pinned to 2019 ahead of Microsoft EOS on 2027-01-12; see aws.py.
-    "windows_server_2016": ("MicrosoftWindowsServer", "WindowsServer", "2019-Datacenter", "latest"),
-    "windows_server_2019": ("MicrosoftWindowsServer", "WindowsServer", "2019-Datacenter", "latest"),
+    "windows_server_2016": ("MicrosoftWindowsServer", "WindowsServer", "2019-datacenter-gensecond", "latest"),
+    "windows_server_2019": ("MicrosoftWindowsServer", "WindowsServer", "2019-datacenter-gensecond", "latest"),
     "windows_server_2022": ("MicrosoftWindowsServer", "WindowsServer", "2022-datacenter-azure-edition", "latest"),
-    "windows_10": ("MicrosoftWindowsDesktop", "Windows-10", "win10-22h2-pro", "latest"),
+    "windows_10": ("MicrosoftWindowsDesktop", "Windows-10", "win10-22h2-pro-g2", "latest"),
     "windows_11": ("MicrosoftWindowsDesktop", "windows-11", "win11-23h2-pro", "latest"),
 }
 _DEFAULT_WINDOWS = WINDOWS_IMAGES["windows_server_2022"]
