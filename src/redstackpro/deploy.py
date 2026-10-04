@@ -339,7 +339,10 @@ def generate_deploy_script(topology, registry=None, provider=None):
             # operator whose record exists and is simply pointing at the last
             # deploy. That misread cost a whole session of beacon callbacks on
             # 2026-09-14. Printing both halves makes the delta unmissable.
-            '  rsp_cur="$("$PY" -c "import socket;print(socket.gethostbyname(\'$rsp_host\'))" 2>/dev/null)"\n'
+            # || true: gethostbyname raises on an unresolved name (the normal first-deploy
+            # case), which under set -e would kill the deploy here instead of printing the
+            # "does not resolve" branch below. Keep the substitution exit 0, empty on failure.
+            '  rsp_cur="$("$PY" -c "import socket;print(socket.gethostbyname(\'$rsp_host\'))" 2>/dev/null || true)"\n'
             '  if [ "$rsp_cur" = "$rsp_ip" ]; then\n'
             '    echo "   >> $rsp_host already resolves to $rsp_ip -- nothing to do"\n'
             "  else\n"
