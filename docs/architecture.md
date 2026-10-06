@@ -28,8 +28,8 @@ collector, jumpbox, operator box. Containers are node kinds too, which is what
 lets every edge endpoint be a bare node id. No provider vocabulary.
 
 **Blueprints** are saved topologies users clone and modify. Current redStack ships as
-the default blueprint. The GOAD-derived range labs ship as their own topology
-templates, built on the same model.
+the default blueprint. The GOAD-derived range labs ship as their own blueprints, built on the same
+model.
 
 **Overlays** are per-node parameters: which C2 on this teamserver, which gating
 rules on this redirector, which services on this jumpbox.
@@ -104,7 +104,7 @@ Azure, Proxmox, and ESXi are on the roadmap, not yet supported; neither Proxmox
 nor ESXi can allocate a public address on its own, so redirector reachability
 would depend on a network redStackPRO does not control.
 
-Defense mode ships as a rendered GOAD template with instantiation parameters;
+Defense mode ships as a rendered GOAD blueprint with instantiation parameters;
 custom range authoring over the same providers is not built yet.
 
 Ansible generation ships from the first release. Inventory, variables, and

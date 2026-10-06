@@ -149,12 +149,6 @@ Names are composed from the topology `prefix` and the node `id`, never stored. S
   and is entitled to hear it while the topology is still in front of them. See 0059.
 - `MGT002` error. A jumpbox is excluded from its own ProxyJump path. This is a
   compiler invariant, listed here because it is what the rule protects.
-- `BOOT001` warning. A jumpbox with `transport: wireguard` needs a two stage play
-  order in the export, because Ansible cannot configure WireGuard over WireGuard.
-  Bootstrap runs directly or by ProxyJump on private addresses, and the tunnel is
-  the management path only afterward. Warning rather than error, since the
-  condition is satisfiable and the constraint falls on the generated play order
-  rather than on the topology.
 
 ## VPN access
 
@@ -279,7 +273,7 @@ than the ordering logic.
 
 These fire only in defense mode (`mode: defense`); the offense rules above are gated
 off there, since a lab jumpbox on a local subnet is correct and the `cyb` naming
-scheme is deferred for templates. See 0047. The shipped GOAD templates are clean
+scheme is deferred for blueprints. See 0047. The shipped GOAD blueprints are clean
 of all four.
 
 - `RNG001` warning. A domain member (`dc`, `srv`, or `wks`) with no `joins`
