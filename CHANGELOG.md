@@ -7,6 +7,11 @@ versioning, and dates are UTC.
 
 ### Fixed
 
+- The redirector DNS reminder no longer aborts the deploy. It resolves the cover
+  hostname to compare against the new public IP; on a name that does not resolve yet
+  (the normal first deploy) that lookup failed under `set -e` and killed the run right
+  after apply. The lookup is now guarded, so the deploy continues and prints the A
+  record to set.
 - Jumpbox SSH no longer stalls on a fresh deploy. A new jumpbox answers port 22
   before cloud-init writes the operator key, so the key was briefly refused and ssh
   dropped to a password prompt. SSH is now non-interactive (BatchMode) and the
