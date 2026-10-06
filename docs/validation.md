@@ -180,6 +180,14 @@ apply, never in the export.
   keys the portal account and the VPN credential, so a duplicate collides at
   apply and the second account cannot be created. The same shape as `RNG007` for
   domain usernames.
+- `VPN005` error. An operator `handle` that is not safe to deploy. The handle is
+  interpolated into shell, filenames, and SQL on the jumpbox at apply, so it is held
+  to a strict charset: lowercase letters, digits, dot, underscore or hyphen, starting
+  with a letter or digit, at most 32 characters. Rename each handle to that form.
+- `VPN006` error. An operator `role` that is not safe to deploy. The role goes into
+  the briefing table and, as a comment, into the Guacamole seed SQL, so a newline or a
+  pipe corrupts the table or breaks out of the SQL comment. A role is a single line,
+  no pipe character, at most 64 characters. Shorten it and remove any newline or pipe.
 
 ## Peering
 

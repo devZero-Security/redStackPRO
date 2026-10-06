@@ -130,12 +130,12 @@ this stack. This file is only how to stand it up.
 
 | | |
 |---|---|
-| On your machine | `terraform`, `ssh`, `tar`, and a Python 3.8+ |
+| On your machine | `terraform`, `ssh`, `tar`, and a Python 3.11+ |
 | On the hosts | nothing: Ansible is installed on the jumpbox for you |
 | Time | roughly 60 to 75 minutes, most of it building C2 agents |
 
 `ssh` and `tar` are already on macOS and Linux and ship with Git for Windows;
-install `terraform` and a Python 3.8+ yourself. The deploy then runs the same
+install `terraform` and a Python 3.11+ yourself. The deploy then runs the same
 way on all three.
 
 ## 1. Make an ssh key
@@ -296,12 +296,12 @@ you are attacking; this file is only how to stand it up.
 
 | | |
 |---|---|
-| On your machine | `terraform`, `ssh`, `tar`, and a Python 3.8+ |
+| On your machine | `terraform`, `ssh`, `tar`, and a Python 3.11+ |
 | On the hosts | nothing: Ansible is installed on the jumpbox for you |
 | Time | roughly 45 minutes for a small forest, longer for a large one |
 
 `ssh` and `tar` are already on macOS and Linux and ship with Git for Windows;
-install `terraform` and a Python 3.8+ yourself. The deploy then runs the same
+install `terraform` and a Python 3.11+ yourself. The deploy then runs the same
 way on all three.
 
 ## 1. Make an ssh key

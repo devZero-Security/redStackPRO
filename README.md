@@ -94,7 +94,7 @@ The whole canvas in one container, the API and the web app on one port:
 Or pull the published image instead of building it:
 
     docker run -p 8000:8000 -v redstackpro-data:/data \
-      ghcr.io/devzero-security/redstackpro:0.9.1
+      ghcr.io/devzero-security/redstackpro:latest
 
 The canvas listens on 8000 inside the container. To serve it on a different host
 port, change the left half of the mapping (`-p 8787:8000`), or set
@@ -149,7 +149,7 @@ one forest, two domain controllers and a member server, plus a jumpbox.
 > **Two things before you deploy.** Your cloud identity needs permission to
 > create the resources the export builds (VPCs or networks, subnets, security
 > groups or firewall rules, instances, elastic or static IPs), and your machine
-> needs `terraform`, `ssh`, `tar`, and Python 3.8 or newer. redStackPRO generates
+> needs `terraform`, `ssh`, `tar`, and Python 3.11 or newer. redStackPRO generates
 > the code and installs none of that for you; Ansible installs itself on the
 > jumpbox.
 >

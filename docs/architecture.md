@@ -112,8 +112,10 @@ play ordering are derived from the topology; role bodies come from redStack.
 
 ## Known gaps accepted by the export-only model
 
-- No deployment status tracking
-- No destroy button
+Every export ships `manage.sh` (`manage.ps1` on Windows) for `status`, `start`,
+`stop`, and `teardown`, so the deployment's state and lifecycle are managed from the
+export itself. What the model still does not do:
+
 - No drift detection
 
 An optional import path where users paste back outputs or state would close
