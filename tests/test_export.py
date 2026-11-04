@@ -102,7 +102,8 @@ def test_a_build_that_would_stop_mid_provision_refuses_to_start(registry):
     # The one-line fix has to be named: a refusal the operator cannot act on is
     # just an obstacle. The guard is only emitted for a fixed `at`, so the fix is
     # moving that time (re-exporting the same value changes nothing).
-    assert "move auto_stop.at later" in body
+    assert ("In the canvas, click empty space, then Topology settings > "
+            "Auto-stop, and export again.") in body
     assert "re-run the compile now" not in body
     assert "REDSTACKPRO_MIN_STOP_LEAD=0" in body, "an override must exist"
 
