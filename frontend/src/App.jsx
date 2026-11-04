@@ -50,11 +50,16 @@ import {
   addHostPreset,
   addNode,
   applyPositions,
+  cleanPrefix,
   emptyDocument,
+  MODE_PREFIX,
+  PREFIX_MAX,
   inferRole,
   isContainer,
   isRangeHost,
   legendItems,
+  offSchemeIds,
+  paletteGroups,
   removeEdge,
   removeNode,
   setJoin,
@@ -65,6 +70,15 @@ import {
 } from "./topology.js";
 import { presetsFor } from "./presets.js";
 import { useHistory } from "./useHistory.js";
+
+const PREFIX_HELP =
+  "Prepended to every host name. 1 to 8 lowercase letters or digits, starting with a letter. " +
+  "Prefix plus each host id must fit in 15 characters, so 3 to 4 letters is best (off, acme).";
+
+// chooseMode resets to an empty document; saved topologies stay in the picker.
+const MODE_SWITCH_HELP =
+  "Switching starts a new empty topology; saved work stays in the picker. " +
+  "Unsaved changes ask before they are dropped.";
 
 function useDebounced(value, delay) {
   const [settled, setSettled] = useState(value);
@@ -153,6 +167,16 @@ function Editor() {
   const wrapper = useRef(null);
   const flow = useReactFlow();
 
+  // The name and prefix as they were when their field took focus. Emptying one
+  // and leaving puts that value back; amend folds the revert into the typing
+  // step that emptied it rather than adding an undo step of its own.
+  const atFocus = useRef({ name: "", prefix: "" });
+  const restoreIfEmpty = useCallback((field, fallback) => {
+    const before = atFocus.current[field] || fallback;
+    history.amend((current) =>
+      current[field] ? current : { ...current, [field]: before });
+  }, [history]);
+
   // The current document, reachable from handlers and the error boundary without
   // threading it through their dependencies.
   const docRef = useRef(document);
@@ -203,7 +227,8 @@ function Editor() {
   // and re-derives it when contents change; a pinned id is left alone. Held in a
   // ref because it steers the retitle effect below without needing to re-render.
   // The pin also persists on the node itself (node.pinned), so a hand-picked name
-  // survives a reload; retitle honours either source. See idscheme.js and 0043.
+  // survives a reload; retitle honours either source. A loaded document's
+  // off-scheme ids are pinned too (offSchemeIds). See idscheme.js and 0043.
   const pinned = useRef(new Set());
 
   // Keep every unpinned node's id on the default scheme. Adding a redirector to a
@@ -325,6 +350,7 @@ function Editor() {
         // Only a document that never had any gets arranged, and that layout is
         // deterministic, so what is on screen is what a reload reproduces.
         const doc = layoutIfNeeded(body.document);
+        pinned.current = new Set(offSchemeIds(doc));
         // Opening a topology is a session boundary, not an edit: undo has
         // nothing to say about whatever was open before.
         history.reset(doc);
@@ -355,6 +381,7 @@ function Editor() {
 
   const resetToEmpty = useCallback((mode = "offense") => {
     const doc = emptyDocument(mode);
+    pinned.current = new Set();
     history.reset(doc); // a new topology is a session boundary, not an undo step
     setSaved(doc);
     setDomainsText("");
@@ -1406,6 +1433,8 @@ function Editor() {
       }
       const doc = layoutIfNeeded(await response.json());
       record("load-template", { url, nodes: doc.nodes.length });
+      // Pinned so retitle leaves the shipped names alone and the load stays clean.
+      pinned.current = new Set(offSchemeIds(doc));
       // A loaded template is a session boundary, not an edit to undo back
       // through.
       history.reset(doc);
@@ -1484,7 +1513,8 @@ function Editor() {
             role="tab"
             aria-selected={document.mode !== "defense"}
             className={`rg-mode-seg rg-mode-offense ${document.mode !== "defense" ? "is-active" : ""}`}
-            title="Offense: attack infrastructure (C2, redirectors, operators)"
+            title={`Offense: attack infrastructure (C2, redirectors, operators).${
+              document.mode === "defense" ? ` ${MODE_SWITCH_HELP}` : ""}`}
             onClick={() => chooseMode("offense")}
           >
             Offense
@@ -1494,7 +1524,8 @@ function Editor() {
             role="tab"
             aria-selected={document.mode === "defense"}
             className={`rg-mode-seg rg-mode-defense ${document.mode === "defense" ? "is-active" : ""}`}
-            title="Defense: defense ranges (AD forests, hosts, SIEM)"
+            title={`Defense: defense ranges (AD forests, hosts, SIEM).${
+              document.mode !== "defense" ? ` ${MODE_SWITCH_HELP}` : ""}`}
             onClick={() => chooseMode("defense")}
           >
             Defense
@@ -1512,23 +1543,31 @@ function Editor() {
         <input
           className="rg-name"
           aria-label="Topology name"
+          placeholder="Topology name"
+          title="Becomes the download file name and the guide title."
           value={document.name}
+          onFocus={() => { atFocus.current.name = document.name; }}
           onChange={(e) =>
             history.coalesce("name", (current) => ({ ...current, name: e.target.value }))
           }
+          onBlur={() => restoreIfEmpty("name", "Untitled")}
         />
-        <label
-          className="rg-prefix"
-          title="Prepended to every host's name (off for Offense, def for Defense). Give each concurrent range a distinct prefix to keep host names clear."
-        >
+        <label className="rg-prefix" title={PREFIX_HELP}>
           prefix
           <input
+            aria-label="Prefix"
             value={document.prefix}
             size={6}
-            title="Prepended to every host's name (off for Offense, def for Defense). Give each concurrent range a distinct prefix to keep host names clear."
-            onChange={(e) =>
-              history.coalesce("prefix", (current) => ({ ...current, prefix: e.target.value }))
-            }
+            maxLength={PREFIX_MAX}
+            title={PREFIX_HELP}
+            onFocus={() => { atFocus.current.prefix = document.prefix; }}
+            onChange={(e) => {
+              const prefix = cleanPrefix(e.target.value);
+              // A stripped keystroke changes nothing, so it adds no undo step.
+              history.coalesce("prefix", (current) =>
+                current.prefix === prefix ? current : { ...current, prefix });
+            }}
+            onBlur={() => restoreIfEmpty("prefix", MODE_PREFIX[document.mode] || "off")}
           />
         </label>
         <ProviderPicker
@@ -1628,7 +1667,7 @@ function Editor() {
           </aside>
         ) : (
           <Palette
-            groups={palette}
+            groups={paletteGroups(palette)}
             onAdd={(entry) => addFromPalette(entry)}
             presets={presetsFor(document.mode)}
             onAddPreset={(preset) => addPreset(preset)}
@@ -1762,7 +1801,7 @@ function Editor() {
                 subnets and hosts inside it.
               </p>
               <p className="rg-muted">
-                Or pick a {document.mode === "defense" ? "GOAD lab" : "template"} from the top of the palette.
+                Or pick a blueprint from the top of the palette.
               </p>
             </div>
           ) : null}

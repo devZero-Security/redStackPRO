@@ -107,7 +107,8 @@ export function HostNode({ data, selected }) {
   const badges = [];
   if (edr) badges.push({ key: "edr", cls: "is-edr", title: `EDR: ${edr}`, text: edr });
   if (vulnCount) badges.push({ key: "vuln", cls: "is-vuln", title: `${vulnCount} planted vulnerabilities`, text: `${vulnCount} vuln${vulnCount === 1 ? "" : "s"}` });
-  if (hardeningCount) badges.push({ key: "hardened", cls: "is-hardened", title: `${hardeningCount} hardening controls`, text: `${hardeningCount} hardened` });
+  // No role applies hardening yet, so the badge must not read as a defended host.
+  if (hardeningCount) badges.push({ key: "hardened", cls: "is-more", title: `${hardeningCount} hardening controls recorded. This release does not apply them, so the host is not hardened.`, text: "hardening off" });
   if (reachable) badges.push({ key: "public", cls: "is-public", title: "Holds a public address on an internet segment", text: "public" });
   if (domain) badges.push({ key: "domain", cls: "is-domain", title: `Joined to ${domain}`, text: domain });
   const shownBadges = badges.slice(0, MAX_BADGES);

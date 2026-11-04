@@ -10,7 +10,7 @@
 // real topology and drawing them all would bury the relationships that matter.
 
 import { HOST } from "./layout.js";
-import { proposeId, edgeId } from "./idscheme.js";
+import { proposeId, edgeId, retitle } from "./idscheme.js";
 import { allocNetworkCidr, allocSegmentCidr, cidrWithin } from "./cidr.js";
 
 const CONTAINERS = ["network", "segment", "domain"];
@@ -411,9 +411,29 @@ const SEED_OVERLAY = {
   redirector: { server: "nginx", tls: { cert_source: "letsencrypt" } },
   teamserver: { c2: "mythic" },
   collector: { sink: "opensearch" },
-  jumpbox: { services: ["ssh"] },
+  // guacamole is the portal deploy.sh and the guide send the operator to.
+  jumpbox: { services: ["ssh", "guacamole"] },
   operator: { os: "kali" },
+  // Without an os Ansible treats an AD host as Linux and provisioning fails.
+  dc: { os: "windows_server_2022" },
+  srv: { os: "windows_server_2022" },
+  wks: { os: "windows_server_2022" },
 };
+
+// Kinds the registry still declares but the palette does not offer: no role
+// provisions them yet, so site.yml would name a missing role. A document that
+// already has one still loads and renders, with its registry label.
+export const PALETTE_HIDDEN = new Set(["fw", "appliance"]);
+
+// The palette groups minus the hidden kinds, with any group left empty dropped.
+export function paletteGroups(groups) {
+  const out = {};
+  for (const [group, entries] of Object.entries(groups || {})) {
+    const shown = entries.filter((entry) => !PALETTE_HIDDEN.has(entry.kind));
+    if (shown.length) out[group] = shown;
+  }
+  return out;
+}
 
 export function addNode(document, entry, position) {
   const overlay = structuredClone(SEED_OVERLAY[entry.kind] || {});
@@ -440,6 +460,13 @@ export function addHostPreset(document, preset, position) {
     ...document,
     nodes: [...document.nodes, { id, kind: preset.kind, position, overlay }],
   };
+}
+
+// Ids in a document the default scheme would rename. A loaded document keeps
+// them: a shipped blueprint's names are the ones its guide uses, and renaming
+// on load also marked the fresh load as unsaved.
+export function offSchemeIds(document) {
+  return Object.keys(retitle(document, new Set()).renamed);
 }
 
 export function removeNode(document, id) {
@@ -532,6 +559,17 @@ export function updateEdge(document, id, patch) {
 
 // The default prefix per canvas: offense names run off-, defense ranges def-.
 export const MODE_PREFIX = { offense: "off", defense: "def" };
+
+// The prefix as typed, cut to what the schema accepts (^[a-z][a-z0-9]{0,7}$):
+// lowercase letters and digits, a letter first, eight at most.
+export const PREFIX_MAX = 8;
+export function cleanPrefix(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .replace(/^[0-9]+/, "")
+    .slice(0, PREFIX_MAX);
+}
 
 export const emptyDocument = (mode = "offense") => ({
   schema_version: "0.7.0",

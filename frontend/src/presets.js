@@ -39,8 +39,9 @@ export const HOST_PRESETS = [
     abbrev: "file",
     icon: "tabler/outline/folder",
     color: SERVER_COLOR,
-    blurb: "SMB/NFS file share member server",
-    overlay: { role: "fileshare", os: WIN_SERVER, services: ["smb"] },
+    blurb: "Member server with an open SMB share (the Open share vuln)",
+    // role fileshare is a badge only; the openshares vuln is what plants the share.
+    overlay: { role: "fileshare", os: WIN_SERVER, vulns: ["openshares"] },
   },
   {
     key: "adcs",

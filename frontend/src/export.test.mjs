@@ -52,9 +52,11 @@ test("the panel states the export-only model", () => {
   assert.ok(/refuses to run on an invalid topology/.test(source));
 });
 
-test("the panel opens on a generated file, not a static one", () => {
-  assert.ok(source.includes('"terraform/firewall.tf"'),
-    "firewall.tf is derived entirely from edges, which is the thing to show");
+test("the panel opens on deploy.tfvars, the one file a person must edit", () => {
+  const preferred = slice("export const PREFERRED", "// A command on its own line");
+  const first = /"([^"]+)"/.exec(preferred)?.[1];
+  assert.equal(first, "deploy.tfvars");
+  assert.ok(!preferred.includes("firewall.tf"));
 });
 
 console.log(`\n${passed} passed`);

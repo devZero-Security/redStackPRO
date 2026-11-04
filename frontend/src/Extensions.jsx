@@ -18,7 +18,7 @@ export function Extensions({ document, readOnly, onToggle, onDismiss }) {
         <h2>Extensions</h2>
         <p className="rg-muted">
           The GOAD extensions. Toggle one to add its box and wire its agents.
-          {readOnly ? " Turning one on makes an editable copy of this template." : ""}
+          {readOnly ? " Turning one on makes an editable copy of this blueprint." : ""}
         </p>
         <ul className="rg-ext-list">
           {available.map((ext) => {
