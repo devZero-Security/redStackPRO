@@ -9,8 +9,10 @@
   microsoft.ad.user:
     name: "{{ item.username }}"
     domain_server: localhost
+    # The user's own spns, or one MSSQL SPN when it lists none (an empty list
+    # included, which default() alone would pass through).
     spn:
-      add: "{{ item.spns | default([item.spn | default('MSSQLSvc/' ~ item.username ~ '.' ~ redstackpro_domain.domain_fqdn ~ ':1433')]) }}"
+      add: "{{ item.spns if (item.spns | default([]) | length > 0) else [item.spn | default('MSSQLSvc/' ~ item.username ~ '.' ~ redstackpro_domain.domain_fqdn ~ ':1433')] }}"
   when: "'kerberoastable' in (item.flaws | default([])) or 'spn_set' in (item.flaws | default([]))"
   loop: "{{ redstackpro_domain.users }}"
   loop_control:
@@ -49,8 +51,9 @@
       $ErrorActionPreference = "Stop"
       $targets = $DelegateTo | ConvertFrom-Json
       Set-ADAccountControl -Server localhost -Identity $Sam -TrustedToAuthForDelegation $true
+      # Replace, not Add: -Add throws on a value already present, so a re-run failed.
       if ($targets.Count -gt 0) {
-        Set-ADUser -Server localhost -Identity $Sam -Add @{'msDS-AllowedToDelegateTo' = $targets}
+        Set-ADUser -Server localhost -Identity $Sam -Replace @{'msDS-AllowedToDelegateTo' = [string[]]$targets}
       }
     parameters:
       Sam: "{{ item.username }}"
@@ -111,6 +114,31 @@
   when:
     - "'weak_password' in (item.flaws | default([]))"
     - not (item.password | default(''))
+  loop: "{{ redstackpro_domain.users }}"
+  loop_control:
+    label: "{{ item.username }}"
+
+# Reversible encryption only stores a reversible copy at the next password set,
+# so the flag is followed by a reset to the same password the account already has
+# (same choice as the two tasks above). DCSync then returns it in cleartext.
+- name: Store passwords with reversible encryption on flagged accounts
+  ansible.windows.win_powershell:
+    script: |
+      param($Sam, $Pass)
+      $ErrorActionPreference = "Stop"
+      Set-ADUser -Server localhost -Identity $Sam -AllowReversiblePasswordEncryption $true
+      Set-ADAccountPassword -Server localhost -Identity $Sam -Reset `
+        -NewPassword (ConvertTo-SecureString $Pass -AsPlainText -Force)
+    parameters:
+      Sam: "{{ item.username }}"
+      Pass: >-
+        {{ item.password if (item.password | default(''))
+           else ((item.weak_password | default('Summer2024!'))
+                 if 'weak_password' in (item.flaws | default([]))
+                 else redstackpro_lab_password) }}
+  no_log: true
+  changed_when: true
+  when: "'reversible_encryption' in (item.flaws | default([]))"
   loop: "{{ redstackpro_domain.users }}"
   loop_control:
     label: "{{ item.username }}"

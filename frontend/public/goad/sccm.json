@@ -141,9 +141,6 @@
             "groups": [],
             "privilege": "user",
             "description": "SCCM Network Access Account",
-            "flaws": [
-              "password_in_description"
-            ],
             "password": "123456789"
           },
           {

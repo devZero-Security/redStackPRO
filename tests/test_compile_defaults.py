@@ -259,3 +259,65 @@ def test_defaults_do_not_touch_the_callers_document():
     before = json.dumps(doc, sort_keys=True)
     compile_topology(doc, Registry(), provider="gcp")
     assert json.dumps(doc, sort_keys=True) == before
+
+
+# -- domain user flaws
+
+ATTACK_PATHS = ROLES / "redstackpro.dc/tasks/attack_paths.yml"
+
+
+def _north_users(doc):
+    return _node(doc, "north")["overlay"]["users"]
+
+
+def test_password_in_description_plants_the_password():
+    doc = goad_light()
+    users = _north_users(doc)
+    users += [
+        {"username": "desc.declared", "password": "Winter1!",
+         "description": "Helpdesk", "flaws": ["password_in_description"]},
+        {"username": "desc.weak", "weak_password": "Spring2025",
+         "flaws": ["password_in_description", "weak_password"]},
+        {"username": "desc.none", "display_name": "No Password",
+         "flaws": ["password_in_description"]},
+    ]
+    files = compile_topology(doc, Registry(), provider="gcp")
+    north = _yaml(files, "ansible/vars/domains/north.sevenkingdoms.local.yml")
+    by = {u["username"]: u for u in north["users"]}
+    assert by["desc.declared"]["description"] == "Helpdesk (Password : Winter1!)"
+    assert by["desc.weak"]["password"] == "Spring2025"
+    assert by["desc.weak"]["description"] == "desc.weak (Password : Spring2025)"
+    # No password of its own: it gets one, never the shared lab password.
+    pw = by["desc.none"]["password"]
+    assert pw and by["desc.none"]["description"] == "No Password (Password : %s)" % pw
+    group = _yaml(files, "ansible/group_vars/all.yml")
+    assert group["redstackpro_user_passwords"]["desc.none"] == pw
+    assert pw in files["DEFENSE-BRIEFING.md"]
+
+
+def test_a_description_that_already_holds_the_password_is_kept():
+    doc = load(PUBLIC / "goad/goad-wazuh.json")
+    files = compile_topology(doc, Registry(), provider="gcp")
+    north = _yaml(files, "ansible/vars/domains/north.sevenkingdoms.local.yml")
+    sam = next(u for u in north["users"] if u["username"] == "samwell.tarly")
+    assert sam["description"] == "Samwell Tarly (Password : Heartsbane)"
+
+
+def test_the_user_role_honours_spns_delegate_to_enabled_and_reversible():
+    tasks = {t["name"]: t for t in yaml.safe_load(
+        ATTACK_PATHS.read_text(encoding="utf-8"))}
+    spn = tasks["Set SPNs on kerberoastable accounts"]["microsoft.ad.user"]["spn"]["add"]
+    assert "item.spns if" in spn and "MSSQLSvc/" in spn
+    deleg = tasks["Configure constrained delegation (protocol transition) on flagged users"]
+    assert "item.delegate_to" in deleg["ansible.windows.win_powershell"]["parameters"]["DelegateTo"]
+    assert "-Replace @{'msDS-AllowedToDelegateTo'" in deleg["ansible.windows.win_powershell"]["script"]
+    rev = tasks["Store passwords with reversible encryption on flagged accounts"]
+    script = rev["ansible.windows.win_powershell"]["script"]
+    assert "-AllowReversiblePasswordEncryption $true" in script
+    assert "Set-ADAccountPassword" in script
+    assert "reversible_encryption" in rev["when"]
+    main = yaml.safe_load((ROLES / "redstackpro.dc/tasks/main.yml").read_text(encoding="utf-8"))
+    create = next(t for t in main if t.get("name") == "Create the domain users")
+    assert create["microsoft.ad.user"]["enabled"] == "{{ item.enabled | default(true) | bool }}"
+    assert create["microsoft.ad.user"]["description"] == "{{ item.description | default(omit) }}"
+    assert create["microsoft.ad.user"]["password_never_expires"] is True

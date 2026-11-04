@@ -239,6 +239,29 @@ def _trust_type_default(source_fqdn, target_fqdn):
     return "forest"
 
 
+# The fallback the dc role sets for a weak_password account with no password.
+WEAK_PASSWORD_DEFAULT = "Summer2024!"
+
+
+def _plant_password_in_description(user):
+    """password_in_description writes the account's password into its AD
+    description. An account with no password of its own would otherwise run on
+    the shared lab password, which is also every Administrator's, so it gets
+    one of its own here: the weak_password value when that flaw is set, else a
+    random one. The dc role then sets it like any declared password."""
+    if "password_in_description" not in (user.get("flaws") or []):
+        return
+    if not user.get("password"):
+        if "weak_password" in (user.get("flaws") or []):
+            user["password"] = user.get("weak_password") or WEAK_PASSWORD_DEFAULT
+        else:
+            user["password"] = secrets.token_urlsafe(9)
+    description = user.get("description") or ""
+    if user["password"] not in description:
+        base = description or user.get("display_name") or user["username"]
+        user["description"] = "%s (Password : %s)" % (base, user["password"])
+
+
 def apply_compile_defaults(topology):
     """Fill the fields a canvas document may leave empty with what the build
     needs, so an unset field compiles to a working host instead of failing in
@@ -252,6 +275,7 @@ def apply_compile_defaults(topology):
       other, else forest. A parent_child edge is turned to run parent to
       child, the direction the dc role reads. direction and transitive take
       the schema defaults.
+    - a user flagged password_in_description: its password in the description.
     """
     nodes = {n.get("id"): n for n in topology.get("nodes", [])}
     for node in nodes.values():
@@ -266,6 +290,8 @@ def apply_compile_defaults(topology):
             ov = node.setdefault("overlay", {})
             if ov.get("fqdn") and not ov.get("netbios"):
                 ov["netbios"] = _netbios_default(ov["fqdn"])
+            for user in ov.get("users") or []:
+                _plant_password_in_description(user)
 
     def fqdn(node_id):
         return ((nodes.get(node_id) or {}).get("overlay") or {}).get("fqdn")

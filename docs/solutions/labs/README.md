@@ -34,7 +34,7 @@ difference between the two labs. Both dimensions are counted below.
 | [nha](nha.md) | 2 | 6 | 10 | 4 unique |
 | [minilab](minilab.md) | 1 | 3 | 5 | 4 unique |
 | [dracarys](../goad-dracarys/README.md) | 1 | 4 | 6 | 5 unique, plus a Linux member. Gets its own solution |
-| [sccm](../goad-sccm/README.md) | 1 | 5 | 2 | surface is the MECM service, not vulns. Gets its own solution |
+| [sccm](../goad-sccm/README.md) | 1 | 5 | 1 | surface is the MECM service, not vulns. Gets its own solution |
 | [harbor](../harbor/README.md) | 2 | 5 | 10 | 3 unique techniques on redStackPRO's own range, not a GOAD lab. Gets its own solution |
 
 "Surface" counts host vulns and user flaws together. It measures technique
