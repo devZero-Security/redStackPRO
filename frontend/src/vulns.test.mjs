@@ -5,7 +5,7 @@
 // wire it. See vulns.js and 0050.
 import assert from "node:assert";
 import { readFileSync, readdirSync } from "node:fs";
-import { ACCOUNT_TECHNIQUE_IDS, VULN_CATALOG, VULN_GOAD, VULN_LABEL, VULN_PROVIDERS } from "./vulns.js";
+import { ACCOUNT_TECHNIQUE_IDS, VULN_CATALOG, VULN_GOAD, VULN_LABEL, VULN_PARAMS, VULN_PROVIDERS, vulnParamsExample } from "./vulns.js";
 
 let passed = 0;
 const test = (name, fn) => { fn(); passed += 1; console.log("  ok", name); };
@@ -82,6 +82,35 @@ test("the account techniques are exactly the user: mapped ids", () => {
     [...ACCOUNT_TECHNIQUE_IDS].sort(),
     ["asreproasting", "kerberoasting", "password_in_description", "weak_password"]
   );
+});
+
+test("every parameterized vuln is a catalog id with described keys", () => {
+  for (const [id, params] of Object.entries(VULN_PARAMS)) {
+    assert.ok(ids.has(id), `VULN_PARAMS names ${id}, which the catalog does not have`);
+    assert.ok(params.length > 0, id);
+    for (const p of params) {
+      assert.match(p.key, /^[a-z0-9_]+(\.[a-z0-9_]+)?$/, `${id} ${p.key}`);
+      assert.ok(p.about, `${id} ${p.key} has no about`);
+      if (p.required) assert.ok("example" in p, `${id} ${p.key} is required but has no example`);
+    }
+  }
+});
+
+test("the example is one line of JSON carrying every required key", () => {
+  for (const [id, params] of Object.entries(VULN_PARAMS)) {
+    const line = vulnParamsExample(id);
+    assert.ok(!line.includes("\n"), id);
+    const parsed = JSON.parse(line);
+    for (const p of params.filter((q) => q.required)) {
+      const value = p.key.split(".").reduce((at, part) => (at || {})[part], parsed);
+      assert.deepEqual(value, p.example, `${id} ${p.key}`);
+    }
+  }
+  assert.equal(
+    vulnParamsExample("constrained_delegation_kerberos"),
+    '{"delegate_to":["CIFS/srv01.corp.local"]}'
+  );
+  assert.equal(vulnParamsExample("smbv1"), null);
 });
 
 console.log(`\n${passed} passed`);
