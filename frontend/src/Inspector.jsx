@@ -8,7 +8,7 @@ import {
 } from "./vulns.js";
 import { HARDENING_CATALOG } from "./hardening.js";
 import {
-  checkValue, defaultFor, emptyOptionLabel, fieldFindings, fieldLabel, fieldRule, findingsAt,
+  checkValue, defaultFor, emptyOptionLabel, fieldFindings, fieldLabel, fieldRule, findingsAt, isNotice,
   jsonKindFor, numberHelp, optionLabel, placeholderFor, resolveSpec,
 } from "./fieldRules.js";
 import {
@@ -720,7 +720,8 @@ function VulnVarsHelp({ vulns, description }) {
 // on ({id, kind, mode, overlay}); together they pick the default an empty field
 // compiles to. Both are optional, so a bare spec (an edge field) still renders.
 // `findings` are the server findings that name a field on this node
-// ({field, message}); the ones at `path` mark this field red.
+// ({field, message, severity}); an error at `path` marks this field red, a
+// warning or an info finding shows under it without the red.
 function Field({
   name, path = name, spec: rawSpec, value: rawValue, required, onChange, disabled,
   help: helpOverride, defs, ctx, findings,
@@ -738,14 +739,22 @@ function Field({
   // A server finding on this field wins; the client check covers the gap until
   // the next validation lands, in the same words.
   const isFieldset = spec.type === "object" && !!spec.properties;
-  const serverErrors = findingsAt(findings, path, !isFieldset).map((f) => f.message);
+  const atField = findingsAt(findings, path, !isFieldset);
+  const serverErrors = atField.filter((f) => !isNotice(f)).map((f) => f.message);
   const clientError =
     serverErrors.length || locked ? null : checkValue(title, spec, value, (v) => optionLabel(name, v));
   const errors = serverErrors.length ? serverErrors : clientError ? [clientError] : [];
   const cls = errors.length ? "rg-field is-invalid" : "rg-field";
-  const errorList = errors.map((message, i) => (
-    <span key={i} className="rg-field-error">{message}</span>
-  ));
+  const errorList = (
+    <>
+      {errors.map((message, i) => (
+        <span key={i} className="rg-field-error">{message}</span>
+      ))}
+      {atField.filter(isNotice).map((f, i) => (
+        <span key={`n${i}`} className={`rg-field-finding is-${f.severity}`}>{f.message}</span>
+      ))}
+    </>
+  );
   const label = (
     <span className="rg-field-label">
       {title}
@@ -872,10 +881,13 @@ function Field({
     const options = spec.items?.enum;
     if (options) {
       const set = (next) => onChange(next.length ? next : undefined);
-      // Stored values the checklist does not offer: shown as chips that say why
-      // they do nothing, removable, never silently dropped.
+      // Stored values the checklist does not offer: chips that say what they
+      // do (installed by another field, or nothing), removable, never silently
+      // dropped.
       const unknown = items.filter((i) => !options.includes(i));
-      const unknownTitle = spec["x-ui-unknown-title"];
+      const chipFor =
+        spec["x-ui-chip"] ??
+        ((v) => ({ text: optionLabel(name, v), title: `${v} is not one of the choices.`, dead: true }));
       return (
         <div className={cls}>
           {label}
@@ -898,25 +910,28 @@ function Field({
           ) : null}
           {unknown.length ? (
             <div className="rg-chips">
-              {unknown.map((v) => (
-                <span
-                  key={v}
-                  className="rg-chip"
-                  title={unknownTitle ? unknownTitle(v) : `${v} is not one of the choices.`}
-                >
-                  {optionLabel(name, v)}
-                  {disabled ? null : (
-                    <button
-                      type="button"
-                      className="rg-chip-del"
-                      aria-label={`Remove ${v}`}
-                      onClick={() => set(items.filter((i) => i !== v))}
-                    >
-                      &times;
-                    </button>
-                  )}
-                </span>
-              ))}
+              {unknown.map((v) => {
+                const chip = chipFor(v);
+                return (
+                  <span
+                    key={v}
+                    className={chip.dead ? "rg-chip is-dead" : "rg-chip is-linked"}
+                    title={chip.title}
+                  >
+                    {chip.text}
+                    {disabled ? null : (
+                      <button
+                        type="button"
+                        className="rg-chip-del"
+                        aria-label={`Remove ${v}`}
+                        onClick={() => set(items.filter((i) => i !== v))}
+                      >
+                        &times;
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
             </div>
           ) : null}
           {spec["x-ui-note"] ? <span className="rg-field-help">{spec["x-ui-note"]}</span> : null}
@@ -1105,7 +1120,7 @@ export function Inspector({
         <span>kind</span>
         <span>{kindLabels[node.kind] || node.kind}</span>
       </p>
-      <label className={idErrors.length ? "rg-field is-invalid" : "rg-field"}>
+      <label className={idErrors.some((f) => !isNotice(f)) ? "rg-field is-invalid" : "rg-field"}>
         <span className="rg-field-label">id</span>
         <input
           value={node.id}
@@ -1113,7 +1128,9 @@ export function Inspector({
           onChange={(e) => onRename(node.id, e.target.value)}
         />
         {idErrors.map((f, i) => (
-          <span key={i} className="rg-field-error">{f.message}</span>
+          <span key={i} className={isNotice(f) ? `rg-field-finding is-${f.severity}` : "rg-field-error"}>
+            {f.message}
+          </span>
         ))}
         <span className="rg-field-help">
           Lowercase kebab: a purpose slug, the kind tag, and a two digit

@@ -99,7 +99,7 @@ const OPTION_LABELS = {
   windows_server_2025: "Windows Server 2025",
   windows_10: "Windows 10 (Server 2022 on GCP/AWS)",
   windows_11: "Windows 11 (Server 2022 on GCP/AWS)",
-  linux: "Linux (Debian)",
+  linux: "Linux (Debian 13)",
   debian_13: "Debian 13",
   debian_12: "Debian 12",
   ubuntu_2404: "Ubuntu 24.04",
@@ -183,7 +183,7 @@ function knownDefault(path, ctx = {}) {
   switch (path) {
     case "os":
       if (AD_KINDS.has(ctx.kind)) return "windows_server_2022";
-      if (LINUX_ONLY_KINDS.has(ctx.kind)) return "linux";
+      if (LINUX_ONLY_KINDS.has(ctx.kind)) return "debian_13";
       if (ctx.kind === "siem") return "debian_13";
       return undefined;
     case "tls.cert_source":
@@ -240,7 +240,7 @@ export function isEmptyValue(value, def) {
 
 const VPN_OFFENSE_ONLY = new Set(["access_mode", "vpn_port", "vpn_protocol", "operators"]);
 const NOTHING_INSTALLED = new Set([
-  "vulns", "vulns_vars", "hardening", "services", "role", "edr",
+  "vulns", "vulns_vars", "hardening", "role", "edr",
   "defender_enabled", "endpoint_telemetry", "sudo_groups", "ssh_groups",
 ]);
 
@@ -277,9 +277,6 @@ function unusedReason(path, ctx) {
     if ((path === "defender_enabled" || path === "endpoint_telemetry") && !isWindowsHost(ctx)) {
       return "Windows hosts only.";
     }
-    if (path === "services" && kind !== "srv") {
-      return "only a member server (srv) installs services.";
-    }
     if (path === "role" && kind === "wks") return "nothing reads the role on a workstation.";
   }
   return null;
@@ -301,9 +298,35 @@ function lockedPublicAddress(ctx, value) {
     : { value: false, reason: `A ${ctx.kind} never takes a public address. Reach it through the jumpbox.` };
 }
 
-function unknownServiceTitle(value) {
-  const known = { adcs: "Set Role to AD CS instead.", mecm: "Set Role to MECM instead." }[value];
-  return `${value} does nothing: no role installs it.${known ? " " + known : ""}`;
+// The services values something installs on this host. Mirrors
+// redstackpro.validate._services_acted_on, so a chip reads dead exactly when
+// SVC001 warns on it: mssql, iis and exchange on a Windows srv, plus adcs and
+// mecm when the Role field installs them.
+export function servicesActedOn(ctx) {
+  const windows = isWindowsHost(ctx);
+  const acted = new Set(ctx.kind === "srv" && windows ? RANGE_SERVICES : []);
+  const role = ctx.overlay?.role;
+  if (role === "adcs" && (ctx.kind === "dc" || ctx.kind === "srv") && windows) acted.add("adcs");
+  if (role === "mecm" && ctx.kind === "srv" && windows) acted.add("mecm");
+  return acted;
+}
+
+// SVC001's remedy for a value nothing installs.
+function serviceRemedy(value) {
+  if (value === "adcs") return "Set Role to AD CS on a Windows dc or srv to stand up the CA.";
+  if (value === "mecm") return "Set Role to MECM on a Windows member server.";
+  if (RANGE_SERVICES.includes(value)) return "Put it on a Windows member server (srv).";
+  return "Remove it. The services that install are mssql, iis and exchange on a Windows member server; for a file share add the Open share vuln.";
+}
+
+// How a stored services value outside the checklist shows: installed by the
+// role, or dead with the reason. {text, title, dead}.
+export function serviceChip(ctx, value) {
+  if (servicesActedOn(ctx).has(value)) {
+    const role = optionLabel("role", ctx.overlay?.role);
+    return { text: `${value} (installed by Role: ${role})`, title: `Role ${role} installs this.`, dead: false };
+  }
+  return { text: value, title: `${value} installs nothing on this host. ${serviceRemedy(value)}`, dead: true };
 }
 
 // The spec as it applies to this node, plus how to show it:
@@ -343,15 +366,18 @@ export function fieldRule(path, spec, ctx, value) {
       ...out,
       items: { ...out.items, enum: out.items.enum.filter((v) => v !== "wireguard" && v !== "openvpn") },
       "x-ui-note": vpn,
-      "x-ui-unknown-title": () => `Ignored. ${vpn}`,
+      "x-ui-chip": (v) => ({ text: optionLabel("services", v), title: `Ignored. ${vpn}`, dead: true }),
     };
   }
   if (path === "services" && RANGE_HOST_KINDS.has(ctx.kind)) {
+    const checklist = ctx.kind === "srv" && isWindowsHost(ctx) ? RANGE_SERVICES : [];
     out = {
       ...out,
-      items: { ...(out.items || {}), enum: ctx.kind === "srv" ? RANGE_SERVICES : [] },
-      "x-ui-unknown-title": unknownServiceTitle,
+      items: { ...(out.items || {}), enum: checklist },
+      "x-ui-chip": (v) => serviceChip(ctx, v),
+      ...(checklist.length ? {} : { "x-ui-note": "Only a Windows member server (srv) installs from this list." }),
     };
+    if (!checklist.length && isEmptyValue(value)) return { spec: out, hide: true };
   }
 
   const reason = unusedReason(path, ctx);
@@ -364,39 +390,63 @@ export function fieldRule(path, spec, ctx, value) {
 
 // ----------------------------------------------------------------- placeholders
 
-const IPV4 = "^([0-9]{1,3}\\.){3}[0-9]{1,3}$";
-const CIDR = "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$";
+const OCTET = "(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])";
+// The address patterns, strict (0.7.0 now) and loose (older schemas).
+const IPV4 = `^(${OCTET}\\.){3}${OCTET}$`;
+const CIDR = `^(${OCTET}\\.){3}${OCTET}/(3[0-2]|[12]?[0-9])$`;
+const IPV4_LOOSE = "^([0-9]{1,3}\\.){3}[0-9]{1,3}$";
+const CIDR_LOOSE = "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$";
+
+const IP_REASON = { reason: "must be an IPv4 address", example: "10.30.10.5" };
+const CIDR_REASON = { reason: "must be an IPv4 address range in CIDR form", example: "10.30.10.0/24" };
 
 // Plain reasons and examples for the schema's patterns, so a miss reads as a
-// sentence rather than a regex.
+// sentence rather than a regex. Worded as the server's table
+// (redstackpro.schemacheck.PATTERNS) so the inline message and the SCH001
+// finding say the same thing; fields.test.jsx fails on a schema pattern
+// missing here.
 const PATTERNS = {
   "^[a-z0-9][a-z0-9-]*$": {
-    reason: "use lowercase letters, digits and hyphens, starting with a letter or digit",
-    example: "main-net01",
+    reason: "must be lowercase letters, digits and hyphens, starting with a letter or digit",
+    example: "myth-ts01",
   },
-  [CIDR]: { reason: "use an address range in CIDR form", example: "10.30.0.0/16" },
-  [IPV4]: { reason: "use an IPv4 address", example: "10.30.10.5" },
-  "^[A-Za-z][A-Za-z0-9-]*$": {
-    reason: "use letters, digits and hyphens, starting with a letter",
-    example: "X-Request-Id",
-  },
+  [CIDR]: CIDR_REASON,
+  [CIDR_LOOSE]: CIDR_REASON,
+  [IPV4]: IP_REASON,
+  [IPV4_LOOSE]: IP_REASON,
   "^[a-z][a-z0-9]{0,7}$": {
-    reason: "use 1 to 8 lowercase letters or digits, starting with a letter",
+    reason: "must be 1 to 8 lowercase letters or digits, starting with a letter",
     example: "off",
   },
-  "^([01][0-9]|2[0-3]):[0-5][0-9]$": { reason: "use a 24 hour time, HH:MM", example: "18:00" },
+  "^[A-Za-z0-9][A-Za-z0-9-]{0,14}$": {
+    reason: "must be 1 to 15 letters, digits or hyphens, starting with a letter or digit",
+    example: "kingslanding",
+  },
+  "^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9][A-Za-z0-9-]{0,61}[A-Za-z0-9]$": {
+    reason: "must be a domain name with no scheme, path or port",
+    example: "cdn.example.net",
+  },
+  "^[A-Za-z][A-Za-z0-9-]*$": {
+    reason: "must be letters, digits and hyphens, starting with a letter",
+    example: "X-Request-Id",
+  },
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$": { reason: "must be a 24 hour time, HH:MM", example: "20:00" },
   "^[a-z0-9][a-z0-9._-]*$": {
-    reason: "use lowercase letters, digits, dot, underscore or hyphen, starting with a letter or digit",
+    reason: "must be lowercase letters, digits, dot, underscore or hyphen, starting with a letter or digit",
     example: "j.smith",
   },
-  "^[^\\r\\n|]+$": { reason: "use a single line with no pipe character", example: "lead" },
+  "^[^\\r\\n|]+$": { reason: "must be a single line with no pipe character", example: "lead" },
   "^/[a-z0-9][a-z0-9/_-]*$": {
-    reason: "start with a slash, then lowercase letters, digits, slash, underscore or hyphen",
+    reason: "must start with a slash, then lowercase letters, digits, slash, underscore or hyphen",
     example: "/cdn/assets",
   },
 };
 
-const DEF_EXAMPLES = { ipv4: "10.30.10.5", cidr: "10.30.0.0/16", identifier: "main-net01" };
+export function patternInfo(pattern) {
+  return PATTERNS[pattern];
+}
+
+const DEF_EXAMPLES = { ipv4: IP_REASON.example, cidr: CIDR_REASON.example, identifier: "myth-ts01" };
 
 export function exampleFor(spec) {
   if (!spec) return undefined;
@@ -439,13 +489,35 @@ function testPattern(pattern, value) {
   }
 }
 
-function addressReason(spec, value) {
-  const isCidr = spec["x-ui-def"] === "cidr" || spec.pattern === CIDR;
-  const isIp = spec["x-ui-def"] === "ipv4" || spec.pattern === IPV4;
-  if (!isCidr && !isIp) return null;
-  const [addr, prefix] = value.split("/");
-  if (addr.split(".").some((o) => Number(o) > 255)) return "each of the four numbers must be 0 to 255";
-  if (isCidr && Number(prefix) > 32) return "the number after the slash must be 0 to 32";
+function addressKind(spec) {
+  if (spec["x-ui-def"] === "cidr" || spec.pattern === CIDR || spec.pattern === CIDR_LOOSE) return "cidr";
+  if (spec["x-ui-def"] === "ipv4" || spec.pattern === IPV4 || spec.pattern === IPV4_LOOSE) return "ipv4";
+  return null;
+}
+
+// The most specific thing wrong with an address, as [reason, example], or null.
+// A strict pattern alone would only say "must be an IPv4 address" for
+// 10.30.10.300, which hides that one number is out of range.
+function addressProblem(kind, value) {
+  const base = kind === "cidr" ? CIDR_REASON : IP_REASON;
+  const m = (kind === "cidr" ? /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/ : /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/).exec(value);
+  if (!m) return [base.reason, base.example];
+  const octets = m.slice(1, 5).map(Number);
+  if (octets.some((o) => o > 255)) return ["each of the four numbers must be 0 to 255", base.example];
+  if (m.slice(1, 5).some((o) => o.length > 1 && o.startsWith("0"))) {
+    return ["a number must not start with 0", base.example];
+  }
+  if (kind !== "cidr") return null;
+  const prefix = Number(m[5]);
+  if (prefix > 32) return ["the number after the slash must be 0 to 32", base.example];
+  // The clouds take a network address only (schemacheck does the same).
+  const ip = octets.reduce((n, o) => n * 256 + o, 0);
+  const size = 2 ** (32 - prefix);
+  const network = ip - (ip % size);
+  if (network !== ip) {
+    const parts = [24, 16, 8, 0].map((shift) => Math.floor(network / 2 ** shift) % 256);
+    return [`${value} has bits set past its mask, so it is not a network address`, `${parts.join(".")}/${prefix}`];
+  }
   return null;
 }
 
@@ -460,35 +532,45 @@ export function checkValue(label, spec, value, display = String) {
   }
   const example = exampleFor(spec);
   if (spec.type === "integer" || spec.type === "number") {
-    if (typeof value !== "number" || Number.isNaN(value)) return sentence(label, "use a number", spec.default ?? example);
+    const sample = spec.default ?? example;
+    if (typeof value !== "number" || Number.isNaN(value)) return sentence(label, "must be a number", sample);
     if (spec.type === "integer" && !Number.isInteger(value)) {
-      return sentence(label, "use a whole number", spec.default ?? example);
+      return sentence(label, "must be a whole number", sample);
     }
     const { minimum: min, maximum: max } = spec;
     if ((min != null && value < min) || (max != null && value > max)) {
-      const range = min != null && max != null ? `from ${min} to ${max}` : min != null ? `of at least ${min}` : `of at most ${max}`;
-      return sentence(label, `use a number ${range}`, spec.default ?? example);
+      const isPort = min === 1 && max === 65535;
+      const range = isPort
+        ? "must be a port from 1 to 65535"
+        : min != null && max != null
+          ? `must be from ${min} to ${max}`
+          : min != null ? `must be at least ${min}` : `must be at most ${max}`;
+      return sentence(label, range, sample ?? (isPort ? 443 : undefined));
     }
     return null;
   }
   if (spec.type === "array" && Array.isArray(value)) {
     if (spec.minItems && value.length < spec.minItems) {
-      return sentence(label, `pick at least ${spec.minItems}`);
+      const n = spec.minItems;
+      return sentence(label, `must list at least ${n === 1 ? "one entry" : `${n} entries`}`);
     }
     return null;
   }
   if (typeof value !== "string") return null;
   if (spec.minLength && value.length < spec.minLength) {
-    return sentence(label, `use at least ${spec.minLength} characters`, example);
+    return sentence(label, spec.minLength === 1 ? "must not be empty" : `must be at least ${spec.minLength} characters`, example);
   }
   if (spec.maxLength && value.length > spec.maxLength) {
-    return sentence(label, `use at most ${spec.maxLength} characters`, example);
+    return sentence(label, `must be at most ${spec.maxLength} characters`, example);
+  }
+  const address = addressKind(spec);
+  if (address) {
+    const problem = addressProblem(address, value);
+    if (problem) return sentence(label, problem[0], problem[1]);
   }
   if (spec.pattern && !testPattern(spec.pattern, value)) {
-    return sentence(label, PATTERNS[spec.pattern]?.reason ?? "this is not in the expected format", example);
+    return sentence(label, PATTERNS[spec.pattern]?.reason ?? "does not have the expected format", example);
   }
-  const address = addressReason(spec, value);
-  if (address) return sentence(label, address, example);
   return null;
 }
 
@@ -499,6 +581,10 @@ export function fieldFindings(findings) {
     .filter((f) => typeof f?.field === "string" && f.field)
     .map((f) => ({ field: f.field.replace(/^overlay\./, ""), message: f.message, severity: f.severity }));
 }
+
+// A warning or an info finding: shown at its field, but it does not mark the
+// field invalid.
+export const isNotice = (f) => f?.severity === "warning" || f?.severity === "info";
 
 // The findings that belong to the field at `path`. A leaf also takes findings
 // on anything under it (an array item), a fieldset only its own.
