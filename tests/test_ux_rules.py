@@ -609,3 +609,16 @@ def test_a_shipped_blueprint_raises_no_new_finding(path, provider, registry):
               if f.severity == "error" and f.code != "RDR001"]
     assert not new, new
     assert not errors, errors
+
+
+def test_a_document_field_remedy_says_where_to_edit_it():
+    doc = example("minimal.json")
+    doc["auto_stop"] = {"enabled": True, "at": "8pm"}
+    (f,) = _sch(doc)
+    assert "Topology settings" in f.remedy
+
+
+def test_a_schema_version_is_never_read_as_a_path():
+    from redstackpro import schemacheck
+    assert schemacheck.schema_for("../topology/0.7.0") is None
+    assert schemacheck.schema_for("0.7.0")["$id"].endswith("0.7.0.json")

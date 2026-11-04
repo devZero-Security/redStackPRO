@@ -88,25 +88,32 @@ _PRIORITY = {"required": 0, "additionalProperties": 1, "unevaluatedProperties": 
              "type": 2, "const": 3, "enum": 3}
 
 
-@lru_cache(maxsize=None)
-def schema_for(version):
-    """The schema file for a version, or None when this release has no such
-    version. Each document is checked against its own version: the API migrates
-    to the latest before it validates, and a CLI run on an older file is held to
-    the rules of the version it says it is."""
-    if not isinstance(version, str):
-        return None
-    path = SCHEMA_DIR / ("%s.json" % version)
-    if not path.is_file():
-        return None
-    return json.loads(path.read_text(encoding="utf-8"))
+# The versions this release ships. A document's schema_version is looked up
+# here, never joined into a path, since it comes straight from the request.
+_VERSIONS = {p.stem: p for p in SCHEMA_DIR.glob("*.json")}
 
 
 def known_versions():
-    return sorted(p.stem for p in SCHEMA_DIR.glob("*.json"))
+    return sorted(_VERSIONS)
 
 
 @lru_cache(maxsize=None)
+def _load(version):
+    return json.loads(_VERSIONS[version].read_text(encoding="utf-8"))
+
+
+def schema_for(version):
+    """The schema for a version, or None when this release has no such version.
+    Each document is checked against its own version: the API migrates to the
+    latest before it validates, and a CLI run on an older file is held to the
+    rules of the version it says it is."""
+    if not isinstance(version, str) or version not in _VERSIONS:
+        return None
+    return _load(version)
+
+
+# Bounded: kind and role come from the request too.
+@lru_cache(maxsize=256)
 def _validator(version, scope, name):
     """A validator for the document root (nodes and edges unchecked), or for one
     node kind or edge role: the base definition plus the one branch it selects."""
@@ -235,6 +242,15 @@ _REMEDIES = {
 }
 
 
+# Where a document-level field is edited, for the remedy.
+_WHERE = {
+    "auto_stop": "It is under Auto-stop in Topology settings, shown when nothing "
+                 "is selected.",
+    "prefix": "It is in the top bar.",
+    "name": "It is in the top bar.",
+}
+
+
 def _findings(code, errors, defs, target, label, strip, known=(),
               lead=()):
     """Turn raw errors into one finding per path. The field path is given
@@ -264,8 +280,10 @@ def _findings(code, errors, defs, target, label, strip, known=(),
         values = {"path": field, "node": label["name"], "reason": reason}
         if example:
             values["example"] = example
-        yield finding(code, "error", [target], template,
-                      remedy=_REMEDIES.get(kind, "Fix the value."),
+        remedy = _REMEDIES.get(kind, "Fix the value.")
+        if target == TOPOLOGY_TARGET and not lead and rel[:1]:
+            remedy = " ".join(filter(None, [remedy, _WHERE.get(str(rel[0]))]))
+        yield finding(code, "error", [target], template, remedy=remedy,
                       field=field, **values)
 
 
