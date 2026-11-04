@@ -23,7 +23,6 @@ export const ACL_RIGHTS = [
   { value: "Ext-User-Force-Change-Password", label: "Force change password (AD name)", meaning: "Same as ForceChangePassword." },
   { value: "Ext-Write-SPN", label: "Write SPN (AD name)", meaning: "Same as WriteSPN." },
   { value: "Ext-Write-Self-Membership", label: "Write self membership (AD name)", meaning: "Same as Add self to group." },
-  { value: "Ext-Write-Member", label: "Write member (AD name)", meaning: "Same as AddMember." },
 ];
 
 // Canvas label to the apply_acls.ps1 name, as the compiler maps it.
