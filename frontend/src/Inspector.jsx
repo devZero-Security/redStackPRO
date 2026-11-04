@@ -560,7 +560,7 @@ function overlaySchemaFor(schema, kind) {
   return defs[`overlay_${name}`] || null;
 }
 
-// An object with free keys (vulns_vars, group_members) is edited as JSON text.
+// An object with free keys (vulns_vars) is edited as JSON text.
 // The text stays local until it parses to an object, so a half-typed brace never
 // reaches the document. It used to fall through to the plain input, which showed
 // "[object Object]" and saved whatever was typed as a string.
@@ -579,7 +579,7 @@ function sameJson(text, value) {
 }
 
 // `expect` is the shape the field holds: "object" ({...}) or "array" ([...]), so
-// a list of objects (gmsa, say) gets the same editor instead of a text box.
+// a list of objects with no editor of its own gets this instead of a text box.
 function JsonObjectField({ label, help, value, disabled, onChange, expect = "object", className = "rg-field" }) {
   const id = useId();
   const [text, setText] = useState(() => showJson(value));
@@ -1121,7 +1121,7 @@ export function Inspector({
         <span>{kindLabels[node.kind] || node.kind}</span>
       </p>
       <label className={idErrors.some((f) => !isNotice(f)) ? "rg-field is-invalid" : "rg-field"}>
-        <span className="rg-field-label">id</span>
+        <span className="rg-field-label">ID</span>
         <input
           value={node.id}
           disabled={readOnly}
@@ -1165,8 +1165,8 @@ export function Inspector({
 
       {node.kind === "jumpbox" && document?.mode === "offense" && !readOnly ? (
         <p className="rg-hint">
-          This jumpbox can front a team. Set <code>access_mode</code> to
-          wireguard or openvpn and add operators below: each gets a portal login
+          This jumpbox can front a team. Set Access mode to WireGuard or
+          OpenVPN and add operators below: each gets a portal login
           and a personal VPN credential generated on the jumpbox at deploy.
         </p>
       ) : null}
