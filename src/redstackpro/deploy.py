@@ -280,6 +280,16 @@ def generate_deploy_script(topology, registry=None, provider=None):
             "fi\n"
         )
 
+    # Azure subscriptions differ in which VM sizes they may allocate and how
+    # many vCPUs and public IPs they get, and a no otherwise arrives mid-apply.
+    # After init, because the check asks terraform for the effective sizes.
+    apply_preflight = ""
+    if provider == "azure":
+        apply_preflight = (
+            'say "azure preflight: VM sizes, quota, resource providers"\n'
+            '"$PY" azure_preflight.py . || exit 1\n'
+        )
+
     # Resolved through TerraformPlan rather than re-read from the topology, so the
     # clock this checks is the same one the generated schedule was built from.
     # Both run in the same compile, seconds apart.
@@ -385,6 +395,7 @@ def generate_deploy_script(topology, registry=None, provider=None):
                             is_range="true" if is_range else "false",
                             gate=gate, limit=limit, dns_actions=dns_actions,
                             cloud_preflight=cloud_preflight,
+                            apply_preflight=apply_preflight,
                             logging_setup=logging_setup,
                             find_python=_FIND_PYTHON)
 
@@ -540,7 +551,7 @@ fi
 set -e
 say "terraform apply"
 terraform -chdir=terraform init -input=false -upgrade >/dev/null || {{ echo "terraform init failed -- check the provider download and your network"; exit 1; }}
-terraform -chdir=terraform apply -auto-approve -input=false || {{ echo "terraform apply failed (its error is above) -- nothing was provisioned."; echo "If it reports resources that already exist, an earlier run was interrupted and left them outside the state. Reconcile with: bash manage.sh teardown --force   (then re-run deploy.sh)."; exit 1; }}
+{apply_preflight}terraform -chdir=terraform apply -auto-approve -input=false || {{ echo "terraform apply failed (its error is above) -- nothing was provisioned."; echo "If it reports resources that already exist, an earlier run was interrupted and left them outside the state. Reconcile with: bash manage.sh teardown --force   (then re-run deploy.sh)."; exit 1; }}
 
 # Both modes. Terraform calls this "the shared password for the admin account,
 # the Windows operator, and the portal" and emits it either way, but only a range

@@ -45,6 +45,38 @@ region, and `availability_zone` in terraform.tfvars overrides it.
 """,
 }
 
+# Provider notes for both modes, ahead of the deploy step. Its own section, apart
+# from the quota note under "Notes that save an hour", so the two can change
+# independently.
+PROVIDER_NOTES = {
+    "azure": """
+## Azure: VM sizes and the preflight
+
+Azure subscriptions differ in which VM sizes they may use in a location and in
+how many vCPUs each size family gets, so a size that works on one subscription
+can be refused on another. Each host takes the size of its role (jumpbox, dc,
+teamserver, and so on). `deploy.tfvars` lists the roles in this topology with
+their default sizes, commented out. To change some, uncomment `vm_sizes` and
+keep only the roles you change; the rest keep their default:
+
+```hcl
+vm_sizes = {
+  jumpbox = "Standard_D2as_v7"
+}
+```
+
+After `terraform init` and before `terraform apply`, `deploy.sh` runs
+`azure_preflight.py`. It asks your subscription, read only, whether each size is
+offered in the location and not restricted for you, whether the regional vCPU,
+per-family vCPU and public IP quotas have room, and whether the resource
+providers the export needs are registered. On a problem it stops before
+anything is created and says what to change: a `vm_sizes` block that fits, a
+quota to raise, or a provider to register. If it cannot reach Azure it warns and
+the deploy continues. `REDSTACKPRO_SKIP_PREFLIGHT=1` skips it, and
+`python azure_preflight.py .` runs it on its own at any time.
+""",
+}
+
 # How to authenticate, per provider. Kept beside the tfvars list because they are
 # the same kind of fact: the one thing an export cannot do for you.
 CLOUD_AUTH = {
@@ -162,7 +194,7 @@ way on all three.
 ## 3. Authenticate to your cloud
 
 {cloud_auth}
-{preconditions}
+{preconditions}{provider_notes}
 ## 4. Run the deploy
 
 {run_the_deploy}
@@ -336,7 +368,7 @@ way on all three.
 ## 3. Authenticate to your cloud
 
 {cloud_auth}
-
+{provider_notes}
 ## 4. Run the deploy
 
 {run_the_deploy}
@@ -525,6 +557,12 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
                                     region=region))
     files.update(generate_ansible(document, registry, provider=provider))
     files.update(static_files(provider))
+    # The Azure subscription check deploy.sh runs before apply. Stdlib only and
+    # reads terraform/preflight.json, which the azure backend writes. See
+    # tools/azure_preflight.py.
+    if provider == "azure":
+        files["azure_preflight.py"] = (
+            ASSETS.parent / "tools" / "azure_preflight.py").read_text(encoding="utf-8")
     # The one-command deploy: apply Terraform, then provision from the jumpbox
     # (the managed hosts are on a private subnet only it can reach). Emitted only
     # when the topology has a jumpbox to stage through. Provider-aware: a GCP export
@@ -567,7 +605,8 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
                       "a credential."),
         make_a_key=MAKE_A_KEY,
         run_the_deploy=RUN_THE_DEPLOY,
-        preconditions="" if is_range else ACCOUNT_PRECONDITIONS.get(provider, ""))
+        preconditions="" if is_range else ACCOUNT_PRECONDITIONS.get(provider, ""),
+        provider_notes=PROVIDER_NOTES.get(provider, ""))
     # The hand-off summary: every box, account, lab user, trust, attack path, and
     # SIEM dashboard, joined from the document and the terraform address tokens.
     # tf_inventory fills the addresses after apply. Named by mode
