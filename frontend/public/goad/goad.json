@@ -263,6 +263,11 @@
           "Westerlands",
           "Reach",
           "Dorne"
+        ],
+        "groups": [
+          "AcrossTheNarrowSea",
+          "DragonStone",
+          "KingsGuard"
         ]
       }
     },
@@ -620,7 +625,11 @@
           "Domain Admins": [
             "QueenProtector"
           ]
-        }
+        },
+        "groups": [
+          "DragonsFriends",
+          "Spys"
+        ]
       }
     },
     {

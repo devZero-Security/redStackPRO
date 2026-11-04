@@ -763,3 +763,15 @@ def test_a_string_vulns_vars_does_not_break_the_esc_gathering():
     files = generate(doc)
     braavos = yaml.safe_load(files["ansible/host_vars/def-braavos.yml"])
     assert "esc7_manager" not in (braavos.get("redstackpro_adcs_esc_vars") or {})
+
+
+def test_groups_only_an_acl_names_are_created_with_the_domain():
+    """GOAD's DragonStone and KingsGuard appear only in the domain's ACLs. The
+    domain lists them under groups, so the dc role creates them up front rather
+    than apply_acls making empty ones on the fly."""
+    root = yaml.safe_load(
+        generate(GOAD_FULL)["ansible/vars/domains/sevenkingdoms.local.yml"])
+    for name in ("AcrossTheNarrowSea", "DragonStone", "KingsGuard"):
+        assert name in root["groups"]
+    essos = yaml.safe_load(generate(GOAD_FULL)["ansible/vars/domains/essos.local.yml"])
+    assert {"DragonsFriends", "Spys"} <= set(essos["groups"])

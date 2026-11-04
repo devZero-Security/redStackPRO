@@ -54,7 +54,7 @@
       "overlay": {
         "services": [
           "ssh",
-          "wireguard"
+          "guacamole"
         ],
         "certificate_authority": true
       }

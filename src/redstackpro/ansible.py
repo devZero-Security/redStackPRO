@@ -932,6 +932,8 @@ class AnsiblePlan:
             group_members = overlay.get("group_members", {}) or {}
             groups |= set(group_members.keys())
             groups |= {m for members in group_members.values() for m in members}
+            # Groups only an ACL names (GOAD's DragonStone, KingsGuard).
+            groups |= set(overlay.get("groups") or [])
             groups = sorted(groups)
             parent = self._parent_domain(domain["id"])
             parent_fqdn = None

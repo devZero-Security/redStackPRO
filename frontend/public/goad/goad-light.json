@@ -242,6 +242,11 @@
             "target": "OU=Crownlands,DC=sevenkingdoms,DC=local",
             "right": "WriteDacl"
           }
+        ],
+        "groups": [
+          "AcrossTheNarrowSea",
+          "DragonStone",
+          "KingsGuard"
         ]
       }
     },

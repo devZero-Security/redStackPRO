@@ -568,19 +568,7 @@ NEW_CODES = {"SCH001", "NET007", "DOM001", "JMP001", "JMP002", "FRT003", "HRD001
 
 # Blueprints waiting on a content fix, with the fix. Remove an entry once the
 # blueprint is fixed.
-PENDING = {
-    "goad-light.json": "sevenkingdoms needs groups: AcrossTheNarrowSea, "
-                       "DragonStone, KingsGuard (ACL001)",
-    "goad-mini.json": "sevenkingdoms needs groups: AcrossTheNarrowSea, "
-                      "DragonStone, KingsGuard (ACL001)",
-    "goad-wazuh.json": "sevenkingdoms needs groups: AcrossTheNarrowSea, "
-                       "DragonStone, KingsGuard (ACL001); ws01 hardening to clear "
-                       "(HRD001)",
-    "goad.json": "sevenkingdoms needs groups: AcrossTheNarrowSea, DragonStone, "
-                 "KingsGuard; essos needs groups: DragonsFriends, Spys (ACL001)",
-    "minimal.json": "the jumpbox needs guacamole in services (JMP001)",
-    "peered.json": "the jumpbox needs guacamole in services (JMP001)",
-}
+PENDING = {}
 
 
 def _shipped():
