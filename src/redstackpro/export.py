@@ -14,7 +14,8 @@ import os
 import re
 from pathlib import Path
 
-from .ansible import generate as generate_ansible, _randomize_gating
+from .ansible import (generate as generate_ansible, _randomize_gating,
+                      apply_compile_defaults)
 from .deploy import generate_deploy_script, generate_manage_script
 from .naming import platform_account
 from .registry import Registry
@@ -590,6 +591,9 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
     # here, so both reads agree. See ansible._randomize_gating.
     document = copy.deepcopy(document or {})
     _randomize_gating(document)
+    # Defaults for fields the canvas may leave empty (os, hostname, netbios,
+    # trust type), applied once so Terraform, Ansible and the briefing agree.
+    apply_compile_defaults(document)
     files = {}
     files.update(generate_terraform(document, registry, provider=provider,
                                     region=region))

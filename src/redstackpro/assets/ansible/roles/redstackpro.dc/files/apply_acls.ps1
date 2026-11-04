@@ -35,9 +35,11 @@ $plain = @{
 }
 # Property-writes scoped to one attribute (WriteProperty + the attribute's
 # schemaIDGUID). Targeted-kerberoast writes the servicePrincipalName of a victim
-# so the attacker sets an SPN and roasts it.
+# so the attacker sets an SPN and roasts it. Ext-Write-Member is BloodHound's
+# AddMember: write the group's member attribute.
 $propWrite = @{
-    "Ext-Write-SPN" = [GUID]"f3a64788-5306-11d1-a9c5-0000f80367c1"
+    "Ext-Write-SPN"    = [GUID]"f3a64788-5306-11d1-a9c5-0000f80367c1"
+    "Ext-Write-Member" = [GUID]"bf9679c0-0de6-11d0-a285-00aa003049e2"
 }
 
 function Resolve-TargetDn($name) {

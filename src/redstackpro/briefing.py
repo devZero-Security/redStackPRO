@@ -14,6 +14,7 @@ Terraform state; the briefing points at `terraform output -raw lab_password`.
 """
 
 from .naming import platform_account
+from .terraform.plan import HOST_KINDS
 from .validate import Context
 
 PLACEHOLDER = "<<tf:%s:%s>>"
@@ -296,8 +297,11 @@ def range_briefing(document, registry=None):
                     row += " - |"
                 lines.append(row)
 
-    # -- Hosts
-    hosts = sorted(ctx.hosts(), key=lambda n: (n["kind"], n["id"]))
+    # -- Hosts. Only what Terraform builds: a fw or appliance node gets no
+    # machine, and its address token would never fill.
+    hosts = sorted((h for h in ctx.hosts() if h["kind"] in HOST_KINDS),
+                   key=lambda n: (n["kind"], n["id"]))
+    unbuilt = sorted(h["id"] for h in ctx.hosts() if h["kind"] not in HOST_KINDS)
     lines += ["", "## Hosts (%d)" % len(hosts), "",
               "| Host | Role | OS | Domain | Address | EDR |",
               "| --- | --- | --- | --- | --- | --- |"]
@@ -319,6 +323,9 @@ def range_briefing(document, registry=None):
         lines.append("| %s | %s | %s | %s | %s | %s |" % (
             hostname, role, ov.get("os", "-"), domain, addr,
             ov.get("edr", "-")))
+    if unbuilt:
+        lines += ["", "Not built by this release (on the canvas only): %s."
+                  % ", ".join(unbuilt)]
 
     # -- Domains and trusts
     domains = ctx.of_kind("domain")
