@@ -37,6 +37,7 @@ import re
 import ssl
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -545,6 +546,15 @@ def check_stack(export, key, plan_only=False):
         return 0
 
     ssh = _ssh_command(plan["target"], key)
+    # Every check below reads an empty answer as "missing", so a session that
+    # never got in would report the whole stack as broken. Say that once instead.
+    why = _reach(ssh)
+    if why:
+        raise Refuse("cannot ssh to %s %s: %s. Pass the key with --key or "
+                     "REDSTACKPRO_SSH_KEY." % (
+                         plan["target"],
+                         "with %s" % key if key else "(no key in keys/ or ~/.ssh)",
+                         why))
 
     report.heading("the provisioning run")
     run = _ssh(ssh, 'grep -a "RUN EXITED" ~/provision/run.log | tail -1')
@@ -662,6 +672,52 @@ def _ssh(base, remote):
     return out.stdout.strip()
 
 
+def _reach(base):
+    """'' when ssh gets in, else the reason it did not."""
+    try:
+        out = subprocess.run(base + ["true"], capture_output=True, text=True,
+                             timeout=90)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return str(exc)
+    if out.returncode == 0:
+        return ""
+    lines = [line for line in out.stderr.splitlines() if line.strip()]
+    return lines[-1].strip().rstrip(".") if lines else "ssh exited %d" % out.returncode
+
+
+def resolve_key(root, given):
+    """The private key, found where deploy.sh finds it: --key or
+    $REDSTACKPRO_SSH_KEY, then the one key in keys/, then ~/.ssh/id_ed25519."""
+    if given:
+        return Path(given)
+    # Skips dotfiles as bash's keys/* does: the export ships keys/.keep.
+    found = [p for p in sorted((Path(root) / "keys").glob("*"))
+             if p.is_file() and not p.name.startswith(".")
+             and p.suffix != ".pub" and "README" not in p.name]
+    if len(found) > 1:
+        raise Refuse("more than one private key in keys/ (%s); say which with --key"
+                     % ", ".join(p.name for p in found))
+    if found:
+        return found[0]
+    default = Path.home() / ".ssh" / "id_ed25519"
+    return default if default.is_file() else None
+
+
+def usable_key(key):
+    """(key, temp path or None). ssh refuses a key others can read, and one on a
+    Windows drive in WSL reports 0777, so such a key is used through a 0600 copy,
+    as deploy.sh does. Windows ssh checks ACLs, not the mode, so it is left alone."""
+    if key is None or os.name == "nt" or not key.is_file():
+        return key, None
+    if key.stat().st_mode & 0o077 == 0:
+        return key, None
+    fd, tmp = tempfile.mkstemp(prefix="rsp-verify-key-")
+    with os.fdopen(fd, "wb") as out:
+        out.write(key.read_bytes())
+    os.chmod(tmp, 0o600)
+    return Path(tmp), tmp
+
+
 # --------------------------------------------------------------------------
 
 
@@ -680,15 +736,20 @@ def main(argv=None):
     stack.add_argument("--plan", action="store_true",
                        help="print the checks and run none")
     stack.add_argument("--key", default=os.environ.get("REDSTACKPRO_SSH_KEY"),
-                       help="ssh private key; defaults to $REDSTACKPRO_SSH_KEY, "
-                            "the same variable deploy.sh takes")
+                       help="ssh private key; defaults to $REDSTACKPRO_SSH_KEY, then "
+                            "the key in keys/, then ~/.ssh/id_ed25519, as deploy.sh")
 
     args = parser.parse_args(argv)
     try:
         export = Export(args.build)
         if args.what == "doors":
             return check_doors(export, plan_only=args.plan)
-        return check_stack(export, args.key, plan_only=args.plan)
+        key, tmp = usable_key(resolve_key(export.root, args.key))
+        try:
+            return check_stack(export, key, plan_only=args.plan)
+        finally:
+            if tmp:
+                os.unlink(tmp)
     except Refuse as exc:
         sys.stderr.write("cannot check: %s\n" % exc)
         return 2

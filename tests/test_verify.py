@@ -14,6 +14,8 @@ the demo's own AWS range is not.
 """
 
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -434,3 +436,66 @@ def test_stack_uses_ansible_host_where_no_public_address_exists(tmp_path, provid
     plan = verify.stack_plan(export)
     assert plan["target"].endswith(
         "@" + addresses[plan["jumpbox"]]["private_address"])
+
+
+# -------------------------------------------------------------- finding the key ---
+
+def _keyfile(path, mode=0o600):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("not a real key", encoding="utf-8")
+    os.chmod(path, mode)
+    return path
+
+
+def test_stack_finds_the_key_where_deploy_sh_does(tmp_path, monkeypatch):
+    """The guide says to drop the key in keys/, and deploy.sh finds it there.
+    `stack` looked only at --key and $REDSTACKPRO_SSH_KEY, so a user who followed
+    the guide saw every check fail on a session that never connected."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    root = tmp_path / "export"
+    (root / "keys").mkdir(parents=True)
+    (root / "keys/README.md").write_text("drop your key here", encoding="utf-8")
+    (root / "keys/.keep").write_text("", encoding="utf-8")  # every export ships one
+    assert verify.resolve_key(root, None) is None
+    home_key = _keyfile(home / ".ssh/id_ed25519")
+    assert verify.resolve_key(root, None) == home_key
+    mine = _keyfile(root / "keys/id_ed25519")
+    (root / "keys/id_ed25519.pub").write_text("ssh-ed25519 AAAA x", encoding="utf-8")
+    assert verify.resolve_key(root, None) == mine
+    assert verify.resolve_key(root, "elsewhere/key") == Path("elsewhere/key")
+    _keyfile(root / "keys/second")
+    with pytest.raises(verify.Refuse, match="more than one private key"):
+        verify.resolve_key(root, None)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="unix modes; Windows ssh checks ACLs")
+def test_a_key_others_can_read_is_used_through_a_0600_copy(tmp_path):
+    """A key on a Windows drive in WSL reports 0777 and ssh refuses it."""
+    loose = _keyfile(tmp_path / "keys/id_ed25519", 0o777)
+    key, tmp = verify.usable_key(loose)
+    try:
+        assert tmp and key != loose
+        assert key.stat().st_mode & 0o777 == 0o600
+        assert key.read_bytes() == loose.read_bytes()
+    finally:
+        os.unlink(tmp)
+    tight = _keyfile(tmp_path / "keys/tight", 0o600)
+    assert verify.usable_key(tight) == (tight, None)
+
+
+def test_stack_refuses_once_when_ssh_cannot_get_in(tmp_path, monkeypatch, capsys):
+    """Every check reads an empty answer as missing, so a session that never
+    connected used to report the whole stack broken. It is one clear error now."""
+    export = _export(tmp_path, "minimalc2-cli.json")
+    _fill_addresses(export.root, public=True)
+    export = verify.Export(export.root)
+
+    def no_entry(cmd, **kw):
+        return subprocess.CompletedProcess(
+            cmd, 255, "", "redop@203.0.113.10: Permission denied (publickey).")
+    monkeypatch.setattr(verify.subprocess, "run", no_entry)
+    with pytest.raises(verify.Refuse, match="cannot ssh to .*Permission denied"):
+        verify.check_stack(export, None)
+    assert "FAIL" not in capsys.readouterr().out
