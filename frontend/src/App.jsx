@@ -47,11 +47,11 @@ import {
   urlForTopology,
 } from "./session.js";
 import {
-  addEdge,
   addHostPreset,
   addNode,
   applyPositions,
   cleanPrefix,
+  connectEdge,
   emptyDocument,
   MODE_PREFIX,
   PREFIX_MAX,
@@ -1145,11 +1145,7 @@ function Editor() {
         );
         return current;
       }
-      const extra =
-        r === "fronts"
-          ? { protocol: "https", listen_port: 443, upstream_port: 443, uri_prefix: "/cdn/assets" }
-          : {};
-      return addEdge(current, source, target, r, extra);
+      return connectEdge(current, source, target, r);
     });
   }, [history]);
 
@@ -1178,11 +1174,7 @@ function Editor() {
           return current;
         }
         setStatus("");
-        const extra =
-          role === "fronts"
-            ? { protocol: "https", listen_port: 443, upstream_port: 443, uri_prefix: "/cdn/assets" }
-            : {};
-        return addEdge(current, source, target, role, extra);
+        return connectEdge(current, source, target, role);
       });
     },
     [history]

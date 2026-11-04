@@ -12,6 +12,7 @@
 import { HOST } from "./layout.js";
 import { proposeId, edgeId, retitle } from "./idscheme.js";
 import { allocNetworkCidr, allocSegmentCidr, cidrWithin } from "./cidr.js";
+import { defaultTrustPatch, roleTitle } from "./edgeRoles.js";
 
 const CONTAINERS = ["network", "segment", "domain"];
 // Domain-member hosts: they nest in a domain via a joins edge.
@@ -83,11 +84,10 @@ export function roleColor(role) {
   return ROLE_COLOR[role] || "#868e96";
 }
 
-// How a role reads to a person. The schema keeps `fronts`, but on the canvas
-// that line is the one carrying URI prefixes, so it shows as "URIs".
-const ROLE_DISPLAY = { fronts: "URIs" };
+// How a role reads to a person: the same words the Inspector uses (C2 route,
+// Ships logs to, Peered with, Trusts). See edgeRoles.js.
 export function roleDisplay(role) {
-  return ROLE_DISPLAY[role] || role;
+  return roleTitle(role);
 }
 
 // A trust reads differently by type: parent-child and tree-root stay inside a
@@ -109,20 +109,21 @@ export function legendItems(document) {
     }
   }
   const trusts = document.edges.filter((e) => e.role === "trusts");
+  const trustWord = roleTitle("trusts");
   if (trusts.some((e) => trustIsIntra(e.trust_type))) {
-    items.push({ key: "trust-intra", color: trustColor("parent_child"), label: "intra-forest trust" });
+    items.push({ key: "trust-intra", color: trustColor("parent_child"), label: `${trustWord}, same forest` });
   }
   if (trusts.some((e) => !trustIsIntra(e.trust_type))) {
-    items.push({ key: "trust-cross", color: trustColor("external"), label: "cross-forest trust" });
+    items.push({ key: "trust-cross", color: trustColor("external"), label: `${trustWord}, across forests` });
   }
   return items;
 }
 
 // The word a line would read as if labelled. A `fronts` edge carries the URI
-// prefix it serves; every other role reads as its own name. The canvas draws no
+// prefix it serves; every other role reads as its title. The canvas draws no
 // label at rest now, but the connection list in the inspector uses this.
 export function edgeLabel(edge) {
-  return edge.role === "fronts" ? edge.uri_prefix || "fronts" : edge.role;
+  return edge.role === "fronts" ? edge.uri_prefix || roleTitle("fronts") : roleTitle(edge.role);
 }
 
 // A canvas mirror of ADR 0021: a segment's exposure is a ceiling and each host
@@ -486,6 +487,25 @@ export function addEdge(document, source, target, role, extra = {}) {
   };
 }
 
+// A new drawn line with what its role needs on creation: a fronts edge gets
+// the HTTPS defaults, a trust its type from the two FQDNs, with the parent made
+// the source of a parent_child trust because the compiler reads it that way.
+export function connectEdge(document, source, target, role) {
+  if (role === "fronts") {
+    return addEdge(document, source, target, role, {
+      protocol: "https", listen_port: 443, upstream_port: 443, uri_prefix: "/cdn/assets",
+    });
+  }
+  if (role === "trusts") {
+    const patch = defaultTrustPatch(document, { source, target });
+    if (patch) {
+      return addEdge(document, patch.source || source, patch.target || target, role,
+        { trust_type: patch.trust_type });
+    }
+  }
+  return addEdge(document, source, target, role);
+}
+
 export function removeEdge(document, id) {
   return { ...document, edges: document.edges.filter((e) => e.id !== id) };
 }
@@ -550,7 +570,13 @@ export function updateOverlay(document, id, overlay) {
   };
 }
 
+// A patch that changes nothing returns the same document, so it adds no undo
+// step (Connections re-applies the trust patch connectEdge already set).
 export function updateEdge(document, id, patch) {
+  const edge = document.edges.find((e) => e.id === id);
+  if (edge && Object.entries(patch).every(([key, value]) => edge[key] === value)) {
+    return document;
+  }
   return {
     ...document,
     edges: document.edges.map((e) => (e.id === id ? { ...e, ...patch } : e)),
