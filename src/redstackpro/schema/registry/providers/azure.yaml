@@ -5,7 +5,7 @@ provider: azure
 reserved_addresses:
   head: 4
   tail: 1
-maturity: preview
+maturity: proven
 description: >
   Azure via the hashicorp/azurerm provider. A cloud like AWS and GCP: allocated
   public addresses, Marketplace images per build (including Windows client

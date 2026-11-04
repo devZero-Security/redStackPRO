@@ -48,15 +48,15 @@ def test_the_canvas_derives_the_list_rather_than_hardcoding_it():
 
 
 def test_only_the_deployment_proven_backends_claim_to_be():
-    """Michael 2026-09-13: "I only plan to demo on gcp and aws, the other
-    providers are just placeholders for now." The canvas greys the rest, so this
-    pins which two claim otherwise -- a backend quietly promoting itself would
-    put an unproven target in front of a customer.
+    """GCP and AWS first, Azure from 0.10.0 once offense and defense ranges
+    deployed and validated on it. The canvas greys the rest, so this pins which
+    three claim otherwise -- a backend quietly promoting itself would put an
+    unproven target in front of a customer.
     """
     registry = Registry()
     proven = {n for n, s in registry.providers.items()
               if s.get("maturity") == "proven"}
-    assert proven == {"aws", "gcp"}
+    assert proven == {"aws", "gcp", "azure"}
 
 
 def test_a_provider_that_declares_no_maturity_is_treated_as_preview():

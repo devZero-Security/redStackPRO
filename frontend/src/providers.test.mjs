@@ -14,7 +14,7 @@ import {
 // what makes them native range targets.
 const REGISTRY = [
   { name: "aws", maturity: "proven", capabilities: ["compute", "public_address", "windows_image"] },
-  { name: "azure", maturity: "preview", capabilities: ["compute", "public_address", "windows_image"] },
+  { name: "azure", maturity: "proven", capabilities: ["compute", "public_address", "windows_image"] },
   { name: "esxi", maturity: "preview", capabilities: ["compute", "windows_image"] },
   { name: "gcp", maturity: "proven", capabilities: ["compute", "public_address", "windows_image"] },
   { name: "proxmox", maturity: "preview", capabilities: ["compute", "windows_image"] },
@@ -63,11 +63,11 @@ assert.equal(resolveProvider("defense", noWindows, "toy"), "gcp");
 // reset to nothing on the first render.
 assert.equal(resolveProvider("offense", [], "gcp"), "gcp");
 
-// Only GCP and AWS have had a range deployed on them, so only those two are
-// choosable. The other three still LIST -- the compiler genuinely builds them,
+// Only GCP, AWS and Azure have had ranges deployed on them, so only those three
+// are choosable. The other two still LIST -- the compiler genuinely builds them,
 // and hiding that would understate the product.
-assert.deepEqual(selectableProviders("offense", REGISTRY), ["gcp", "aws"]);
-assert.deepEqual(selectableProviders("defense", REGISTRY), ["gcp", "aws"]);
+assert.deepEqual(selectableProviders("offense", REGISTRY), ["gcp", "aws", "azure"]);
+assert.deepEqual(selectableProviders("defense", REGISTRY), ["gcp", "aws", "azure"]);
 assert.equal(providersFor("offense", REGISTRY).length, 5);
 
 // Declaring nothing means preview. Claiming proven by omission is the wrong way
@@ -81,6 +81,6 @@ assert.equal(resolveProvider("defense", noWindows, "toy"), "gcp");
 
 // But a provider someone deliberately chose and saved is left alone. Greying is
 // about where the canvas steers people, not about overriding their choice.
-assert.equal(resolveProvider("offense", REGISTRY, "azure"), "azure");
+assert.equal(resolveProvider("offense", REGISTRY, "proxmox"), "proxmox");
 
 console.log("providers ok");
