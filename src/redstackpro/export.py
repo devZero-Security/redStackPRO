@@ -64,6 +64,37 @@ az login
 ```""",
 }
 
+# The account limits a deploy runs into, per provider. Proxmox and ESXi have none
+# the export can name: the hardware is the operator's own.
+QUOTA_NOTES = {
+    "gcp": """
+## Quotas
+
+A large topology can exceed the default GCP per-project vCPU quota
+(`CPUS_ALL_REGIONS`); raise it before deploying.
+""",
+    "aws": """
+## Quotas
+
+AWS allows 5 Elastic IPs per region by default. A defense range takes 2 (the
+jumpbox and the NAT gateway) and an offense stack 3 (the jumpbox, the NAT gateway,
+and one per redirector), so the default holds only one or two at a time. The
+running On-Demand Standard vCPU quota also caps a region, and a large forest or
+several ranges at once can exceed a new account's default. Raise both in Service
+Quotas before deploying: a shortfall (`AddressLimitExceeded`, `VcpuLimitExceeded`)
+stops the apply with instances already running, and `manage.sh teardown` clears
+them.
+""",
+    "azure": """
+## Quotas
+
+Azure caps vCPUs per region twice, as a total regional quota and as a quota per
+VM size family, and a large topology can exceed either. Both show in
+`az vm list-usage --location <region> -o table`. A subscription can also be
+barred from a size in a region, which apply reports as `SkuNotAvailable`.
+""",
+}
+
 # Making the key is the OTHER place the platforms differ, and it is the one that
 # bites hardest because nothing complains at the time. PowerShell passes `-N ""`
 # through as two literal quote characters, so the key gets a passphrase of `""`
@@ -162,7 +193,7 @@ way on all three.
 ## 3. Authenticate to your cloud
 
 {cloud_auth}
-{preconditions}
+{preconditions}{quotas}
 ## 4. Run the deploy
 
 {run_the_deploy}
@@ -221,9 +252,6 @@ On the redirector itself, `sudo rsp-check` is the on-box eyeball version: web
 server, decoy, per-teamserver gating, and backend reachability, in one command.
 
 ## Notes that save an hour
-
-A large topology can exceed the default GCP per-project vCPU quota
-(`CPUS_ALL_REGIONS`); raise it before deploying.
 
 A Windows operator box is reached over `psrp` on 5986, not ssh, so it has no
 ProxyJump. Put the control node on the jumpbox VPN, or set `ansible_psrp_proxy`
@@ -336,7 +364,7 @@ way on all three.
 ## 3. Authenticate to your cloud
 
 {cloud_auth}
-
+{quotas}
 ## 4. Run the deploy
 
 {run_the_deploy}
@@ -567,6 +595,7 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
                       "a credential."),
         make_a_key=MAKE_A_KEY,
         run_the_deploy=RUN_THE_DEPLOY,
+        quotas=QUOTA_NOTES.get(provider, ""),
         preconditions="" if is_range else ACCOUNT_PRECONDITIONS.get(provider, ""))
     # The hand-off summary: every box, account, lab user, trust, attack path, and
     # SIEM dashboard, joined from the document and the terraform address tokens.
