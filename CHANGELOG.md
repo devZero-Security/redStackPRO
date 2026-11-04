@@ -49,6 +49,39 @@ versioning, and dates are UTC.
   IANA name is refused at compile.
 - The generated DEPLOYMENT-GUIDE has a Quotas section for each cloud provider in both
   modes, and an Azure section on `vm_sizes` and the preflight.
+- The validator checks every value against the topology schema (`SCH001`). A value
+  that used to compile and then fail in Terraform or Ansible (a malformed CIDR,
+  address, prefix, URI prefix or header name, an unknown option) now stops the
+  export with a message that names the field and gives an example, and the Inspector
+  marks that field.
+- New validator checks: a subnet outside its network (`NET007`), a malformed domain
+  FQDN or NetBIOS name (`DOM001`), the jumpbox certificate authority turned off while
+  collector TLS, a Windows operator or OpenVPN needs it (`JMP002`), and Stop at plus
+  Stop after in a timezone other than UTC (`STP001`) are errors. A jumpbox with no
+  Guacamole portal (`JMP001`), C2 route ports or protocols the redirector does not
+  serve (`FRT003`), recorded hardening (`HRD001`), external and tree root trusts
+  (`TRU001`), ACL names or rights that do not resolve (`ACL001`) and services that
+  nothing installs (`SVC001`) are warnings.
+- Findings have an info severity, which never blocks an export: Windows 10 and 11
+  boot Server 2022 on GCP and AWS (`CAP005`), and firewall and appliance hosts are
+  not built (`SVC002`).
+- With nothing selected, the Inspector shows Topology settings: auto-stop (on or
+  off, Stop at a time or Stop after a number of hours, and the timezone, limited to
+  the zones Azure can map when deploying to Azure), region, address range and
+  description. A finding about the whole topology opens this panel.
+- Structured editors in the Inspector:
+  - Trusts: type, direction and transitive. A new trust is typed parent and child
+    when one domain sits under the other, otherwise forest; external and tree root
+    say they are not built yet.
+  - Access rights: principal and target are picked from the domain's users, groups,
+    computers and OUs, a name that does not resolve is flagged, a missing group can
+    be added to the domain in one click, and the rights list holds only the rights
+    that apply, each with its meaning.
+  - gMSA accounts and group nesting, which used to show `[object Object]`.
+  - Domain users show only the flaws that take effect, with Description, Password,
+    SPNs, Delegate to and Weak password inputs where a flaw needs them.
+- A domain takes a `groups` list for groups that only an access right names. The
+  GOAD blueprints list theirs, so the domain controller creates them up front.
 
 ### Changed
 
@@ -70,6 +103,50 @@ versioning, and dates are UTC.
 - The README and wiki say the AWS Kali Marketplace subscription is once per account,
   not per region.
 - Security reports go to GitHub issues, and `SECURITY.md` is removed.
+- The Inspector labels fields and options in words (Public address, Windows Server
+  2019, Let's Encrypt) while the stored values stay the same. An empty select names
+  what it compiles to, such as "default (Windows Server 2022)". `public_address`
+  is a checkbox and ports are number inputs. Fields that do nothing on the selected
+  node are hidden, and a stored value on such a field is shown with the reason.
+  A value that misses its format shows red as you type.
+- Jumpbox services offer SSH and Guacamole. The VPN server follows Access mode
+  alone, and a defense jumpbox runs none. Member server services are a checklist of
+  what a role installs, and the role select says what the chosen role installs.
+- The hardening picker is read only and says the controls are recorded but not
+  deployed, since no role applies them yet. A host with recorded hardening shows
+  "hardening off" on the canvas, and goad-wazuh's ws01 no longer claims hardening.
+- The palette no longer offers Firewall and Appliance, which were never built.
+  Topologies that already have them still open.
+- Domain controllers, servers and workstations dropped from the palette start as
+  Windows Server 2022, a jumpbox starts with the Guacamole portal, and the File
+  Server preset plants an open SMB share.
+- The certificate source `provided` and the Splunk collector sink and SIEM product
+  are removed. None of them could deploy: there was no way to supply the
+  certificate or the Splunk download.
+- A KeePass vault with no master password is an error, since it fails the host's
+  provisioning.
+- The Export panel lists the `deploy.tfvars` fields to set for the selected
+  provider, shows the login command to run, and opens `deploy.tfvars` first.
+- `deploy.tfvars` explains each value and where to find it. `deploy.sh` stops
+  early on an empty GCP project, an empty Azure subscription, or a zone outside its
+  region, and suggests your public IP when `operator_source_ranges` is unset.
+- The DEPLOYMENT-GUIDE says when the range stops itself and how to change it, what
+  to confirm for the provider, and how to enable the GCP Compute Engine API.
+- The deploy needs Python 3.8 or newer on your machine, and the guide, README,
+  wiki and Export panel now all say so. Ansible runs on the jumpbox. Running
+  redStackPRO from source still needs 3.11.
+- An Azure range's resource group defaults to `{prefix}-{topology name}-rg`, and
+  the preflight stops when that group already exists outside this range's state.
+- The DEFENSE-BRIEFING shows Defender as off unless `defender_enabled` is set, and
+  marks vulns the target provider cannot carry. Blueprint descriptions say poisoning
+  plants on Proxmox and ESXi only.
+- The prefix field accepts 1 to 8 lowercase letters or digits starting with a
+  letter and explains the 15 character limit. The topology name field has a
+  placeholder, and an emptied name or prefix goes back to its previous value. The
+  line role picker and Connections offer only the lines two nodes can carry, with
+  plain labels and full host names.
+- Stop after (`auto_stop.after_hours`) is scheduled in UTC, so the range stops the
+  given number of hours after apply whatever timezone the topology names.
 
 ### Fixed
 
@@ -103,6 +180,32 @@ versioning, and dates are UTC.
   not a JSON object (`RNG012`). The Inspector edits `vulns_vars` as JSON, where it
   used to show `[object Object]` and save typed text as a string, and lists under it
   the keys each ticked vuln reads, required or optional, with an example.
+- A domain controller, server or workstation with no OS set was built as Windows
+  but provisioned as Linux. It now builds and provisions as Windows Server 2022.
+- A host with no hostname uses its node id, and a domain with no NetBIOS name uses
+  its first DNS label, uppercased. A domain controller with no hostname used to fail
+  at the rename step.
+- A trust with no type built nothing. It now becomes parent and child when one
+  domain sits under the other, otherwise forest. A child domain promotes into its
+  parent whichever way the line was drawn, a trust with no direction is two way
+  (it used to build one way only), and forest trusts honour an inbound direction.
+- Firewall and appliance nodes no longer stop provisioning of the whole range. Their
+  Ansible roles did not exist; they are now left out, and the briefing lists them as
+  not built.
+- The access rights ForceChangePassword and AddMember were skipped at apply. They
+  now map to rights the script applies, as does WriteSPN.
+- The account flaws password in description and reversible encryption take effect,
+  kerberoastable accounts use their own SPNs, disabled accounts stay disabled, and
+  re-running a constrained delegation account no longer fails.
+- nha plants its linked server and harbor plants its stored credential. The stored
+  credential task grants its owner batch logon first, which a Domain Users owner
+  needs for the task to run.
+- Loading a shipped blueprint no longer renames its hosts (redStack's `ops-sub01`
+  became `mgmt-sub02`) or marks it unsaved.
+- Stop after with a timezone other than UTC fired at the UTC clock time read in that
+  timezone, hours off the requested stop.
+- A comma typed into a list field was deleted, so a second entry could only be
+  pasted.
 
 ## [0.9.2] (2026-11-04)
 
