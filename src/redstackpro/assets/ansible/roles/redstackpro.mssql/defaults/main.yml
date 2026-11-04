@@ -11,3 +11,6 @@ redstackpro_mssql_sysadmins: []      # extra domain accounts made sysadmin (SCCM
 redstackpro_mssql_execas_logins: []   # {login,target} login-level EXECUTE AS
 redstackpro_mssql_execas_users: []    # {user,db,impersonate} db-level EXECUTE AS
 redstackpro_mssql_domain_users_group: "Domain Users"  # caller scopes it to the domain
+# The .NET Framework 4.8 offline installer, for hosts whose image ships older
+# (chocolatey 2 needs 4.8). Microsoft's own download link.
+redstackpro_dotnet48_url: "https://download.visualstudio.microsoft.com/download/pr/2d6bb6b2-226a-4baa-bdec-798822606ff1/8494001c276a4b96804cde7829c04d7f/ndp48-x86-x64-allos-enu.exe"

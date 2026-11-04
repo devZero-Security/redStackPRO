@@ -14,6 +14,33 @@
   ansible.builtin.set_fact:
     _kv: "{{ redstackpro_host_vulns_vars.keepass_vault | default({}) }}"
 
+# Chocolatey 2 will not run below .NET 4.8 (release 528040). Azure's Windows
+# Server 2019 image ships 4.7.2; the GCP and AWS images already carry 4.8.
+- name: Read the .NET Framework 4 release
+  ansible.windows.win_reg_stat:
+    path: HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full
+    name: Release
+  register: _kv_dotnet
+
+- name: Install .NET Framework 4.8 for chocolatey
+  when: (_kv_dotnet.value | default(0) | int) < 528040
+  block:
+    - name: Download the .NET Framework 4.8 offline installer
+      ansible.windows.win_get_url:
+        url: "{{ redstackpro_dotnet48_url }}"
+        dest: C:\Windows\Temp\ndp48-x86-x64-allos-enu.exe
+
+    - name: Install .NET Framework 4.8
+      ansible.windows.win_package:
+        path: C:\Windows\Temp\ndp48-x86-x64-allos-enu.exe
+        arguments: /q /norestart
+        expected_return_code: [0, 1641, 3010]
+      register: _kv_dotnet_install
+
+    - name: Reboot to finish the .NET Framework 4.8 install
+      ansible.windows.win_reboot:
+      when: _kv_dotnet_install.reboot_required | default(false)
+
 - name: Install Chocolatey if it is missing
   ansible.windows.win_shell: |
     if (-not (Get-Command choco.exe -ErrorAction SilentlyContinue)) {

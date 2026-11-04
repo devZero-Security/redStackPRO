@@ -7,6 +7,7 @@ else and would fail silently at deploy if they drifted.
 """
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -728,6 +729,24 @@ def test_sql_install_is_judged_by_the_service_not_by_chocos_exit_code():
     assert "Get-Service" in script, (
         "the install trusts choco's exit code alone; a cleanup-step failure "
         "after a successful install will fail the deploy")
-    assert "-not $svc -and" in script, (
+    assert "-not $found -and" in script, (
         "the throw is not gated on the service being ABSENT, so a good install "
         "with a bad cleanup exit code still fails")
+    # PowerShell names are case-insensitive: a $svc result variable overwrites the
+    # $Svc parameter, and the failure then names an empty service (live 2026-11-04).
+    assert not re.search(r"\$svc\s*=", script), (
+        "a $svc assignment shadows the $Svc parameter")
+
+
+def test_chocolatey_gets_dotnet_48_first():
+    """Chocolatey 2 refuses to run below .NET 4.8. Azure's Windows Server 2019
+    image ships 4.7.2, so the SQL install failed on every Azure castelblack until
+    the roles install 4.8 (and reboot) before bootstrapping chocolatey."""
+    roles = ROOT / "src/redstackpro/assets/ansible/roles"
+    for path, before in (("redstackpro.mssql/tasks/main.yml", "Bootstrap chocolatey"),
+                         ("redstackpro.host_vulns/tasks/keepass_vault.yml",
+                          "Install Chocolatey if it is missing")):
+        text = (roles / path).read_text(encoding="utf-8")
+        assert "528040" in text, "%s does not check for .NET 4.8" % path
+        assert text.index("Install .NET Framework 4.8") < text.index(before), path
+        assert "win_reboot" in text, path

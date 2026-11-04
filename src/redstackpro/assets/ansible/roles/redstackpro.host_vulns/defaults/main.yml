@@ -60,3 +60,6 @@ redstackpro_host_vulns_implemented:
   - printnightmare
   - ldap_signing_off
   - iis_webshell
+# The .NET Framework 4.8 offline installer, for hosts whose image ships older
+# (chocolatey 2 needs 4.8). Microsoft's own download link.
+redstackpro_dotnet48_url: "https://download.visualstudio.microsoft.com/download/pr/2d6bb6b2-226a-4baa-bdec-798822606ff1/8494001c276a4b96804cde7829c04d7f/ndp48-x86-x64-allos-enu.exe"

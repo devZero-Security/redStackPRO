@@ -40,6 +40,33 @@
         src: sql_conf.ini.j2
         dest: C:\setup\mssql\sql_conf.ini
 
+    # Chocolatey 2 will not run below .NET 4.8 (release 528040). Azure's Windows
+    # Server 2019 image ships 4.7.2; the GCP and AWS images already carry 4.8.
+    - name: Read the .NET Framework 4 release
+      ansible.windows.win_reg_stat:
+        path: HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full
+        name: Release
+      register: redstackpro_mssql_dotnet
+
+    - name: Install .NET Framework 4.8 for chocolatey
+      when: (redstackpro_mssql_dotnet.value | default(0) | int) < 528040
+      block:
+        - name: Download the .NET Framework 4.8 offline installer
+          ansible.windows.win_get_url:
+            url: "{{ redstackpro_dotnet48_url }}"
+            dest: C:\Windows\Temp\ndp48-x86-x64-allos-enu.exe
+
+        - name: Install .NET Framework 4.8
+          ansible.windows.win_package:
+            path: C:\Windows\Temp\ndp48-x86-x64-allos-enu.exe
+            arguments: /q /norestart
+            expected_return_code: [0, 1641, 3010]
+          register: redstackpro_mssql_dotnet_install
+
+        - name: Reboot to finish the .NET Framework 4.8 install
+          ansible.windows.win_reboot:
+          when: redstackpro_mssql_dotnet_install.reboot_required | default(false)
+
     - name: Bootstrap chocolatey
       ansible.windows.win_powershell:
         script: |
@@ -89,11 +116,13 @@
           # database that was actually there. So: if the service exists, the
           # install worked, whatever choco says; only a MISSING service on a bad
           # exit code is a real failure. Found on a live range 2026-09-18.
-          $svc = Get-Service -Name $Svc -ErrorAction SilentlyContinue
-          if (-not $svc -and $code -notin 0, 3010, 1641) {
+          # Not $svc: PowerShell names are case-insensitive, so it would overwrite
+          # the $Svc parameter and the error below would name no service.
+          $found = Get-Service -Name $Svc -ErrorAction SilentlyContinue
+          if (-not $found -and $code -notin 0, 3010, 1641) {
             throw "choco install exit $code and no '$Svc' service; see C:\Windows\Temp\choco-sql.log"
           }
-          [Ordered]@{ code = $code; service_present = [bool]$svc }
+          [Ordered]@{ code = $code; service_present = [bool]$found }
         parameters:
           Ea: "{{ redstackpro_mssql_domain_admin }}"
           Pass: "{{ redstackpro_lab_password }}"
