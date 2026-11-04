@@ -10,9 +10,10 @@ at all -- and the difference was not a decision, it was an oversight.
 
 
 def render(findings, out=print):
-    """Print findings the way the validator does. Returns the error count."""
+    """Print findings the way the validator does. Returns the error and warning
+    counts; an info finding is printed but counted as neither."""
     errors = sum(1 for f in findings if f.severity == "error")
-    warnings = len(findings) - errors
+    warnings = sum(1 for f in findings if f.severity == "warning")
     for f in findings:
         out("    %-7s %-8s %s" % (f.severity, f.code, f.message))
         if f.remedy and f.severity == "error":

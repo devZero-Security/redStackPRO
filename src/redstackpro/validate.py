@@ -415,11 +415,11 @@ def frt001_pool_disagrees(ctx):
                 yield finding(
                     "FRT001", "error",
                     [teamserver] + [e["id"] for e in edges],
-                    "The redirectors fronting {name} disagree on {field}: {values}. "
+                    "The redirectors fronting {name} disagree on {what}: {values}. "
                     "A beacon would work through one and get the decoy through "
                     "another.",
                     remedy="Make every fronts edge into this teamserver match.",
-                    name=ctx.name(teamserver), field=field,
+                    name=ctx.name(teamserver), what=field,
                     values=", ".join(repr(v) for v in sorted(values, key=str)))
 
 
@@ -1612,7 +1612,7 @@ def validate(topology, provider=None, registry=None):
         findings.extend(cap004_network_peering(ctx, provider))
         findings.extend(net006_internal_ip_in_reserved_range(ctx, provider))
 
-    order = {"error": 0, "warning": 1}
+    order = {"error": 0, "warning": 1, "info": 2}
     findings.sort(key=lambda f: (order[f.severity], f.code, f.target_ids))
     return findings
 
