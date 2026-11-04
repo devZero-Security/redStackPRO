@@ -727,6 +727,21 @@ def test_aws_auto_stop_warns_about_iam_before_apply():
     assert "iam:CreateRole" not in no_ttl
 
 
+def test_aws_iam_note_also_covers_an_after_hours_ttl():
+    """minimalc2-cli ships auto_stop.after_hours and no fixed `at`. The IAM role
+    is created for that too, but the note sat inside the fixed-`at` branch, so
+    the shipped blueprint applied with no warning at all."""
+    from shipped import load
+    doc = load(TEMPLATES / "minimalc2-cli.json")
+    assert doc["auto_stop"].get("after_hours") and not doc["auto_stop"].get("at")
+    files = compile_topology(doc, Registry(), provider="aws")
+    terraform = "".join(v for k, v in files.items() if k.startswith("terraform/"))
+    assert 'resource "aws_iam_role" "auto_stop"' in terraform
+    assert "iam:CreateRole" in files["deploy.sh"]
+    gcp = generate_deploy_script(doc, Registry(), provider="gcp")
+    assert "iam:CreateRole" not in gcp
+
+
 def test_an_untested_provider_still_gets_teardown_but_says_so_for_the_rest():
     """aws, gcp and azure are wired for live status/start/stop. A provider without
     that support must not block the export or the teardown path, which is

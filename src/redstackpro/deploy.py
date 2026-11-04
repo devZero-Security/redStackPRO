@@ -292,8 +292,9 @@ def generate_deploy_script(topology, registry=None, provider=None):
             hour=stop["at_minute"] // 60,
             minute=stop["at_minute"] % 60,
         )
-        if provider == "aws":
-            cloud_preflight += _AWS_TTL_IAM_NOTE
+    # aws.py emits the scheduler role for any auto_stop, after_hours included.
+    if stop and provider == "aws":
+        cloud_preflight += _AWS_TTL_IAM_NOTE
 
     # The provision runner that lands on the jumpbox. Mode is baked in here rather
     # than branched at run time, so the emitted runner is straight-line.
