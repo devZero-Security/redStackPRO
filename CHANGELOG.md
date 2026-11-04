@@ -147,6 +147,12 @@ versioning, and dates are UTC.
   plain labels and full host names.
 - Stop after (`auto_stop.after_hours`) is scheduled in UTC, so the range stops the
   given number of hours after apply whatever timezone the topology names.
+- The deploy target is saved with the topology (`provider`) and comes back on
+  reload, and the Download button names it.
+- GOAD extensions follow the blueprint a topology started from (`blueprint`), so
+  renaming it or saving a copy keeps them available.
+- The canvas legend uses the Inspector's line names, and info findings are counted
+  and listed apart from warnings.
 
 ### Fixed
 
