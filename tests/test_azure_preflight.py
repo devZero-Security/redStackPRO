@@ -15,7 +15,7 @@ from redstackpro import Registry
 from redstackpro.export import compile_topology
 from redstackpro.tools import azure_preflight as ap
 
-from shipped import example
+from shipped import ROOT, example, load
 
 SUB = "11111111-2222-3333-4444-555555555555"
 SECRET = "sp-secret-never-printed"
@@ -344,3 +344,16 @@ def test_deploy_runs_the_preflight_after_init_and_before_apply():
     for provider in ("gcp", "aws"):
         other = generate_deploy_script(example("redstack.json"), Registry(), provider=provider)
         assert "azure_preflight" not in other
+
+
+def test_the_guide_explains_vm_sizes_and_the_preflight_for_azure_only():
+    goad = load(ROOT / "frontend/public/goad/goad-light.json")
+    for doc in (example("redstack.json"), goad):
+        guide = compile_topology(doc, Registry(), provider="azure")["DEPLOYMENT-GUIDE.md"]
+        section = guide.split("## Azure: VM sizes and the preflight")[1].split("\n## ")[0]
+        for needle in ("vm_sizes", "azure_preflight.py", "REDSTACKPRO_SKIP_PREFLIGHT=1"):
+            assert needle in section
+        assert guide.index("## Azure: VM sizes") < guide.index("## 4. Run the deploy")
+        for provider in ("gcp", "aws"):
+            other = compile_topology(doc, Registry(), provider=provider)["DEPLOYMENT-GUIDE.md"]
+            assert "azure_preflight" not in other
