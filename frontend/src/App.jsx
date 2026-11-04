@@ -58,6 +58,7 @@ import {
   isContainer,
   isRangeHost,
   legendItems,
+  offSchemeIds,
   paletteGroups,
   removeEdge,
   removeNode,
@@ -226,7 +227,8 @@ function Editor() {
   // and re-derives it when contents change; a pinned id is left alone. Held in a
   // ref because it steers the retitle effect below without needing to re-render.
   // The pin also persists on the node itself (node.pinned), so a hand-picked name
-  // survives a reload; retitle honours either source. See idscheme.js and 0043.
+  // survives a reload; retitle honours either source. A loaded document's
+  // off-scheme ids are pinned too (offSchemeIds). See idscheme.js and 0043.
   const pinned = useRef(new Set());
 
   // Keep every unpinned node's id on the default scheme. Adding a redirector to a
@@ -348,6 +350,7 @@ function Editor() {
         // Only a document that never had any gets arranged, and that layout is
         // deterministic, so what is on screen is what a reload reproduces.
         const doc = layoutIfNeeded(body.document);
+        pinned.current = new Set(offSchemeIds(doc));
         // Opening a topology is a session boundary, not an edit: undo has
         // nothing to say about whatever was open before.
         history.reset(doc);
@@ -378,6 +381,7 @@ function Editor() {
 
   const resetToEmpty = useCallback((mode = "offense") => {
     const doc = emptyDocument(mode);
+    pinned.current = new Set();
     history.reset(doc); // a new topology is a session boundary, not an undo step
     setSaved(doc);
     setDomainsText("");
@@ -1429,6 +1433,8 @@ function Editor() {
       }
       const doc = layoutIfNeeded(await response.json());
       record("load-template", { url, nodes: doc.nodes.length });
+      // Pinned so retitle leaves the shipped names alone and the load stays clean.
+      pinned.current = new Set(offSchemeIds(doc));
       // A loaded template is a session boundary, not an edit to undo back
       // through.
       history.reset(doc);

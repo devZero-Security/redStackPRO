@@ -10,7 +10,7 @@
 // real topology and drawing them all would bury the relationships that matter.
 
 import { HOST } from "./layout.js";
-import { proposeId, edgeId } from "./idscheme.js";
+import { proposeId, edgeId, retitle } from "./idscheme.js";
 import { allocNetworkCidr, allocSegmentCidr, cidrWithin } from "./cidr.js";
 
 const CONTAINERS = ["network", "segment", "domain"];
@@ -460,6 +460,13 @@ export function addHostPreset(document, preset, position) {
     ...document,
     nodes: [...document.nodes, { id, kind: preset.kind, position, overlay }],
   };
+}
+
+// Ids in a document the default scheme would rename. A loaded document keeps
+// them: a shipped blueprint's names are the ones its guide uses, and renaming
+// on load also marked the fresh load as unsaved.
+export function offSchemeIds(document) {
+  return Object.keys(retitle(document, new Set()).renamed);
 }
 
 export function removeNode(document, id) {

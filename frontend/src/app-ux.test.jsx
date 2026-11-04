@@ -10,7 +10,9 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import App from "./App.jsx";
-import { addNode, cleanPrefix, emptyDocument, paletteGroups, PALETTE_HIDDEN } from "./topology.js";
+import {
+  addNode, cleanPrefix, emptyDocument, offSchemeIds, paletteGroups, PALETTE_HIDDEN,
+} from "./topology.js";
 import { HOST_PRESETS } from "./presets.js";
 import { VULN_CATALOG } from "./vulns.js";
 import { EXTENSIONS } from "./extensions.js";
@@ -355,5 +357,73 @@ describe("header inputs", () => {
     fakeBackend();
     render(<App />);
     expect(await screen.findByText("Or pick a blueprint from the top of the palette.")).toBeTruthy();
+  });
+});
+
+
+describe("loading a shipped blueprint", () => {
+  const shipped = (file) =>
+    JSON.parse(readFileSync(join(HERE, "../public", file), "utf8"));
+
+  test("offSchemeIds names the ids retitle would have renamed", () => {
+    expect(offSchemeIds(shipped("redstack.json"))).toEqual(["ops-sub01"]);
+    expect(offSchemeIds(emptyDocument("offense"))).toEqual([]);
+  });
+
+  async function loadFromPicker(user, name) {
+    await user.click(await screen.findByRole("button", { name: "Load blueprint" }));
+    const dialog = await screen.findByRole("dialog", { name: "Load a blueprint" });
+    await user.click(within(dialog).getByText(name).closest("button"));
+  }
+
+  test("redStack loads clean, with the ids its guide uses", async () => {
+    fakeBackend();
+    const user = userEvent.setup();
+    render(<App />);
+    await loadFromPicker(user, "redStack");
+
+    expect(await screen.findByText("off-ops-sub01")).toBeTruthy();
+    expect(screen.queryByText("off-mgmt-sub02")).toBeNull();
+    expect(screen.getByText("Not saved")).toBeTruthy();
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
+    expect(screen.getByRole("button", { name: "Undo" }).disabled).toBe(true);
+  });
+
+  test("an edit after the load still leaves the shipped ids alone", async () => {
+    fakeBackend();
+    const user = userEvent.setup();
+    render(<App />);
+    await loadFromPicker(user, "redStack");
+    await screen.findByText("off-ops-sub01");
+
+    await user.type(screen.getByLabelText("Topology name"), "!");
+    expect(await screen.findByText("Unsaved changes")).toBeTruthy();
+    expect(screen.getByText("off-ops-sub01")).toBeTruthy();
+    expect(screen.queryByText("off-mgmt-sub02")).toBeNull();
+  });
+
+  test("every shipped offense blueprint loads without renaming a node", async () => {
+    for (const file of ["minimalc2-cli", "minimalc2-gui", "rollover", "split-horizon"]) {
+      const doc = shipped(`${file}.json`);
+      expect(offSchemeIds(doc).length, file).toBeGreaterThan(0);
+    }
+    fakeBackend();
+    const user = userEvent.setup();
+    render(<App />);
+    await loadFromPicker(user, "Split horizon C2");
+    const doc = shipped("split-horizon.json");
+    for (const id of offSchemeIds(doc)) {
+      expect(await screen.findByText(`${doc.prefix}-${id}`), id).toBeTruthy();
+    }
+    expect(screen.getByText("Not saved")).toBeTruthy();
+  });
+
+  test("a saved topology carrying off-scheme ids opens clean", async () => {
+    const doc = shipped("redstack.json");
+    openUrl("?topology=g5");
+    fakeBackend({ documents: { g5: doc } });
+    render(<App />);
+    expect(await screen.findByText("off-ops-sub01")).toBeTruthy();
+    expect(screen.getByText(/Saved, version 1/)).toBeTruthy();
   });
 });
