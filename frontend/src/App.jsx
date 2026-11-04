@@ -16,6 +16,7 @@ import { LabList } from "./LabList.jsx";
 import { Palette } from "./Palette.jsx";
 import { Icon } from "./icons.jsx";
 import { Inspector } from "./Inspector.jsx";
+import { applyTopologyPatch } from "./TopologySettings.jsx";
 import { ExportPanel } from "./Export.jsx";
 import { TopologyPicker } from "./TopologyPicker.jsx";
 import { ProviderPicker } from "./ProviderPicker.jsx";
@@ -1794,6 +1795,10 @@ function Editor() {
           readOnly={readOnly}
           kindLabels={kindLabels}
           provider={document.mode === "defense" ? provider : undefined}
+          deployTarget={provider}
+          onTopologyChange={(patch) =>
+            history.coalesce("topology-settings", (current) => applyTopologyPatch(current, patch))
+          }
           findings={selection ? findingsFor(selection.id) : []}
           onOverlayChange={(id, overlay) =>
             history.coalesce(`overlay:${id}`, (current) => updateOverlay(current, id, overlay))

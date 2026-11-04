@@ -17,6 +17,7 @@ import { GroupNesting } from "./GroupNesting.jsx";
 import { TrustEditor } from "./TrustEditor.jsx";
 import { EdgeRole, FrontsPorts } from "./EdgeEditors.jsx";
 import { Connections } from "./Connections.jsx";
+import { TopologySettings } from "./TopologySettings.jsx";
 import { nodeName, roleTitle } from "./edgeRoles.js";
 
 // A group starts expanded only when one of its items is already selected, so
@@ -860,30 +861,17 @@ export function Inspector({
   readOnly = false,
   kindLabels = {},
   provider,
+  deployTarget,
+  onTopologyChange,
 }) {
   if (!selection) {
     return (
-      <aside className="rg-panel rg-inspector">
-        <h2>Inspector</h2>
-        <p className="rg-hint">Select a node or an edge.</p>
-        <h3>Topology</h3>
-        <p className="rg-kv">
-          <span>prefix</span>
-          <span>{document.prefix}</span>
-        </p>
-        <p className="rg-kv">
-          <span>mode</span>
-          <span>{document.mode}</span>
-        </p>
-        <p className="rg-kv">
-          <span>nodes</span>
-          <span>{document.nodes.length}</span>
-        </p>
-        <p className="rg-kv">
-          <span>edges</span>
-          <span>{document.edges.length}</span>
-        </p>
-      </aside>
+      <TopologySettings
+        document={document}
+        deployTarget={deployTarget}
+        readOnly={readOnly}
+        onChange={onTopologyChange}
+      />
     );
   }
 

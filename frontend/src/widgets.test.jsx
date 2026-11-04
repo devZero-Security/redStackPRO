@@ -11,6 +11,8 @@ import userEvent from "@testing-library/user-event";
 import SCHEMA from "../../src/redstackpro/schema/topology/0.7.0.json";
 import { Inspector } from "./Inspector.jsx";
 import { addEdge, updateEdge, updateOverlay } from "./topology.js";
+import { applyTopologyPatch } from "./TopologySettings.jsx";
+import { AZURE_TIMEZONES } from "./azureTimezones.js";
 import {
   connectOptions, defaultTrustPatch, parentChild, rolesFor,
 } from "./edgeRoles.js";
@@ -35,6 +37,7 @@ function Harness({ initial, selection, seen = [], ...rest }) {
       onOverlayChange={(id, overlay) => apply((d) => updateOverlay(d, id, overlay))}
       onEdgeChange={(id, patch) => apply((d) => updateEdge(d, id, patch))}
       onAddEdge={(s, t, r) => apply((d) => addEdge(d, s, t, r))}
+      onTopologyChange={(patch) => apply((d) => applyTopologyPatch(d, patch))}
       onRename={() => {}}
       onDelete={() => {}}
       kindLabels={{}}
@@ -579,5 +582,86 @@ describe("domain users", () => {
       { id: "d", kind: "domain", overlay: { fqdn: "corp.local" } }, "srv01", "password_in_description"
     );
     expect(planted.users[0].description).toContain(planted.users[0].password);
+  });
+});
+
+// -- topology settings
+
+describe("topology settings", () => {
+  const base = (extra = {}) => ({
+    schema_version: "0.7.0",
+    mode: "defense",
+    prefix: "def",
+    nodes: [],
+    edges: [],
+    ...extra,
+  });
+
+  test("the no-selection panel is Topology settings with an Auto-stop section", () => {
+    render(<Harness initial={base()} selection={null} />);
+    expect(screen.getByRole("heading", { name: "Topology settings" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Auto-stop" })).toBeTruthy();
+    expect(
+      screen.getByText(
+        "The range stops itself at this time each day (or N hours after the first apply). Start it again with manage.sh start."
+      )
+    ).toBeTruthy();
+  });
+
+  test("auto-stop turns on, switches between its two shapes, and turns off", async () => {
+    const user = userEvent.setup();
+    const seen = [];
+    render(<Harness initial={base()} selection={null} seen={seen} deployTarget="gcp" />);
+    await user.click(screen.getByRole("checkbox", { name: "Stop the range automatically" }));
+    expect(last(seen).auto_stop).toEqual({ enabled: true, after_hours: 8 });
+
+    await user.click(screen.getByRole("radio", { name: "Stop at a time each day" }));
+    expect(last(seen).auto_stop).toEqual({ enabled: true, at: "20:00" });
+    fireEvent.change(screen.getByLabelText("stop at"), { target: { value: "18:30" } });
+    expect(last(seen).auto_stop.at).toBe("18:30");
+    await user.selectOptions(screen.getByRole("combobox", { name: "timezone" }), "America/New_York");
+    expect(last(seen).auto_stop.timezone).toBe("America/New_York");
+
+    await user.click(screen.getByRole("radio", { name: "Stop a number of hours after the first apply" }));
+    expect(last(seen).auto_stop).toEqual({ enabled: true, after_hours: 8 });
+
+    await user.click(screen.getByRole("checkbox", { name: "Stop the range automatically" }));
+    expect(last(seen).auto_stop).toEqual({ enabled: false, after_hours: 8 });
+  });
+
+  test("on Azure the timezone list is the zones Azure can map", () => {
+    render(
+      <Harness
+        initial={base({ auto_stop: { enabled: true, at: "19:00", timezone: "America/Bogota" } })}
+        selection={null}
+        deployTarget="azure"
+      />
+    );
+    const tz = screen.getByRole("combobox", { name: "timezone" });
+    const options = within(tz).getAllByRole("option").map((o) => o.value);
+    expect(options).toEqual(["America/Bogota", ...AZURE_TIMEZONES]);
+    expect(screen.getByText("Azure cannot map America/Bogota, so the export will fail. Pick a zone from the list.")).toBeTruthy();
+  });
+
+  test("description, region and address range edit the document", async () => {
+    const user = userEvent.setup();
+    const seen = [];
+    render(<Harness initial={base()} selection={null} seen={seen} deployTarget="aws" />);
+    const region = screen.getByRole("textbox", { name: "region" });
+    expect(region.placeholder).toBe("us-east-1");
+    await user.type(region, "us-west-2");
+    await user.type(screen.getByRole("textbox", { name: "description" }), "Purple team lab");
+    await user.type(screen.getByRole("textbox", { name: "address range" }), "172.16.0.0/12");
+    expect(last(seen)).toMatchObject({
+      region: "us-west-2", description: "Purple team lab", base_cidr: "172.16.0.0/12",
+    });
+    await user.clear(region);
+    expect("region" in last(seen)).toBe(false);
+  });
+
+  test("a locked topology shows the settings but cannot change them", () => {
+    render(<Harness initial={base({ auto_stop: { enabled: true, after_hours: 8 } })} selection={null} readOnly />);
+    expect(screen.getByRole("checkbox", { name: "Stop the range automatically" }).disabled).toBe(true);
+    expect(screen.getByRole("textbox", { name: "region" }).disabled).toBe(true);
   });
 });
