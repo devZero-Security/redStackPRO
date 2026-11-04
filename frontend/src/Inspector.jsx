@@ -12,6 +12,7 @@ import {
   plantAccountTechnique, recommendedUserCount, removeAccountTechnique, removeUser,
   setUsers, updateUser,
 } from "./rangeUsers.js";
+import { AclEditor } from "./AclEditor.jsx";
 import { TrustEditor } from "./TrustEditor.jsx";
 import { EdgeRole, FrontsPorts } from "./EdgeEditors.jsx";
 import { Connections } from "./Connections.jsx";
@@ -533,83 +534,6 @@ function withoutDecoy(spec) {
   const properties = { ...spec.properties };
   delete properties.decoy;
   return { ...spec, properties };
-}
-
-// A readable label for a GOAD access right, which may arrive as a raw AD string
-// (Ext-User-Force-Change-Password) or a plain one (GenericAll). Prettify without
-// losing the stored value.
-function prettyRight(right) {
-  return (right || "")
-    .replace(/^Ext-/, "")
-    .replace(/-/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2");
-}
-
-// The dangerous access rights on a domain: who can act on whom. This is the
-// attack graph the users and groups sit inside, the same acls GOAD carries and
-// BloodHound walks. Listed and editable here, since a right runs between two
-// principals rather than being a property of one node. See 0052.
-function DomainAcls({ node, onChange, readOnly }) {
-  const acls = (node.overlay || {}).acls || [];
-  const [principal, setPrincipal] = useState("");
-  const [target, setTarget] = useState("");
-  const [right, setRight] = useState("GenericAll");
-
-  const set = (next) => onChange({ ...(node.overlay || {}), acls: next.length ? next : undefined });
-  const add = () => {
-    if (!principal.trim() || !target.trim() || !right.trim()) return;
-    set([...acls, { principal: principal.trim(), target: target.trim(), right: right.trim() }]);
-    setPrincipal("");
-    setTarget("");
-  };
-
-  return (
-    <div className="rg-acls">
-      <h3>Access rights{acls.length ? ` (${acls.length})` : ""}</h3>
-      <p className="rg-hint">
-        Who can act on whom: the escalation edges that make the domain an attack
-        graph. Principal and target are usernames or groups.
-      </p>
-      {acls.length ? (
-        <div className="rg-acls-list">
-          {acls.map((a, i) => (
-            <div key={i} className="rg-acl-row">
-              <span className="rg-acl-pair">
-                <span className="rg-acl-p" title={a.principal}>{a.principal}</span>
-                <span className="rg-acl-arrow" aria-hidden="true">&rarr;</span>
-                <span className="rg-acl-t" title={a.target}>{a.target}</span>
-              </span>
-              <span className="rg-acl-right" title={a.right}>{prettyRight(a.right)}</span>
-              {readOnly ? null : (
-                <button
-                  type="button"
-                  className="rg-user-del"
-                  title="Remove right"
-                  onClick={() => set(acls.filter((_, j) => j !== i))}
-                >
-                  &times;
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {/* Reading order matches the sentence the row makes: principal, target,
-          then the right that connects them, then Add. */}
-      {readOnly ? null : (
-        <div className="rg-acls-add">
-          <input value={principal} placeholder="principal" onChange={(e) => setPrincipal(e.target.value)} />
-          <input value={target} placeholder="target" onChange={(e) => setTarget(e.target.value)} />
-          <select value={right} onChange={(e) => setRight(e.target.value)}>
-            {["GenericAll", "GenericWrite", "WriteDacl", "WriteOwner", "ForceChangePassword", "AddMember"].map((r) => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-          <button type="button" onClick={add} disabled={!principal.trim() || !target.trim()}>Add</button>
-        </div>
-      )}
-    </div>
-  );
 }
 
 // The operator roster on an offense jumpbox: the people who reach the range. Each
@@ -1321,9 +1245,10 @@ export function Inspector({
                   onChange={(overlay) => onOverlayChange(node.id, overlay)}
                 />
               ) : name === "acls" ? (
-                <DomainAcls
-                  key={name}
+                <AclEditor
+                  key={`${name}-${node.id}`}
                   node={node}
+                  document={document}
                   readOnly={readOnly}
                   onChange={(overlay) => onOverlayChange(node.id, overlay)}
                 />

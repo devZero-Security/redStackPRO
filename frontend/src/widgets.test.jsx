@@ -14,6 +14,7 @@ import { addEdge, updateEdge, updateOverlay } from "./topology.js";
 import {
   connectOptions, defaultTrustPatch, parentChild, rolesFor,
 } from "./edgeRoles.js";
+import { domainDirectory, principalStatus, targetStatus } from "./domainDirectory.js";
 
 function Harness({ initial, selection, seen = [], ...rest }) {
   const [doc, setDoc] = useState(initial);
@@ -301,5 +302,106 @@ describe("trust editor", () => {
     expect(last(seen).edges[0]).toMatchObject({
       role: "trusts", source: "sevenkingdoms", target: "north", trust_type: "parent_child",
     });
+  });
+});
+
+// -- domain editors
+
+function essosDoc(overlay = {}) {
+  return {
+    schema_version: "0.7.0",
+    mode: "defense",
+    prefix: "def",
+    nodes: [
+      {
+        id: "essos",
+        kind: "domain",
+        overlay: {
+          fqdn: "essos.local",
+          netbios: "ESSOS",
+          users: [
+            { username: "khal.drogo", privilege: "domain_admin", groups: ["Dothraki"] },
+            { username: "viserys.targaryen", groups: ["Targaryen"] },
+          ],
+          ous: ["Pentos"],
+          ...overlay,
+        },
+      },
+      { id: "meereen", kind: "dc", overlay: { os: "windows_server_2019" } },
+      { id: "braavos", kind: "srv", overlay: { hostname: "braavos" } },
+    ],
+    edges: [
+      { id: "j1", role: "joins", source: "meereen", target: "essos" },
+      { id: "j2", role: "joins", source: "braavos", target: "essos" },
+    ],
+  };
+}
+
+const domainSelection = { type: "node", id: "essos" };
+
+describe("ACL editor", () => {
+  test("the directory knows users, groups, computers, gMSAs and OUs", () => {
+    const doc = essosDoc({ gmsa: [{ name: "gmsaDragon", hosts: ["braavos"] }] });
+    const dir = domainDirectory(doc, doc.nodes[0]);
+    expect(dir.users).toEqual(["khal.drogo", "viserys.targaryen"]);
+    expect(dir.groups).toEqual(["Dothraki", "Targaryen"]);
+    expect(dir.computers).toEqual(["braavos$", "meereen$"]);
+    expect(dir.gmsa).toEqual(["gmsaDragon$"]);
+    expect(principalStatus(dir, "KHAL.DROGO")).toBe("known");
+    expect(principalStatus(dir, "Domain Admins")).toBe("known");
+    expect(principalStatus(dir, "NT AUTHORITY\\ANONYMOUS LOGON")).toBe("known");
+    expect(principalStatus(dir, "khal.drgo")).toBe("created");
+    expect(targetStatus(dir, "OU=Pentos,DC=essos,DC=local")).toBe("dn");
+    expect(targetStatus(dir, "Pentos")).toBe("known");
+    expect(targetStatus(dir, "castelblack$")).toBe("skipped");
+    expect(targetStatus(dir, "viserys")).toBe("created");
+  });
+
+  test("principal and target offer this domain's names, and a typo is flagged before Add", async () => {
+    const user = userEvent.setup();
+    const seen = [];
+    const { container } = render(
+      <Harness initial={essosDoc()} selection={domainSelection} seen={seen} />
+    );
+    const principal = screen.getByRole("combobox", { name: "principal" });
+    const target = screen.getByRole("combobox", { name: "target" });
+    const values = (input) =>
+      [...container.querySelector(`datalist[id="${input.getAttribute("list")}"]`).options].map((o) => o.value);
+    expect(values(principal)).toEqual(expect.arrayContaining(["khal.drogo", "Domain Admins", "Dothraki", "braavos$"]));
+    expect(values(target)).toEqual(expect.arrayContaining(["viserys.targaryen", "OU=Pentos,DC=essos,DC=local"]));
+
+    await user.type(principal, "khal.drgo");
+    expect(screen.getByText("khal.drgo is not found on this domain; it would be created as an empty group.")).toBeTruthy();
+    await user.type(target, "castelblack$");
+    expect(screen.getByText("castelblack$ is not found on this domain; this right would be skipped.")).toBeTruthy();
+  });
+
+  test("rights are the ones that compile, each with its meaning", async () => {
+    const user = userEvent.setup();
+    const seen = [];
+    render(<Harness initial={essosDoc()} selection={domainSelection} seen={seen} />);
+    const right = screen.getByRole("combobox", { name: "right" });
+    const values = within(right).getAllByRole("option").map((o) => o.value);
+    expect(values).toEqual(expect.arrayContaining([
+      "GenericAll", "ForceChangePassword", "AddMember", "Ext-Write-SPN", "Ext-User-Force-Change-Password",
+    ]));
+    await user.selectOptions(right, "ForceChangePassword");
+    expect(screen.getByText("Reset the target user's password without knowing the old one.")).toBeTruthy();
+    await user.type(screen.getByRole("combobox", { name: "principal" }), "khal.drogo");
+    await user.type(screen.getByRole("combobox", { name: "target" }), "viserys.targaryen");
+    await user.click(within(screen.getByText(/^Access rights/).closest(".rg-acls")).getByRole("button", { name: "Add" }));
+    expect(last(seen).nodes[0].overlay.acls).toEqual([
+      { principal: "khal.drogo", target: "viserys.targaryen", right: "ForceChangePassword" },
+    ]);
+  });
+
+  test("a saved right the script does not know is called out", () => {
+    render(
+      <Harness
+        initial={essosDoc({ acls: [{ principal: "khal.drogo", target: "Domain Admins", right: "AllExtendedRights" }] })}
+        selection={domainSelection}
+      />
+    );
+    expect(screen.getByText("AllExtendedRights is not a right redStackPRO applies; this entry is skipped.")).toBeTruthy();
   });
 });

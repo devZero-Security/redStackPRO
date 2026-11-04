@@ -1,6 +1,11 @@
-"""ROLE_ENDPOINTS and HOST_KINDS in frontend/src/edgeRoles.js decide which line
-roles the Inspector offers between two node kinds. They must match the drawn
-roles in the registry (roles.yaml, kinds/*.yaml).
+"""Two canvas tables mirror backend sources and must not drift from them.
+
+- ROLE_ENDPOINTS and HOST_KINDS in frontend/src/edgeRoles.js decide which line
+  roles the Inspector offers between two node kinds. They must match the drawn
+  roles in the registry (roles.yaml, kinds/*.yaml).
+- ACL_RIGHTS in frontend/src/AclEditor.jsx is the rights dropdown. Every right
+  it offers must be one apply_acls.ps1 applies or an alias the compiler maps,
+  and every right the script applies must be offered.
 """
 
 import json
@@ -12,6 +17,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = ROOT / "src/redstackpro/schema/registry"
 DRAWN = {"fronts", "logs_to", "peers", "trusts"}
+ALIASES = {"ForceChangePassword", "AddMember"}
 
 
 def _js_block(path, header, line_re):
@@ -48,3 +54,14 @@ def test_edge_role_endpoints_match_the_registry():
             reg_hosts.add(spec["kind"])
     assert js_hosts == reg_hosts
 
+
+def test_acl_rights_dropdown_matches_apply_acls():
+    rows = _js_block(ROOT / "frontend/src/AclEditor.jsx", "export const ACL_RIGHTS = [",
+                     re.compile(r'^  \{ value: "([A-Za-z-]+)", '))
+    offered = {m.group(1) for m in rows}
+    script = (ROOT / "src/redstackpro/assets/ansible/roles/redstackpro.dc/files/"
+              "apply_acls.ps1").read_text(encoding="utf-8")
+    known = set(re.findall(r'^\s+"([A-Za-z-]+)"\s*=', script, re.MULTILINE))
+    assert known, "found no rights in apply_acls.ps1; the tables drifted?"
+    assert offered - ALIASES <= known, offered - ALIASES - known
+    assert known <= offered, known - offered
