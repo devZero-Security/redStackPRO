@@ -1652,6 +1652,24 @@ def dom001_domain_name_format(ctx):
                 netbios=netbios or "(empty)", name=display_name(ctx, n["id"]))
 
 
+# ---------------------------------------------------------------- auto stop
+
+def stp001_both_clocks_off_utc(ctx):
+    """after_hours resolves at apply in UTC, and the compiler has no tz
+    database to move `at` into UTC, so both together only work in UTC."""
+    cfg = ctx.topology.get("auto_stop") or {}
+    tz = cfg.get("timezone") or "UTC"
+    if cfg.get("enabled") and cfg.get("at") and cfg.get("after_hours") and tz != "UTC":
+        yield finding(
+            "STP001", "error", [schemacheck.TOPOLOGY_TARGET],
+            "Auto-stop sets both Stop at ({at}) and Stop after ({hours} hours) "
+            "in {tz}. Stop after is counted in UTC, so the two cannot be compared "
+            "in {tz}.",
+            remedy="In Topology settings > Auto-stop, keep one of the two, or set "
+                   "the timezone to UTC.", field="auto_stop.timezone",
+            at=cfg["at"], hours=cfg["after_hours"], tz=tz)
+
+
 # ---------------------------------------------------------------- jumpbox
 
 def jmp001_no_portal(ctx):
@@ -2032,6 +2050,7 @@ RULES = [
     rng012_vulns_vars_not_an_object,
     net007_subnet_outside_network,
     dom001_domain_name_format,
+    stp001_both_clocks_off_utc,
     jmp001_no_portal,
     jmp002_certificate_authority_needed,
     frt003_fronts_not_served,

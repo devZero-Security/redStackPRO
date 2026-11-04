@@ -621,3 +621,39 @@ def test_dom001_says_what_is_wrong_in_plain_words():
         "The fqdn corp on d is not a domain name. It needs at least two labels "
         "of letters, digits and hyphens.",
     ]
+
+
+# -- auto stop
+
+def test_stp001_refuses_both_clocks_outside_utc():
+    doc = example("minimal.json")
+    doc["auto_stop"] = {"enabled": True, "at": "20:00", "after_hours": 8,
+                        "timezone": "America/New_York"}
+    (f,) = [f for f in validate(doc) if f.code == "STP001"]
+    assert f.severity == "error" and f.field == "auto_stop.timezone"
+    assert "Topology settings > Auto-stop" in f.remedy
+
+
+@pytest.mark.parametrize("cfg", [
+    {"enabled": True, "at": "20:00", "after_hours": 8, "timezone": "UTC"},
+    {"enabled": True, "at": "20:00", "timezone": "America/New_York"},
+    {"enabled": True, "after_hours": 8, "timezone": "America/New_York"},
+    {"enabled": False, "at": "20:00", "after_hours": 8, "timezone": "Europe/Paris"},
+])
+def test_stp001_allows_one_clock_or_utc(cfg):
+    doc = example("minimal.json")
+    doc["auto_stop"] = cfg
+    assert not [f for f in validate(doc) if f.code == "STP001"]
+
+
+def test_after_hours_schedules_in_utc_whatever_the_timezone():
+    # time_offset gives a UTC clock; read in New York it would stop 4 to 5
+    # hours late.
+    from redstackpro.terraform.plan import TerraformPlan
+    doc = example("minimal.json")
+    doc["auto_stop"] = {"enabled": True, "after_hours": 8,
+                        "timezone": "America/New_York"}
+    assert TerraformPlan(doc).auto_stop["timezone"] == "UTC"
+    doc["auto_stop"] = {"enabled": True, "at": "20:00",
+                        "timezone": "America/New_York"}
+    assert TerraformPlan(doc).auto_stop["timezone"] == "America/New_York"

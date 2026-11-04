@@ -224,6 +224,13 @@ apply, never in the export.
   (its WinRM certificate), or `access_mode: openvpn`. Each fails mid provision
   without it, and only the OpenVPN task says why.
 
+## Auto-stop
+
+- `STP001` error. `auto_stop` sets both `at` and `after_hours` with a timezone other
+  than UTC. `after_hours` is resolved at apply as a UTC clock, so a range with
+  `after_hours` is scheduled in UTC, and an `at` in another zone cannot be compared
+  with it. Keep one of the two, or set the timezone to UTC.
+
 ## Peering
 
 A `peers` edge joins two networks so hosts in one can reach hosts in the other on

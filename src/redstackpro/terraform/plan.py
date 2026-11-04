@@ -206,7 +206,10 @@ class TerraformPlan:
         return {
             "hour": minute // 60,
             "minute": minute % 60,
-            "timezone": cfg.get("timezone") or "UTC",
+            # time_offset yields a UTC clock, so a schedule fed from it must
+            # read in UTC or it fires at that clock time in another zone.
+            # STP001 refuses `at` plus after_hours outside UTC.
+            "timezone": "UTC" if hours else (cfg.get("timezone") or "UTC"),
             "after_hours": hours or None,
             "at_minute": at_minute,
             # Every provider reads these and never the numbers, so the three

@@ -93,6 +93,10 @@ export const FAMILIES = {
     label: "Software",
     blurb: "Whether what a host asks to run is something a role installs.",
   },
+  STP: {
+    label: "Auto-stop",
+    blurb: "Whether the range's stop time can be scheduled as written.",
+  },
 };
 
 // Codes are three letters then three digits. Anything else is a code from a
