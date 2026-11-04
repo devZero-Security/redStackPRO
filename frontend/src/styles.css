@@ -747,6 +747,30 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-checks { display: flex; flex-wrap: wrap; gap: 8px; }
 .rg-check { display: flex; align-items: center; gap: 4px; font-size: var(--fs-2); }
 
+/* A stored value the field does not use on this node, or a picker that deploys
+   nothing yet. */
+.rg-field-ignored { color: var(--warning); font-size: var(--fs-1); }
+.rg-option-help { color: var(--text); }
+/* Stored list values the checklist does not offer, each removable. */
+.rg-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.rg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 3px 1px 7px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  cursor: help;
+}
+.rg-chip-del { background: none; border: 0; padding: 0 3px; color: inherit; font: inherit; cursor: pointer; }
+.rg-chip-del:hover { color: var(--error-text); }
+/* A value that misses its pattern, bounds or choices, client side or SCH001. */
+.rg-field.is-invalid input,
+.rg-field.is-invalid select,
+.rg-field.is-invalid textarea { border-color: var(--error); }
+
 .rg-vulns {
   max-height: 380px;
   overflow-y: auto;
