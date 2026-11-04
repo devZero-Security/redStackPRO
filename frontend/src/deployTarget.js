@@ -8,6 +8,16 @@
 // inside it. An export that only ran on the machine its author happened to pick
 // would be a worse product, not a better-tailored one.
 
+import { providersFor, resolveProvider } from "./providers.js";
+
+// The deploy target a document compiles for: the provider saved in it when this
+// mode can build that one (or before the registry has answered), otherwise the
+// session's choice. Either way resolved to one the mode offers.
+export function targetFor(mode, providers, saved, chosen) {
+  const usable = saved && (!providers.length || providersFor(mode, providers).includes(saved));
+  return resolveProvider(mode, providers, usable ? saved : chosen);
+}
+
 export const PLATFORMS = {
   windows: {
     label: "Windows",

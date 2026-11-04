@@ -21,11 +21,12 @@ import { ExportPanel } from "./Export.jsx";
 import { TopologyPicker } from "./TopologyPicker.jsx";
 import { ProviderPicker } from "./ProviderPicker.jsx";
 import { providersFor, resolveProvider, selectableProviders } from "./providers.js";
+import { targetFor } from "./deployTarget.js";
 import { Library } from "./Library.jsx";
 import { ConflictDialog } from "./Conflict.jsx";
 import { ConfirmDialog } from "./ConfirmDialog.jsx";
 import { TemplatePicker } from "./TemplatePicker.jsx";
-import { templateFor } from "./templates.js";
+import { blueprintId, templateFor } from "./templates.js";
 import { Extensions } from "./Extensions.jsx";
 import { applyExtension, removeExtension } from "./extensions.js";
 import { nodeTypes } from "./nodes.jsx";
@@ -47,11 +48,11 @@ import {
   urlForTopology,
 } from "./session.js";
 import {
-  addEdge,
   addHostPreset,
   addNode,
   applyPositions,
   cleanPrefix,
+  connectEdge,
   emptyDocument,
   MODE_PREFIX,
   PREFIX_MAX,
@@ -70,6 +71,7 @@ import {
   updateOverlay,
 } from "./topology.js";
 import { presetsFor } from "./presets.js";
+import { countBySeverity, findingSelection, sortFindings } from "./findingSeverity.js";
 import { useHistory } from "./useHistory.js";
 
 const PREFIX_HELP =
@@ -144,7 +146,13 @@ function Editor() {
   // The running server version, shown in a corner of the canvas. Empty until the
   // health call answers, and stays empty if it does not, so it never shows an error.
   const [appVersion, setAppVersion] = useState("");
-  const [provider, setProvider] = useState("gcp");
+  // The session's deploy target, used when the open document saves none. A
+  // document's own provider wins, so a reload or an undo puts the picker back
+  // where that topology was left. Carried into the next document on a switch.
+  const [chosenProvider, setChosenProvider] = useState("gcp");
+  const provider = targetFor(document.mode, providers, document.provider, chosenProvider);
+  const providerRef = useRef(provider);
+  providerRef.current = provider;
   const [selection, setSelection] = useState(null);
   const [findings, setFindings] = useState([]);
   const [status, setStatus] = useState("");
@@ -192,6 +200,18 @@ function Editor() {
   // screen. Cleared when the card is dismissed, so it is not document state.
   const [summary, setSummary] = useState(null);
   const readOnly = document.mode === "defense" && templateView;
+
+  // Picking a deploy target is an edit: it saves with the topology. A locked
+  // blueprint is only being looked at, so there it stays a session choice and
+  // does not mark the view unsaved.
+  const chooseProvider = useCallback((name) => {
+    if (readOnly && !docRef.current.provider) {
+      setChosenProvider(name);
+      return;
+    }
+    history.mutate((current) =>
+      current.provider === name ? current : { ...current, provider: name });
+  }, [history, readOnly]);
 
   // Copy the full diagnostics (recent events, document shape, environment) to the
   // clipboard, or log them if the clipboard is unavailable, so a canvas problem
@@ -286,7 +306,7 @@ function Editor() {
   // means what is on screen is what gets compiled.
   useEffect(() => {
     if (!providers.length) return;
-    setProvider((current) => resolveProvider(document.mode, providers, current));
+    setChosenProvider((current) => resolveProvider(document.mode, providers, current));
   }, [document.mode, providers]);
 
   // The palette is the current canvas's kinds, so it re-fetches when the mode
@@ -352,6 +372,7 @@ function Editor() {
         // deterministic, so what is on screen is what a reload reproduces.
         const doc = layoutIfNeeded(body.document);
         pinned.current = new Set(offSchemeIds(doc));
+        setChosenProvider(providerRef.current);
         // Opening a topology is a session boundary, not an edit: undo has
         // nothing to say about whatever was open before.
         history.reset(doc);
@@ -383,6 +404,7 @@ function Editor() {
   const resetToEmpty = useCallback((mode = "offense") => {
     const doc = emptyDocument(mode);
     pinned.current = new Set();
+    setChosenProvider(providerRef.current);
     history.reset(doc); // a new topology is a session boundary, not an undo step
     setSaved(doc);
     setDomainsText("");
@@ -738,7 +760,7 @@ function Editor() {
     api
       .validate(settled, provider)
       .then((body) => {
-        if (!cancelled) setFindings(body.findings);
+        if (!cancelled) setFindings(sortFindings(body.findings));
       })
       .catch((error) => {
         if (!cancelled) {
@@ -1145,11 +1167,7 @@ function Editor() {
         );
         return current;
       }
-      const extra =
-        r === "fronts"
-          ? { protocol: "https", listen_port: 443, upstream_port: 443, uri_prefix: "/cdn/assets" }
-          : {};
-      return addEdge(current, source, target, r, extra);
+      return connectEdge(current, source, target, r);
     });
   }, [history]);
 
@@ -1178,11 +1196,7 @@ function Editor() {
           return current;
         }
         setStatus("");
-        const extra =
-          role === "fronts"
-            ? { protocol: "https", listen_port: 443, upstream_port: 443, uri_prefix: "/cdn/assets" }
-            : {};
-        return addEdge(current, source, target, role, extra);
+        return connectEdge(current, source, target, role);
       });
     },
     [history]
@@ -1432,10 +1446,14 @@ function Editor() {
         setStatus("Nothing bundled there. Paste a document instead.");
         return;
       }
-      const doc = layoutIfNeeded(await response.json());
+      const loaded = layoutIfNeeded(await response.json());
+      // Part of the clean baseline, so naming the source blueprint is not an edit.
+      const source = blueprintId(url);
+      const doc = source ? { ...loaded, blueprint: source } : loaded;
       record("load-template", { url, nodes: doc.nodes.length });
       // Pinned so retitle leaves the shipped names alone and the load stays clean.
       pinned.current = new Set(offSchemeIds(doc));
+      setChosenProvider(providerRef.current);
       // A loaded template is a session boundary, not an edit to undo back
       // through.
       history.reset(doc);
@@ -1494,8 +1512,7 @@ function Editor() {
     setTimeout(() => flow.fitView({ padding: 0.15, duration: 300 }), 60);
   }, [flow, history]);
 
-  const errors = findings.filter((f) => f.severity === "error");
-  const warnings = findings.filter((f) => f.severity === "warning");
+  const counts = countBySeverity(findings);
 
   return (
     <div className={`rg-app rg-mode-${document.mode || "offense"}`}>
@@ -1572,10 +1589,10 @@ function Editor() {
           />
         </label>
         <ProviderPicker
-          provider={resolveProvider(document.mode, providers, provider)}
+          provider={provider}
           providers={providersFor(document.mode, providers)}
           selectable={selectableProviders(document.mode, providers)}
-          onChange={setProvider}
+          onChange={chooseProvider}
           title={
             document.mode === "defense"
               ? "Deploy target. Every target listed compiles the range natively."
@@ -1583,10 +1600,16 @@ function Editor() {
           }
         />
         <span className="rg-spacer" />
-        <span className={`rg-count ${errors.length ? "is-error" : "is-ok"}`}>
-          {errors.length} errors
+        <span className={`rg-count ${counts.error ? "is-error" : "is-ok"}`}>
+          {counts.error} errors
         </span>
-        <span className="rg-count is-warning">{warnings.length} warnings</span>
+        <span className="rg-count is-warning">{counts.warning} warnings</span>
+        <span
+          className="rg-count is-info"
+          title="Notices. They never block a compile."
+        >
+          {counts.info} info
+        </span>
         <span
           className={`rg-saved ${dirty ? "is-dirty" : ""}`}
           title={topology ? `${topology.name}, version ${topology.version}` : "Never saved"}
@@ -1888,24 +1911,28 @@ function Editor() {
               No findings.
             </span>
           ) : (
+            // Sorted worst first, so the notices trail the problems under a
+            // label of their own.
             findings.map((finding, index) => (
-              <button
-                key={index}
-                className={`rg-finding is-${finding.severity}`}
-                onClick={() =>
-                  setSelection({
-                    type: document.edges.some((e) => e.id === finding.target_ids[0])
-                      ? "edge"
-                      : "node",
-                    id: finding.target_ids[0],
-                  })
-                }
-              >
-                <FindingBadge code={finding.code} /> {finding.message}
-                {finding.remedy ? (
-                  <span className="rg-remedy">{finding.remedy}</span>
+              <React.Fragment key={index}>
+                {finding.severity === "info" && findings[index - 1]?.severity !== "info" ? (
+                  <span className="rg-hint">Info, not blocking:</span>
                 ) : null}
-              </button>
+                <button
+                  className={`rg-finding is-${finding.severity}`}
+                  onClick={() => {
+                    const next = findingSelection(document, finding);
+                    setSelection(next);
+                    // A document-level finding lands on Topology settings.
+                    if (!next) setPanel("inspector");
+                  }}
+                >
+                  <FindingBadge code={finding.code} /> {finding.message}
+                  {finding.remedy ? (
+                    <span className="rg-remedy">{finding.remedy}</span>
+                  ) : null}
+                </button>
+              </React.Fragment>
             ))
           )}
         </div>

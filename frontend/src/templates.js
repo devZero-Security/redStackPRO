@@ -109,10 +109,12 @@ export const TEMPLATES = {
       file: "goad/minilab",
       name: "MINILAB",
       group: "GOAD",
-      blurb: "A minimal lab: one DC and one Windows 10 workstation.",
+      blurb:
+        "A minimal lab: one DC and one Windows 10 workstation, which boots " +
+        "Windows Server 2022 on GCP and AWS.",
       teaches:
         "The smallest thing that still behaves like a domain. Stored " +
-        "credentials, CredSSP and a weak password, with a real workstation to " +
+        "credentials, CredSSP and a weak password, with a workstation to " +
         "land on.",
     },
     {
@@ -184,6 +186,15 @@ export function templateFor(file) {
     if (hit) return hit;
   }
   return undefined;
+}
+
+// A shipped blueprint's stable id, its file name (goad-light, redstack). A
+// loaded document carries it as `blueprint`, so what it supports (the GOAD
+// extensions) follows it through a rename or a Save a copy. Undefined for a
+// file that is not a shipped blueprint.
+export function blueprintId(file) {
+  const hit = templateFor(file);
+  return hit ? hit.file.split("/").pop() : undefined;
 }
 
 // The templates for a canvas mode. Anything that is not the range canvas is
