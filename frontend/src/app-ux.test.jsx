@@ -7,9 +7,10 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { describe, expect, test, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import App from "./App.jsx";
-import { addNode, emptyDocument, paletteGroups, PALETTE_HIDDEN } from "./topology.js";
+import { addNode, cleanPrefix, emptyDocument, paletteGroups, PALETTE_HIDDEN } from "./topology.js";
 import { HOST_PRESETS } from "./presets.js";
 import { VULN_CATALOG } from "./vulns.js";
 import { EXTENSIONS } from "./extensions.js";
@@ -273,5 +274,86 @@ describe("export panel", () => {
       expect(p.note).toMatch(/Python 3\.11/);
       expect(p.note).not.toMatch(/3\.8/);
     }
+  });
+});
+
+
+describe("header inputs", () => {
+  test("cleanPrefix keeps only what the schema pattern accepts", () => {
+    expect(cleanPrefix("ACME")).toBe("acme");
+    expect(cleanPrefix("R_T-9x")).toBe("rt9x");
+    expect(cleanPrefix("1off")).toBe("off");
+    expect(cleanPrefix("redteamops")).toBe("redteamo");
+    expect(cleanPrefix("")).toBe("");
+    for (const raw of ["Off", "a.b.c", "99zz", "x".repeat(20), "ok1"]) {
+      const out = cleanPrefix(raw);
+      if (out) expect(out).toMatch(/^[a-z][a-z0-9]{0,7}$/);
+    }
+  });
+
+  test("the prefix field lowercases, strips and caps what is typed, and says why",
+    async () => {
+      fakeBackend();
+      const user = userEvent.setup();
+      render(<App />);
+      const prefix = await screen.findByRole("textbox", { name: "Prefix" });
+      expect(prefix.maxLength).toBe(8);
+      expect(prefix.title).toMatch(
+        /1 to 8 lowercase letters or digits, starting with a letter\. Prefix plus each host id must fit in 15 characters, so 3 to 4 letters is best \(off, acme\)\./);
+
+      await user.clear(prefix);
+      await user.type(prefix, "9R_t-Ops");
+      expect(prefix.value).toBe("rtops");
+
+      await user.clear(prefix);
+      await user.type(prefix, "abcdefghijk");
+      expect(prefix.value).toBe("abcdefgh");
+    });
+
+  test("an emptied prefix goes back to what it was on blur", async () => {
+    fakeBackend();
+    const user = userEvent.setup();
+    render(<App />);
+    const prefix = await screen.findByRole("textbox", { name: "Prefix" });
+    await user.clear(prefix);
+    expect(prefix.value).toBe("");
+    await user.tab();
+    await waitFor(() => expect(prefix.value).toBe("off"));
+  });
+
+  test("the name field explains itself and an emptied name reverts on blur", async () => {
+    fakeBackend();
+    const user = userEvent.setup();
+    render(<App />);
+    const name = await screen.findByLabelText("Topology name");
+    expect(name.placeholder).toBe("Topology name");
+    expect(name.title).toBe("Becomes the download file name and the guide title.");
+
+    await user.clear(name);
+    await user.type(name, "Range one");
+    await user.tab();
+    expect(name.value).toBe("Range one");
+
+    await user.clear(name);
+    await user.tab();
+    await waitFor(() => expect(name.value).toBe("Range one"));
+    // The revert folds into the typing step, so the canvas is back where it was.
+    expect(screen.getByText("Unsaved changes")).toBeTruthy();
+  });
+
+  test("the inactive mode says switching starts an empty topology", async () => {
+    fakeBackend();
+    render(<App />);
+    const defense = await screen.findByRole("tab", { name: "Defense" });
+    expect(defense.title).toMatch(
+      /Switching starts a new empty topology; saved work stays in the picker\./);
+    const offense = screen.getByRole("tab", { name: "Offense" });
+    expect(offense.title).not.toMatch(/Switching/);
+  });
+
+  test("the empty canvas points at the blueprints", async () => {
+    fakeBackend();
+    render(<App />);
+    expect(await screen.findByText("Or pick a blueprint from the top of the palette.")).toBeTruthy();
   });
 });

@@ -19,7 +19,7 @@ export function TemplatePicker({ mode, onPick, onDismiss }) {
       <div
         className={`rg-modal is-chooser rg-mode-${isRange ? "defense" : "offense"}`}
         role="dialog"
-        aria-label="Load a template"
+        aria-label="Load a blueprint"
         onClick={(event) => event.stopPropagation()}
       >
         <h2>{isRange ? "Load a Defense blueprint" : "Load an Offense blueprint"}</h2>

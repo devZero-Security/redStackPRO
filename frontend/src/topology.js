@@ -553,6 +553,17 @@ export function updateEdge(document, id, patch) {
 // The default prefix per canvas: offense names run off-, defense ranges def-.
 export const MODE_PREFIX = { offense: "off", defense: "def" };
 
+// The prefix as typed, cut to what the schema accepts (^[a-z][a-z0-9]{0,7}$):
+// lowercase letters and digits, a letter first, eight at most.
+export const PREFIX_MAX = 8;
+export function cleanPrefix(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .replace(/^[0-9]+/, "")
+    .slice(0, PREFIX_MAX);
+}
+
 export const emptyDocument = (mode = "offense") => ({
   schema_version: "0.7.0",
   mode,
