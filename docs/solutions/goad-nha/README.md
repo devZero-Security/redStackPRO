@@ -39,20 +39,24 @@ backends declare fewer network capabilities (`src/redstackpro/schema/registry/pr
 | capability | cloud (gcp/aws/azure) | on-prem (proxmox/esxi) |
 |------------|-----------------------|------------------------|
 | public address | allocated: the jumpbox gets an external IP | none: reachability depends on the operator's own network and any upstream NAT or firewall |
-| private DNS | managed zone, hosts resolve by name | none: use static hosts entries |
+| private DNS | gcp, aws: managed zone, hosts resolve by name. azure: none, use static hosts entries | none: use static hosts entries |
 | network peering | managed: a jumpbox or collector can serve across the project boundary | none: joining networks is the host network's routing, which redStackPRO does not control |
-| host firewall | per-VM firewall | proxmox has one, esxi has none (layer-2 VLAN isolation only) |
+| host firewall | per-VM firewall on gcp and aws, a Network Security Group per subnet on azure | proxmox has one, esxi has none (layer-2 VLAN isolation only) |
 
 - **Range access.** On cloud the jumpbox has an allocated (per-deploy, ephemeral)
   public address, read from `DEFENSE-BRIEFING.md`. On on-prem there is no allocated
   external IP: reach the jumpbox over the operator's own network or VPN.
 - **Name resolution.** The two domains already go in `/etc/hosts` above, which is
-  exactly what on-prem needs (`proxmox`, `esxi` have no managed private DNS). On a
-  cloud backend the range can also resolve through managed private DNS, but the
+  exactly what on-prem and Azure need (`proxmox`, `esxi`, `azure` have no managed
+  private DNS). On GCP or AWS the range can also resolve through managed private
+  DNS, but the
   static entries keep the commands identical, so use them either way.
 
-Azure is on the roadmap and not yet supported, the same as Proxmox and ESXi;
-treat it as on-prem for now (static hosts entries, no managed peering).
+Azure is supported from 0.10.0. This lab is not among those validated on Azure
+so far (the minilab, goad-light, and goad-wazuh blueprints). Azure has an
+allocated public address and network peering, like GCP and AWS. It declares no
+managed private DNS, so resolve range names with static hosts entries, as
+on-prem.
 
 ## Topology - and why it makes this a cross-forest problem
 

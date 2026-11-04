@@ -98,11 +98,11 @@ runs `terraform init` without assembling anything.
 
 ## Scope
 
-The canvas covers `offense` mode and `defense` mode, generating for GCP and AWS, both
-supported and tested end to end for target ranges and attack infrastructure.
-Azure, Proxmox, and ESXi are on the roadmap, not yet supported; neither Proxmox
-nor ESXi can allocate a public address on its own, so redirector reachability
-would depend on a network redStackPRO does not control.
+The canvas covers `offense` mode and `defense` mode, generating for GCP, AWS, and
+Azure, all three supported and tested end to end for target ranges and attack
+infrastructure. Proxmox and ESXi are on the roadmap, not yet supported; neither
+can allocate a public address on its own, so redirector reachability would
+depend on a network redStackPRO does not control.
 
 Defense mode ships as a rendered GOAD blueprint with instantiation parameters;
 custom range authoring over the same providers is not built yet.
