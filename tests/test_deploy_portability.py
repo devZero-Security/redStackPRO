@@ -536,6 +536,30 @@ def test_azure_service_principal_env_passes_the_credential_preflight(azure_stage
 
 
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_a_failed_azure_preflight_stops_before_apply(azure_staged):
+    """The preflight runs after init and its failure ends the deploy there: apply
+    is never called. The real script is swapped for one that fails, so this
+    checks the wiring, not Azure."""
+    export, stubs = azure_staged
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    _stub(stubs, "az", "exit 0")
+    calls = export / "terraform-calls.log"
+    _stub(stubs, "terraform", 'echo "$*" >> "%s"; exit 0' % _msys(calls))
+    (export / "deploy.tfvars").write_text(
+        'subscription_id = "s"\nlocation = "eastus2"\n'
+        'ssh_public_key = "ssh-ed25519 AAAATEST test"\n'
+        'operator_source_ranges = ["203.0.113.5/32"]\n', encoding="utf-8", newline="\n")
+    (export / "azure_preflight.py").write_text(
+        'print("preflight says no"); raise SystemExit(1)\n', encoding="utf-8")
+
+    done = _run(export, stubs)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert "preflight says no" in done.stdout
+    ran = calls.read_text(encoding="utf-8")
+    assert "init" in ran and "apply" not in ran
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
 def test_unset_operator_source_ranges_aborts_until_set(staged):
     """The export now ships operator_source_ranges commented out (fail closed), so a
     real run must stop and say to set it, rather than deploy an unreachable range or

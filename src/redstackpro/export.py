@@ -525,6 +525,12 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
                                     region=region))
     files.update(generate_ansible(document, registry, provider=provider))
     files.update(static_files(provider))
+    # The Azure subscription check deploy.sh runs before apply. Stdlib only and
+    # reads terraform/preflight.json, which the azure backend writes. See
+    # tools/azure_preflight.py.
+    if provider == "azure":
+        files["azure_preflight.py"] = (
+            ASSETS.parent / "tools" / "azure_preflight.py").read_text(encoding="utf-8")
     # The one-command deploy: apply Terraform, then provision from the jumpbox
     # (the managed hosts are on a private subnet only it can reach). Emitted only
     # when the topology has a jumpbox to stage through. Provider-aware: a GCP export

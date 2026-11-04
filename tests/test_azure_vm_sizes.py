@@ -15,7 +15,9 @@ import subprocess
 import pytest
 
 from redstackpro import Registry
+from redstackpro.export import compile_topology
 from redstackpro.terraform import TerraformPlan, azure, generate
+from redstackpro.tools.azure_preflight import read_tfvars
 
 from shipped import ROOT, load
 
@@ -71,7 +73,7 @@ def test_a_range_keeps_its_burstable_workstation_and_dc_defaults():
         assert sizes["wks"] == "Standard_B2as_v2"
 
 
-def test_tfvars_ships_a_commented_example_of_every_role_with_its_default(redstack):
+def test_tfvars_ships_a_commented_example_of_every_role_with_its_default(redstack, tmp_path):
     tfvars = generate(redstack, provider="azure")["terraform/terraform.tfvars"]
     # Commented out: an unset map keeps every default.
     assert not re.search(r"^vm_sizes", tfvars, flags=re.M)
@@ -79,6 +81,10 @@ def test_tfvars_ships_a_commented_example_of_every_role_with_its_default(redstac
     assert block, tfvars
     listed = dict(re.findall(r'^#\s+(\w+)\s+=\s+"([^"]+)"', block.group(1), flags=re.M))
     assert listed == _defaults(redstack)
+    # Uncommenting the block as the comment says gives a map read back as listed.
+    uncommented = re.sub(r"^# ?(vm_sizes = \{|  \w+ +=.*|\})$", r"\1", tfvars, flags=re.M)
+    (tmp_path / "deploy.tfvars").write_text(uncommented, encoding="utf-8")
+    assert read_tfvars(tmp_path / "deploy.tfvars")["vm_sizes"] == listed
 
 
 def test_gcp_and_aws_are_untouched(redstack):
@@ -86,6 +92,7 @@ def test_gcp_and_aws_are_untouched(redstack):
         out = generate(redstack, provider=provider)
         assert "vm_sizes" not in out["terraform/main.tf"]
         assert "vm_sizes" not in out["terraform/variables.tf"]
+        assert "terraform/preflight.json" not in out
 
 
 @pytest.mark.skipif(shutil.which("terraform") is None, reason="terraform not on PATH")
@@ -108,3 +115,32 @@ def test_a_partial_override_changes_only_the_roles_it_names(redstack, tmp_path, 
     assert done.returncode == 0, done.stderr
     merged = json.loads(json.loads(done.stdout.strip().splitlines()[-1]))
     assert merged == dict(_defaults(redstack), **override)
+
+
+def test_the_preflight_manifest_counts_what_apply_creates(redstack):
+    files = compile_topology(redstack, Registry(), provider="azure")
+    manifest = json.loads(files["terraform/preflight.json"])
+    main = files["terraform/main.tf"]
+    by_name = {attrs["name"].strip('"'): attrs for attrs in _host_modules(main).values()}
+    assert {h["name"] for h in manifest["hosts"]} == set(by_name)
+    for h in manifest["hosts"]:
+        attrs = by_name[h["name"]]
+        assert attrs["size"] == 'local.vm_sizes["%s"]' % h["role"]
+        assert (attrs["public_address"] == "true") == h["public_ip"]
+    assert manifest["nat_public_ips"] == len(re.findall(r"create_nat\s*=\s*true", main))
+    assert manifest["default_vm_sizes"] == _defaults(redstack)
+    assert "Microsoft.Compute" in manifest["providers_auto_registered"]
+    # The script that reads it ships for azure only.
+    assert "azure_preflight.py" in files
+    assert "azure_preflight.py" not in compile_topology(redstack, Registry(), provider="gcp")
+
+
+def test_the_shutdown_schedule_requires_devtestlab(redstack):
+    """auto_stop is a Microsoft.DevTestLab resource, outside azurerm's core set."""
+    doc = json.loads(json.dumps(redstack))
+    with_stop = json.loads(generate(doc, provider="azure")["terraform/preflight.json"])
+    doc.pop("auto_stop", None)
+    without = json.loads(generate(doc, provider="azure")["terraform/preflight.json"])
+    assert ("Microsoft.DevTestLab" in with_stop["providers_required"]) == bool(
+        redstack.get("auto_stop"))
+    assert without["providers_required"] == {}

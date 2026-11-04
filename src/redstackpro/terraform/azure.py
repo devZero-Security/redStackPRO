@@ -12,6 +12,7 @@ HTTPS WinRM listener, the Azure form of the boot self-provision. See 0015.
 
 import base64
 import ipaddress
+import json
 
 from .plan import (  # noqa: F401  GenerationError re-exported
     GenerationError, align, operator_hosts_hcl,
@@ -54,7 +55,7 @@ LINUX_IMAGES = {
 # usually cheaper. Gen2 images (debian-13-gen2, 2022-datacenter-azure-edition)
 # run on these. wks is burstable, sized like the gcp/aws small default. These
 # are only defaults: which sizes a subscription may allocate varies widely, so
-# var.vm_sizes overrides any role.
+# var.vm_sizes overrides any role and the deploy preflight checks the result.
 DEFAULT_MACHINE = {
     "redirector": "Standard_D2as_v5",
     "teamserver": "Standard_D2as_v5",
@@ -67,6 +68,15 @@ DEFAULT_MACHINE = {
     "siem": "Standard_D4as_v5",
 }
 _FALLBACK_MACHINE = "Standard_D2as_v5"
+
+# azurerm 4.x registers this set itself when it starts (resource_provider_registrations
+# defaults to "core"), so an unregistered one only bites an identity that may not
+# register providers. Anything else the HCL uses must already be registered.
+AZURERM_CORE_PROVIDERS = (
+    "Microsoft.Authorization", "Microsoft.Compute", "Microsoft.CostManagement",
+    "Microsoft.ManagedIdentity", "Microsoft.MarketplaceOrdering",
+    "Microsoft.Network", "Microsoft.Resources", "Microsoft.Storage",
+)
 
 # IANA -> Windows timezone id for Azure's shutdown schedule, which (unlike gcp/aws)
 # does not accept IANA names. The CLDR default per zone. Only the common zones an
@@ -150,6 +160,7 @@ def files(plan):
         "terraform/terraform.tfvars": _tfvars(plan),
         "terraform/main.tf": _main(plan),
         "terraform/firewall.tf": _firewall(plan),
+        "terraform/preflight.json": _preflight_manifest(plan),
     }
 
 
@@ -158,6 +169,29 @@ def default_vm_sizes(plan):
     node kind, the key var.vm_sizes overrides by."""
     return {kind: DEFAULT_MACHINE.get(kind, _FALLBACK_MACHINE)
             for kind in sorted({n["kind"] for n in plan.hosts()})}
+
+
+def _preflight_manifest(plan):
+    """What azure_preflight.py checks the subscription against: every host with
+    its role and whether it takes a public IP, the NAT gateway IPs, and the
+    resource providers the HCL needs. Built from the same calls _main uses, so
+    the count cannot drift from what apply creates."""
+    hosts = [{"name": plan.tag(n["id"]), "role": n["kind"],
+              "public_ip": plan.takes_public_address(n)}
+             for n in sorted(plan.hosts(), key=lambda n: plan.tag(n["id"]))]
+    nat_ips = sum(1 for n in plan.networks() if _network_needs_nat(plan, n["id"]))
+    # The shutdown schedule is a Microsoft.DevTestLab resource, which is outside
+    # azurerm's core set, so an unregistered one fails apply after the VMs exist.
+    required = {"Microsoft.DevTestLab": "the auto-stop schedule"} if plan.auto_stop else {}
+    return json.dumps({
+        "provider": "azure",
+        "default_location": plan.region,
+        "hosts": hosts,
+        "default_vm_sizes": default_vm_sizes(plan),
+        "nat_public_ips": nat_ips,
+        "providers_required": required,
+        "providers_auto_registered": list(AZURERM_CORE_PROVIDERS),
+    }, indent=2) + "\n"
 
 
 # ---------------------------------------------------------------- static parts
@@ -261,8 +295,8 @@ def _tfvars(plan):
         example = """
 # Optional: the VM size per role. These are the defaults for the roles in this
 # topology. Subscriptions differ in which sizes they may use and how many vCPUs
-# each size family gets. To change one, uncomment the first and last lines and
-# only the roles you change:
+# each size family gets, and deploy.sh checks that before apply. To change one,
+# uncomment the first and last lines and only the roles you change:
 # vm_sizes = {
 %s# }
 """ % example
@@ -444,7 +478,8 @@ def _main(plan):
             # A range's jumpbox is reached from outside (Guacamole and ssh), so it
             # needs a public address even when exposure would not grant one; every
             # other range host stays private.
-            # takes_public_address is that rule.
+            # takes_public_address is that rule, shared with the preflight
+            # manifest's public IP count.
             ("public_address",
              "true" if plan.takes_public_address(node) else "false"),
             ("size", 'local.vm_sizes["%s"]' % node["kind"]),
