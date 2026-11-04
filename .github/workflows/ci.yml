@@ -152,7 +152,8 @@ jobs:
             echo "key material in the export"
             exit 1
           fi
-          grep -q 'ssh_public_key = ""' export/deploy.tfvars
+          # fmt aligns the "=" to the longest key, so the spacing varies by provider.
+          grep -Eq '^ssh_public_key[[:space:]]+=[[:space:]]+""' export/deploy.tfvars
 
   ansible:
     # ansible-core does not run on Windows, so this is the check a contributor
