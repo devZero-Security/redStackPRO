@@ -218,6 +218,7 @@ body {
 .rg-count.is-error { color: var(--error-text); }
 .rg-count.is-ok { color: var(--ok); }
 .rg-count.is-warning { color: var(--warning); }
+.rg-count.is-info { color: var(--muted); }
 
 button, select {
   background: var(--panel-2);
@@ -461,6 +462,8 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-badge + .rg-dot { margin-left: 6px; }
 .rg-dot.is-error { background: var(--error); }
 .rg-dot.is-warning { background: var(--warning); }
+/* A notice, not a problem: muted so it never reads as an alarm. */
+.rg-dot.is-info { background: var(--muted); }
 
 /* A container is a backdrop. Its body ignores the pointer so a click lands on
    the host inside it, and only the header is draggable. */
@@ -705,7 +708,11 @@ button:disabled { opacity: 0.5; cursor: default; }
    beside the box. See the boolean branch in Inspector.jsx. */
 .rg-check-row { display: flex; align-items: center; gap: 7px; }
 .rg-check-row input[type="checkbox"] { flex: none; margin: 0; }
-.rg-field-label { color: var(--muted); font-size: var(--fs-1); text-transform: lowercase; }
+/* Labels are schema titles now ("SPNs", "Operating system"), so their case is
+   kept. A hand-written lowercase label still reads as a sentence: the first
+   letter is raised, the rest left alone. */
+.rg-field-label { color: var(--muted); font-size: var(--fs-1); }
+.rg-field-label::first-letter { text-transform: uppercase; }
 .rg-required { color: var(--warning); margin-left: 6px; font-size: 10px; }
 .rg-field-help { color: var(--muted); font-size: var(--fs-1); }
 
@@ -717,7 +724,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   padding: 5px 7px;
   font: inherit;
 }
-/* A free-key object (vulns_vars, group_members) edited as JSON. */
+/* A free-key object (vulns_vars) edited as JSON. */
 .rg-field textarea {
   font-family: ui-monospace, monospace;
   font-size: var(--fs-1);
@@ -750,22 +757,20 @@ button:disabled { opacity: 0.5; cursor: default; }
 /* A stored value the field does not use on this node, or a picker that deploys
    nothing yet. */
 .rg-field-ignored { color: var(--warning); font-size: var(--fs-1); }
+/* A warning or info finding that names this field: shown, but not red. */
+.rg-field-finding { font-size: var(--fs-1); }
+.rg-field-finding.is-warning { color: var(--warning); }
+.rg-field-finding.is-info { color: var(--muted); }
 .rg-option-help { color: var(--text); }
-/* Stored list values the checklist does not offer, each removable. */
-.rg-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-.rg-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 1px 3px 1px 7px;
-  border: 1px dashed var(--line);
-  border-radius: 10px;
+/* Stored list values the checklist does not offer. The chip itself is
+   widgets.css; these say whether the value does anything. */
+.rg-chip.is-linked { cursor: help; }
+.rg-chip.is-dead {
+  background: none;
+  border-style: dashed;
   color: var(--muted);
-  font-size: var(--fs-1);
   cursor: help;
 }
-.rg-chip-del { background: none; border: 0; padding: 0 3px; color: inherit; font: inherit; cursor: pointer; }
-.rg-chip-del:hover { color: var(--error-text); }
 /* A value that misses its pattern, bounds or choices, client side or SCH001. */
 .rg-field.is-invalid input,
 .rg-field.is-invalid select,
@@ -883,6 +888,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 .rg-finding.is-error { border-left-color: var(--error); }
 .rg-finding.is-warning { border-left-color: var(--warning); }
+.rg-finding.is-info { border-left-color: var(--muted); color: var(--muted); }
 .rg-finding code { color: var(--muted); margin-right: 7px; font-size: var(--fs-1); }
 
 /* The family word that leads a finding, in place of the raw code. A native
