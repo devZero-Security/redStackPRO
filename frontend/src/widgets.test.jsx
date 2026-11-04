@@ -346,10 +346,10 @@ const domainSelection = { type: "node", id: "essos" };
 
 describe("ACL editor", () => {
   test("the directory knows users, groups, computers, gMSAs and OUs", () => {
-    const doc = essosDoc({ gmsa: [{ name: "gmsaDragon", hosts: ["braavos"] }] });
+    const doc = essosDoc({ gmsa: [{ name: "gmsaDragon", hosts: ["braavos"] }], groups: ["Spys"] });
     const dir = domainDirectory(doc, doc.nodes[0]);
     expect(dir.users).toEqual(["khal.drogo", "viserys.targaryen"]);
-    expect(dir.groups).toEqual(["Dothraki", "Targaryen"]);
+    expect(dir.groups).toEqual(["Dothraki", "Spys", "Targaryen"]);
     expect(dir.computers).toEqual(["braavos$", "meereen$"]);
     expect(dir.gmsa).toEqual(["gmsaDragon$"]);
     expect(principalStatus(dir, "KHAL.DROGO")).toBe("known");
@@ -379,6 +379,26 @@ describe("ACL editor", () => {
     expect(screen.getByText("khal.drgo is not found on this domain; it would be created as an empty group.")).toBeTruthy();
     await user.type(target, "castelblack$");
     expect(screen.getByText("castelblack$ is not found on this domain; this right would be skipped.")).toBeTruthy();
+    // Only the plain name can become a group; a computer name cannot.
+    expect(screen.queryByRole("button", { name: "Add castelblack$ as a domain group" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Add khal.drgo as a domain group" }));
+    expect(last(seen).nodes[0].overlay.groups).toEqual(["khal.drgo"]);
+    expect(screen.queryByText(/khal.drgo is not found/)).toBeNull();
+  });
+
+  test("a saved right on a group only an ACL names offers to add it as a domain group", async () => {
+    const seen = [];
+    render(
+      <Harness
+        initial={essosDoc({ acls: [{ principal: "Spys", target: "khal.drogo", right: "GenericAll" }] })}
+        selection={domainSelection}
+        seen={seen}
+      />
+    );
+    expect(screen.getByText("Spys is not found on this domain; it would be created as an empty group.")).toBeTruthy();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Add Spys as a domain group" }));
+    expect(last(seen).nodes[0].overlay.groups).toEqual(["Spys"]);
+    expect(screen.queryByText(/Spys is not found/)).toBeNull();
   });
 
   test("rights are the ones that compile, each with its meaning", async () => {
@@ -388,7 +408,7 @@ describe("ACL editor", () => {
     const right = screen.getByRole("combobox", { name: "right" });
     const values = within(right).getAllByRole("option").map((o) => o.value);
     expect(values).toEqual(expect.arrayContaining([
-      "GenericAll", "ForceChangePassword", "AddMember", "Ext-Write-SPN", "Ext-User-Force-Change-Password",
+      "GenericAll", "ForceChangePassword", "AddMember", "WriteSPN", "Ext-Write-SPN", "Ext-User-Force-Change-Password",
     ]));
     await user.selectOptions(right, "ForceChangePassword");
     expect(screen.getByText("Reset the target user's password without knowing the old one.")).toBeTruthy();
@@ -408,6 +428,22 @@ describe("ACL editor", () => {
       />
     );
     expect(screen.getByText("AllExtendedRights is not a right redStackPRO applies; this entry is skipped.")).toBeTruthy();
+  });
+
+  test("a saved alias target or a right in other case is recognised", () => {
+    render(
+      <Harness
+        initial={essosDoc({
+          acls: [
+            { principal: "khal.drogo", target: "Domain Admins", right: "Ext-Write-Member" },
+            { principal: "khal.drogo", target: "viserys.targaryen", right: "genericall" },
+          ],
+        })}
+        selection={domainSelection}
+      />
+    );
+    expect(screen.queryByText(/is not a right redStackPRO applies/)).toBeNull();
+    expect(screen.getByText("AddMember (AD name)")).toBeTruthy();
   });
 });
 

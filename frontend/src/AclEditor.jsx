@@ -4,9 +4,9 @@ import {
   domainDirectory, principalChoices, principalStatus, targetChoices, targetStatus,
 } from "./domainDirectory.js";
 
-// The rights that compile: every name apply_acls.ps1 knows, plus the two
-// aliases the compiler maps onto them. tests/test_canvas_widgets_sync.py
-// checks this list against the script. One entry per line.
+// The rights that compile: every name apply_acls.ps1 knows, plus the aliases
+// the compiler maps onto them (ACL_ALIASES). tests/test_canvas_widgets_sync.py
+// checks both against the script and the compiler. One entry per line.
 export const ACL_RIGHTS = [
   { value: "GenericAll", label: "GenericAll", meaning: "Full control of the target." },
   { value: "GenericWrite", label: "GenericWrite", meaning: "Write the target's attributes, such as an SPN or a logon script." },
@@ -14,17 +14,35 @@ export const ACL_RIGHTS = [
   { value: "WriteOwner", label: "WriteOwner", meaning: "Take ownership of the target, then rewrite its permissions." },
   { value: "ForceChangePassword", label: "ForceChangePassword", meaning: "Reset the target user's password without knowing the old one." },
   { value: "AddMember", label: "AddMember", meaning: "Add any account to the target group." },
+  { value: "WriteSPN", label: "WriteSPN", meaning: "Set an SPN on the target account, for a targeted Kerberoast." },
   { value: "Ext-Self-Self-Membership", label: "Add self to group", meaning: "Add yourself to the target group." },
-  { value: "Ext-Write-SPN", label: "Write SPN", meaning: "Set an SPN on the target account, for a targeted Kerberoast." },
   { value: "WriteProperty", label: "WriteProperty", meaning: "Write any property of the target." },
   { value: "ReadProperty", label: "ReadProperty", meaning: "Read the target's properties." },
   { value: "GenericExecute", label: "GenericExecute", meaning: "List and read the target." },
   { value: "Self", label: "Self", meaning: "Validated writes on the target, such as adding yourself to a group." },
   { value: "Ext-User-Force-Change-Password", label: "Force change password (AD name)", meaning: "Same as ForceChangePassword." },
+  { value: "Ext-Write-SPN", label: "Write SPN (AD name)", meaning: "Same as WriteSPN." },
   { value: "Ext-Write-Self-Membership", label: "Write self membership (AD name)", meaning: "Same as Add self to group." },
 ];
 
-const RIGHT_BY_VALUE = Object.fromEntries(ACL_RIGHTS.map((r) => [r.value, r]));
+// Canvas label to the apply_acls.ps1 name, as the compiler maps it.
+export const ACL_ALIASES = {
+  ForceChangePassword: "Ext-User-Force-Change-Password",
+  AddMember: "Ext-Write-Member",
+  WriteSPN: "Ext-Write-SPN",
+};
+
+const lower = (s) => String(s || "").toLowerCase();
+
+// The dropdown entry for a saved right, matched without case the way the
+// compiler and the script match it. An alias target with no entry of its own
+// (Ext-Write-Member) reads as its alias.
+function rightInfo(right) {
+  const hit = ACL_RIGHTS.find((r) => lower(r.value) === lower(right));
+  if (hit) return hit;
+  const alias = Object.entries(ACL_ALIASES).find(([, v]) => lower(v) === lower(right));
+  return alias ? { value: right, label: `${alias[0]} (AD name)`, meaning: `Same as ${alias[0]}.` } : null;
+}
 
 // A readable label for a right that is not in the list above, which may
 // arrive as a raw AD string from an import. The stored value is kept.
@@ -55,7 +73,8 @@ function targetNote(dir, name) {
 // attack graph the users and groups sit inside, the same acls GOAD carries and
 // BloodHound walks. See 0052.
 export function AclEditor({ node, document, onChange, readOnly }) {
-  const acls = (node.overlay || {}).acls || [];
+  const overlay = node.overlay || {};
+  const acls = overlay.acls || [];
   const [principal, setPrincipal] = useState("");
   const [target, setTarget] = useState("");
   const [right, setRight] = useState("GenericAll");
@@ -66,7 +85,33 @@ export function AclEditor({ node, document, onChange, readOnly }) {
   const principals = principalChoices(dir);
   const targets = targetChoices(dir);
 
-  const set = (next) => onChange({ ...(node.overlay || {}), acls: next.length ? next : undefined });
+  const set = (next) => onChange({ ...overlay, acls: next.length ? next : undefined });
+  // A name only an access right uses becomes one of the domain's own groups,
+  // which the dc role creates on purpose rather than as a side effect.
+  const addGroup = (name) => {
+    const groups = Array.isArray(overlay.groups) ? overlay.groups : [];
+    if (groups.some((g) => lower(g) === lower(name))) return;
+    onChange({ ...overlay, groups: [...groups, name] });
+  };
+  // The unknown plain names in a principal and target pair, once each.
+  const newGroups = (p, t) =>
+    [...new Set([
+      principalStatus(dir, p) === "created" ? p : null,
+      targetStatus(dir, t) === "created" ? t : null,
+    ].filter(Boolean))];
+  const groupButtons = (names) =>
+    readOnly
+      ? null
+      : names.map((name) => (
+          <button
+            key={name}
+            type="button"
+            className="rg-inline-btn rg-acl-group-btn"
+            onClick={() => addGroup(name)}
+          >
+            Add {name} as a domain group
+          </button>
+        ));
   const add = () => {
     if (!principal.trim() || !target.trim() || !right.trim()) return;
     set([...acls, { principal: principal.trim(), target: target.trim(), right: right.trim() }]);
@@ -88,7 +133,8 @@ export function AclEditor({ node, document, onChange, readOnly }) {
       {acls.length ? (
         <div className="rg-acls-list">
           {acls.map((a, i) => {
-            const known = RIGHT_BY_VALUE[a.right];
+            const known = rightInfo(a.right);
+            const fresh = newGroups(a.principal, a.target);
             const notes = [
               principalNote(dir, a.principal),
               targetNote(dir, a.target),
@@ -109,6 +155,7 @@ export function AclEditor({ node, document, onChange, readOnly }) {
                     {notes.map((n) => (
                       <span key={n} className="rg-widget-warn">{n}</span>
                     ))}
+                    {groupButtons(fresh)}
                   </span>
                 ) : null}
                 {readOnly ? null : (
@@ -163,9 +210,10 @@ export function AclEditor({ node, document, onChange, readOnly }) {
               <option key={`${c.kind}:${c.value}`} value={c.value} label={c.kind} />
             ))}
           </datalist>
-          <span className="rg-field-help">{RIGHT_BY_VALUE[right]?.meaning}</span>
+          <span className="rg-field-help">{rightInfo(right)?.meaning}</span>
           {pNote ? <span className="rg-widget-warn">{pNote}</span> : null}
           {tNote ? <span className="rg-widget-warn">{tNote}</span> : null}
+          {groupButtons(newGroups(principal.trim(), target.trim()))}
         </>
       )}
     </div>
