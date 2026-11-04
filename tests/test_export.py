@@ -100,8 +100,10 @@ def test_a_build_that_would_stop_mid_provision_refuses_to_start(registry):
     assert body.index("RSP_STOP_LEAD") < body.index("terraform -chdir=terraform apply")
     assert 'REDSTACKPRO_MIN_STOP_LEAD:-150' in body
     # The one-line fix has to be named: a refusal the operator cannot act on is
-    # just an obstacle. Recompiling is what actually resets the clock.
-    assert "re-run the compile now" in body
+    # just an obstacle. The guard is only emitted for a fixed `at`, so the fix is
+    # moving that time (re-exporting the same value changes nothing).
+    assert "move auto_stop.at later" in body
+    assert "re-run the compile now" not in body
     assert "REDSTACKPRO_MIN_STOP_LEAD=0" in body, "an override must exist"
 
 
