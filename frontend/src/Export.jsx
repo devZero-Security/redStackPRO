@@ -6,7 +6,9 @@ import {
   PLATFORM_KEY,
   archiveName,
   defaultPlatform,
+  providerSetup,
 } from "./deployTarget.js";
+import { labelFor } from "./providers.js";
 
 // The export is the product. redStackPRO does not run anything, so what a person
 // should be looking at is the code they are about to run themselves. Showing
@@ -72,11 +74,32 @@ function tree(paths) {
   return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
 }
 
-const PREFERRED = [
-  "terraform/firewall.tf",
+// deploy.tfvars leads: it is the one file a person has to edit before running.
+export const PREFERRED = [
+  "deploy.tfvars",
+  "DEPLOYMENT-GUIDE.md",
   "terraform/main.tf",
   "ansible/inventory.yml",
 ];
+
+// A command on its own line. One click selects all of it, ready to copy.
+function Cmd({ children }) {
+  return (
+    <code className="rg-cmd" style={{ userSelect: "all" }}>
+      {children}
+    </code>
+  );
+}
+
+// Field names as inline code, read as "a, b and c".
+function FieldList({ fields }) {
+  return fields.map((field, index) => (
+    <React.Fragment key={field}>
+      {index === 0 ? "" : index === fields.length - 1 ? " and " : ", "}
+      <code>{field}</code>
+    </React.Fragment>
+  ));
+}
 
 
 export function ExportPanel({ document, provider }) {
@@ -184,13 +207,15 @@ export function ExportPanel({ document, provider }) {
   }
 
   const bytes = result.files.reduce((total, f) => total + f.contents.length, 0);
+  const setup = providerSetup(provider);
+  const cloud = labelFor(provider);
 
   return (
     <aside className="rg-panel rg-export">
       <div className="rg-export-head">
         <h2>Working directory</h2>
         <span className="rg-export-meta">
-          {result.files.length} files, {(bytes / 1024).toFixed(0)} kB, {provider}
+          {result.files.length} files, {(bytes / 1024).toFixed(0)} kB, {cloud}
         </span>
         <label className="rg-export-platform">
           Deploy from
@@ -217,16 +242,38 @@ export function ExportPanel({ document, provider }) {
       <ol className="rg-export-steps">
         <li>
           Extract it, then make a key:
-          <code className="rg-cmd">{PLATFORMS[platform].keygen}</code>
+          <Cmd>{PLATFORMS[platform].keygen}</Cmd>
         </li>
         <li>
-          Put <code>keys/id_ed25519.pub</code> into{" "}
-          <code>deploy.tfvars</code> (in the export root) as{" "}
-          <code>ssh_public_key</code>, with the other values it asks for.
+          Open <code>deploy.tfvars</code> (in the export root) and set{" "}
+          {setup.fields.length ? (
+            <FieldList fields={setup.fields} />
+          ) : (
+            "the values it lists"
+          )}
+          . <code>ssh_public_key</code> can stay empty; deploy fills it
+          from <code>keys/</code>.
         </li>
         <li>
-          Authenticate to {provider}, then in {PLATFORMS[platform].shell}:
-          <code className="rg-cmd">{PLATFORMS[platform].run}</code>
+          {setup.login?.length ? (
+            <>
+              Log in to {cloud}:
+              {setup.login.map((cmd) => <Cmd key={cmd}>{cmd}</Cmd>)}
+              {setup.altLogin?.length ? (
+                <>
+                  or, with an SSO profile:
+                  {setup.altLogin.map((cmd) => <Cmd key={cmd}>{cmd}</Cmd>)}
+                </>
+              ) : null}
+              {setup.loginNote || null}
+            </>
+          ) : (
+            setup.loginNote || `Log in to ${cloud} the way its Terraform provider expects.`
+          )}
+        </li>
+        <li>
+          Then in {PLATFORMS[platform].shell}:
+          <Cmd>{PLATFORMS[platform].run}</Cmd>
         </li>
       </ol>
       <p className="rg-export-note">{PLATFORMS[platform].note} Both scripts are

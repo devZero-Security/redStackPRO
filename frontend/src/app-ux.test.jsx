@@ -14,6 +14,8 @@ import { HOST_PRESETS } from "./presets.js";
 import { VULN_CATALOG } from "./vulns.js";
 import { EXTENSIONS } from "./extensions.js";
 import { TEMPLATES } from "./templates.js";
+import { ExportPanel } from "./Export.jsx";
+import { PLATFORMS, PROVIDER_SETUP } from "./deployTarget.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -195,6 +197,81 @@ describe("blueprint picker text", () => {
       if (/poison/i.test(words)) {
         expect(words, t.name).toMatch(/Proxmox and ESXi/);
       }
+    }
+  });
+});
+
+
+describe("export panel", () => {
+  const COMPILED = {
+    compile_id: "c1",
+    files: [
+      { path: "terraform/firewall.tf", contents: "# firewall\n" },
+      { path: "terraform/main.tf", contents: "# main\n" },
+      { path: "deploy.tfvars", contents: 'project = ""\n' },
+    ],
+  };
+  const DOC = { ...emptyDocument("offense"), nodes: [{ id: "net01", kind: "network", overlay: {} }] };
+
+  function compileBackend() {
+    global.fetch = vi.fn(async (url) =>
+      url.endsWith("/compile") ? respond(200, COMPILED) : respond(404, {}));
+  }
+
+  test("deploy.tfvars opens first, not firewall.tf", async () => {
+    compileBackend();
+    render(<ExportPanel document={DOC} provider="gcp" />);
+    const head = await waitFor(() => {
+      const el = window.document.querySelector(".rg-code-head");
+      expect(el?.textContent).toBe("deploy.tfvars");
+      return el;
+    });
+    expect(head).toBeTruthy();
+  });
+
+  test.each([
+    ["gcp", ["project", "region", "zone", "operator_source_ranges"],
+      ["gcloud auth application-default login"]],
+    ["aws", ["region", "operator_source_ranges"], ["aws configure", "aws sso login"]],
+    ["azure", ["subscription_id", "location", "resource_group", "operator_source_ranges"],
+      ["az login"]],
+  ])("%s: step 2 names the tfvars fields and step 3 the login command",
+    async (provider, fields, logins) => {
+      compileBackend();
+      render(<ExportPanel document={DOC} provider={provider} />);
+      const steps = await waitFor(() => {
+        const el = window.document.querySelector(".rg-export-steps");
+        expect(el).toBeTruthy();
+        return el;
+      });
+      const items = steps.querySelectorAll(":scope > li");
+      const fieldStep = items[1];
+      for (const field of fields) {
+        expect(within(fieldStep).getByText(field).tagName).toBe("CODE");
+      }
+      expect(fieldStep.textContent).toMatch(
+        /ssh_public_key can stay empty; deploy fills it from keys\/\./);
+      const commands = [...items[2].querySelectorAll("code.rg-cmd")].map((c) => c.textContent);
+      for (const login of logins) expect(commands).toContain(login);
+    });
+
+  test("the field lists match the variables each provider's Terraform declares", () => {
+    const tf = (name) => readFileSync(
+      join(HERE, `../../src/redstackpro/terraform/${name}.py`), "utf8");
+    for (const [provider, setup] of Object.entries(PROVIDER_SETUP)) {
+      const source = tf(provider);
+      for (const field of setup.fields) {
+        const declared = source.includes(`variable "${field}"`)
+          || source.split(/\r?\n/).some((line) => line.startsWith(`${field} `));
+        expect(declared, `${provider}: ${field}`).toBe(true);
+      }
+    }
+  });
+
+  test("Python 3.11 is the stated minimum on every platform", () => {
+    for (const p of Object.values(PLATFORMS)) {
+      expect(p.note).toMatch(/Python 3\.11/);
+      expect(p.note).not.toMatch(/3\.8/);
     }
   });
 });
