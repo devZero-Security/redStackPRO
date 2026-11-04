@@ -807,7 +807,8 @@ fi
 # carries exactly what that provider's CLI needs to address a host: an AWS
 # instance id, or a GCP instance name plus its zone. See plan.outputs.
 _MANAGE_PROVIDER_BLOCK = {
-    "aws": r'''INSTANCES="$(terraform -chdir=terraform output -json redstackpro_instances 2>/dev/null)"
+    "aws": r'''command -v aws >/dev/null 2>&1 || { echo "aws (the AWS CLI) not found on PATH -- install it and run: aws configure"; exit 1; }
+INSTANCES="$(terraform -chdir=terraform output -json redstackpro_instances 2>/dev/null)"
 if [ -z "$INSTANCES" ] || [ "$INSTANCES" = "null" ]; then
   echo "no redstackpro_instances output found -- has terraform applied yet?"
   exit 1
@@ -829,7 +830,8 @@ case "$cmd" in
     ;;
 esac
 ''',
-    "gcp": r'''INSTANCES="$(terraform -chdir=terraform output -json redstackpro_instances 2>/dev/null)"
+    "gcp": r'''command -v gcloud >/dev/null 2>&1 || { echo "gcloud not found on PATH -- install the Google Cloud CLI and run: gcloud auth login"; exit 1; }
+INSTANCES="$(terraform -chdir=terraform output -json redstackpro_instances 2>/dev/null)"
 if [ -z "$INSTANCES" ] || [ "$INSTANCES" = "null" ]; then
   echo "no redstackpro_instances output found -- has terraform applied yet?"
   exit 1
@@ -840,25 +842,26 @@ PROJECT="$(grep -E '^[[:space:]]*project[[:space:]]*=' deploy.tfvars 2>/dev/null
 PROJ_ARG=""
 [ -n "$PROJECT" ] && PROJ_ARG="--project $PROJECT"
 if [ "$cmd" = "status" ]; then
-  RSP_ANY=0
+  RSP_ANY=0; RSP_FAIL=0
   while IFS=' ' read -r name zone; do
     [ -n "$name" ] || continue
     RSP_ANY=1
     gcloud compute instances describe "$name" --zone "$zone" $PROJ_ARG \
-      --format='table(name,status,networkInterfaces[0].accessConfigs[0].natIP)'
+      --format='table(name,status,networkInterfaces[0].accessConfigs[0].natIP)' || RSP_FAIL=1
   done < <(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
 for v in json.load(sys.stdin).values():
     print(v['name'], v['zone'])")
   [ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
+  [ "$RSP_FAIL" -eq 0 ] || { echo "$cmd failed on at least one instance (see above)."; exit 1; }
 else
   # start/stop: one gcloud call per zone acts on all that zone's instances at
   # once, instead of a blocking call per instance (a multi-VM range was slow
   # that way). --zone is required and a topology can span zones, so group first.
-  RSP_ANY=0
+  RSP_ANY=0; RSP_FAIL=0
   while IFS=' ' read -r zone names; do
     [ -n "$zone" ] || continue
     RSP_ANY=1
-    gcloud compute instances "$cmd" $names --zone "$zone" $PROJ_ARG
+    gcloud compute instances "$cmd" $names --zone "$zone" $PROJ_ARG || RSP_FAIL=1
   done < <(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
 z={}
 for v in json.load(sys.stdin).values():
@@ -866,28 +869,31 @@ for v in json.load(sys.stdin).values():
 for zone, names in z.items():
     print(zone, ' '.join(names))")
   [ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
+  [ "$RSP_FAIL" -eq 0 ] || { echo "$cmd failed on at least one instance (see above)."; exit 1; }
 fi
 ''',
-    "azure": r'''INSTANCES="$(terraform -chdir=terraform output -json redstackpro_instances 2>/dev/null)"
+    "azure": r'''command -v az >/dev/null 2>&1 || { echo "az (the Azure CLI) not found on PATH -- install it and run: az login (or az login --service-principal)"; exit 1; }
+INSTANCES="$(terraform -chdir=terraform output -json redstackpro_instances 2>/dev/null)"
 if [ -z "$INSTANCES" ] || [ "$INSTANCES" = "null" ]; then
   echo "no redstackpro_instances output found -- has terraform applied yet?"
   exit 1
 fi
 # Target this range's own VMs by name + resource group (from the output). stop
 # uses deallocate, which halts billing; a plain `az vm stop` would keep charging.
-RSP_ANY=0
+RSP_ANY=0; RSP_FAIL=0
 while IFS=' ' read -r vm rg; do
   [ -n "$vm" ] || continue
   RSP_ANY=1
   case "$cmd" in
-    status) az vm show -g "$rg" -n "$vm" -d --query "{name:name,state:powerState,ip:publicIps}" -o table ;;
-    start)  az vm start -g "$rg" -n "$vm" ;;
-    stop)   az vm deallocate -g "$rg" -n "$vm" ;;
+    status) az vm show -g "$rg" -n "$vm" -d --query "{name:name,state:powerState,ip:publicIps}" -o table || RSP_FAIL=1 ;;
+    start)  az vm start -g "$rg" -n "$vm" || RSP_FAIL=1 ;;
+    stop)   az vm deallocate -g "$rg" -n "$vm" || RSP_FAIL=1 ;;
   esac
 done < <(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
 for v in json.load(sys.stdin).values():
     print(v['name'], v['resource_group'])")
 [ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
+[ "$RSP_FAIL" -eq 0 ] || { echo "$cmd failed on at least one instance (see above)."; exit 1; }
 ''',
 }
 
@@ -905,8 +911,8 @@ def generate_manage_script(topology, registry=None, provider=None):
     is nothing to have deployed in the first place). Mirrors generate_deploy_script:
     same gate, same reason.
 
-    status/start/stop are wired for aws and gcp, the two tested native
-    providers; teardown is provider agnostic and works everywhere."""
+    status/start/stop are wired for aws, gcp and azure, each through its own
+    CLI; teardown is provider agnostic and works everywhere."""
     ctx = Context(topology, registry)
     if not _jumpbox_name(ctx):
         return None

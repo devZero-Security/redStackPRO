@@ -854,3 +854,47 @@ def test_manage_scripts_ship_only_alongside_the_deploy():
     files = compile_topology(doc, Registry(), provider="gcp")
     assert "manage.sh" not in files
     assert "manage.ps1" not in files
+
+
+# -- manage.sh live control, executed against stub CLIs
+
+_INSTANCES = {
+    "aws": '{"jump": {"instance_id": "i-0123"}}',
+    "gcp": '{"jump": {"name": "jump", "zone": "us-east4-a"}}',
+    "azure": '{"jump": {"name": "jump", "resource_group": "rg"}}',
+}
+_CLI = {"aws": "aws", "gcp": "gcloud", "azure": "az"}
+
+
+def _manage_staged(tmp_path, provider, cli_body):
+    files = compile_topology(example("redstack.json"), Registry(), provider=provider)
+    export = tmp_path / "export"
+    for path, contents in files.items():
+        target = export / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(contents, encoding="utf-8", newline="\n")
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    _stub(stubs, "terraform", "case \"$*\" in *redstackpro_instances*) echo '%s' ;; "
+                              "*) echo '{}' ;; esac" % _INSTANCES[provider])
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    if cli_body is not None:
+        _stub(stubs, _CLI[provider], cli_body)
+    command = 'export PATH="%s:/usr/bin:/bin"; exec bash manage.sh status' % _msys(stubs)
+    return subprocess.run([_bash(), "-c", command], cwd=export, env=dict(os.environ),
+                          capture_output=True, text=True, timeout=120)
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+@pytest.mark.parametrize("provider", ["aws", "gcp", "azure"])
+def test_manage_fails_loudly_when_the_cloud_cli_is_missing_or_fails(tmp_path, provider):
+    """Live 2026-11-04: on a box without az, `manage.sh stop` printed `az: command
+    not found` per VM and exited 0, so a range that kept billing read as stopped.
+    The CLI is checked up front, and any failed call makes the run exit nonzero."""
+    missing = _manage_staged(tmp_path / "missing", provider, None)
+    assert missing.returncode == 1, missing.stdout + missing.stderr
+    assert "%s" % _CLI[provider] in missing.stdout and "not found on PATH" in missing.stdout
+    failing = _manage_staged(tmp_path / "failing", provider, "echo boom >&2; exit 1")
+    assert failing.returncode != 0, failing.stdout + failing.stderr
+    working = _manage_staged(tmp_path / "working", provider, "exit 0")
+    assert working.returncode == 0, working.stdout + working.stderr
