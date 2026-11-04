@@ -18,7 +18,7 @@ export const PLATFORMS = {
     // C:\Windows\System32\bash.exe, the WSL launcher, so the deploy runs in a
     // different filesystem with a different home and different cloud
     // credentials, and fails for reasons that look nothing like the cause.
-    note: "Needs terraform, Git for Windows (for ssh, tar and Git Bash) and Python 3.11 or newer. Run it from PowerShell. Not `bash deploy.sh` there: that is WSL's bash, not Git Bash.",
+    note: "Needs terraform, Git for Windows (for ssh, tar and Git Bash) and Python 3.8 or newer. Run it from PowerShell. Not `bash deploy.sh` there: that is WSL's bash, not Git Bash.",
     // PowerShell passes -N "" through as two literal quote characters, so the
     // key ends up with a passphrase of `""`. Nothing complains until the deploy
     // fails minutes later with Permission denied (publickey) from the jumpbox.
@@ -29,7 +29,7 @@ export const PLATFORMS = {
     file: "macos-linux",
     run: "bash deploy.sh",
     shell: "a terminal",
-    note: "Needs terraform, ssh, tar and Python 3.11 or newer.",
+    note: "Needs terraform, ssh, tar and Python 3.8 or newer.",
     keygen: 'ssh-keygen -t ed25519 -f keys/id_ed25519 -N ""',
   },
 };

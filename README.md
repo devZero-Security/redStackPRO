@@ -151,7 +151,7 @@ one forest, two domain controllers and a member server, plus a jumpbox.
 > **Two things before you deploy.** Your cloud identity needs permission to
 > create the resources the export builds (VPCs or networks, subnets, security
 > groups or firewall rules, instances, elastic or static IPs), and your machine
-> needs `terraform`, `ssh`, `tar`, and Python 3.11 or newer. redStackPRO generates
+> needs `terraform`, `ssh`, `tar`, and Python 3.8 or newer. redStackPRO generates
 > the code and installs none of that for you; Ansible installs itself on the
 > jumpbox.
 >

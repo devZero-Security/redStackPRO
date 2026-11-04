@@ -211,11 +211,11 @@ _FIND_PYTHON = r'''# Find a Python that actually RUNS, rather than one that mere
 PY=""
 for c in python3 python py; do
   command -v "$c" >/dev/null 2>&1 || continue
-  "$c" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' \
+  "$c" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)' \
     >/dev/null 2>&1 && { PY="$c"; break; }
 done
 [ -n "$PY" ] || {
-  echo "no working Python 3.11 or newer found (tried: python3, python, py)."
+  echo "no working Python 3.8 or newer found (tried: python3, python, py)."
   echo "One of them may be on PATH but not runnable -- on Windows the Microsoft"
   echo "Store stub does exactly that. Install Python and re-run."
   exit 1
@@ -463,7 +463,7 @@ _TEMPLATE = r"""#!/usr/bin/env bash
 # jumpbox and provisions from there. Run it from the export root (the directory
 # holding this script, terraform/ and ansible/).
 #
-# Needs on your machine: terraform, ssh, tar, and Python 3.11+. Ansible is installed
+# Needs on your machine: terraform, ssh, tar, and Python 3.8+. Ansible is installed
 # on the jumpbox automatically -- you do not need it locally. Every one of these
 # ships with Git for Windows, macOS and any Linux, so this runs the same way on
 # all three. On Windows run it from Git Bash, or use deploy.ps1 beside this file.

@@ -271,10 +271,10 @@ describe("export panel", () => {
     }
   });
 
-  test("Python 3.11 is the stated minimum on every platform", () => {
+  test("Python 3.8 is the stated minimum on every platform", () => {
     for (const p of Object.values(PLATFORMS)) {
-      expect(p.note).toMatch(/Python 3\.11/);
-      expect(p.note).not.toMatch(/3\.8/);
+      expect(p.note).toMatch(/Python 3\.8 or newer/);
+      expect(p.note).not.toMatch(/3\.11/);
     }
   });
 });

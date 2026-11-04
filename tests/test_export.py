@@ -343,7 +343,7 @@ def test_the_guide_names_what_to_confirm_per_provider(provider, expect, absent):
     assert expect in guide
     assert absent not in guide.split("## 3.")[0].split("## 2.")[1]
     assert "(and, on GCP, the project)" not in guide
-    assert "Python 3.11+" in guide and "3.8" not in guide
+    assert "Python 3.8+" in guide and "3.11" not in guide
 
 
 def test_the_gcp_guide_enables_compute_and_points_at_the_quota_page():

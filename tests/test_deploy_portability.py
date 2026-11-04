@@ -973,3 +973,19 @@ def test_aws_checks_the_availability_zone_against_the_region():
     body = generate_deploy_script(example("redstack.json"), Registry(), provider="aws")
     assert "availability_zone $RSP_ZONE is not in region $RSP_REGION" in body
     assert body.index("rsp_tfvar availability_zone") < body.index('say "terraform apply"')
+
+
+@pytest.mark.parametrize("path", [
+    "src/redstackpro/assets/tf_inventory.py",
+    "src/redstackpro/tools/verify.py",
+    "src/redstackpro/tools/azure_preflight.py",
+])
+def test_scripts_the_export_ships_parse_as_python_3_8(path):
+    # deploy.sh accepts Python 3.8+, and these run on the user's machine.
+    import ast
+    src = (Path(__file__).resolve().parents[1] / path).read_text(encoding="utf-8")
+    ast.parse(src, feature_version=(3, 8))
+
+
+def test_deploy_accepts_python_3_8_like_the_guide_says(script):
+    assert "sys.version_info >= (3, 8)" in script
