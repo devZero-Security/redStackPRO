@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/license-MIT-3B9EFF" alt="MIT license">
   <img src="https://img.shields.io/badge/version-0.9.2-CF2127" alt="version 0.9.2">
-  <img src="https://img.shields.io/badge/providers-GCP%20%7C%20AWS-3B9EFF" alt="providers GCP and AWS">
+  <img src="https://img.shields.io/badge/providers-GCP%20%7C%20AWS%20%7C%20Azure-3B9EFF" alt="providers GCP, AWS, and Azure">
   <img src="https://img.shields.io/badge/status-prerelease%20beta-A97BFF" alt="status prerelease beta">
   <img src="https://img.shields.io/badge/exports-Terraform%20%2B%20Ansible-844FBA?logo=terraform&logoColor=white" alt="Terraform and Ansible">
 </p>
@@ -18,7 +18,7 @@
 
 > [!IMPORTANT]
 > **redStackPRO is in prerelease (beta).** Features are still moving before 1.0.
-> GCP and AWS are tested end to end; Azure, Proxmox, and ESXi are on the roadmap.
+> GCP, AWS, and Azure are tested end to end; Proxmox and ESXi are on the roadmap.
 > Expect rough edges, and pin to a released version if you need stability.
 >
 > **Hit a rough edge, or have feedback?** Open an issue at
@@ -81,7 +81,8 @@ to end: a topology compiles to Terraform and Ansible, and the export deploys.
 | Provider | State |
 | -------- | ----- |
 | GCP, AWS | Supported and tested end to end, for both target ranges and attack infrastructure. |
-| Azure, Proxmox, ESXi | On the roadmap, not yet supported. |
+| Azure | Supported and tested end to end, for both target ranges and attack infrastructure (new in 0.10.0). |
+| Proxmox, ESXi | On the roadmap, not yet supported. |
 
 ---
 
@@ -129,7 +130,7 @@ canvas dev server at it with `REDSTACKPRO_API=http://127.0.0.1:8787`.
 
 Open it, use **Load blueprint** (the button, or the mode palette) to open a
 shipped starting point, choose your cloud in the toolbar
-provider selector (GCP or AWS), open the Export tab (it compiles as you go), then
+provider selector (GCP, AWS, or Azure), open the Export tab (it compiles as you go), then
 Download. You get a zip of the working directory described below.
 
 **Or skip the canvas entirely** and compile a shipped blueprint from the command
@@ -137,7 +138,8 @@ line, same compiler, same output:
 
     redstackpro compile frontend/public/goad/goad-light.json -o export
 
-The command line defaults to GCP. Pass `--provider aws` for AWS.
+The command line defaults to GCP. Pass `--provider aws` for AWS or
+`--provider azure` for Azure.
 
 That writes about **200 files**: Terraform for the cloud, Ansible for everything
 that happens on the boxes, a `deploy.sh`, and a `DEFENSE-BRIEFING.md` telling you the
@@ -153,7 +155,8 @@ one forest, two domain controllers and a member server, plus a jumpbox.
 > the code and installs none of that for you; Ansible installs itself on the
 > jumpbox.
 >
-> New to the AWS CLI or gcloud? Quick setup for whichever you target:
+> New to the AWS CLI, gcloud, or the Azure CLI? Quick setup for whichever you
+> target:
 >
 > **AWS**
 >
@@ -171,6 +174,22 @@ one forest, two domain controllers and a member server, plus a jumpbox.
 >     gcloud services enable compute.googleapis.com --project <project-id>
 >
 > Grant your account `roles/compute.admin` on the project.
+>
+> **Azure**
+>
+>     az login
+>     az account set --subscription <subscription-id>
+>
+> Your identity needs Contributor on the subscription. Set `subscription_id` in
+> `deploy.tfvars`. A service principal in `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`,
+> `ARM_TENANT_ID`, and `ARM_SUBSCRIPTION_ID` also works for `deploy.sh`, but
+> `manage.sh status`, `start`, `stop`, and `teardown --force` need `az` installed
+> and logged in. Before apply, `deploy.sh` runs a read-only
+> preflight that checks VM sizes, vCPU and public IP quotas, and resource
+> provider registration, and stops before anything is created if the
+> subscription cannot take the range. Resource providers, quotas, and size
+> restrictions are in the wiki
+> [Cloud Prerequisites](https://github.com/devZero-Security/redStackPRO/wiki/Cloud-Prerequisites#azure).
 >
 > Full permission tables, install links, and the GCP vCPU quota note
 > (`CPUS_ALL_REGIONS`, default 32 per project) are in the wiki
@@ -238,10 +257,10 @@ infrastructure running and billing.
   mostly `t3.large` and `t3.medium` (2 vCPU each), and a full AD range (GOAD plus a
   SIEM) can exceed the default. Check and raise it before large deploys.
 - **Kali subscription.** A Kali operator needs a one-time Marketplace subscription
-  on the account, per region. redStackPRO generates code and touches no account, so
-  you subscribe once per region you deploy Kali into.
+  on the account. It is per account, not per region. redStackPRO generates code and
+  touches no account, so you subscribe once before the first Kali deploy.
 
-All of this is per region. Running several ranges at once? Give each a distinct
+The quotas are per region. Running several ranges at once? Give each a distinct
 **prefix** so its host names stay clear; the few account-global names (the key pair
 and the auto-stop role) auto-suffix per deployment, so ranges never collide in one
 account. The full quota table, the increase commands, and the pre-deploy checklist
