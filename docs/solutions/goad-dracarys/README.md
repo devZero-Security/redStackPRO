@@ -43,7 +43,8 @@ backends declare fewer network capabilities (`src/redstackpro/schema/registry/pr
   the commands identical.
 
 Azure is supported from 0.10.0 (the minilab, goad-light, and goad-wazuh
-blueprints are validated there). This lab on Azure: TODO-AZURE-GOAD-RESULT.
+blueprints are validated there). This lab is validated on Azure too: it deploys
+clean, with the KeePass vault on vhagar and syrax joined to the domain.
 Azure has an allocated public address and network peering, like GCP and AWS. It
 declares no managed private DNS, so resolve range names with static hosts
 entries, as on-prem.
