@@ -1,0 +1,66 @@
+/* The structured Inspector editors: trusts, fronts ports, ACLs, users, gMSAs,
+   group nesting and the topology settings. Builds on the rg-acls, rg-users and
+   rg-field rules in styles.css. */
+
+.rg-widget-warn { color: var(--warning); font-size: var(--fs-1); }
+
+.rg-acl-row .rg-acl-notes {
+  grid-column: 1 / 2;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 2px;
+}
+
+.rg-acls > .rg-field-help,
+.rg-acls > .rg-widget-warn,
+.rg-connections > .rg-field-help,
+.rg-field > .rg-widget-warn { display: block; margin-top: 4px; }
+
+.rg-check.is-noop { color: var(--muted); }
+
+.rg-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 4px; }
+.rg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 2px 1px 7px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: var(--fs-1);
+}
+.rg-chip-del {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: var(--fs-3);
+  line-height: 1;
+}
+.rg-chip-del:hover { color: var(--danger-1); }
+
+.rg-widget-card {
+  padding: 8px;
+  margin: 8px 0;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.rg-widget-card-head { display: flex; align-items: flex-start; gap: 6px; }
+.rg-widget-grow { flex: 1; min-width: 0; }
+
+.rg-trust { margin: 6px 0 10px; }
+
+.rg-fronts-ports { font-family: ui-monospace, monospace; font-size: var(--fs-2); }
+
+.rg-settings-section {
+  margin: 14px 0;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.rg-settings-section h3 { margin: 0 0 4px; }
+.rg-settings-section .rg-hint { margin-top: 0; }

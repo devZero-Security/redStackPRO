@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useState } from "react";
 import { FindingBadge } from "./FindingBadge.jsx";
-import { DRAWN_ROLES, isContainer, roleColor, roleDisplay } from "./topology.js";
+import { isContainer } from "./topology.js";
 import { PROFILES } from "./profiles.js";
 import {
   ACCOUNT_TECHNIQUE_IDS, VULN_CATALOG, VULN_LABEL, VULN_PARAMS, VULN_PROVIDERS,
@@ -12,6 +12,9 @@ import {
   plantAccountTechnique, recommendedUserCount, removeAccountTechnique, removeUser,
   setUsers, updateUser,
 } from "./rangeUsers.js";
+import { EdgeRole } from "./EdgeEditors.jsx";
+import { Connections } from "./Connections.jsx";
+import { nodeName, roleTitle } from "./edgeRoles.js";
 
 const PRIVILEGES = ["user", "local_admin", "domain_admin", "enterprise_admin"];
 
@@ -752,85 +755,6 @@ function RangePlacement({ node, document, onJoinDomain, onPlaceSubnet }) {
   );
 }
 
-// A node's drawn relationships, listed as rows you click to open and edit rather
-// than hunting for a thin line to hit on the canvas. Each row names the role and
-// the other end, coloured the same as the line so the two read as one thing.
-// Below the list, a small form adds a new connection from this node without
-// having to draw it: pick the other end and the role, or leave the role to be
-// inferred from the two kinds.
-function Connections({ node, document, onSelect, onAddEdge, readOnly }) {
-  const [target, setTarget] = useState("");
-  const [role, setRole] = useState("");
-  const others = document.nodes.filter((n) => n.id !== node.id);
-  const rows = document.edges
-    .filter(
-      (e) =>
-        DRAWN_ROLES.includes(e.role) &&
-        (e.source === node.id || e.target === node.id)
-    )
-    .map((e) => {
-      const outgoing = e.source === node.id;
-      const other = outgoing ? e.target : e.source;
-      const detail = e.role === "fronts" ? e.uri_prefix || "" : "";
-      return { id: e.id, role: e.role, outgoing, other, detail };
-    });
-  const add = () => {
-    if (!target) return;
-    onAddEdge?.(node.id, target, role || undefined);
-    setTarget("");
-    setRole("");
-  };
-
-  return (
-    <div className="rg-connections">
-      <h3>Connections</h3>
-      {rows.length === 0 ? (
-        <p className="rg-hint">No connections yet.</p>
-      ) : (
-        rows.map((r) => (
-          <button
-            key={r.id}
-            type="button"
-            className="rg-connection"
-            onClick={() => onSelect?.(r.id)}
-          >
-            <span className="rg-connection-dot" style={{ background: roleColor(r.role) }} />
-            <span className="rg-connection-role">{roleDisplay(r.role)}</span>
-            <span className="rg-connection-dir">{r.outgoing ? "to" : "from"}</span>
-            <span className="rg-connection-other">
-              {document.prefix}-{r.other}
-            </span>
-            {r.detail ? <span className="rg-connection-detail">{r.detail}</span> : null}
-          </button>
-        ))
-      )}
-      {readOnly ? null : (
-        <div className="rg-connection-add">
-          <select value={target} onChange={(e) => setTarget(e.target.value)}>
-            <option value="">connect to...</option>
-            {others.map((n) => (
-              <option key={n.id} value={n.id}>
-                {document.prefix}-{n.id}
-              </option>
-            ))}
-          </select>
-          <select value={role} onChange={(e) => setRole(e.target.value)}>
-            <option value="">auto role</option>
-            {DRAWN_ROLES.map((r) => (
-              <option key={r} value={r}>
-                {roleDisplay(r)}
-              </option>
-            ))}
-          </select>
-          <button type="button" onClick={add} disabled={!target}>
-            Add
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // The manages relationship is not a drawn line, so it does not appear in
 // Connections. It is listed here instead: what this node governs, and, on a
 // container, what governs it. Each row selects the other end so the two read as
@@ -1235,55 +1159,21 @@ export function Inspector({
     if (!edge) return null;
     return (
       <aside className="rg-panel rg-inspector">
-        <h2>{roleDisplay(edge.role)}</h2>
+        <h2>{roleTitle(edge.role)}</h2>
         <p className="rg-kv">
           <span>from</span>
-          <span>{edge.source}</span>
+          <span>{nodeName(document, edge.source)}</span>
         </p>
         <p className="rg-kv">
           <span>to</span>
-          <span>{edge.target}</span>
+          <span>{nodeName(document, edge.target)}</span>
         </p>
-        <label className="rg-field">
-          <span className="rg-field-label">role</span>
-          <select
-            value={edge.role}
-            disabled={readOnly}
-            onChange={(e) => {
-              const role = e.target.value;
-              if (!role || role === edge.role) return;
-              // Switching to fronts seeds the fields it needs so it validates;
-              // switching away drops them so a stale prefix does not linger.
-              const patch =
-                role === "fronts"
-                  ? {
-                      role,
-                      protocol: edge.protocol || "https",
-                      listen_port: edge.listen_port || 443,
-                      upstream_port: edge.upstream_port || 443,
-                      uri_prefix: edge.uri_prefix || "/cdn/assets",
-                    }
-                  : {
-                      role,
-                      protocol: undefined,
-                      listen_port: undefined,
-                      upstream_port: undefined,
-                      uri_prefix: undefined,
-                    };
-              onEdgeChange(edge.id, patch);
-            }}
-          >
-            {["fronts", "logs_to", "manages", "peers"].map((r) => (
-              <option key={r} value={r}>
-                {roleDisplay(r)}
-              </option>
-            ))}
-          </select>
-          <span className="rg-field-help">
-            What this line is. The role also follows from what it connects; set it
-            here when you want a different one.
-          </span>
-        </label>
+        <EdgeRole
+          edge={edge}
+          document={document}
+          readOnly={readOnly}
+          onEdgeChange={onEdgeChange}
+        />
         {edge.role === "fronts" ? (
           <>
             <Field
