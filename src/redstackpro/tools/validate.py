@@ -16,7 +16,7 @@ from redstackpro import Registry, validate
 from redstackpro.authoring import set_redirector_hostname
 from redstackpro.migrate import LATEST
 
-from . import _report
+from . import _report, provider_arg
 
 # Resolved from the package: the shipped examples travel with the install, so the
 # default run no longer depends on the CWD being the repo root.
@@ -26,7 +26,8 @@ EXAMPLES = str(Path(__file__).resolve().parents[1]
 
 def configure(ap):
     ap.add_argument("paths", nargs="*", help="topology documents; defaults to the examples")
-    ap.add_argument("--provider", help="also run capability rules against this provider")
+    ap.add_argument("--provider", type=provider_arg,
+                    help="also run capability rules against this provider")
     ap.add_argument("--json", action="store_true", help="machine readable output")
     # Every example with a redirector is one field short on purpose: RDR001 holds the
     # compile until a person supplies a domain they own. Without this the run reports
