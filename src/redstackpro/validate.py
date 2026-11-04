@@ -172,7 +172,8 @@ def sch001_schema(ctx):
     """The document against its JSON schema. One finding per bad field, with
     the field's dotted path under its node in `field` for the canvas."""
     yield from schemacheck.check(ctx.topology,
-                                 lambda node_id: display_name(ctx, node_id))
+                                 lambda node_id: display_name(ctx, node_id),
+                                 code="SCH001")
 
 
 # ---------------------------------------------------------------- naming
@@ -229,15 +230,31 @@ def nam003_netbios_length(ctx):
         # to truncate. The rule is about machines in the inventory.
         if node.get("kind") in ("network", "segment"):
             continue
-        if too_long(ctx.prefix, node["id"]):
-            yield finding(
-                "NAM003", "error", [node["id"]],
-                "{name} is {length} characters. Windows truncates NetBIOS names "
-                "at 15, so this host would answer to a different name than the "
-                "one in the inventory.",
-                remedy="Shorten the topology prefix or the node id.",
-                name=ctx.name(node["id"]),
-                length=len(ctx.name(node["id"])))
+        if not too_long(ctx.prefix, node["id"]):
+            continue
+        if _is_windows(node):
+            template = ("{name} is {length} characters. Windows truncates NetBIOS "
+                        "names at 15, so this host would answer to a different "
+                        "name than the one in the inventory.")
+        else:
+            template = ("{name} is {length} characters; host names here are "
+                        "capped at 15.")
+        yield finding(
+            "NAM003", "error", [node["id"]], template,
+            remedy="Shorten the topology prefix or the node id.",
+            name=ctx.name(node["id"]),
+            length=len(ctx.name(node["id"])))
+
+
+# The AD host kinds build Windows when no os is set. See plan.is_windows.
+_AD_KINDS = ("dc", "srv", "wks")
+
+
+def _is_windows(node):
+    os = (node.get("overlay") or {}).get("os") or ""
+    if os:
+        return str(os).startswith("windows")
+    return node.get("kind") in _AD_KINDS
 
 
 # ---------------------------------------------------------------- referential
@@ -320,7 +337,7 @@ def car001_host_unattached(ctx):
             yield finding(
                 "CAR001", "error", [n["id"]],
                 "{name} is not attached to a segment.",
-                remedy="Draw an attached edge from it to a segment.",
+                remedy="Drag it into a subnet box on the canvas.",
                 name=self_name(ctx, n))
 
 
@@ -347,7 +364,8 @@ def car003_primary_attachment(ctx):
             yield finding(
                 "CAR003", "error", [n["id"]],
                 "{name} is multihomed with {count} primary attachments. Exactly one is primary.",
-                remedy="Set primary false on all but one attachment.",
+                remedy="Keep the host in one subnet, or edit the topology file and "
+                       "set primary to false on all but one of its attached edges.",
                 name=self_name(ctx, n), count=len(primaries))
 
 
@@ -1027,8 +1045,8 @@ def exp003_no_egress_install(ctx):
                 yield finding(
                     "EXP003", "error", [n["id"], seg],
                     "{name} sits in {seg}, which has no egress, but it needs package "
-                    "installation. Nothing in 0.1.0 installs offline.",
-                    remedy="Set egress allowed, or stage artifacts, which is not built.",
+                    "installation. Nothing here installs offline.",
+                    remedy="Set the subnet's egress to allowed.",
                     name=self_name(ctx, n), seg=ctx.name(seg))
 
 
@@ -1081,10 +1099,22 @@ def cap_provider_capabilities(ctx, provider):
                 continue
             container = reg.kinds[n["kind"]]["category"] == "container"
             reason = reg.unsupported_reason(provider, req) or ""
+            # Name the overlay field whose value raised the requirement, so the
+            # remedy is something the inspector can do.
+            when = next((r.get("when") for r in reg.kinds[n["kind"]].get(
+                "requirements", []) if r.get("name") == req), None)
+            if when:
+                field, value = next(iter(when.items()))
+                remedy = ("Choose another deploy target, or change %s (now %s) "
+                          "on this node." % (field, value))
+            else:
+                field = ""
+                remedy = ("Choose another deploy target; every %s needs it."
+                          % n["kind"])
             yield finding(
                 "CAP002" if container else "CAP001", "error", [n["id"]],
                 "{name} needs {req}, which {provider} does not provide. {reason}",
-                remedy="Choose another provider, or change the field that raises it.",
+                remedy=remedy, field=field,
                 name=ctx.name(n["id"]), req=req, provider=provider, reason=reason)
 
 
@@ -1130,7 +1160,9 @@ def net001_cross_provider_edge(ctx):
                 "NET001", "error", [e["id"], e["source"], e["target"]],
                 "{src} and {dst} resolve to different providers. Cross-provider "
                 "transport is not implemented.",
-                remedy="Pin both networks to one provider.",
+                remedy="Clear the provider on both networks, or set them to the "
+                       "same one. An unset network compiles to the deploy target "
+                       "you pick at download.",
                 src=ctx.name(e["source"]), dst=ctx.name(e["target"]))
 
 
@@ -1215,8 +1247,8 @@ def rng009_user_flaw_as_host_vuln(ctx):
                 "RNG009", "warning", [n["id"]],
                 "{name} declares {vuln}, but that is an account property, not a "
                 "host task, so it plants nothing here.",
-                remedy="Set it on a domain user's flaws (with spns/weak_password "
-                       "as needed) instead of the host's vulns.",
+                remedy="Untick it here and set it as a flaw on a user of this "
+                       "host's domain instead.",
                 name=ctx.name(n["id"]), vuln=vuln)
 
 
@@ -1321,6 +1353,7 @@ VULNS_VARS_REQUIRED = {
     # keepass_vault.yml: master_password has no default, so the task errors.
     "keepass_vault": {
         "keys": [("keepass_vault.master_password",)],
+        "fails": True,
         "effect": "the vault task fails and the run stops for this host",
         "example": '{"keepass_vault": {"master_password": "<password>", '
                    '"entry_password_user": "<user>"}}',
@@ -1399,8 +1432,11 @@ def rng011_vuln_missing_parameter(ctx):
                       "Add to vulns_vars: %s") % spec["example"]
             if spec.get("domain"):
                 remedy += " on this host or any host in its domain"
+            # A missing master_password fails the vault task and stops the run
+            # for the host; every other missing key only skips its task.
+            severity = "error" if spec.get("fails") else "warning"
             yield finding(
-                "RNG011", "warning", [n["id"]],
+                "RNG011", severity, [n["id"]],
                 "{vuln} on {name} has no {keys}{where}, so {effect}.",
                 remedy=remedy + ".",
                 vuln=vuln, name=n["id"], keys=keys, where=where,
@@ -1557,6 +1593,389 @@ def ord001_dependency_cycle(ctx):
             return
 
 
+# ---------------------------------------------------------------- addressing
+
+def net007_subnet_outside_network(ctx):
+    """A subnet whose cidr is not inside its network's. GCP accepts it, AWS and
+    Azure refuse it at apply."""
+    for seg in ctx.of_kind("segment"):
+        net = ctx.network_of_segment(seg["id"])
+        if net is None:
+            continue
+        cidr, ncidr = ctx.overlay(seg["id"], "cidr"), ctx.overlay(net, "cidr")
+        if not cidr or not ncidr:
+            continue
+        try:
+            sub = ipaddress.ip_network(cidr, strict=False)
+            parent = ipaddress.ip_network(ncidr, strict=False)
+        except ValueError:
+            continue  # a malformed value is SCH001's
+        if sub.subnet_of(parent):
+            continue
+        yield finding(
+            "NET007", "error", [seg["id"], net],
+            "{subnet} ({cidr}) is outside its network {net} ({ncidr}).",
+            remedy="Pick a range inside %s, e.g. %s." % (
+                parent, next(parent.subnets(new_prefix=max(parent.prefixlen, 24)))),
+            field="cidr",
+            subnet=display_name(ctx, seg["id"]), cidr=cidr,
+            net=display_name(ctx, net), ncidr=ncidr)
+
+
+# ---------------------------------------------------------------- domains
+
+_LABEL = r"[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+_FQDN_RE = re.compile(r"^%s(\.%s)+$" % (_LABEL, _LABEL))
+_NETBIOS_RE = re.compile(r"^[A-Za-z0-9]{1,15}$")
+
+
+def dom001_domain_name_format(ctx):
+    """A domain fqdn or NetBIOS name promotion would refuse. Both compile, then
+    the DC promotion fails mid run."""
+    for n in ctx.of_kind("domain"):
+        fqdn = ctx.overlay(n["id"], "fqdn")
+        if isinstance(fqdn, str) and (len(fqdn) > 253 or not _FQDN_RE.match(fqdn)):
+            yield finding(
+                "DOM001", "error", [n["id"]],
+                "The fqdn {fqdn!r} on {name} is not a domain name. It needs at "
+                "least two labels of letters, digits and hyphens.",
+                remedy="Set it to a name like corp.local.", field="fqdn",
+                fqdn=fqdn, name=display_name(ctx, n["id"]))
+        netbios = ctx.overlay(n["id"], "netbios")
+        if isinstance(netbios, str) and not _NETBIOS_RE.match(netbios):
+            yield finding(
+                "DOM001", "error", [n["id"]],
+                "The NetBIOS name {netbios!r} on {name} is not 1 to 15 letters "
+                "or digits.",
+                remedy="Set it to a short name like CORP, or clear it to use the "
+                       "first label of the fqdn.", field="netbios",
+                netbios=netbios, name=display_name(ctx, n["id"]))
+
+
+# ---------------------------------------------------------------- jumpbox
+
+def jmp001_no_portal(ctx):
+    """A jumpbox without guacamole has no portal, while the guide and deploy.sh
+    both send the operator to one."""
+    for n in ctx.of_kind("jumpbox"):
+        if "guacamole" in (ctx.overlay(n["id"], "services") or []):
+            continue
+        yield finding(
+            "JMP001", "warning", [n["id"]],
+            "{name} has no guacamole, so there is no portal; hosts are reachable "
+            "over ssh only.",
+            remedy="Add guacamole to its services.", field="services",
+            name=display_name(ctx, n["id"]))
+
+
+def jmp002_certificate_authority_needed(ctx):
+    """The jumpbox CA turned off while something signs with it. Collector TLS,
+    WinRM on a Windows operator and OpenVPN all fail mid provision without it;
+    only the OpenVPN task says why."""
+    collector_tls = any(ctx.overlay(c["id"], "tls", True) is not False
+                        for c in ctx.of_kind("collector"))
+    windows_op = any(ctx.overlay(o["id"], "os") == "windows"
+                     for o in ctx.of_kind("operator"))
+    for n in ctx.of_kind("jumpbox"):
+        if ctx.overlay(n["id"], "certificate_authority", True) is not False:
+            continue
+        needs = []
+        if collector_tls:
+            needs.append("a collector ships logs over TLS")
+        if windows_op:
+            needs.append("a Windows operator needs a WinRM certificate")
+        if ctx.overlay(n["id"], "access_mode") == "openvpn":
+            needs.append("access_mode openvpn needs certificates")
+        if not needs:
+            continue
+        yield finding(
+            "JMP002", "error", [n["id"]],
+            "{name} has certificate_authority off, but {needs}. Provisioning "
+            "fails without the CA.",
+            remedy="Turn certificate_authority on.", field="certificate_authority",
+            name=display_name(ctx, n["id"]), needs=" and ".join(needs))
+
+
+# ---------------------------------------------------------------- fronting
+
+# Apache and nginx on the redirector serve HTTPS on 443 and proxy to 443.
+_FRONTS_DEFAULTS = (("protocol", "https"), ("listen_port", 443),
+                    ("upstream_port", 443))
+
+
+def frt003_fronts_not_served(ctx):
+    """A fronts edge asking for something the redirector does not serve. It
+    compiles, and the beacon then calls a port or protocol nothing answers."""
+    for e in ctx.by_role.get("fronts", []):
+        problems, first = [], ""
+        for key, default in _FRONTS_DEFAULTS:
+            value = e.get(key)
+            if value is None or value == default:
+                continue
+            first = first or key
+            if key == "protocol":
+                problems.append("protocol %s is not served%s" % (
+                    value, ", and dns opens UDP with no listener"
+                    if value == "dns" else ""))
+            elif key == "listen_port":
+                problems.append("listen_port %s opens a port nothing answers on, "
+                                "and the beacon will call it" % value)
+            else:
+                problems.append("upstream_port %s proxies to a port the C2 does "
+                                "not listen on" % value)
+        if not problems:
+            continue
+        yield finding(
+            "FRT003", "warning", [e["id"], e["source"]],
+            "{rdr} serves HTTPS on 443 only; {problems}.",
+            remedy="Set protocol https, listen_port 443 and upstream_port 443 on "
+                   "this edge.", field=first,
+            rdr=display_name(ctx, e["source"]), problems="; ".join(problems))
+
+
+# ---------------------------------------------------------------- range hosts
+
+_RANGE_HOST_KINDS = ("dc", "srv", "wks", "fw", "appliance")
+
+
+def hrd001_hardening_not_applied(ctx):
+    """No role reads the hardening list, so a host that lists controls deploys
+    without them."""
+    for n in ctx.of_kind(*_RANGE_HOST_KINDS):
+        ids = ctx.overlay(n["id"], "hardening") or []
+        if not ids:
+            continue
+        yield finding(
+            "HRD001", "warning", [n["id"]],
+            "{host} lists hardening {ids}, which this release does not apply.",
+            remedy="Clear the hardening list; the host deploys without these "
+                   "controls either way.", field="hardening",
+            host=display_name(ctx, n["id"]), ids=", ".join(map(str, ids)))
+
+
+def _services_acted_on(node):
+    """The services values a role installs on this host. Read from the srv role
+    (mssql, iis, exchange on a Windows member) and the role field, which is what
+    installs adcs and mecm. tests/test_ux_rules.py keeps this in step with the
+    roles."""
+    if node["kind"] != "srv" or not _is_windows(node):
+        acted = set()
+    else:
+        acted = {"mssql", "iis", "exchange"}
+    role = (node.get("overlay") or {}).get("role")
+    if role == "adcs" and node["kind"] in ("dc", "srv") and _is_windows(node):
+        acted.add("adcs")
+    if role == "mecm" and node["kind"] == "srv" and _is_windows(node):
+        acted.add("mecm")
+    return acted
+
+
+def svc001_service_installs_nothing(ctx):
+    """A services value no role acts on. services is free text, so a typo or a
+    badge-only value (smb, adcs without role adcs) passes silently and plants
+    nothing."""
+    for n in ctx.of_kind(*_RANGE_HOST_KINDS):
+        acted = _services_acted_on(n)
+        for svc in ctx.overlay(n["id"], "services") or []:
+            if svc in acted:
+                continue
+            if svc == "adcs":
+                remedy = "Set role to adcs on a Windows dc or srv to stand up the CA."
+            elif svc == "mecm":
+                remedy = "Set role to mecm on a Windows member server."
+            elif svc in ("mssql", "iis", "exchange"):
+                remedy = "Put it on a Windows member server (srv)."
+            else:
+                remedy = ("Remove it. The services that install are mssql, iis "
+                          "and exchange on a Windows member server; for a file "
+                          "share add the Open share vuln.")
+            yield finding(
+                "SVC001", "warning", [n["id"]],
+                "{name} lists the service {svc}, which nothing installs on this "
+                "host.",
+                remedy=remedy, field="services",
+                name=display_name(ctx, n["id"]), svc=svc)
+
+
+def svc002_box_installs_nothing(ctx):
+    """A fw or appliance host gets no role yet, so it boots as a plain host."""
+    for n in ctx.of_kind("fw", "appliance"):
+        yield finding(
+            "SVC002", "info", [n["id"]],
+            "{name} is a {kind}; redStackPRO installs nothing on it yet, so it "
+            "boots as a plain host on its subnet.",
+            name=display_name(ctx, n["id"]), kind=n["kind"])
+
+
+# ---------------------------------------------------------------- trusts
+
+_TRUSTS_BUILT = ("parent_child", "forest")
+
+
+def tru001_trust_type_not_built(ctx):
+    """The dc role builds parent and child domains and forest trusts only."""
+    for e in ctx.by_role.get("trusts", []):
+        kind = e.get("trust_type")
+        if kind is None or kind in _TRUSTS_BUILT:
+            continue
+        yield finding(
+            "TRU001", "warning", [e["id"], e["source"], e["target"]],
+            "The {kind} trust from {a} to {b} is not built yet, so the range gets "
+            "no trust between them.",
+            remedy="Use parent_child for a child domain, or forest between two "
+                   "forests.", field="trust_type",
+            kind=kind, a=display_name(ctx, e["source"]),
+            b=display_name(ctx, e["target"]))
+
+
+# ---------------------------------------------------------------- access rights
+
+# The rights apply_acls.ps1 knows, plus the two aliases the compiler maps onto
+# them. Anything else is skipped at apply. tests/test_ux_rules.py checks this
+# against the script.
+ACL_RIGHTS = {
+    "GenericAll", "GenericWrite", "WriteDacl", "WriteOwner", "GenericExecute",
+    "ReadProperty", "WriteProperty", "Self", "Ext-User-Force-Change-Password",
+    "Ext-Self-Self-Membership", "Ext-Write-Self-Membership", "Ext-Write-SPN",
+}
+ACL_RIGHT_ALIASES = {"ForceChangePassword", "AddMember"}
+
+# Principals every domain has.
+_BUILTIN_PRINCIPALS = {s.lower() for s in (
+    "Domain Admins", "Enterprise Admins", "Schema Admins", "Domain Users",
+    "Domain Computers", "Domain Controllers", "Domain Guests", "Protected Users",
+    "Administrators", "Account Operators", "Backup Operators", "Server Operators",
+    "Print Operators", "Group Policy Creator Owners", "Remote Desktop Users",
+    "Remote Management Users", "DnsAdmins", "DnsUpdateProxy", "Cert Publishers",
+    "Key Admins", "Enterprise Key Admins", "Read-only Domain Controllers",
+    "Enterprise Read-only Domain Controllers", "Cloneable Domain Controllers",
+    "Users", "Guests", "Replicator", "Event Log Readers",
+    "Distributed COM Users", "Performance Log Users", "Performance Monitor Users",
+    "Network Configuration Operators", "Cryptographic Operators",
+    "Pre-Windows 2000 Compatible Access", "Windows Authorization Access Group",
+    "Incoming Forest Trust Builders", "Allowed RODC Password Replication Group",
+    "Denied RODC Password Replication Group", "RAS and IAS Servers",
+    "Everyone", "Authenticated Users", "Self", "Creator Owner",
+    "Administrator", "Guest", "krbtgt",
+)}
+_WELL_KNOWN_AUTHORITIES = ("nt authority", "builtin")
+_DN_RE = re.compile(r"^(CN|OU|DC)=", re.IGNORECASE)
+
+
+def _domain_names(ctx, domain_id):
+    """What a principal or target may name on this domain, lowercased: users,
+    groups (built in, named by users, by nesting or listed), gMSAs, joined
+    computers with and without $, and OUs."""
+    ov = ctx.nodes[domain_id].get("overlay") or {}
+    principals = set(_BUILTIN_PRINCIPALS)
+    for u in ov.get("users") or []:
+        principals.add(str(u.get("username", "")).lower())
+        principals |= {str(g).lower() for g in u.get("groups") or []}
+    for parent, members in (ov.get("group_members") or {}).items():
+        principals.add(str(parent).lower())
+        principals |= {str(m).lower() for m in members or []}
+    principals |= {str(g).lower() for g in ov.get("groups") or []}
+    for g in ov.get("gmsa") or []:
+        name = str(g.get("name", "")).lower()
+        principals |= {name, name + "$"}
+    for e in ctx.by_role.get("joins", []):
+        if e["target"] != domain_id or e["source"] not in ctx.nodes:
+            continue
+        host = ctx.nodes[e["source"]]
+        name = str((host.get("overlay") or {}).get("hostname") or host["id"]).lower()
+        principals |= {name, name + "$"}
+    ous = {str(o).lower() for o in ov.get("ous") or []}
+    return principals, ous
+
+
+def _netbios_of(ctx, domain_id):
+    ov = ctx.nodes[domain_id].get("overlay") or {}
+    fqdn = str(ov.get("fqdn") or "")
+    return str(ov.get("netbios") or fqdn.split(".")[0]).lower()
+
+
+def acl001_unknown_acl_name(ctx):
+    """An ACL entry naming something the domain does not have, or a right the
+    apply script does not know. apply_acls.ps1 creates a missing principal as an
+    empty group, creates or skips a missing target, and skips an unknown right,
+    all without failing the run."""
+    domains = {_netbios_of(ctx, d["id"]): d["id"] for d in ctx.of_kind("domain")}
+    names = {d["id"]: _domain_names(ctx, d["id"]) for d in ctx.of_kind("domain")}
+
+    def resolves(value, domain_id, target=False):
+        value = str(value or "")
+        if "\\" in value:
+            authority, _, rest = value.partition("\\")
+            if authority.lower() in _WELL_KNOWN_AUTHORITIES:
+                return True
+            other = domains.get(authority.lower())
+            return bool(other) and rest.lower() in names[other][0]
+        if target and _DN_RE.match(value):
+            return True
+        principals, ous = names[domain_id]
+        return value.lower() in principals or (target and value.lower() in ous)
+
+    for d in ctx.of_kind("domain"):
+        dname = display_name(ctx, d["id"])
+        for i, acl in enumerate(ctx.overlay(d["id"], "acls") or []):
+            if not isinstance(acl, dict):
+                continue
+            p, t, right = acl.get("principal"), acl.get("target"), acl.get("right")
+            common = dict(principal=p, target=t, domain=dname)
+            if p and not resolves(p, d["id"]):
+                yield finding(
+                    "ACL001", "warning", [d["id"]],
+                    "ACL {principal} to {target}: {principal} is not a user, group "
+                    "or computer on {domain}; it would be created as an empty "
+                    "group.",
+                    remedy="Fix the name, or add it to the domain's extra groups "
+                           "if an empty group is what you want.",
+                    field="acls.%d.principal" % i, **common)
+            if t and not resolves(t, d["id"], target=True):
+                effect = ("the entry is skipped" if str(t).endswith("$")
+                          else "the right lands on an empty group made for it")
+                yield finding(
+                    "ACL001", "warning", [d["id"]],
+                    "ACL {principal} to {target}: {target} is not a user, group, "
+                    "computer or OU on {domain}, so {effect}.",
+                    remedy="Fix the name, or give the object's distinguished name, "
+                           "e.g. OU=Crownlands,DC=sevenkingdoms,DC=local.",
+                    field="acls.%d.target" % i, effect=effect, **common)
+            if right and right not in ACL_RIGHTS | ACL_RIGHT_ALIASES:
+                yield finding(
+                    "ACL001", "warning", [d["id"]],
+                    "ACL {principal} to {target}: {right} is not a right this "
+                    "release applies, so the entry is skipped.",
+                    remedy="Use one of %s." % ", ".join(
+                        sorted(ACL_RIGHTS | ACL_RIGHT_ALIASES)),
+                    field="acls.%d.right" % i, right=right, **common)
+
+
+# ---------------------------------------------------------------- provider notes
+
+_NO_CLIENT_IMAGE = ("gcp", "aws")
+_CLIENT_BUILDS = {"windows_10": "Windows 10", "windows_11": "Windows 11"}
+
+
+def cap005_no_windows_client_image(ctx, provider):
+    """GCP and AWS publish no Windows client image, so a workstation build boots
+    Server 2022 there. A notice, not a fault: the host works, as a server."""
+    if provider not in _NO_CLIENT_IMAGE:
+        return
+    for n in ctx.of_kind(*_RANGE_HOST_KINDS):
+        build = ctx.overlay(n["id"], "os")
+        if build not in _CLIENT_BUILDS:
+            continue
+        yield finding(
+            "CAP005", "info", [n["id"]],
+            "{host} asks for {build}; {provider} has no client image, so it boots "
+            "Windows Server 2022.",
+            remedy="Fine for most attack paths. Use azure for a real client "
+                   "build.", field="os",
+            host=display_name(ctx, n["id"]), build=_CLIENT_BUILDS[build],
+            provider=provider)
+
+
 RULES = [
     sch001_schema,
     nam001_id_matches_kind,
@@ -1610,6 +2029,16 @@ RULES = [
     rng010_vuln_planted_elsewhere,
     rng011_vuln_missing_parameter,
     rng012_vulns_vars_not_an_object,
+    net007_subnet_outside_network,
+    dom001_domain_name_format,
+    jmp001_no_portal,
+    jmp002_certificate_authority_needed,
+    frt003_fronts_not_served,
+    hrd001_hardening_not_applied,
+    svc001_service_installs_nothing,
+    svc002_box_installs_nothing,
+    tru001_trust_type_not_built,
+    acl001_unknown_acl_name,
     ord001_dependency_cycle,
 ]
 
@@ -1628,7 +2057,7 @@ def validate(topology, provider=None, registry=None):
         # The semantic rules index nodes and edges by id, kind and role, so a
         # document missing those can only be reported by the schema check.
         findings = list(schemacheck.check(
-            topology, lambda node_id: str(node_id)))
+            topology, lambda node_id: str(node_id), code="SCH001"))
         findings.sort(key=lambda f: (order[f.severity], f.code, f.target_ids))
         return findings
 
@@ -1640,6 +2069,7 @@ def validate(topology, provider=None, registry=None):
         findings.extend(cap_provider_capabilities(ctx, provider))
         findings.extend(cap004_network_peering(ctx, provider))
         findings.extend(net006_internal_ip_in_reserved_range(ctx, provider))
+        findings.extend(cap005_no_windows_client_image(ctx, provider))
 
     findings.sort(key=lambda f: (order[f.severity], f.code, f.target_ids))
     return findings

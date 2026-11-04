@@ -226,7 +226,10 @@ def test_rng011_fires_when_a_required_parameter_is_missing(vuln):
     topology = _range_with((hid, kind, dict(overlay, vulns=[vuln])))
     found = _found(topology, "RNG011")
     assert [f.target_ids for f in found] == [(hid,)], vuln
-    assert found[0].severity == "warning"
+    # keepass_vault fails its task without the key, so it blocks the compile;
+    # every other missing key only skips its task.
+    expected = "error" if vuln == "keepass_vault" else "warning"
+    assert found[0].severity == expected, vuln
     assert vuln in found[0].message and "vulns_vars." in found[0].message
     assert found[0].remedy.startswith("Set vulns_vars to {")
 

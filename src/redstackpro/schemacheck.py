@@ -235,7 +235,8 @@ _REMEDIES = {
 }
 
 
-def _findings(errors, defs, target, label, strip, known=(), lead=()):
+def _findings(code, errors, defs, target, label, strip, known=(),
+              lead=()):
     """Turn raw errors into one finding per path. The field path is given
     relative to strip (overlay), and lead is put in front of it when the target
     is the topology rather than the node itself."""
@@ -263,7 +264,7 @@ def _findings(errors, defs, target, label, strip, known=(), lead=()):
         values = {"path": field, "node": label["name"], "reason": reason}
         if example:
             values["example"] = example
-        yield finding("SCH001", "error", [target], template,
+        yield finding(code, "error", [target], template,
                       remedy=_REMEDIES.get(kind, "Fix the value."),
                       field=field, **values)
 
@@ -286,11 +287,11 @@ def _article(word):
     return ("an %s" if word[:1] in "aeiou" else "a %s") % word
 
 
-def check(topology, name_of):
-    """SCH001 findings for a document. name_of(node_id) gives the display name a
-    finding uses for a node."""
+def check(topology, name_of, code="SCH001"):
+    """Schema findings for a document, under code. name_of(node_id) gives the
+    display name a finding uses for a node."""
     if not isinstance(topology, dict):
-        yield finding("SCH001", "error", [TOPOLOGY_TARGET],
+        yield finding(code, "error", [TOPOLOGY_TARGET],
                       "The document is not a JSON object.",
                       remedy="Load a topology file.")
         return
@@ -299,7 +300,7 @@ def check(topology, name_of):
     if schema is None:
         reason = ("is required" if version is None else
                   "must be one of %s" % ", ".join(known_versions()))
-        yield finding("SCH001", "error", [TOPOLOGY_TARGET],
+        yield finding(code, "error", [TOPOLOGY_TARGET],
                       "{path} on {node}: {reason}.",
                       remedy="Set the schema version this file was written for.",
                       field="schema_version", path="schema_version",
@@ -307,8 +308,9 @@ def check(topology, name_of):
         return
     defs = schema.get("$defs", {})
     top = {"name": "the topology", "what": "the topology", "kind": None}
-    yield from _findings(_validator(version, "root", "").iter_errors(topology),
-                         defs, TOPOLOGY_TARGET, top, [])
+    yield from _findings(
+        code, _validator(version, "root", "").iter_errors(topology), defs,
+        TOPOLOGY_TARGET, top, [])
 
     nodes = topology.get("nodes")
     for i, node in enumerate(nodes if isinstance(nodes, list) else []):
@@ -323,7 +325,7 @@ def check(topology, name_of):
         target = node["id"] if has_id else TOPOLOGY_TARGET
         lead = () if has_id else ("nodes", i)
         yield from _findings(
-            _validator(version, "node", kind_key).iter_errors(node), defs,
+            code, _validator(version, "node", kind_key).iter_errors(node), defs,
             target, label, ["overlay"], _known_keys(version, "node", kind_key),
             lead)
         overlay = node.get("overlay") if isinstance(node, dict) else None
@@ -332,7 +334,7 @@ def check(topology, name_of):
             fixed = _network_address(cidr) if isinstance(cidr, str) else None
             if fixed:
                 yield finding(
-                    "SCH001", "error", [node["id"]],
+                    code, "error", [node["id"]],
                     "{path} on {node}: {reason}. Example: {example}.",
                     remedy="Use the network address of the range.",
                     field="cidr", path="cidr", node=label["name"],
@@ -354,5 +356,5 @@ def check(topology, name_of):
         target = edge["id"] if has_id else TOPOLOGY_TARGET
         lead = () if has_id else ("edges", i)
         yield from _findings(
-            _validator(version, "edge", role_key).iter_errors(edge), defs,
+            code, _validator(version, "edge", role_key).iter_errors(edge), defs,
             target, label, [], _known_keys(version, "edge", role_key), lead)
