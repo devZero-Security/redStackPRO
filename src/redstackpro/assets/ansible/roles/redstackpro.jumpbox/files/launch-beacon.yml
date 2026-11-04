@@ -39,6 +39,27 @@
         src: "{{ beacon }}"
         dest: 'C:\Windows\Temp\{{ beacon | basename }}'
 
+    # Windows Temp gives ordinary users no read on a file another account wrote
+    # there (only SYSTEM, IIS_IUSRS and Administrators inherit), so without this
+    # the task logs on as patient zero and `start` cannot open the beacon.
+    - name: Let patient zero read and run the staged beacon
+      ansible.windows.win_acl:
+        path: 'C:\Windows\Temp\{{ beacon | basename }}'
+        user: "{{ run_as }}"
+        rights: ReadAndExecute
+        type: allow
+        state: present
+
+    # A scheduled task starts under a batch logon, and Domain Users do not hold
+    # SeBatchLogonRight by default. Without it the task never runs: no process,
+    # no error, and no session ever lands (found on Azure full GOAD, where hodor
+    # had RDP but not batch logon). Granting it here is staging, like the copy.
+    - name: Let patient zero log on as a batch job
+      ansible.windows.win_user_right:
+        name: SeBatchLogonRight
+        users: ["{{ run_as }}"]
+        action: add
+
     - name: Run it under patient zero's token
       ansible.windows.win_powershell:
         parameters:
@@ -90,8 +111,20 @@
             $q = schtasks.exe /Query /TN $name /FO LIST 2>&1 | Select-String 'Status:'
             if ($q -notmatch 'Running') { break }
           }
+          $last = schtasks.exe /Query /TN $name /V /FO LIST 2>&1 | Select-String 'Last Result:'
           schtasks.exe /Delete /TN $name /F 2>&1 | Out-Null
-          Write-Output "launched $Exe as $RunAs"
+          # A task that could not log on still "runs" without error, so check
+          # the outcome: the beacon process must exist under patient zero.
+          $proc = [IO.Path]::GetFileNameWithoutExtension($Exe)
+          $who = $RunAs.Split('\')[-1]
+          $up = $null
+          for ($i = 0; $i -lt 10 -and -not $up; $i++) {
+            Start-Sleep -Seconds 1
+            $up = Get-Process -Name $proc -IncludeUserName -ErrorAction SilentlyContinue |
+                  Where-Object { $_.UserName -and $_.UserName.Split('\')[-1] -eq $who }
+          }
+          if (-not $up) { throw "the beacon did not start as $RunAs (task $last)" }
+          Write-Output "launched $Exe as $RunAs (pid $($up[0].Id))"
       # The beacon calls back on its own schedule, so the task exiting says
       # nothing about whether a session landed. Check the teamserver.
       register: rsp_launch
