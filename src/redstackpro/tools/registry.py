@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from redstackpro import Registry
+from redstackpro.tools import provider_arg
 
 # Resolved from the package (schema ships as package data), not the CWD.
 _SCHEMA_ROOT = Path(__file__).resolve().parents[1] / "schema" / "topology"
@@ -81,7 +82,8 @@ def check(reg, topology, provider):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--provider", help="check one provider verbosely")
+    ap.add_argument("--provider", type=provider_arg,
+                    help="check one provider verbosely")
     ap.add_argument("--palette", metavar="MODE", nargs="?", const="offense",
                     help="print the canvas palette for a mode")
     args = ap.parse_args()

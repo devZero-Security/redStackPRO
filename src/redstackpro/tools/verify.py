@@ -121,6 +121,15 @@ class Export:
                 "tf_inventory.py after terraform apply." % (name, value))
         return value
 
+    def jumpbox_address(self, name):
+        """The address this machine reaches the jumpbox at. On a defense range
+        ansible_host is the jumpbox's private address (ansible runs on the box
+        itself), so the public one the compiler records wins. An export without
+        it (on-prem providers, older compiles) falls back to ansible_host."""
+        if "redstackpro_public_address" in self.hosts[name]:
+            return self.address(name, "redstackpro_public_address")
+        return self.address(name, "ansible_host")
+
 
 def _yaml(path):
     if not path.exists():
@@ -476,8 +485,7 @@ def stack_plan(export):
     return {
         "account": export.account,
         "jumpbox": jumpbox,
-        "target": "%s@%s" % (export.account,
-                             export.address(jumpbox, "ansible_host")),
+        "target": "%s@%s" % (export.account, export.jumpbox_address(jumpbox)),
         # From the inventory groups, and so from the export rather than from the
         # range. The id scheme does guarantee a teamserver ends in `ts` and an
         # ordinal, so grepping for that shape was not the fragile part; reading

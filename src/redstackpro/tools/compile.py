@@ -19,13 +19,13 @@ from redstackpro.authoring import set_redirector_hostname
 from redstackpro.export import compile_topology
 from redstackpro.terraform import GenerationError
 
-from . import _report
+from . import _report, provider_arg
 
 
 def configure(ap):
     ap.add_argument("topology")
     ap.add_argument("-o", "--out", default="build")
-    ap.add_argument("--provider", default="gcp")
+    ap.add_argument("--provider", default="gcp", type=provider_arg)
     ap.add_argument("--region", default=None,
                     help="cloud region for the deploy; overrides a region on "
                          "the document and the per-provider default")

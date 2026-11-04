@@ -4,10 +4,16 @@ rather than through either one. It joins generated code to the static modules an
 roles, and it ships one provider's modules, not all three. See 0010 and 0015.
 """
 
+import json
+from pathlib import Path
+
 import pytest
 
 from redstackpro.deploy import generate_deploy_script
 from redstackpro.export import compile_topology, static_files
+
+GOAD_LIGHT = (Path(__file__).resolve().parent.parent
+              / "frontend/public/goad/goad-light.json")
 
 
 def _topology(mode, nodes):
@@ -209,6 +215,40 @@ def test_readme_hints_are_provider_specific(redstack, registry):
     # The Kali Marketplace subscription is an aws-only precondition.
     assert "Marketplace" in aws
     assert "Marketplace" not in gcp
+
+
+# The marker each provider's quota note carries. Proxmox and ESXi carry none.
+QUOTA_MARKERS = {"gcp": "CPUS_ALL_REGIONS", "aws": "Elastic IPs",
+                 "azure": "SkuNotAvailable"}
+
+
+@pytest.mark.parametrize("provider", ["gcp", "aws", "azure", "proxmox", "esxi"])
+def test_each_guide_carries_its_own_quota_note_and_no_other(redstack, registry, provider):
+    """The GCP CPUS_ALL_REGIONS note used to ship in every offense guide, AWS's
+    included, while the AWS deploy.sh points at the guide for Elastic IP and
+    vCPU limits it never covered, and a defense guide had no quota note at all."""
+    goad_light = json.loads(GOAD_LIGHT.read_text(encoding="utf-8"))
+    guides = [compile_topology(goad_light, registry=registry,
+                               provider=provider)["DEPLOYMENT-GUIDE.md"]]
+    if provider in QUOTA_MARKERS:
+        guides.append(compile_topology(redstack, registry=registry,
+                                       provider=provider)["DEPLOYMENT-GUIDE.md"])
+    for guide in guides:
+        for other, marker in QUOTA_MARKERS.items():
+            assert (marker in guide) == (other == provider), (provider, marker)
+        assert ("## Quotas" in guide) == (provider in QUOTA_MARKERS)
+
+
+def test_the_aws_quota_note_names_what_deploy_sh_points_at(redstack, registry):
+    """deploy.sh tells an AWS user to see the guide for Elastic IP and vCPU
+    headroom, so the guide has to answer with the numbers."""
+    guide = compile_topology(redstack, registry=registry,
+                             provider="aws")["DEPLOYMENT-GUIDE.md"]
+    assert "DEPLOYMENT-GUIDE.md" in compile_topology(
+        redstack, registry=registry, provider="aws")["deploy.sh"]
+    assert "5 Elastic IPs per region" in guide
+    assert "defense range takes 2" in guide and "offense stack 3" in guide
+    assert "vCPU" in guide
 
 
 # -- manage.sh / manage.ps1 (status, start, stop, teardown)
