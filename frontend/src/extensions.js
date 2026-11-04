@@ -14,8 +14,10 @@
 export const EXTENSIONS = [
   {
     key: "ws01",
-    title: "Hardened workstation",
-    blurb: "A hardened Windows 10 workstation (casterlyrock) joined to the domain. RunAsPPL, Defender ASR, constrained PowerShell.",
+    title: "Workstation (ws01)",
+    // GOAD's ws01 is hardened; no role here applies hardening yet, so the blurb
+    // states only what the seed below deploys.
+    blurb: "A Windows 10 workstation (ws01) joined to the root domain, with no planted vulnerabilities. Defender is turned off, as on every range host, unless you tick defender_enabled on it. GCP and AWS have no Windows 10 image, so there it boots Windows Server 2022.",
     requiresDomain: true,
     compatibility: ["GOAD", "GOAD-Light", "GOAD-Mini"],
     boxes: [{
@@ -23,7 +25,7 @@ export const EXTENSIONS = [
       overlay: {
         os: "windows_10", hostname: "ws01", role: "generic", edr: "defender",
         vulns: [],
-        notes: "Hardened workstation (ws01 extension): RunAsPPL, Defender ASR rules, constrained PowerShell.",
+        notes: "Workstation from the ws01 extension: domain member, no planted vulnerabilities.",
       },
     }],
   },

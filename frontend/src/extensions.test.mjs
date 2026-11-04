@@ -50,7 +50,7 @@ test("adding wazuh adds a SIEM box and an agent on the Windows host", () => {
   assert.equal(dc.overlay.edr, "wazuh");
 });
 
-test("adding ws01 adds a hardened workstation joined to the root domain", () => {
+test("adding ws01 adds a workstation joined to the root domain", () => {
   const doc = applyExtension(base(), "ws01");
   const ws = doc.nodes.find((n) => n.id === "ws01");
   assert.equal(ws.kind, "wks");

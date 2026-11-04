@@ -12,6 +12,7 @@ import App from "./App.jsx";
 import { addNode, emptyDocument, paletteGroups, PALETTE_HIDDEN } from "./topology.js";
 import { HOST_PRESETS } from "./presets.js";
 import { VULN_CATALOG } from "./vulns.js";
+import { EXTENSIONS } from "./extensions.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -166,5 +167,21 @@ describe("presets", () => {
     const task = join(HERE,
       "../../src/redstackpro/assets/ansible/roles/redstackpro.host_vulns/tasks/openshares.yml");
     expect(readFileSync(task, "utf8")).toMatch(/win_share/);
+  });
+});
+
+
+describe("extensions", () => {
+  test("ws01 promises no hardening its seed does not set", () => {
+    const ws01 = EXTENSIONS.find((e) => e.key === "ws01");
+    const overlay = ws01.boxes[0].overlay;
+    expect(overlay.hardening).toBeUndefined();
+    const vulns = overlay.vulns || [];
+    const words = `${ws01.title} ${ws01.blurb} ${overlay.notes || ""}`;
+    if (!vulns.includes("run_as_ppl")) expect(words).not.toMatch(/RunAsPPL|PPL/i);
+    expect(words).not.toMatch(/ASR|constrained PowerShell|hardened/i);
+    // Defender is off on a range host unless defender_enabled is set, and the
+    // blurb has to say which of the two this box gets.
+    if (!overlay.defender_enabled) expect(ws01.blurb).toMatch(/Defender is turned off/);
   });
 });
