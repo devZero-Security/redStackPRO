@@ -1857,7 +1857,7 @@ ACL_RIGHTS = {
     "Ext-Self-Self-Membership", "Ext-Write-Self-Membership", "Ext-Write-SPN",
     "Ext-Write-Member",
 }
-ACL_RIGHT_ALIASES = {"ForceChangePassword", "AddMember"}
+ACL_RIGHT_ALIASES = {"ForceChangePassword", "AddMember", "WriteSPN"}
 
 # Principals every domain has.
 _BUILTIN_PRINCIPALS = {s.lower() for s in (
@@ -1960,7 +1960,9 @@ def acl001_unknown_acl_name(ctx):
                     remedy="Fix the name, or give the object's distinguished name, "
                            "e.g. OU=Crownlands,DC=sevenkingdoms,DC=local.",
                     field="acls.%d.target" % i, effect=effect, **common)
-            if right and right not in ACL_RIGHTS | ACL_RIGHT_ALIASES:
+            # Aliases match without case, as ansible.acl_right maps them.
+            if right and right not in ACL_RIGHTS and str(right).lower() not in {
+                    a.lower() for a in ACL_RIGHT_ALIASES}:
                 yield finding(
                     "ACL001", "warning", [d["id"]],
                     "ACL {principal} to {target}: {right} is not a right this "

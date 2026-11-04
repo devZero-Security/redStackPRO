@@ -657,3 +657,9 @@ def test_after_hours_schedules_in_utc_whatever_the_timezone():
     doc["auto_stop"] = {"enabled": True, "at": "20:00",
                         "timezone": "America/New_York"}
     assert TerraformPlan(doc).auto_stop["timezone"] == "America/New_York"
+
+
+def test_the_validator_accepts_exactly_the_aliases_the_compiler_maps():
+    from redstackpro import ansible
+    from redstackpro.validate import ACL_RIGHT_ALIASES
+    assert {a.lower() for a in ACL_RIGHT_ALIASES} == set(ansible.ACL_RIGHT_ALIASES)
