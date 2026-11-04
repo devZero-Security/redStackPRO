@@ -7,7 +7,10 @@ import {
   vulnParamsExample,
 } from "./vulns.js";
 import { HARDENING_CATALOG } from "./hardening.js";
-import { jsonKindFor, resolveSpec } from "./fieldRules.js";
+import {
+  defaultFor, emptyOptionLabel, fieldLabel, jsonKindFor, numberHelp, optionLabel,
+  placeholderFor, resolveSpec,
+} from "./fieldRules.js";
 import {
   USER_ARCHETYPES, accountTechniquePlanted, addUser, buildArchetype, generateUsers,
   plantAccountTechnique, recommendedUserCount, removeAccountTechnique, removeUser,
@@ -224,7 +227,7 @@ function initialCollapsed(catalog, selected) {
 // The defensive-controls picker: the same grouped checklist as the vuln picker
 // above, over hardening.js. Each group states what that family buys you, which
 // is the job the schema description used to do in one run-on sentence.
-function HardeningPicker({ value, onChange, disabled }) {
+function HardeningPicker({ value, onChange, disabled, title = "hardening" }) {
   const set = value || [];
   const [collapsed, setCollapsed] = useState(() => initialCollapsed(HARDENING_CATALOG, set));
   const toggle = (id) =>
@@ -239,7 +242,7 @@ function HardeningPicker({ value, onChange, disabled }) {
   return (
     <div className="rg-field">
       <span className="rg-field-label">
-        hardening{set.length ? ` (${set.length})` : ""}
+        {title}{set.length ? ` (${set.length})` : ""}
       </span>
       <div className="rg-vulns rg-hardening">
         {HARDENING_CATALOG.map((group) => {
@@ -313,7 +316,9 @@ const ACCOUNT_TECHNIQUE_ITEMS = VULN_CATALOG.flatMap((g) => g.items).filter((ite
 // instead of writing into the host's own overlay.vulns, so they get their own
 // group below rather than a checkbox that would otherwise no-op (RNG009). See
 // rangeUsers.js plantAccountTechnique.
-function VulnPicker({ value, onChange, disabled, provider, document, hostId, onOverlayChange }) {
+function VulnPicker({
+  value, onChange, disabled, provider, document, hostId, onOverlayChange, title = "vulnerabilities",
+}) {
   const set = value || [];
   const [collapsed, setCollapsed] = useState(() => initialCollapsed(VULN_CATALOG, set));
   const [accountCollapsed, setAccountCollapsed] = useState(false);
@@ -342,7 +347,7 @@ function VulnPicker({ value, onChange, disabled, provider, document, hostId, onO
   return (
     <div className="rg-field">
       <span className="rg-field-label">
-        vulnerabilities{set.length ? ` (${set.length})` : ""}
+        {title}{set.length ? ` (${set.length})` : ""}
       </span>
       <div className="rg-vulns">
         {VULN_CATALOG.map((group) => {
@@ -1049,11 +1054,19 @@ function VulnVarsHelp({ vulns, description }) {
 
 // `defs` is the schema's $defs, so a property that is only a $ref (public_address,
 // a port) renders as the type it points at rather than as a bare text box.
-function Field({ name, spec: rawSpec, value, required, onChange, disabled, help: helpOverride, defs }) {
+// `path` is the dotted overlay path (tls.cert_source) and `ctx` the node it sits
+// on ({id, kind, mode, overlay}); together they pick the default an empty field
+// compiles to. Both are optional, so a bare spec (an edge field) still renders.
+function Field({
+  name, path = name, spec: rawSpec, value, required, onChange, disabled,
+  help: helpOverride, defs, ctx,
+}) {
   const spec = resolveSpec(rawSpec, defs) || {};
+  const title = fieldLabel(name, spec);
+  const def = defaultFor(path, spec, ctx);
   const label = (
     <span className="rg-field-label">
-      {spec.title || name}
+      {title}
       {required ? <span className="rg-required">required</span> : null}
     </span>
   );
@@ -1079,8 +1092,13 @@ function Field({ name, spec: rawSpec, value, required, onChange, disabled, help:
   }
 
   // An enum is a choice, so it is a select rather than a free text box the
-  // validator has to reject afterward.
+  // validator has to reject afterward. The empty option names what an empty
+  // field compiles to; a required field has none. A stored value the list does
+  // not offer stays selectable so the select never shows a choice it does not
+  // hold.
   if (spec.enum) {
+    const unset = value == null || value === "";
+    const offered = unset || spec.enum.includes(value);
     return (
       <label className="rg-field">
         {label}
@@ -1089,10 +1107,17 @@ function Field({ name, spec: rawSpec, value, required, onChange, disabled, help:
           disabled={disabled}
           onChange={(e) => onChange(e.target.value || undefined)}
         >
-          <option value="">unset</option>
+          {required ? (
+            unset ? <option value="" disabled>pick one</option> : null
+          ) : (
+            <option value="">{emptyOptionLabel(path, spec, ctx)}</option>
+          )}
+          {offered ? null : (
+            <option value={value}>{optionLabel(name, value)} (not a choice here)</option>
+          )}
           {spec.enum.map((option) => (
             <option key={option} value={option}>
-              {option}
+              {optionLabel(name, option)}
             </option>
           ))}
         </select>
@@ -1126,19 +1151,23 @@ function Field({ name, spec: rawSpec, value, required, onChange, disabled, help:
   }
 
   if (spec.type === "integer" || spec.type === "number") {
+    const autoHelp = numberHelp(spec, def);
     return (
       <label className="rg-field">
         {label}
         <input
           type="number"
           value={value ?? ""}
-          placeholder={spec.default ?? ""}
+          placeholder={def ?? ""}
+          min={spec.minimum}
+          max={spec.maximum}
+          step={spec.type === "integer" ? 1 : undefined}
           disabled={disabled}
           onChange={(e) =>
             onChange(e.target.value === "" ? undefined : Number(e.target.value))
           }
         />
-        {help}
+        {help ?? (autoHelp ? <span className="rg-field-help">{autoHelp}</span> : null)}
       </label>
     );
   }
@@ -1165,7 +1194,7 @@ function Field({ name, spec: rawSpec, value, required, onChange, disabled, help:
                     )
                   }
                 />
-                {option}
+                {optionLabel(name, option)}
               </label>
             ))}
           </div>
@@ -1178,6 +1207,7 @@ function Field({ name, spec: rawSpec, value, required, onChange, disabled, help:
         label={label}
         help={help}
         value={items}
+        placeholder={placeholderFor(path, spec, ctx)}
         disabled={disabled}
         onChange={onChange}
       />
@@ -1187,17 +1217,19 @@ function Field({ name, spec: rawSpec, value, required, onChange, disabled, help:
   if (spec.type === "object" && spec.properties) {
     return (
       <fieldset className="rg-fieldset">
-        <legend>{name}</legend>
+        <legend>{title}</legend>
         {spec.description ? <p className="rg-field-help">{spec.description}</p> : null}
         {Object.entries(spec.properties).map(([child, childSpec]) => (
           <Field
             key={child}
             name={child}
+            path={`${path}.${child}`}
             spec={childSpec}
             value={(value || {})[child]}
             required={(spec.required || []).includes(child)}
             disabled={disabled}
             defs={defs}
+            ctx={ctx}
             onChange={(next) => onChange({ ...(value || {}), [child]: next })}
           />
         ))}
@@ -1210,11 +1242,10 @@ function Field({ name, spec: rawSpec, value, required, onChange, disabled, help:
       {label}
       <input
         value={value ?? ""}
-        // A field the schema gives hint text for shows the hint, so a value the
-        // compiler will fill in for you says so in grey rather than sitting in the
-        // document as a literal CHANGE-ME that someone has to notice and delete.
-        // The raw pattern is the fallback for fields with no hint.
-        placeholder={spec["x-redstackpro-placeholder"] ?? (spec.pattern || "")}
+        // A value the compiler fills in shows in grey, so a default does not sit
+        // in the document as a literal someone has to notice and delete. Then
+        // the schema's hint, then an example; never the raw pattern.
+        placeholder={placeholderFor(path, spec, ctx)}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value || undefined)}
       />
@@ -1393,6 +1424,8 @@ export function Inspector({
   // When the Cover profile panel is on screen it owns the decoy, so the gating
   // group below does not repeat it. Read-only views show the full group.
   const coverShown = node.kind === "redirector" && onApplyCover && !readOnly;
+  // What a field's rules read: the node it sits on and the canvas mode.
+  const fieldCtx = { id: node.id, kind: node.kind, mode: document.mode, overlay: node.overlay || {} };
 
   return (
     <aside className="rg-panel rg-inspector">
@@ -1458,6 +1491,7 @@ export function Inspector({
                 <VulnPicker
                   key={`${name}-${node.id}`}
                   value={(node.overlay || {}).vulns}
+                  title={spec.title}
                   disabled={readOnly}
                   provider={provider}
                   document={document}
@@ -1471,6 +1505,7 @@ export function Inspector({
                 <HardeningPicker
                   key={`${name}-${node.id}`}
                   value={(node.overlay || {}).hardening}
+                  title={spec.title}
                   disabled={readOnly}
                   onChange={(value) =>
                     onOverlayChange(node.id, {
@@ -1523,6 +1558,7 @@ export function Inspector({
                   }
                   disabled={readOnly}
                   defs={schema?.$defs}
+                  ctx={fieldCtx}
                   onChange={(value) =>
                     onOverlayChange(node.id, { ...(node.overlay || {}), [name]: value })
                   }

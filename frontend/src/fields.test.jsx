@@ -137,3 +137,145 @@ describe("structured values never render as a text box", () => {
     expect(seen.at(-1).tags).toEqual(["LinuxAdmins", "Ops"]);
   });
 });
+
+// The control under a field label. The label's first text node is the title,
+// so a "required" badge does not get in the way.
+function fieldNamed(title) {
+  const label = screen.getAllByText(
+    (_, el) => el?.classList?.contains("rg-field-label") && el.firstChild?.textContent === title
+  )[0];
+  return label.closest(".rg-field");
+}
+const selectNamed = (title) => fieldNamed(title).querySelector("select");
+const inputNamed = (title) => fieldNamed(title).querySelector("input");
+const optionTexts = (select) => [...select.options].map((o) => o.textContent);
+
+// The real schema with titles added, to check a label follows spec.title.
+function withTitles(titles) {
+  const copy = structuredClone(SCHEMA);
+  for (const [path, title] of Object.entries(titles)) {
+    const [def, ...props] = path.split(".");
+    let at = copy.$defs[def];
+    for (const p of props) at = at.properties[p];
+    at.title = title;
+  }
+  return copy;
+}
+
+describe("labels", () => {
+  test("a field is labelled by spec.title, or its key without one", () => {
+    const titled = withTitles({ "overlay_range_host.os": "Operating system" });
+    const { unmount } = render(<Panel schema={titled} node={{ id: "dc01", kind: "dc", overlay: {} }} />);
+    expect(selectNamed("Operating system")).toBeTruthy();
+    unmount();
+    render(<Panel node={{ id: "dc01", kind: "dc", overlay: {} }} />);
+    expect(selectNamed("os")).toBeTruthy();
+  });
+
+  test("a fieldset legend uses spec.title", () => {
+    const titled = withTitles({ "overlay_redirector.tls": "TLS certificate" });
+    render(
+      <Panel
+        mode="offense"
+        schema={titled}
+        node={{ id: "cdn-rdr01", kind: "redirector", overlay: { server: "nginx", tls: {} } }}
+      />
+    );
+    expect(screen.getByText("TLS certificate", { selector: "legend" })).toBeTruthy();
+  });
+
+  test("enum options read as words while the stored value stays the id", async () => {
+    const user = userEvent.setup();
+    const seen = [];
+    render(<Panel seen={seen} node={{ id: "dc01", kind: "dc", overlay: {} }} />);
+    const os = selectNamed("os");
+    expect(optionTexts(os)).toContain("Windows Server 2019");
+    expect(optionTexts(os)).toContain("Windows 10 (Server 2022 on GCP/AWS)");
+    expect(optionTexts(os)).toContain("Windows 11 (Server 2022 on GCP/AWS)");
+    expect(optionTexts(os)).not.toContain("windows_server_2019");
+    await user.selectOptions(os, "Windows Server 2019");
+    expect(seen.at(-1).os).toBe("windows_server_2019");
+  });
+
+  test("cert_source options are Let's Encrypt and Self-signed", () => {
+    render(
+      <Panel
+        mode="offense"
+        node={{ id: "cdn-rdr01", kind: "redirector", overlay: { server: "nginx", tls: {} } }}
+      />
+    );
+    const texts = optionTexts(selectNamed("cert_source"));
+    expect(texts).toContain("Let's Encrypt");
+    expect(texts).toContain("Self-signed");
+  });
+});
+
+describe("the empty option names the default", () => {
+  test("a dc, srv or wks with no os says Windows Server 2022, never unset", () => {
+    for (const kind of ["dc", "srv", "wks"]) {
+      const { unmount } = render(<Panel node={{ id: `${kind}01`, kind, overlay: {} }} />);
+      const os = selectNamed("os");
+      expect(os.value).toBe("");
+      expect(os.options[os.selectedIndex].textContent).toBe("default (Windows Server 2022)");
+      expect(screen.queryByText("unset")).toBeNull();
+      unmount();
+    }
+  });
+
+  test("schema and known defaults label the empty option", () => {
+    render(
+      <Panel
+        mode="offense"
+        node={{ id: "cdn-rdr01", kind: "redirector", overlay: { server: "nginx", tls: {}, gating: {} } }}
+      />
+    );
+    expect(optionTexts(selectNamed("cert_source"))[0]).toBe("default (Let's Encrypt)");
+    expect(optionTexts(selectNamed("decoy"))[0]).toBe("default (CDN)");
+  });
+
+  test("a jumpbox's access mode and vpn protocol name theirs", () => {
+    render(
+      <Panel
+        mode="offense"
+        node={{ id: "jump01", kind: "jumpbox", overlay: { services: ["ssh"], access_mode: "openvpn" } }}
+      />
+    );
+    expect(optionTexts(selectNamed("access_mode"))[0]).toBe("default (Public portal)");
+    expect(optionTexts(selectNamed("vpn_protocol"))[0]).toBe("default (UDP)");
+    expect(inputNamed("vpn_port").getAttribute("placeholder")).toBe("1194");
+  });
+
+  test("a required enum offers no empty option", () => {
+    render(<Panel mode="offense" node={{ id: "myth-ts01", kind: "teamserver", overlay: { c2: "mythic" } }} />);
+    const c2 = selectNamed("c2");
+    expect(optionTexts(c2)).toEqual(["Mythic", "Sliver", "AdaptixC2", "None (plain Debian host)"]);
+  });
+
+  test("a required enum with nothing stored asks for a pick rather than showing one", () => {
+    render(<Panel mode="offense" node={{ id: "myth-ts01", kind: "teamserver", overlay: {} }} />);
+    const c2 = selectNamed("c2");
+    expect(c2.value).toBe("");
+    expect(c2.options[c2.selectedIndex].textContent).toBe("pick one");
+  });
+
+  test("a stored value the list does not offer stays visible", () => {
+    render(<Panel node={{ id: "wks01", kind: "wks", overlay: { os: "windows_7" } }} />);
+    const os = selectNamed("os");
+    expect(os.value).toBe("windows_7");
+    expect(os.options[os.selectedIndex].textContent).toBe("Windows 7 (not a choice here)");
+  });
+
+  test("a dc hostname and a domain netbios show what the compiler fills in", () => {
+    const { unmount } = render(<Panel node={{ id: "dc01", kind: "dc", overlay: {} }} />);
+    expect(inputNamed("hostname").getAttribute("placeholder")).toBe("dc01 (default)");
+    unmount();
+    render(<Panel node={{ id: "sk-dom01", kind: "domain", overlay: { fqdn: "sevenkingdoms.local" } }} />);
+    expect(inputNamed("netbios").getAttribute("placeholder")).toBe("SEVENKINGDOMS (default)");
+  });
+
+  test("a pattern field shows an example, never the raw pattern", () => {
+    render(<Panel node={{ id: "dc01", kind: "dc", overlay: {} }} />);
+    const ip = inputNamed("internal_ip");
+    expect(ip.getAttribute("placeholder")).toBe("e.g. 10.30.10.5");
+  });
+});

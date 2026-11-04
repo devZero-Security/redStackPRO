@@ -4,7 +4,8 @@
 // Same shape and same reason as vulns.js: the picker is data, so adding a
 // control is a data change. Grouped, because nine checkboxes in one wrapped
 // row is a wall with no order to it, and because the ids are opaque on their
-// own -- `runasppl` and `asr` mean nothing to someone who has not met them.
+// own: `runasppl` and `asr` mean nothing to someone who has not met them, so
+// each item carries a readable label.
 //
 // Each group carries a one-line `summary` saying what that family of controls
 // buys you. That summary is what replaced a single run-on sentence in the
@@ -23,17 +24,17 @@ export const HARDENING_CATALOG = [
     items: [
       {
         id: "runasppl",
-        label: "runasppl",
+        label: "RunAsPPL (LSASS as a protected process)",
         blurb: "Runs LSASS as a Protected Process Light, so an ordinary administrator cannot open it and read credentials out of memory.",
       },
       {
         id: "lsa_protection",
-        label: "lsa_protection",
+        label: "LSA protection",
         blurb: "Turns on LSA protection, which blocks unsigned code from loading into the authentication subsystem.",
       },
       {
         id: "credential_guard",
-        label: "credential_guard",
+        label: "Credential Guard",
         blurb: "Isolates derived credentials in virtualisation-based security, so a pass-the-hash needs more than local admin.",
       },
     ],
@@ -44,17 +45,17 @@ export const HARDENING_CATALOG = [
     items: [
       {
         id: "applocker",
-        label: "applocker",
+        label: "AppLocker",
         blurb: "Allow-lists which executables and scripts may run, so dropping a binary is not enough to run it.",
       },
       {
         id: "constrained_powershell",
-        label: "constrained_powershell",
+        label: "PowerShell Constrained Language Mode",
         blurb: "Constrained Language Mode: PowerShell keeps working, but the .NET and COM calls most offensive tooling relies on stop being available.",
       },
       {
         id: "asr",
-        label: "asr",
+        label: "Defender ASR rules",
         blurb: "Defender Attack Surface Reduction rules, which block common execution routes such as Office spawning child processes.",
       },
     ],
@@ -65,7 +66,7 @@ export const HARDENING_CATALOG = [
     items: [
       {
         id: "defender_tamper_protection",
-        label: "defender_tamper_protection",
+        label: "Defender tamper protection",
         blurb: "Stops Defender's own settings being disabled from the host, including by an administrator, so evasion has to work around it rather than turn it off.",
       },
     ],
@@ -76,12 +77,12 @@ export const HARDENING_CATALOG = [
     items: [
       {
         id: "smb_signing",
-        label: "smb_signing",
+        label: "SMB signing required",
         blurb: "Requires SMB signing, which is what makes an SMB relay fail rather than land.",
       },
       {
         id: "llmnr_disabled",
-        label: "llmnr_disabled",
+        label: "LLMNR and NBT-NS off",
         blurb: "Turns off LLMNR and NBT-NS name resolution, removing the broadcast fallback that responder-style poisoning answers.",
       },
     ],
