@@ -1838,7 +1838,7 @@ function Editor() {
           onTopologyChange={(patch) =>
             history.coalesce("topology-settings", (current) => applyTopologyPatch(current, patch))
           }
-          findings={selection ? findingsFor(selection.id) : []}
+          findings={findingsFor(selection ? selection.id : "topology")}
           onOverlayChange={(id, overlay) =>
             history.coalesce(`overlay:${id}`, (current) => updateOverlay(current, id, overlay))
           }

@@ -18,7 +18,7 @@ import {
 } from "./edgeRoles.js";
 import { domainDirectory, principalStatus, targetStatus } from "./domainDirectory.js";
 import { effectiveFlaws } from "./DomainUsers.jsx";
-import { generateUsers, plantAccountTechnique, seededRng } from "./rangeUsers.js";
+import { generateUsers, seededRng } from "./rangeUsers.js";
 
 function Harness({ initial, selection, seen = [], ...rest }) {
   const [doc, setDoc] = useState(initial);
@@ -526,7 +526,7 @@ describe("domain users", () => {
     const labels = picks.getAllByRole("checkbox").map((c) => c.closest("label").textContent);
     expect(labels).toEqual([
       "Kerberoastable", "AS-REP roastable", "Password in description", "Weak password",
-      "Constrained delegation", "Sensitive, cannot be delegated",
+      "Reversible encryption", "Constrained delegation", "Sensitive, cannot be delegated",
       "Password never expires (already on for every account)",
     ]);
     // no_preauth is the same flaw as AS-REP roastable.
@@ -553,8 +553,9 @@ describe("domain users", () => {
     expect(screen.queryByRole("textbox", { name: "delegate to" })).toBeNull();
 
     await user.click(screen.getByRole("checkbox", { name: "Password in description" }));
-    await user.type(screen.getByRole("textbox", { name: "description" }), "Temp password: x");
-    expect(screen.getByRole("textbox", { name: "password" })).toBeTruthy();
+    await user.type(screen.getByRole("textbox", { name: "description" }), "SQL service");
+    await user.type(screen.getByRole("textbox", { name: "password" }), "Ssql2024!");
+    expect(screen.getByText('The export adds "(Password : Ssql2024!)" to this text. Empty uses the display name.')).toBeTruthy();
 
     await user.click(screen.getByRole("checkbox", { name: "Kerberoastable" }));
     const spns = screen.getByRole("textbox", { name: "SPNs" });
@@ -566,7 +567,8 @@ describe("domain users", () => {
 
     expect(last(seen).nodes[0].overlay.users[0]).toMatchObject({
       flaws: ["password_in_description", "kerberoastable", "constrained_delegation"],
-      description: "Temp password: x",
+      description: "SQL service",
+      password: "Ssql2024!",
       spns: ["HTTP/braavos.essos.local", "MSSQLSvc/braavos.essos.local:1433"],
       delegate_to: ["CIFS/meereen.essos.local"],
     });
@@ -597,7 +599,7 @@ describe("domain users", () => {
       />
     );
     expect(screen.getByRole("combobox", { name: "privilege" }).title).toBe(
-      "Added to local Administrators on every Windows member server and workstation in this domain."
+      "Added to local Administrators on every Windows member server in this domain. Workstations and domain controllers are left as they are."
     );
     await open(user, "hodor");
     expect(screen.getByRole("checkbox", { name: "Assumed-breach foothold" }).closest("label").title).toMatch(
@@ -605,19 +607,11 @@ describe("domain users", () => {
     );
   });
 
-  test("generated and planted password-in-description users carry a real password", () => {
+  test("duplicate flaws count once, and Populate hands out no flaw that does nothing", () => {
     expect(effectiveFlaws(["kerberoastable", "spn_set", "no_preauth"])).toEqual(["kerberoastable", "asrep_roastable"]);
-    const users = generateUsers(60, "corp.local", seededRng(7));
-    for (const u of users) {
+    for (const u of generateUsers(60, "corp.local", seededRng(7))) {
       expect(u.flaws || []).not.toContain("password_never_expires");
-      if ((u.flaws || []).includes("password_in_description")) {
-        expect(u.description).toContain(u.password);
-      }
     }
-    const planted = plantAccountTechnique(
-      { id: "d", kind: "domain", overlay: { fqdn: "corp.local" } }, "srv01", "password_in_description"
-    );
-    expect(planted.users[0].description).toContain(planted.users[0].password);
   });
 });
 
@@ -693,6 +687,28 @@ describe("topology settings", () => {
     });
     await user.clear(region);
     expect("region" in last(seen)).toBe(false);
+  });
+
+  test("a click on a document finding opens these settings, each finding by its field", () => {
+    const findings = [
+      { code: "SCH001", severity: "error", target_ids: ["topology"], field: "auto_stop.at", message: "Stop at must be HH:MM." },
+      { code: "SCH001", severity: "error", target_ids: ["topology"], field: "prefix", message: "The prefix is too long." },
+      { code: "SCH001", severity: "info", target_ids: ["topology"], field: "region", message: "Region note." },
+    ];
+    render(
+      <Harness
+        initial={base({ auto_stop: { enabled: true, at: "25:00" } })}
+        selection={{ type: "node", id: "topology" }}
+        findings={findings}
+      />
+    );
+    expect(screen.getByRole("heading", { name: "Topology settings" })).toBeTruthy();
+    const autoStop = screen.getByRole("heading", { name: "Auto-stop" }).closest(".rg-settings-section");
+    expect(within(autoStop).getByText(/Stop at must be HH:MM\./)).toBeTruthy();
+    expect(within(autoStop).queryByText(/The prefix is too long/)).toBeNull();
+    expect(screen.getByText(/The prefix is too long\./)).toBeTruthy();
+    const region = screen.getByRole("textbox", { name: "region" }).closest(".rg-field");
+    expect(region.nextElementSibling.textContent).toContain("Region note.");
   });
 
   test("a locked topology shows the settings but cannot change them", () => {

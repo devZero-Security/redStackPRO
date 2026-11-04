@@ -41,7 +41,6 @@ export const DEPARTMENTS = [
 const SPRINKLE_FLAWS = [
   "kerberoastable", "asrep_roastable", "password_in_description", "weak_password",
 ];
-const DESCRIPTION_PASSWORDS = ["Welcome1!", "Changeme123", "Spring2025!", "Helpdesk42"];
 
 // A tiny linear-congruential rng seeded from an integer, so a test can pass a
 // seed and get the same population every run. Mirrors profiles.js.
@@ -107,14 +106,7 @@ export function generateUsers(count, fqdn, rng = Math.random, existing = []) {
   for (let i = 0; i < n; i += 1) {
     const privilege = i === 0 ? "domain_admin" : "user";
     const flaws = i > 0 && i <= flawed ? [pick(rng, SPRINKLE_FLAWS)] : [];
-    const user = makeUser(rng, fqdn, taken, { privilege, flaws });
-    // The flaw plants nothing by itself; the description has to carry a
-    // password the account really has.
-    if (flaws.includes("password_in_description")) {
-      user.password = pick(rng, DESCRIPTION_PASSWORDS);
-      user.description = `Temp password: ${user.password}`;
-    }
-    users.push(user);
+    users.push(makeUser(rng, fqdn, taken, { privilege, flaws }));
   }
   return users;
 }
@@ -264,20 +256,13 @@ export function plantAccountTechnique(domainNode, hostId, technique) {
   let n = 1;
   while (taken.has(username)) username = `${base}${(n += 1)}`;
 
-  const user = {
+  return addUser(domainNode, {
     username,
     email: `${username}@${fqdn}`,
     privilege: "user",
     flaws,
     planted_by: plantedByOf(hostId, technique),
-  };
-  // The flaw plants nothing by itself; the description has to carry a
-  // password the account really has.
-  if (technique === "password_in_description") {
-    user.password = "Helpdesk42";
-    user.description = "Temp password: Helpdesk42";
-  }
-  return addUser(domainNode, user);
+  });
 }
 
 // Remove the user marked for this host+technique, if any. Returns the
