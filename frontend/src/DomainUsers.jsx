@@ -9,10 +9,10 @@ import { allGroups, groupKnown, joinedHosts } from "./domainDirectory.js";
 const PRIVILEGES = ["user", "local_admin", "domain_admin", "enterprise_admin"];
 
 // What each privilege does at deploy, from ansible.py domain_files and
-// _local_admins_for.
+// _local_admins_for. Only the srv role reads the local admin list.
 export const PRIVILEGE_HELP = {
   user: "An ordinary domain member. No extra groups.",
-  local_admin: "Added to local Administrators on every Windows member server and workstation in this domain.",
+  local_admin: "Added to local Administrators on every Windows member server in this domain. Workstations and domain controllers are left as they are.",
   domain_admin: "Added to Domain Admins.",
   enterprise_admin: "Added to Enterprise Admins and Domain Admins.",
 };
@@ -26,8 +26,9 @@ export const BREACH_HELP =
 export const SHOWN_FLAWS = [
   { id: "kerberoastable", also: ["spn_set"], label: "Kerberoastable", help: "Sets an SPN on the account and pins it to RC4, so its service ticket can be requested and cracked." },
   { id: "asrep_roastable", also: ["no_preauth"], label: "AS-REP roastable", help: "Turns off Kerberos pre-authentication, so anyone can request a crackable AS-REP for it." },
-  { id: "password_in_description", label: "Password in description", help: "Plants nothing by itself: write the password into the Description below." },
+  { id: "password_in_description", label: "Password in description", help: "Writes the account's password into its AD description, where a description hunt finds it." },
   { id: "weak_password", label: "Weak password", help: "Sets a sprayable password when the account has no password of its own." },
+  { id: "reversible_encryption", label: "Reversible encryption", help: "Stores the password with reversible encryption, so DCSync returns it in cleartext." },
   { id: "constrained_delegation", label: "Constrained delegation", help: "Trusted to delegate with protocol transition (S4U) to the SPNs in Delegate to." },
   { id: "account_is_sensitive", label: "Sensitive, cannot be delegated", help: "Marks the account sensitive so it cannot be delegated. A defensive setting that shapes a delegation path." },
 ];
@@ -36,7 +37,6 @@ export const SHOWN_FLAWS = [
 // ticked, so it can be removed.
 export const HIDDEN_FLAWS = {
   password_never_expires: "Password never expires (already on for every account)",
-  reversible_encryption: "Reversible encryption (not applied)",
 };
 
 const ALIASES = Object.fromEntries(SHOWN_FLAWS.flatMap((f) => (f.also || []).map((a) => [a, f.id])));
@@ -335,8 +335,12 @@ export function DomainUsers({ node, document, rangeHostCount, flawOptions = [], 
                       <TextField
                         label="description"
                         value={u.description}
-                        placeholder={`Password: ${u.password || "<the account's password>"}`}
-                        help="Written to the account's AD description, where a description hunt finds it. Name a password the account really has: set Password below."
+                        placeholder={u.display_name || u.username}
+                        help={
+                          hasFlaw(u, "password_in_description")
+                            ? `The export adds "(Password : ${u.password || "the account's password"})" to this text. Empty uses the display name.`
+                            : "The account's AD description."
+                        }
                         disabled={readOnly}
                         onChange={(v) => patch(i, { description: v })}
                       />
@@ -345,8 +349,12 @@ export function DomainUsers({ node, document, rangeHostCount, flawOptions = [], 
                       <TextField
                         label="password"
                         value={u.password}
-                        placeholder="shared lab password"
-                        help="The account's own password. Empty uses the shared lab password, which is set at deploy."
+                        placeholder={hasFlaw(u, "password_in_description") ? "random" : "shared lab password"}
+                        help={
+                          hasFlaw(u, "password_in_description")
+                            ? "The account's own password, the one the description names. Empty gets a random one, or the weak password when Weak password is ticked."
+                            : "The account's own password. Empty uses the shared lab password, which is set at deploy."
+                        }
                         disabled={readOnly}
                         onChange={(v) => patch(i, { password: v })}
                       />
