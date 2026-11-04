@@ -357,3 +357,32 @@ def test_the_guide_explains_vm_sizes_and_the_preflight_for_azure_only():
         for provider in ("gcp", "aws"):
             other = compile_topology(doc, Registry(), provider=provider)["DEPLOYMENT-GUIDE.md"]
             assert "azure_preflight" not in other
+
+
+def test_a_burstable_default_is_replaced_by_general_purpose_memory():
+    """Live 2026-11-04: with B2as_v2 barred, the suggestion for a workstation was a
+    4 GB compute-optimized F2as_v7 although 8 GB D sizes had quota. B maps to D, and
+    a size with less memory than the default ranks last, whether or not the
+    subscription's SKU list reports the default's memory."""
+    listed = [sku("Standard_B2as_v2", "standardBasv2Family", restrictions=NOT_FOR_SUB),
+              sku("Standard_F2as_v7", "StandardFasv7Family", memory=4),
+              sku("Standard_D2ds_v7", "StandardDdsv7Family")]
+    for values in (listed, listed[1:]):
+        skus = ap.parse_skus(values, "eastus2")
+        names = [c["name"] for c in ap.candidates(skus, 2, "Standard_B2as_v2")]
+        assert names == ["Standard_D2ds_v7", "Standard_F2as_v7"]
+
+
+def test_a_proposal_with_less_memory_says_so(export):
+    """When the only size with quota room has less memory than the default, the
+    proposal still clears the failure but names the shortfall."""
+    arm = FakeArm(
+        skus=[sku("Standard_D2as_v5", "standardDASv5Family", restrictions=NOT_FOR_SUB),
+              sku("Standard_F2as_v7", "StandardFasv7Family", memory=4),
+              sku("Standard_D2ps_v6", "standardDPSv6Family")],
+        compute=[usage("cores", 0, 100, "Total Regional vCPUs"),
+                 usage("StandardFasv7Family", 0, 100, "Standard Fasv7 Family vCPUs")])
+    rc, text = run(export, arm)
+    assert rc == 1, text
+    assert set(proposed(text).values()) == {"Standard_F2as_v7"}
+    assert "jumpbox gets Standard_F2as_v7 with 4 GB, less than the 8 GB" in text

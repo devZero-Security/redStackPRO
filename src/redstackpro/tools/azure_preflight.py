@@ -331,13 +331,27 @@ def _parts(size):
             int(m.group(4) or 1))
 
 
+# Burstable B is general purpose; its nearest non-burstable series is D.
+_SERIES_ALIAS = {"B": "D"}
+
+
+def _series(size):
+    s = _parts(size)[0]
+    return _SERIES_ALIAS.get(s, s)
+
+
+def ref_memory(skus, vcpus, like):
+    """Memory of `like`, or 4 GB per vCPU (the ratio every default size has) when
+    the subscription's SKU list does not report it."""
+    return (skus.get(like.lower()) or {}).get("memory") or 4 * vcpus
+
+
 def candidates(skus, vcpus, like):
     """Sizes this subscription can use here in the same vCPU class, safest and
-    closest to `like` first: no zone restriction at all, same series, nearest
-    memory, same feature letters, newest version."""
-    ref = skus.get(like.lower()) or {}
-    memory = ref.get("memory")
-    series, _, feats, _ = _parts(like)
+    closest to `like` first: no zone restriction, at least its memory, same
+    series, nearest memory, same feature letters, newest version."""
+    memory = ref_memory(skus, vcpus, like)
+    series, feats = _series(like), _parts(like)[2]
     pool = [s for s in skus.values()
             if s["vcpus"] == vcpus and not s["restricted"] and s["gen2"]
             and not s["special"] and "-" not in s["name"]
@@ -345,8 +359,9 @@ def candidates(skus, vcpus, like):
             and not re.match(r"(?i)standard_(dc|ec|n)", s["name"])]
     return sorted(pool, key=lambda s: (
         bool(s["zones_restricted"]),
-        _parts(s["name"])[0] != series,
-        abs((s["memory"] or 0) - memory) if memory and s["memory"] else 0,
+        (s["memory"] or 0) < memory,
+        _series(s["name"]) != series,
+        abs((s["memory"] or 0) - memory),
         _parts(s["name"])[2] != feats,
         -_parts(s["name"])[3],
         len(s["name"]), s["name"]))
@@ -524,7 +539,7 @@ def assess(manifest, settings, skus, compute, network, providers, state):
             each = (sku and sku["vcpus"]) or _parts(size_of(role))[1] or 0
             return each, each * len(roles[role])
 
-        proposal, stuck = {}, []
+        proposal, stuck, thin = {}, [], []
         for role in sorted(roles, key=lambda r: (-need(r)[1], r)):
             size = size_of(role)
             sku = sku_of(size)
@@ -540,12 +555,18 @@ def assess(manifest, settings, skus, compute, network, providers, state):
                 left[pick["family"].lower()] -= total
             if pick is not sku:
                 proposal[role] = pick["name"]
+                want = ref_memory(skus, each, size)
+                if pick["memory"] and pick["memory"] < want:
+                    thin.append("%s gets %s with %g GB, less than the %g GB of %s; no "
+                                "size with as much memory has quota room here."
+                                % (role, pick["name"], pick["memory"], want, size))
         if proposal:
             width = max(len(r) for r in proposal)
             fix += ["Set vm_sizes in deploy.tfvars (only these roles change):",
                     "  vm_sizes = {"]
             fix += ['    %s = "%s"' % (r.ljust(width), s) for r, s in sorted(proposal.items())]
             fix += ["  }"]
+            fix += ["  note: " + t for t in thin]
         if stuck:
             fix += ["No size this subscription can use here has family vCPU quota room "
                     "for: %s. Request a family vCPU quota increase (Azure portal, Quotas "
