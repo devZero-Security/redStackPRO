@@ -1637,19 +1637,19 @@ def dom001_domain_name_format(ctx):
         if isinstance(fqdn, str) and (len(fqdn) > 253 or not _FQDN_RE.match(fqdn)):
             yield finding(
                 "DOM001", "error", [n["id"]],
-                "The fqdn {fqdn!r} on {name} is not a domain name. It needs at "
+                "The fqdn {fqdn} on {name} is not a domain name. It needs at "
                 "least two labels of letters, digits and hyphens.",
                 remedy="Set it to a name like corp.local.", field="fqdn",
-                fqdn=fqdn, name=display_name(ctx, n["id"]))
+                fqdn=fqdn or "(empty)", name=display_name(ctx, n["id"]))
         netbios = ctx.overlay(n["id"], "netbios")
         if isinstance(netbios, str) and not _NETBIOS_RE.match(netbios):
             yield finding(
                 "DOM001", "error", [n["id"]],
-                "The NetBIOS name {netbios!r} on {name} is not 1 to 15 letters "
+                "The NetBIOS name {netbios} on {name} is not 1 to 15 letters "
                 "or digits.",
                 remedy="Set it to a short name like CORP, or clear it to use the "
                        "first label of the fqdn.", field="netbios",
-                netbios=netbios, name=display_name(ctx, n["id"]))
+                netbios=netbios or "(empty)", name=display_name(ctx, n["id"]))
 
 
 # ---------------------------------------------------------------- jumpbox

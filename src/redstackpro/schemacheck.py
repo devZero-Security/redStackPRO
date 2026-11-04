@@ -74,7 +74,7 @@ _TYPES = {
 }
 
 # Problems a rule in validate.py already reports, as (field, validator) with
-# "*" for any index or any validator.
+# "*" for any list index.
 _OWNED = {
     ("operators.*.handle", "pattern"): "VPN005",
     ("operators.*.handle", "maxLength"): "VPN005",

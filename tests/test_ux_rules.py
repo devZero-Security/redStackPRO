@@ -622,3 +622,14 @@ def test_a_schema_version_is_never_read_as_a_path():
     from redstackpro import schemacheck
     assert schemacheck.schema_for("../topology/0.7.0") is None
     assert schemacheck.schema_for("0.7.0")["$id"].endswith("0.7.0.json")
+
+
+def test_dom001_says_what_is_wrong_in_plain_words():
+    doc = _range(domain={"fqdn": "corp", "netbios": "", "users": [
+        {"username": "alice", "privilege": "domain_admin"}]})
+    messages = sorted(f.message for f in _of(doc, "DOM001"))
+    assert messages == [
+        "The NetBIOS name (empty) on d is not 1 to 15 letters or digits.",
+        "The fqdn corp on d is not a domain name. It needs at least two labels "
+        "of letters, digits and hyphens.",
+    ]
