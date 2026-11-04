@@ -82,7 +82,7 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 168,
-          "description": "A hard cap on how long a range may run, in hours. Approximate by construction: the schedulers are cron shaped, so the compiler turns this into a daily stop time computed from the apply, and a re-apply moves it. Use it to bound a range started at an odd hour, where a fixed nightly time would let it run all day."
+          "description": "A hard cap on how long a range may run, in hours. Approximate by construction: the schedulers are cron shaped, so this becomes a daily stop time counted from the first apply. Terraform keeps that instant in state (time_offset.auto_stop), so a later re-apply keeps the same stop time; only recreating the range, or replacing time_offset.auto_stop, moves it. Use it to bound a range started at an odd hour, where a fixed nightly time would let it run all day."
         },
         "timezone": {
           "type": "string",
