@@ -588,7 +588,16 @@
         "vulns_vars": {
           "administrator_folder": {
             "name": "flag.txt"
-          }
+          },
+          "mssql_linked_targets": [
+            "sql.academy.ninja.lan"
+          ],
+          "mssql_linked_logins": [
+            {
+              "target": "sql.academy.ninja.lan",
+              "remote_user": "sa"
+            }
+          ]
         }
       }
     },

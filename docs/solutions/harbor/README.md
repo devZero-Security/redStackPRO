@@ -105,8 +105,10 @@ through the portal's patient-zero RDP tile as in the GOAD methodology (she has t
 be a Remote Desktop Users member on `fr-wks01` for the tile to open, which the
 range grants). She is a plain
 `freight.harbor.corp` domain user. `fr-wks01` also carries `stored_credential`:
-check the Windows Credential Manager on the box for a saved credential that gives
-an early second identity.
+her Credential Manager vault holds a saved `TERMSRV/fr-app01` credential for
+`FREIGHT\svc.reports`, an early second identity and a shortcut past the roast in
+step 2. `cmdkey /list` shows it; the password comes out of the vault with a DPAPI
+tool run as her.
 
 ```
 proxychains cmdkey /list                 # from a beacon on fr-wks01

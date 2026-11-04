@@ -321,3 +321,29 @@ def test_the_user_role_honours_spns_delegate_to_enabled_and_reversible():
     assert create["microsoft.ad.user"]["enabled"] == "{{ item.enabled | default(true) | bool }}"
     assert create["microsoft.ad.user"]["description"] == "{{ item.description | default(omit) }}"
     assert create["microsoft.ad.user"]["password_never_expires"] is True
+
+
+# -- shipped labs carry the parameters their ticked vulns read
+
+@pytest.mark.parametrize("name,host,vuln", [
+    ("goad/nha.json", "sql", "mssql_linked"),
+    ("harbor.json", "fr-wks01", "stored_credential"),
+])
+def test_lab_vulns_have_their_parameters(name, host, vuln):
+    from redstackpro.validate import validate
+    doc = load(PUBLIC / name)
+    assert vuln in _node(doc, host)["overlay"]["vulns"]
+    codes = [f.code for f in validate(doc) if host in f.target_ids]
+    assert "RNG011" not in codes, codes
+
+
+def test_the_stored_credential_owner_gets_batch_logon():
+    """cmdkey runs in a scheduled task as the vault owner; without batch logon
+    a Domain Users owner's task never runs and the vault stays empty."""
+    tasks = yaml.safe_load((ROLES / "redstackpro.host_vulns/tasks/stored_credential.yml")
+                           .read_text(encoding="utf-8"))
+    names = [t["name"] for t in tasks]
+    grant = tasks[names.index("Let the vault owner log on as a batch job")]
+    assert grant["ansible.windows.win_user_right"]["name"] == "SeBatchLogonRight"
+    assert names.index("Let the vault owner log on as a batch job") < names.index(
+        "Plant a Credential Manager credential in a user's vault")
