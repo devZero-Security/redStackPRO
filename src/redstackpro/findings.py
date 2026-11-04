@@ -4,10 +4,11 @@ This object is returned by the API, rendered by the canvas, and iterated on by t
 agent harness. It is a contract, so changing its shape is expensive. See 0014.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field as dc_field
 
 
-SEVERITIES = ("error", "warning")
+# info is a notice: it never blocks a compile and is not counted as a warning.
+SEVERITIES = ("error", "warning", "info")
 
 
 @dataclass(frozen=True)
@@ -16,8 +17,11 @@ class Finding:
     severity: str
     target_ids: tuple
     template: str
-    values: dict = field(default_factory=dict)
+    values: dict = dc_field(default_factory=dict)
     remedy: str = ""
+    # Dotted path of the offending field under its node or edge, e.g.
+    # "tls.cert_source". Empty when the finding is not about one field.
+    field: str = ""
 
     def __post_init__(self):
         if self.severity not in SEVERITIES:
@@ -32,7 +36,7 @@ class Finding:
         return self.template.format(**self.values)
 
     def to_dict(self):
-        return {
+        out = {
             "code": self.code,
             "severity": self.severity,
             "target_ids": list(self.target_ids),
@@ -41,9 +45,13 @@ class Finding:
             "message": self.message,
             "remedy": self.remedy,
         }
+        # Only when set, so every finding without one keeps the shape it had.
+        if self.field:
+            out["field"] = self.field
+        return out
 
 
-def finding(code, severity, targets, template, remedy="", **values):
+def finding(code, severity, targets, template, remedy="", field="", **values):
     return Finding(
         code=code,
         severity=severity,
@@ -51,4 +59,5 @@ def finding(code, severity, targets, template, remedy="", **values):
         template=template,
         values=values,
         remedy=remedy,
+        field=field,
     )

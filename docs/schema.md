@@ -71,25 +71,39 @@ and `transitive`; a two-way trust is one bidirectional edge, not two.
 The range host kinds `dc`, `srv`, `wks`, and `fw` share one overlay,
 `overlay_range_host`. Its user fields:
 
-- `os` and `hostname`, the image and canonical name (`windows_server_2019`,
-  `kingslanding`)
-- `role`, a server's primary function (`sql`, `web`, `fileshare`, `adcs`,
-  `generic`), which drives its badge and, later, its provisioning
-- `services`, free-form roles the host runs (`mssql`, `iis`, `adcs`)
-- `edr`, the endpoint detection running on it (`defender`, `elastic`, `wazuh`,
-  and the commercial labels), for evasion practice
+- `os`, the image: `windows_server_2019`, `windows_server_2022`, `windows_10`,
+  `windows_11`, `linux`, or a named distribution (`debian_13`, `debian_12`,
+  `ubuntu_2204`, `ubuntu_2004`). Empty builds Windows Server 2022 for a `dc`,
+  `srv` or `wks`. GCP and AWS have no Windows client image, so `windows_10` and
+  `windows_11` boot Server 2022 there (`OS001`).
+- `hostname`, the Windows computer name, 15 characters max (`kingslanding`).
+  Keep it equal to the id.
+- `role`, a host's primary function. `sql`, `adcs` and `mecm` install something;
+  `web`, `fileshare` and `generic` are badges only
+- `services`, software for a Windows member server: `mssql`, `iis`, `exchange`.
+  Any other value installs nothing (`SVC001`)
+- `edr`, a label shown in the briefing. Defender runs only with
+  `defender_enabled`; SIEM agents follow the SIEM boxes the range has
 - `vulns`, planted attack-path misconfigurations and CVEs from the GOAD-derived
   catalog in `frontend/src/vulns.js`, kept as free strings so the catalog grows
   without a schema change
 - `hardening`, defensive controls (`asr`, `runasppl`, `constrained_powershell`,
-  and peers) for practicing against a locked-down endpoint rather than a weak
-  one, as on the GOAD ws01 extension
-- `notes`, free-form provenance, e.g. an imported role an importer could not map
+  and peers). Recorded but not applied in this release (`HRD001`)
+- `notes`, free text for the author; nothing reads it during the deploy
 
-A `siem` box carries `overlay_siem` (`product` of `wazuh`, `elk`, or `splunk`,
-plus `os`/`hostname`/`notes`); an `appliance` reuses `overlay_range_host`. Both
-sit on a subnet rather than joining a domain. Range semantics are checked by the
-`RNG` rules in `validation.md`.
+A `domain` carries `fqdn`, `netbios`, `users`, `acls`, `gmsa`, `laps_readers`,
+`group_members`, `ous`, and `groups`, the groups to create even though no user is
+in them (a group only an access right names).
+
+A `siem` box carries `overlay_siem` (`product` of `wazuh` or `elk`, a Linux `os`
+from the named distributions, `hostname`, `notes`); an `appliance` reuses
+`overlay_range_host`. Both sit on a subnet rather than joining a domain. Range
+semantics are checked by the `RNG` rules in `validation.md`.
+
+Every property carries a short `title` the canvas shows as its label, falling
+back to the key. The `$defs` (`identifier`, `cidr`, `ipv4`, `port`,
+`public_address`) carry a title and description too, for a form that resolves
+`$ref`.
 
 ## Still open
 

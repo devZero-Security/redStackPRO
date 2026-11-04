@@ -34,8 +34,10 @@ TAGS = [
      "description": "Starter topologies to clone from. Seeded system ones have no "
                     "owner; a team publishes its own. A clone is a private copy."},
     {"name": "validation",
-     "description": "Topology semantics the schema cannot express. Findings carry "
-                    "a code, target ids, prose, and a remedy."},
+     "description": "The document schema (SCH001) and the topology semantics it "
+                    "cannot express. Findings carry a code, target ids, prose, a "
+                    "remedy, and for a single bad field its dotted path in "
+                    "`field`."},
     {"name": "compile",
      "description": "Renders a topology into a working directory of Terraform and "
                     "Ansible. The archive is a formatter over the file map."},
@@ -480,7 +482,7 @@ def validate_topology(topology_id: str, provider: str | None = Query(default=Non
 @router.post("/validate", tags=["validation"],
              summary="Validate a document without storing it",
              responses={200: {"content": {"application/json": {"example": {
-                 "valid": False, "errors": 1, "warnings": 0,
+                 "valid": False, "errors": 2, "warnings": 0, "infos": 0,
                  "findings": [{
                      "code": "MGT001", "severity": "error",
                      "target_ids": ["ts-01"],
@@ -488,6 +490,20 @@ def validate_topology(topology_id: str, provider: str | None = Query(default=Non
                      "values": {"name": "rt-ts-01"},
                      "message": "rt-ts-01 has no management path.",
                      "remedy": "Draw a manages edge from a jumpbox to its network.",
+                 }, {
+                     "code": "SCH001", "severity": "error",
+                     "target_ids": ["nginx-rd01"],
+                     "template": "{path} on {node}: {reason}. Example: {example}.",
+                     "values": {"path": "tls.cert_source",
+                                "node": "off-nginx-rd01",
+                                "reason": "must be one of letsencrypt, "
+                                          "self_signed",
+                                "example": "letsencrypt"},
+                     "message": "tls.cert_source on off-nginx-rd01: must be one "
+                                "of letsencrypt, self_signed. Example: "
+                                "letsencrypt.",
+                     "remedy": "Pick one of the listed values.",
+                     "field": "tls.cert_source",
                  }]}}}}})
 def validate_document(body: DocumentSubmission,
                       principal: Principal = CurrentPrincipal):
@@ -499,11 +515,13 @@ def validate_document(body: DocumentSubmission,
 
 def _validation_response(document, provider):
     findings = _findings(document, provider)
-    errors = [f for f in findings if f["severity"] == "error"]
+    count = {s: sum(1 for f in findings if f["severity"] == s)
+             for s in ("error", "warning", "info")}
     return {
-        "valid": not errors,
-        "errors": len(errors),
-        "warnings": len(findings) - len(errors),
+        "valid": not count["error"],
+        "errors": count["error"],
+        "warnings": count["warning"],
+        "infos": count["info"],
         "findings": findings,
     }
 
@@ -568,6 +586,7 @@ def _compile_response(sess, document, provider, principal, topology_id=None,
         "provider": provider,
         "files": [{"path": p, "contents": c} for p, c in sorted(files.items())],
         "warnings": [f for f in findings if f["severity"] == "warning"],
+        "infos": [f for f in findings if f["severity"] == "info"],
         "errors": [],
     }
 

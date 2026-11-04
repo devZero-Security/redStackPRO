@@ -9,6 +9,10 @@
 // section, compressed to a sentence a stakeholder can read out loud.
 
 export const FAMILIES = {
+  SCH: {
+    label: "Schema",
+    blurb: "Whether a field holds a value of the right kind and format.",
+  },
   NAM: {
     label: "Naming",
     blurb: "How a node id is formed, and whether the name it composes to fits.",
@@ -22,8 +26,8 @@ export const FAMILIES = {
     blurb: "Whether an edge joins the kinds of node that edge is allowed to join.",
   },
   NET: {
-    label: "Cross-provider",
-    blurb: "An edge spanning two providers, which the compiler cannot transport.",
+    label: "Network",
+    blurb: "Whether addresses fit their subnets and networks, and traffic has a route.",
   },
   CAR: {
     label: "Cardinality",
@@ -31,7 +35,7 @@ export const FAMILIES = {
   },
   FRT: {
     label: "Fronting",
-    blurb: "Whether redirectors agree on the URIs and prefixes they front.",
+    blurb: "Whether redirectors agree on the URIs they front and serve the ports asked of them.",
   },
   MGT: {
     label: "Management path",
@@ -64,6 +68,30 @@ export const FAMILIES = {
   VPN: {
     label: "VPN access",
     blurb: "Whether the multi-user VPN access mode and operator roster are coherent.",
+  },
+  JMP: {
+    label: "Jumpbox",
+    blurb: "Whether the jumpbox runs the portal and the certificate authority the range relies on.",
+  },
+  DOM: {
+    label: "Domain",
+    blurb: "Whether a domain's names are ones a controller can be promoted with.",
+  },
+  TRU: {
+    label: "Trust",
+    blurb: "Whether a trust between two domains is one this release builds.",
+  },
+  ACL: {
+    label: "Access rights",
+    blurb: "Whether an access right names objects on its domain and a right that is applied.",
+  },
+  HRD: {
+    label: "Hardening",
+    blurb: "Defensive controls a host lists that this release does not apply.",
+  },
+  SVC: {
+    label: "Software",
+    blurb: "Whether what a host asks to run is something a role installs.",
   },
 };
 

@@ -514,13 +514,14 @@ def test_operator_reaches_each_teamserver_control_plane(redstack):
 
 
 def test_generic_teamserver_opens_no_operator_control_path(redstack):
-    """A teamserver with an unset/unknown C2 gets no control rule: the secure
-    default. Flip Mythic to a generic teamserver and its ctl rule disappears."""
+    """A teamserver with no C2 framework (c2 none) gets no control rule: the
+    secure default. Flip Mythic to a generic teamserver and its ctl rule
+    disappears. c2 is required by the schema, so none is how it is unset."""
     import copy
     g = copy.deepcopy(redstack)
     for node in g["nodes"]:
         if node["id"] == "myth-ts01":
-            node["overlay"].pop("c2", None)
+            node["overlay"]["c2"] = "none"
     assert "ctl_off_myth_ts01" not in firewall_rules(g)
     # the others, still C2-typed, keep theirs
     assert "ctl_off_sliv_ts01" in firewall_rules(g)

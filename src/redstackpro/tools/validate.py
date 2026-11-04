@@ -58,7 +58,7 @@ def run(args):
             continue
 
         errors = sum(1 for f in findings if f.severity == "error")
-        warnings = len(findings) - errors
+        warnings = sum(1 for f in findings if f.severity == "warning")
         print("%s  %s" % (Path(path).stem, _report.summary(errors, warnings)))
         _report.render(findings)
         print()

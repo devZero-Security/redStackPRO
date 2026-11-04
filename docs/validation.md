@@ -1,18 +1,40 @@
 # Validator rules, schema 0.7.0
 
-JSON Schema covers document shape only. Everything below is topology semantics and
-belongs in the topology layer validator, not in the compiler. Every rule carries a
-machine-readable code and prose written for a reader, because the eventual agent
-harness iterates on the prose.
+`SCH001` applies the JSON schema to the document. Everything after it is topology
+semantics and belongs in the topology layer validator, not in the compiler. Every
+rule carries a machine-readable code and prose written for a reader, because the
+eventual agent harness iterates on the prose.
 
 Four-digit codes (00NN) are internal design-decision references and are not
 published with this repo.
 
-Severity is `error` or `warning`. The compiler refuses to run on any error.
+Severity is `error`, `warning` or `info`. The compiler refuses to run on any error.
+An `info` finding is a notice: the export is fine, it just may not be what you
+expect. A finding about one field carries that field's dotted path under its node
+or edge in `field` (for example `tls.cert_source`), so the canvas can mark the
+field itself.
 
 Implemented in `src/redstackpro/validate.py`, one function per rule, with a negative
-test per rule in `tests/test_validate.py`. Rules marked not implemented below are
-described but not yet written.
+test per rule in `tests/test_validate.py` and `tests/test_ux_rules.py`. Rules
+marked not implemented below are described but not yet written.
+
+## Schema
+
+- `SCH001` error. A value the topology schema rejects: a wrong type, a value
+  outside an enum, a missing required field, a field the node or edge does not
+  have, or a value that misses its pattern (a prefix with an underscore, a cidr
+  with no mask, a domain with a scheme). The message is
+  `{field} on {node}: {reason}. Example: {example}.` A node is checked against
+  the one definition its `kind` selects and an edge against the one its `role`
+  selects, so a bad field is one finding rather than one per branch of the
+  schema's `oneOf`. A cidr with host bits set (`10.30.10.5/24`) is reported here
+  too, since the clouds take a network address only. A document is checked
+  against the schema of its own `schema_version`; the API migrates to the latest
+  first. A document-level finding points at the target `topology`. Problems
+  another rule words better are left to it: an operator handle or role
+  (`VPN005`, `VPN006`), a `vulns_vars` that is not an object (`RNG012`), and an
+  empty redirector domain (`RDR001`). A document whose nodes or edges lack an
+  id, kind or role gets only `SCH001`, since the other rules cannot index it.
 
 ## Naming
 
@@ -26,7 +48,8 @@ Names are composed from the topology `prefix` and the node `id`, never stored. S
   the meaning; the ordinal keeps siblings apart.
 - `NAM003` error. The composed name must be 15 characters or fewer. Windows
   truncates NetBIOS names there, so a longer host answers to a name the
-  inventory does not use.
+  inventory does not use. On a Linux host the message says only that host names
+  here are capped at 15.
 
 ## Referential integrity
 
@@ -70,6 +93,11 @@ Names are composed from the topology `prefix` and the node `id`, never stored. S
   through another.
 - `FRT002` error. One redirector routes the same prefix to two teamservers. The
   first rewrite rule matches and the second never fires.
+- `FRT003` warning. A `fronts` edge with a `protocol` other than `https`, or a
+  `listen_port` or `upstream_port` other than 443. Apache and nginx serve HTTPS on
+  443 and proxy to 443, so another listen port opens a port nothing answers on and
+  the beacon is told to call it, `dns` opens UDP with no listener, and another
+  upstream port proxies to nothing.
 
 ## Reachability and management
 
@@ -104,6 +132,9 @@ Names are composed from the topology `prefix` and the node `id`, never stored. S
   `192.168.56.2` that deployed on GCP for months, then failed every AWS apply with
   "Address 192.168.56.2 is in subnet's reserved address range" two minutes in,
   after a NAT gateway and five instances already existed. See 0055.
+- `NET007` error. A subnet whose `cidr` is not inside its network's `cidr`. GCP
+  takes it; AWS and Azure refuse it at apply. The remedy suggests a range inside
+  the network.
 - `RDR001` error. A redirector has no `hostname`, or its hostname is still a
   placeholder (`example`, `CHANGE-ME`, `your-domain`). A domain cannot be generated
   the way the gating header value is: someone has to register one and point it at the
@@ -183,6 +214,16 @@ apply, never in the export.
   pipe corrupts the table or breaks out of the SQL comment. A role is a single line,
   no pipe character, at most 64 characters. Shorten it and remove any newline or pipe.
 
+## Jumpbox
+
+- `JMP001` warning. A jumpbox without `guacamole` in its `services`. There is no
+  portal, so hosts are reachable over ssh only, while deploy.sh and the guide send
+  the operator to the portal.
+- `JMP002` error. A jumpbox with `certificate_authority: false` while something
+  signs with that CA: a collector with TLS on (the default), a Windows operator
+  (its WinRM certificate), or `access_mode: openvpn`. Each fails mid provision
+  without it, and only the OpenVPN task says why.
+
 ## Peering
 
 A `peers` edge joins two networks so hosts in one can reach hosts in the other on
@@ -244,6 +285,12 @@ Requirements come from the node kind registry, not from the document.
   never fired in practice, being gated on `exposure: internet` while every shipped
   template uses `local`, and its description had drifted to the opposite of the
   real failure. See 0054.
+- `CAP005` info, provider-specific. A range host with `os: windows_10` or
+  `windows_11` on GCP or AWS. Neither publishes a Windows client image, so the
+  host boots Windows Server 2022. Azure has the client images.
+- `CAP001` and `CAP002` name the overlay field whose value raised the
+  requirement (for example `exposure` on a segment), in the remedy and in
+  `field`.
 - `CAP004` error. A `peers` edge against a provider that does not render network
   peering. Both clouds do; Proxmox cannot peer at all, since joining two networks
   is a property of the host network's routing that redStackPRO does not control. The
@@ -305,8 +352,10 @@ of all of them except `RNG011`.
   domain user's `flaws` only), `gpo_abuse` or `sysvol_secret` on anything but a
   `dc`, and `mssql_impersonation` or `mssql_linked` on anything but a Windows
   `srv` with role `sql` or the `mssql` service.
-- `RNG011` warning. A host declares a vuln whose task needs a `vulns_vars` key
-  the host does not set, so the task is skipped (or, for `keepass_vault`, fails).
+- `RNG011` warning, error for `keepass_vault`. A host declares a vuln whose task
+  needs a `vulns_vars` key the host does not set, so the task is skipped. A
+  `keepass_vault` with no `master_password` fails its task and stops the run for
+  that host, so that one is an error.
   The required keys: `delegate_to` (`constrained_delegation_kerberos`),
   `bot_user` (`rdp_scheduler`, `responder`), `ntlm_relay_user` or `bot_user`
   (`ntlm_relay`), `stored_credential.owner` and `.username`, `files`,
@@ -317,6 +366,36 @@ of all of them except `RNG011`.
   `VULN_PARAMS` is kept in step by `tests/test_vuln_params_sync.py`.
 - `RNG012` warning. A host's `vulns_vars` is not a JSON object (a string saved by
   an older canvas field, say), so none of its parameters reach the roles.
+
+- `DOM001` error. A domain `fqdn` that is not at least two labels of letters,
+  digits and hyphens (`corp`, `Seven Kingdoms.local`, an empty one), or a
+  `netbios` that is not 1 to 15 letters or digits. Both compile, then promotion
+  fails. An unset `netbios` is fine: the compiler uses the first label of the
+  fqdn.
+- `TRU001` warning. A `trusts` edge with `trust_type` `external` or `tree_root`.
+  The dc role builds parent and child domains and forest trusts only, so the
+  range gets no trust between the two. A trust with no `trust_type` is fine: the
+  compiler picks `parent_child` when one fqdn ends with the other, else `forest`.
+- `ACL001` warning. An entry in a domain's `acls` whose principal or target is
+  not on that domain, or whose right is not one this release applies.
+  `apply_acls.ps1` never fails on these: a missing principal is created as an
+  empty group, a missing plain target is created as an empty group and the right
+  lands on it, a missing `name$` target is skipped, and an unknown right is
+  skipped. A name is known when it is a user, a group (built in, named in a
+  user's `groups`, in `group_members`, or listed in the domain's `groups`), a
+  gMSA, a joined computer with or without `$`, or, for a target, an OU or a
+  distinguished name. `DOMAIN\name` is checked on that domain, and
+  `NT AUTHORITY\` or `BUILTIN\` names always pass. The rights are the ones the
+  script knows plus `ForceChangePassword` and `AddMember`, which the compiler
+  maps onto them. List a group only an ACL names in the domain's `groups`.
+- `HRD001` warning. A range host lists `hardening` controls. No role reads them
+  in this release, so the host deploys without them.
+- `SVC001` warning. A range host lists a `services` value no role installs.
+  `mssql`, `iis` and `exchange` install on a Windows member server (`srv`);
+  `adcs` and `mecm` come from `role`, so they count only alongside the matching
+  role. Anything else (`smb`, a typo, `iis` on a workstation) installs nothing.
+- `SVC002` info. A `fw` or `appliance` host. No role installs anything on it yet,
+  so it boots as a plain host on its subnet.
 
 `RNG006` and `RNG007` are the first of the compile pre-flight checks 0050 calls
 for: things that must hold before a range is provisioned, reported on the canvas
