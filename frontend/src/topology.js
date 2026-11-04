@@ -411,9 +411,29 @@ const SEED_OVERLAY = {
   redirector: { server: "nginx", tls: { cert_source: "letsencrypt" } },
   teamserver: { c2: "mythic" },
   collector: { sink: "opensearch" },
-  jumpbox: { services: ["ssh"] },
+  // guacamole is the portal deploy.sh and the guide send the operator to.
+  jumpbox: { services: ["ssh", "guacamole"] },
   operator: { os: "kali" },
+  // Without an os Ansible treats an AD host as Linux and provisioning fails.
+  dc: { os: "windows_server_2022" },
+  srv: { os: "windows_server_2022" },
+  wks: { os: "windows_server_2022" },
 };
+
+// Kinds the registry still declares but the palette does not offer: no role
+// provisions them yet, so site.yml would name a missing role. A document that
+// already has one still loads and renders, with its registry label.
+export const PALETTE_HIDDEN = new Set(["fw", "appliance"]);
+
+// The palette groups minus the hidden kinds, with any group left empty dropped.
+export function paletteGroups(groups) {
+  const out = {};
+  for (const [group, entries] of Object.entries(groups || {})) {
+    const shown = entries.filter((entry) => !PALETTE_HIDDEN.has(entry.kind));
+    if (shown.length) out[group] = shown;
+  }
+  return out;
+}
 
 export function addNode(document, entry, position) {
   const overlay = structuredClone(SEED_OVERLAY[entry.kind] || {});

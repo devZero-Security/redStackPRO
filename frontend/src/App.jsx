@@ -55,6 +55,7 @@ import {
   isContainer,
   isRangeHost,
   legendItems,
+  paletteGroups,
   removeEdge,
   removeNode,
   setJoin,
@@ -1628,7 +1629,7 @@ function Editor() {
           </aside>
         ) : (
           <Palette
-            groups={palette}
+            groups={paletteGroups(palette)}
             onAdd={(entry) => addFromPalette(entry)}
             presets={presetsFor(document.mode)}
             onAddPreset={(preset) => addPreset(preset)}
