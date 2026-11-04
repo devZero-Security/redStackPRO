@@ -22,6 +22,7 @@ export const ACL_RIGHTS = [
   { value: "Self", label: "Self", meaning: "Validated writes on the target, such as adding yourself to a group." },
   { value: "Ext-User-Force-Change-Password", label: "Force change password (AD name)", meaning: "Same as ForceChangePassword." },
   { value: "Ext-Write-Self-Membership", label: "Write self membership (AD name)", meaning: "Same as Add self to group." },
+  { value: "Ext-Write-Member", label: "Write member (AD name)", meaning: "Same as AddMember." },
 ];
 
 const RIGHT_BY_VALUE = Object.fromEntries(ACL_RIGHTS.map((r) => [r.value, r]));

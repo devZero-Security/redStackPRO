@@ -1837,6 +1837,7 @@ ACL_RIGHTS = {
     "GenericAll", "GenericWrite", "WriteDacl", "WriteOwner", "GenericExecute",
     "ReadProperty", "WriteProperty", "Self", "Ext-User-Force-Change-Password",
     "Ext-Self-Self-Membership", "Ext-Write-Self-Membership", "Ext-Write-SPN",
+    "Ext-Write-Member",
 }
 ACL_RIGHT_ALIASES = {"ForceChangePassword", "AddMember"}
 
