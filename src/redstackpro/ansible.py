@@ -390,6 +390,13 @@ class AnsiblePlan:
             # plan.vpn_access.
             if node["kind"] == "jumpbox":
                 self._jumpbox_vpn_vars(node, vars_)
+                # Where the operator's machine reaches the jumpbox (verify.py).
+                # Not ansible_host: a range jumpbox sits on a local segment, so
+                # that is its private address, yet terraform gives it a public
+                # one regardless (plan.takes_public_address).
+                if self._jumpbox_has_public_address(nid):
+                    vars_["redstackpro_public_address"] = _token(
+                        self.ctx.name(nid), "public_address")
 
             # The jumpbox also creates each assumed-breach domain user as a local
             # admin: the foothold is a jumpbox local admin AND a low-priv domain
@@ -877,6 +884,14 @@ class AnsiblePlan:
         return ("public_address"
                 if self.ctx.exposure(node_id) == "internet"
                 else "private_address")
+
+    def _jumpbox_has_public_address(self, node_id):
+        """Mirrors plan.takes_public_address. Proxmox and ESXi allocate none, so
+        their public_address output is null and a token would never fill."""
+        if (self.provider is not None and "public_address"
+                not in self.registry.capabilities(self.provider)):
+            return False
+        return self._is_range() or self.ctx.public_address(node_id)
 
     def _jumpbox_vpn_vars(self, node, vars_):
         """Bridge the jumpbox access_mode to what the role provisions. The

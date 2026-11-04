@@ -32,13 +32,13 @@ TEMPLATES = ROOT / "frontend/public"
 HOSTNAME = "cdn.redops.design"
 
 
-def _export(tmp_path, name, hostname=HOSTNAME, edit=None):
+def _export(tmp_path, name, hostname=HOSTNAME, edit=None, provider="gcp"):
     """Compile a shipped template to disk and hand back a loaded Export."""
     document = json.loads((TEMPLATES / name).read_text(encoding="utf-8"))
     if edit:
         edit(document)
     set_redirector_hostname(document, hostname)
-    files = compile_topology(document, Registry(), provider="gcp")
+    files = compile_topology(document, Registry(), provider=provider)
     out = tmp_path / name.replace(".json", "")
     for path, contents in files.items():
         target = out / path
@@ -374,3 +374,63 @@ def test_the_certificate_command_probe_does_not_fail_on_a_healthy_redirector():
     assert "unconfirmed" in probe, (
         "there is no third answer, so an account without sudo produces the same "
         "false failure in a new form")
+
+
+# ------------------------------------------------------- reaching the jumpbox ---
+
+def _fill_addresses(root, public):
+    """What tf_inventory.py does after apply, with made-up addresses: a private
+    one for every host, and a public one unless the provider allocates none.
+    Fails on a token left unfilled, which is what aborts a real deploy."""
+    from redstackpro.tools import tf_inventory
+    names = sorted(p.stem for p in (root / "ansible/host_vars").glob("*.yml"))
+    addresses = {
+        n: {"private_address": "10.20.0.%d" % (i + 10),
+            "public_address": "203.0.113.%d" % (i + 10) if public else None}
+        for i, n in enumerate(names)}
+    lookup = dict(addresses)
+    lookup["@settings"] = {"operator_source_ranges": '["198.51.100.7/32"]'}
+    unresolved = set()
+    for path in (root / "ansible").rglob("*.yml"):
+        text = path.read_text(encoding="utf-8")
+        if "<<tf:" in text:
+            path.write_text(tf_inventory.substitute(text, lookup, unresolved),
+                            encoding="utf-8")
+    assert not unresolved, unresolved
+    return addresses
+
+
+@pytest.mark.parametrize("provider", ["gcp", "aws", "azure"])
+@pytest.mark.parametrize("name", ["goad/goad-light.json", "goad/minilab.json",
+                                  "redstack.json"])
+def test_stack_reaches_the_jumpbox_at_its_public_address(tmp_path, name, provider):
+    """`stack` runs from the operator's machine, which reaches the jumpbox only
+    at its public address. It used to ssh to ansible_host, which on a defense
+    range is the jumpbox's PRIVATE address: the range puts it on a local
+    segment, and terraform gives it a public address anyway. Offense worked
+    only because its jumpbox sits on an internet segment."""
+    root = _export(tmp_path, name, provider=provider).root
+    addresses = _fill_addresses(root, public=True)
+    export = verify.Export(root)
+    plan = verify.stack_plan(export)
+    jump = plan["jumpbox"]
+    assert plan["target"] == "%s@%s" % (
+        export.account, addresses[jump]["public_address"])
+    # Ansible is untouched: it runs on the range jumpbox and keeps its
+    # private address there.
+    mode = json.loads((TEMPLATES / name).read_text(encoding="utf-8"))["mode"]
+    field = "private_address" if mode == "defense" else "public_address"
+    assert export.hosts[jump]["ansible_host"] == addresses[jump][field]
+
+
+@pytest.mark.parametrize("provider", ["proxmox", "esxi"])
+def test_stack_uses_ansible_host_where_no_public_address_exists(tmp_path, provider):
+    """Proxmox and ESXi allocate no public address (their output is null), so
+    no public token is emitted to sit unfilled, and the jumpbox is reached at
+    the address the operator's own network routes."""
+    root = _export(tmp_path, "goad/goad-light.json", provider=provider).root
+    addresses = _fill_addresses(root, public=False)
+    export = verify.Export(root)
+    plan = verify.stack_plan(export)
+    assert plan["target"].endswith(
+        "@" + addresses[plan["jumpbox"]]["private_address"])
