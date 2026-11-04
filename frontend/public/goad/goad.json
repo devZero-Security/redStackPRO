@@ -858,8 +858,7 @@
       "overlay": {
         "services": [
           "ssh",
-          "guacamole",
-          "wireguard"
+          "guacamole"
         ],
         "certificate_authority": true,
         "internal_ip": "192.168.56.4"

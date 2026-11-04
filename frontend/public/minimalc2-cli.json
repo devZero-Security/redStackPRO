@@ -60,8 +60,7 @@
       "overlay": {
         "services": [
           "ssh",
-          "guacamole",
-          "wireguard"
+          "guacamole"
         ],
         "certificate_authority": true,
         "access_mode": "wireguard",
