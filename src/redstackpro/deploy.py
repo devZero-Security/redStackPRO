@@ -907,14 +907,14 @@ def generate_manage_script(topology, registry=None, provider=None):
 
 # The Windows front door for manage.sh, the same trap and the same fix as
 # DEPLOY_PS1: `bash manage.sh` at a PowerShell prompt runs WSL's bash, not Git
-# Bash, so this finds Git Bash and calls it properly, forwarding the one
-# subcommand argument through.
+# Bash, so this finds Git Bash and calls it properly, forwarding every argument
+# through.
 MANAGE_PS1 = r"""# redStackPRO range control, for Windows PowerShell.
 #
 #   .\manage.ps1 status
 #   .\manage.ps1 start
 #   .\manage.ps1 stop
-#   .\manage.ps1 teardown
+#   .\manage.ps1 teardown [--force]
 #
 # This is a wrapper. The command itself is manage.sh beside it, the same script
 # macOS and Linux run -- there is one range control script, not two. See
@@ -936,8 +936,11 @@ if (-not $bash) {
   exit 1
 }
 
-$cmd = if ($args.Count -gt 0) { $args[0] } else { "" }
-$here = (Split-Path -Parent $MyInvocation.MyCommand.Path) -replace '\\', '/'
-& $bash -lc "cd '$here' && bash manage.sh $cmd"
+# Every argument goes through, not just the first (teardown --force needs its
+# flag), each single-quoted for bash so a space or a quote cannot split it.
+function ConvertTo-BashWord([string]$s) { "'" + ($s -replace "'", "'\''") + "'" }
+$fwd = ($args | ForEach-Object { ConvertTo-BashWord $_ }) -join ' '
+$here = ConvertTo-BashWord ((Split-Path -Parent $MyInvocation.MyCommand.Path) -replace '\\', '/')
+& $bash -lc "cd $here && bash manage.sh $fwd"
 exit $LASTEXITCODE
 """

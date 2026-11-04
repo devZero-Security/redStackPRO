@@ -772,6 +772,41 @@ def test_MANAGE_ps1_wraps_git_bash_and_forwards_the_subcommand(tmp_path):
     assert "manage.sh" in wrapper
 
 
+def test_MANAGE_ps1_forwards_every_argument_not_just_the_first():
+    """It used to forward $args[0] alone, so `.\\manage.ps1 teardown --force`
+    silently ran a plain teardown, the one that cannot clear an interrupted
+    apply."""
+    from redstackpro.deploy import MANAGE_PS1
+    assert "$args[0]" not in MANAGE_PS1
+    assert "$args | ForEach-Object" in MANAGE_PS1
+    assert "bash manage.sh $fwd" in MANAGE_PS1
+
+
+def _powershell():
+    if os.name != "nt":
+        return None
+    return shutil.which("powershell") or shutil.which("pwsh")
+
+
+def test_MANAGE_ps1_hands_teardown_force_to_manage_sh(tmp_path):
+    """Executed: the wrapper runs a stub manage.sh that echoes what it got. A
+    space and an apostrophe ride along to prove each argument stays one word."""
+    from redstackpro.deploy import MANAGE_PS1
+    ps = _powershell()
+    if ps is None or _bash() is None:
+        pytest.skip("needs Windows PowerShell and Git Bash")
+    (tmp_path / "manage.ps1").write_text(MANAGE_PS1, encoding="utf-8")
+    (tmp_path / "manage.sh").write_text(
+        "printf '[%s]\\n' \"$@\"\n", encoding="utf-8", newline="\n")
+    done = subprocess.run(
+        [ps, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+         str(tmp_path / "manage.ps1"), "teardown", "--force", "a b", "it's"],
+        capture_output=True, text=True, timeout=120)
+    assert done.returncode == 0, done.stderr
+    got = [line for line in done.stdout.splitlines() if line.startswith("[")]
+    assert got == ["[teardown]", "[--force]", "[a b]", "[it's]"], done.stdout
+
+
 def test_manage_scripts_ship_only_alongside_the_deploy():
     """Both only mean anything once something has been deployed through a
     jumpbox, exactly like deploy.sh/deploy.ps1."""
