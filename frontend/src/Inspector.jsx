@@ -7,6 +7,7 @@ import {
   vulnParamsExample,
 } from "./vulns.js";
 import { HARDENING_CATALOG } from "./hardening.js";
+import { jsonKindFor, resolveSpec } from "./fieldRules.js";
 import {
   USER_ARCHETYPES, accountTechniquePlanted, addUser, buildArchetype, generateUsers,
   plantAccountTechnique, recommendedUserCount, removeAccountTechnique, removeUser,
@@ -910,10 +911,15 @@ function sameJson(text, value) {
   }
 }
 
-function JsonObjectField({ label, help, value, disabled, onChange }) {
+// `expect` is the shape the field holds: "object" ({...}) or "array" ([...]), so
+// a list of objects (gmsa, say) gets the same editor instead of a text box.
+function JsonObjectField({ label, help, value, disabled, onChange, expect = "object" }) {
   const id = useId();
   const [text, setText] = useState(() => showJson(value));
   const [error, setError] = useState(null);
+  const wantArray = expect === "array";
+  const fits = (v) => (wantArray ? Array.isArray(v) : !!v && typeof v === "object" && !Array.isArray(v));
+  const shapeHint = wantArray ? "a JSON list, [...]" : "a JSON object, {...}";
   const committed = typeof value === "string" ? value : JSON.stringify(value ?? null);
   useEffect(() => {
     // An outside change (undo, a template load) replaces the text unless the
@@ -938,13 +944,18 @@ function JsonObjectField({ label, help, value, disabled, onChange }) {
       setError("Not valid JSON yet. The last valid value is kept.");
       return;
     }
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      setError("Must be a JSON object, {...}. The last valid value is kept.");
+    if (!fits(parsed)) {
+      setError(`Must be ${shapeHint}. The last valid value is kept.`);
       return;
     }
     setError(null);
     onChange(parsed);
   };
+
+  // A stored value of the wrong shape (a string where a list belongs) says so
+  // up front rather than only once someone starts typing.
+  const shown =
+    error || (value != null && !fits(value) ? `The stored value is not ${shapeHint}. Replace it with one.` : null);
 
   // The help sits outside the label: a click inside a label moves focus to the
   // textarea, which would drop a selection made in the help's example.
@@ -959,9 +970,43 @@ function JsonObjectField({ label, help, value, disabled, onChange }) {
         disabled={disabled}
         onChange={(e) => edit(e.target.value)}
       />
-      {error ? <span className="rg-field-error">{error}</span> : null}
+      {shown ? <span className="rg-field-error">{shown}</span> : null}
       {help}
     </div>
+  );
+}
+
+// A comma separated list of strings. The text stays local so a trailing comma
+// survives while typing; a controlled input bound to the parsed list used to
+// eat it, so a second entry could only be pasted in.
+const parseList = (text) =>
+  text
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+function ListField({ label, help, value, disabled, onChange, placeholder, className = "rg-field" }) {
+  const toText = (v) => (Array.isArray(v) ? v.join(", ") : "");
+  const [text, setText] = useState(() => toText(value));
+  const committed = JSON.stringify(value ?? []);
+  useEffect(() => {
+    if (JSON.stringify(parseList(text)) !== committed) setText(toText(value));
+  }, [committed]);
+  return (
+    <label className={className}>
+      {label}
+      <input
+        value={text}
+        placeholder={placeholder}
+        disabled={disabled}
+        onChange={(e) => {
+          setText(e.target.value);
+          const list = parseList(e.target.value);
+          onChange(list.length ? list : undefined);
+        }}
+      />
+      {help}
+    </label>
   );
 }
 
@@ -1002,7 +1047,10 @@ function VulnVarsHelp({ vulns, description }) {
   );
 }
 
-function Field({ name, spec, value, required, onChange, disabled, help: helpOverride }) {
+// `defs` is the schema's $defs, so a property that is only a $ref (public_address,
+// a port) renders as the type it points at rather than as a bare text box.
+function Field({ name, spec: rawSpec, value, required, onChange, disabled, help: helpOverride, defs }) {
+  const spec = resolveSpec(rawSpec, defs) || {};
   const label = (
     <span className="rg-field-label">
       {spec.title || name}
@@ -1014,7 +1062,10 @@ function Field({ name, spec, value, required, onChange, disabled, help: helpOver
     <span className="rg-field-help">{spec.description}</span>
   ) : null);
 
-  if (spec.type === "object" && !spec.properties) {
+  // Never a text box for structured data: it showed "[object Object]" and any
+  // keystroke replaced the structure with a string.
+  const jsonKind = jsonKindFor(spec, value);
+  if (jsonKind) {
     return (
       <JsonObjectField
         label={label}
@@ -1022,6 +1073,7 @@ function Field({ name, spec, value, required, onChange, disabled, help: helpOver
         value={value}
         disabled={disabled}
         onChange={onChange}
+        expect={jsonKind}
       />
     );
   }
@@ -1122,22 +1174,13 @@ function Field({ name, spec, value, required, onChange, disabled, help: helpOver
       );
     }
     return (
-      <label className="rg-field">
-        {label}
-        <input
-          value={items.join(", ")}
-          disabled={disabled}
-          onChange={(e) =>
-            onChange(
-              e.target.value
-                .split(",")
-                .map((s) => s.trim())
-                .filter(Boolean)
-            )
-          }
-        />
-        {help}
-      </label>
+      <ListField
+        label={label}
+        help={help}
+        value={items}
+        disabled={disabled}
+        onChange={onChange}
+      />
     );
   }
 
@@ -1154,6 +1197,7 @@ function Field({ name, spec, value, required, onChange, disabled, help: helpOver
             value={(value || {})[child]}
             required={(spec.required || []).includes(child)}
             disabled={disabled}
+            defs={defs}
             onChange={(next) => onChange({ ...(value || {}), [child]: next })}
           />
         ))}
@@ -1407,6 +1451,7 @@ export function Inspector({
 
       {overlaySchema
         ? Object.entries(overlaySchema.properties || {})
+            .map(([name, spec]) => [name, resolveSpec(spec, schema?.$defs)])
             .filter(([, spec]) => spec["x-redstackpro-source"] !== "derived")
             .map(([name, spec]) =>
               name === "vulns" ? (
@@ -1477,6 +1522,7 @@ export function Inspector({
                     ) : undefined
                   }
                   disabled={readOnly}
+                  defs={schema?.$defs}
                   onChange={(value) =>
                     onOverlayChange(node.id, { ...(node.overlay || {}), [name]: value })
                   }
