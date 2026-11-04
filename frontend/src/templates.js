@@ -188,6 +188,15 @@ export function templateFor(file) {
   return undefined;
 }
 
+// A shipped blueprint's stable id, its file name (goad-light, redstack). A
+// loaded document carries it as `blueprint`, so what it supports (the GOAD
+// extensions) follows it through a rename or a Save a copy. Undefined for a
+// file that is not a shipped blueprint.
+export function blueprintId(file) {
+  const hit = templateFor(file);
+  return hit ? hit.file.split("/").pop() : undefined;
+}
+
 // The templates for a canvas mode. Anything that is not the range canvas is
 // treated as Red Infra, so an undefined mode falls back to the offense library.
 export function templatesFor(mode) {

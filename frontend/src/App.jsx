@@ -26,7 +26,7 @@ import { Library } from "./Library.jsx";
 import { ConflictDialog } from "./Conflict.jsx";
 import { ConfirmDialog } from "./ConfirmDialog.jsx";
 import { TemplatePicker } from "./TemplatePicker.jsx";
-import { templateFor } from "./templates.js";
+import { blueprintId, templateFor } from "./templates.js";
 import { Extensions } from "./Extensions.jsx";
 import { applyExtension, removeExtension } from "./extensions.js";
 import { nodeTypes } from "./nodes.jsx";
@@ -1446,7 +1446,10 @@ function Editor() {
         setStatus("Nothing bundled there. Paste a document instead.");
         return;
       }
-      const doc = layoutIfNeeded(await response.json());
+      const loaded = layoutIfNeeded(await response.json());
+      // Part of the clean baseline, so naming the source blueprint is not an edit.
+      const source = blueprintId(url);
+      const doc = source ? { ...loaded, blueprint: source } : loaded;
       record("load-template", { url, nodes: doc.nodes.length });
       // Pinned so retitle leaves the shipped names alone and the load stays clean.
       pinned.current = new Set(offSchemeIds(doc));

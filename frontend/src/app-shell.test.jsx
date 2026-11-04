@@ -1,6 +1,7 @@
 // The app shell over the merged widgets and validator: how a new trust is
 // typed, what the legend calls each line, how the footer reads findings of
-// each severity, and how a topology remembers where it deploys.
+// each severity, and what a topology remembers about where it came from and
+// where it deploys.
 
 import React from "react";
 import { readFileSync } from "node:fs";
@@ -16,6 +17,7 @@ import { edgeId } from "./idscheme.js";
 import { countBySeverity, findingSelection, sortFindings } from "./findingSeverity.js";
 import { TEMPLATES } from "./templates.js";
 import { targetFor } from "./deployTarget.js";
+import { supportsExtension } from "./extensions.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -322,3 +324,59 @@ describe("the deploy target saves with the topology", () => {
     });
 });
 
+
+describe("extensions follow the source blueprint", () => {
+  const lab = (extra) => ({ mode: "defense", nodes: [], edges: [], ...extra });
+
+  test("matched on blueprint first, on the name only for older documents", () => {
+    expect(supportsExtension(lab({ name: "My lab (copy)", blueprint: "goad-light" }), "ws01")).toBe(true);
+    expect(supportsExtension(lab({ name: "GOAD", blueprint: "nha" }), "ws01")).toBe(false);
+    expect(supportsExtension(lab({ name: "GOAD-Light" }), "ws01")).toBe(true);
+    expect(supportsExtension(lab({ name: "renamed" }), "ws01")).toBe(false);
+    expect(supportsExtension(lab({ name: "anything", blueprint: "nha" }), "wazuh")).toBe(true);
+  });
+
+  async function loadGoadLight(user) {
+    await user.click(await screen.findByRole("tab", { name: "Defense" }));
+    await user.click(await screen.findByRole("button", { name: "Load blueprint" }));
+    const dialog = await screen.findByRole("dialog", { name: "Load a blueprint" });
+    await user.click(within(dialog).getByText("GOAD-Light").closest("button"));
+    await screen.findByText("Unlock to edit");
+  }
+
+  test("a loaded blueprint is tagged without an edit, and a renamed copy keeps its extensions",
+    async () => {
+      fakeBackend();
+      const user = userEvent.setup();
+      render(<App />);
+      await loadGoadLight(user);
+      expect(screen.getByText("Not saved")).toBeTruthy();
+
+      const name = screen.getByLabelText("Topology name");
+      await user.clear(name);
+      await user.type(name, "Team range");
+      await user.click(screen.getByRole("button", { name: "Extensions" }));
+      const dialog = await screen.findByRole("dialog", { name: "GOAD extensions" });
+      expect(within(dialog).getByText("Workstation (ws01)")).toBeTruthy();
+    });
+
+  test("Save a copy keeps the source blueprint", async () => {
+    const doc = {
+      schema_version: "0.7.0", mode: "defense", name: "GOAD-Light renamed", prefix: "def",
+      blueprint: "goad-light",
+      nodes: [{ id: "net01", kind: "network", overlay: { cidr: "192.168.0.0/16" }, position: { x: 0, y: 0 } }],
+      edges: [],
+    };
+    openUrl("?topology=g3");
+    const calls = fakeBackend({ documents: { g3: doc }, editable: false });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("net01");
+    await user.type(screen.getByLabelText("Topology name"), "!");
+    await user.click(screen.getByRole("button", { name: "Save a copy" }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/topologies"))).toBe(true));
+    const post = calls.find((c) => c.method === "POST" && c.url.endsWith("/topologies"));
+    expect(post.body.document.blueprint).toBe("goad-light");
+  });
+});

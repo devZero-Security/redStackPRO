@@ -4,12 +4,14 @@
 // the agents; toggling it off removes them again. Domain members join the
 // range's first (root) domain; the standalone Linux boxes sit on the subnet.
 //
-// `compatibility` is GOAD's own: the labs an extension can be added to, matched
-// against the document name, with "*" meaning any lab. ws01/exchange/lx01 are
+// `compatibility` is GOAD's own: the labs an extension can be added to, by lab
+// name, with "*" meaning any lab. ws01/exchange/lx01 are
 // sevenkingdoms specific, so they only offer on GOAD, GOAD-Light and GOAD-Mini;
 // wazuh and elk work on any lab. GOAD's guacamole extension is deliberately
 // omitted: redStackPRO always runs Guacamole on the jumpbox, so a separate
 // guacamole box is redundant. See guacamole-on-the-jumpbox.
+
+import { TEMPLATES, blueprintId } from "./templates.js";
 
 export const EXTENSIONS = [
   {
@@ -118,15 +120,23 @@ export function activeExtensions(doc) {
   return active;
 }
 
-// GOAD lists which labs an extension supports, matched against the document
-// name; "*" is any lab. A lab an extension does not list simply does not offer
-// it: ws01/exchange/lx01 are sevenkingdoms specific, so NHA, SCCM and the rest
-// see only wazuh and elk.
+// The blueprint id behind each lab name in `compatibility` (GOAD-Light is
+// goad-light), from the shipped blueprint list.
+const LAB_BLUEPRINT = Object.fromEntries(
+  TEMPLATES.defense.map((t) => [t.name, blueprintId(t.file)]));
+
+// GOAD lists which labs an extension supports; "*" is any lab. A lab an
+// extension does not list simply does not offer it: ws01/exchange/lx01 are
+// sevenkingdoms specific, so NHA, SCCM and the rest see only wazuh and elk.
+// Matched on the document's source blueprint, which survives a rename or a
+// Save a copy; a document saved before that field existed falls back to its name.
 export function supportsExtension(doc, key) {
   const ext = EXT_BY_KEY[key];
   if (!ext) return false;
   const compat = ext.compatibility || [];
-  return compat.includes("*") || compat.includes(doc.name);
+  if (compat.includes("*")) return true;
+  if (doc.blueprint) return compat.some((lab) => LAB_BLUEPRINT[lab] === doc.blueprint);
+  return compat.includes(doc.name);
 }
 
 // The extensions to show for a range: only the ones its lab supports.
