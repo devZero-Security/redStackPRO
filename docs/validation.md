@@ -274,7 +274,7 @@ than the ordering logic.
 These fire only in defense mode (`mode: defense`); the offense rules above are gated
 off there, since a lab jumpbox on a local subnet is correct and the `cyb` naming
 scheme is deferred for blueprints. See 0047. The shipped GOAD blueprints are clean
-of all four.
+of all of them except `RNG011`.
 
 - `RNG001` warning. A domain member (`dc`, `srv`, or `wks`) with no `joins`
   edge. In an AD range a host that joins no domain is drawn but part of nothing.
@@ -300,6 +300,23 @@ of all four.
   A host has no task for these, so declaring them in the host's `vulns` plants
   nothing; set them on a domain user's `flaws` instead. Caught because the run
   still succeeds, just without the attack the author intended.
+- `RNG010` warning. A host declares a vuln that no role plants on that kind of
+  host: `constrained_delegation` on any host (protocol transition is planted on a
+  domain user's `flaws` only), `gpo_abuse` or `sysvol_secret` on anything but a
+  `dc`, and `mssql_impersonation` or `mssql_linked` on anything but a Windows
+  `srv` with role `sql` or the `mssql` service.
+- `RNG011` warning. A host declares a vuln whose task needs a `vulns_vars` key
+  the host does not set, so the task is skipped (or, for `keepass_vault`, fails).
+  The required keys: `delegate_to` (`constrained_delegation_kerberos`),
+  `bot_user` (`rdp_scheduler`, `responder`), `ntlm_relay_user` or `bot_user`
+  (`ntlm_relay`), `stored_credential.owner` and `.username`, `files`,
+  `keepass_vault.master_password`, `gpo_abuse.principal`, `mssql_linked_targets`,
+  and `esc7_manager` / `esc14_target`, which may sit on any host in the domain.
+  Every other key has a role default. The list lives in
+  `validate.VULNS_VARS_REQUIRED`, and the canvas help in `frontend/src/vulns.js`
+  `VULN_PARAMS` is kept in step by `tests/test_vuln_params_sync.py`.
+- `RNG012` warning. A host's `vulns_vars` is not a JSON object (a string saved by
+  an older canvas field, say), so none of its parameters reach the roles.
 
 `RNG006` and `RNG007` are the first of the compile pre-flight checks 0050 calls
 for: things that must hold before a range is provisioned, reported on the canvas

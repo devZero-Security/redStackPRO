@@ -158,6 +158,190 @@ def test_shipped_labs_have_no_user_flaw_host_vulns():
         assert "RNG009" not in codes(topology), os.path.basename(path)
 
 
+# -- host vulns that plant nothing (RNG010, RNG011, RNG012)
+
+def _range_with(*hosts):
+    """A one-domain defense range. Each host is (id, kind, overlay) and joins the
+    domain, the way the canvas draws a member."""
+    nodes = [
+        {"id": "net01", "kind": "network", "overlay": {"cidr": "192.168.0.0/16"}},
+        {"id": "sub01", "kind": "segment",
+         "overlay": {"cidr": "192.168.56.0/24", "egress": "allowed", "exposure": "local"}},
+        {"id": "d", "kind": "domain",
+         "overlay": {"fqdn": "t.lab", "netbios": "T",
+                     "users": [{"username": "a", "privilege": "domain_admin"}]}},
+    ]
+    edges = [{"id": "e-sub", "role": "attached", "source": "sub01", "target": "net01"}]
+    for hid, kind, overlay in hosts:
+        nodes.append({"id": hid, "kind": kind, "overlay": overlay})
+        edges += [
+            {"id": "e-%s-att" % hid, "role": "attached", "source": hid, "target": "sub01"},
+            {"id": "e-%s-joins" % hid, "role": "joins", "source": hid, "target": "d"},
+        ]
+    return {"schema_version": "0.7.0", "mode": "defense", "name": "T",
+            "prefix": "def", "nodes": nodes, "edges": edges}
+
+
+def _found(topology, code):
+    return [f for f in validate(topology) if f.code == code]
+
+
+def _nested(dotted, value):
+    head, _, rest = dotted.partition(".")
+    return {head: _nested(rest, value) if rest else value}
+
+
+def _merge(a, b):
+    out = dict(a)
+    for k, v in b.items():
+        out[k] = _merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
+# A host each technique is not misplaced on, so only the parameter is at issue.
+_PARAM_HOST = {
+    "gpo_abuse": ("dc01", "dc", {}),
+    "mssql_linked": ("sql01", "srv", {"role": "sql", "services": ["mssql"]}),
+}
+
+
+def _param_case(vuln):
+    from redstackpro.validate import VULNS_VARS_REQUIRED
+    hid, kind, overlay = _PARAM_HOST.get(vuln, ("srv01", "srv", {}))
+    satisfied = {}
+    for alts in VULNS_VARS_REQUIRED[vuln]["keys"]:
+        satisfied = _merge(satisfied, _nested(alts[0], ["x"] if alts[0] in (
+            "delegate_to", "files", "mssql_linked_targets") else "x"))
+    return hid, kind, overlay, satisfied
+
+
+def _required_vulns():
+    from redstackpro.validate import VULNS_VARS_REQUIRED
+    return sorted(VULNS_VARS_REQUIRED)
+
+
+@pytest.mark.parametrize("vuln", _required_vulns())
+def test_rng011_fires_when_a_required_parameter_is_missing(vuln):
+    hid, kind, overlay, _ = _param_case(vuln)
+    topology = _range_with((hid, kind, dict(overlay, vulns=[vuln])))
+    found = _found(topology, "RNG011")
+    assert [f.target_ids for f in found] == [(hid,)], vuln
+    assert found[0].severity == "warning"
+    assert vuln in found[0].message and "vulns_vars." in found[0].message
+    assert found[0].remedy.startswith("Set vulns_vars to {")
+
+
+@pytest.mark.parametrize("vuln", _required_vulns())
+def test_rng011_is_silent_when_the_parameter_is_set(vuln):
+    hid, kind, overlay, satisfied = _param_case(vuln)
+    topology = _range_with((hid, kind, dict(overlay, vulns=[vuln], vulns_vars=satisfied)))
+    assert "RNG011" not in codes(topology), vuln
+    assert "RNG010" not in codes(topology), vuln
+
+
+def test_rng011_constrained_delegation_kerberos_says_what_happens_and_the_fix():
+    topology = _range_with(("wks01", "wks", {"vulns": ["constrained_delegation_kerberos"]}))
+    (f,) = _found(topology, "RNG011")
+    assert f.message == ("constrained_delegation_kerberos on wks01 has no "
+                         "vulns_vars.delegate_to, so no delegation is planted.")
+    assert f.remedy == 'Set vulns_vars to {"delegate_to": ["CIFS/<host>.<domain>"]}.'
+    # An empty list plants nothing either.
+    topology = _range_with(("wks01", "wks", {
+        "vulns": ["constrained_delegation_kerberos"], "vulns_vars": {"delegate_to": []}}))
+    (f,) = _found(topology, "RNG011")
+    assert f.remedy.startswith("Add to vulns_vars: ")
+    topology = _range_with(("wks01", "wks", {
+        "vulns": ["constrained_delegation_kerberos"],
+        "vulns_vars": {"delegate_to": ["CIFS/dc01.t.lab"]}}))
+    assert "RNG011" not in codes(topology)
+
+
+def test_rng011_ntlm_relay_falls_back_to_bot_user():
+    topology = _range_with(("dc01", "dc", {
+        "vulns": ["ntlm_relay"], "vulns_vars": {"bot_user": "T\\a"}}))
+    assert "RNG011" not in codes(topology)
+
+
+def test_rng011_names_only_the_missing_stored_credential_key():
+    topology = _range_with(("wks01", "wks", {
+        "vulns": ["stored_credential"],
+        "vulns_vars": {"stored_credential": {"owner": "T\\a"}}}))
+    (f,) = _found(topology, "RNG011")
+    assert "stored_credential.username" in f.message
+    assert "stored_credential.owner" not in f.message
+
+
+def test_rng011_esc_parameters_count_from_any_host_in_the_domain():
+    """The compiler gathers esc7_manager to the CA from every member, so one set
+    on another host in the domain satisfies an esc7 declared on the DC."""
+    lone = _range_with(("dc01", "dc", {"vulns": ["esc7"]}))
+    (f,) = _found(lone, "RNG011")
+    assert "on any host in its domain" in f.message
+    shared = _range_with(
+        ("dc01", "dc", {"vulns": ["esc7"]}),
+        ("ca01", "srv", {"role": "adcs", "vulns_vars": {"esc7_manager": "T\\a"}}))
+    assert "RNG011" not in codes(shared)
+
+
+def test_rng010_protocol_transition_on_a_host_plants_nothing():
+    """The dc role applies constrained_delegation from a user's flaws only, so on
+    a host it is a no-op whatever vulns_vars says."""
+    topology = _range_with(("wks01", "wks", {
+        "vulns": ["constrained_delegation"],
+        "vulns_vars": {"delegate_to": ["CIFS/dc01.t.lab"]}}))
+    (f,) = _found(topology, "RNG010")
+    assert f.severity == "warning"
+    assert "domain user accounts only" in f.message
+    assert "flaws" in f.remedy and "delegate_to" in f.remedy
+    assert "RNG011" not in codes(topology)
+
+
+@pytest.mark.parametrize("vuln,host", [
+    ("gpo_abuse", ("srv01", "srv", {})),
+    ("sysvol_secret", ("wks01", "wks", {})),
+    ("mssql_linked", ("srv01", "srv", {"role": "web"})),
+    ("mssql_impersonation", ("wks01", "wks", {})),
+])
+def test_rng010_vuln_on_a_host_kind_that_does_not_plant_it(vuln, host):
+    hid, kind, overlay = host
+    topology = _range_with((hid, kind, dict(overlay, vulns=[vuln])))
+    assert [f.target_ids for f in _found(topology, "RNG010")] == [(hid,)]
+    assert "RNG011" not in codes(topology), "a misplaced vuln is reported once"
+
+
+@pytest.mark.parametrize("vuln,host", [
+    ("gpo_abuse", ("dc01", "dc", {"vulns_vars": {"gpo_abuse": {"principal": "a"}}})),
+    ("sysvol_secret", ("dc01", "dc", {})),
+    ("mssql_impersonation", ("sql01", "srv", {"services": ["mssql"]})),
+    ("mssql_impersonation", ("sql01", "srv", {"role": "sql"})),
+])
+def test_rng010_is_silent_where_the_vuln_is_planted(vuln, host):
+    hid, kind, overlay = host
+    topology = _range_with((hid, kind, dict(overlay, vulns=[vuln])))
+    assert "RNG010" not in codes(topology)
+
+
+def test_rng012_vulns_vars_saved_as_a_string():
+    topology = _range_with(("wks01", "wks", {
+        "vulns": ["rdp_scheduler"], "vulns_vars": '{"bot_user": "T\\\\a"}'}))
+    (f,) = _found(topology, "RNG012")
+    assert f.severity == "warning" and "not a JSON object" in f.message
+    assert "RNG011" not in codes(topology), "the malformed object is the one finding"
+
+
+def test_shipped_labs_carry_no_misplaced_vulns_or_malformed_vulns_vars():
+    import glob
+    import os
+    root = os.path.join(os.path.dirname(__file__), "..", "frontend", "public")
+    for path in glob.glob(os.path.join(root, "**", "*.json"), recursive=True):
+        topology = json.loads(open(path, encoding="utf-8").read())
+        if topology.get("mode") != "defense":
+            continue
+        found = codes(topology)
+        assert "RNG010" not in found, os.path.basename(path)
+        assert "RNG012" not in found, os.path.basename(path)
+
+
 # -- management and exposure
 
 def test_mgt001_no_management_path(minimal):
