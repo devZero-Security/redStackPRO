@@ -2,7 +2,10 @@ import React, { useEffect, useId, useState } from "react";
 import { FindingBadge } from "./FindingBadge.jsx";
 import { DRAWN_ROLES, isContainer, roleColor, roleDisplay } from "./topology.js";
 import { PROFILES } from "./profiles.js";
-import { ACCOUNT_TECHNIQUE_IDS, VULN_CATALOG, VULN_PROVIDERS } from "./vulns.js";
+import {
+  ACCOUNT_TECHNIQUE_IDS, VULN_CATALOG, VULN_LABEL, VULN_PARAMS, VULN_PROVIDERS,
+  vulnParamsExample,
+} from "./vulns.js";
 import { HARDENING_CATALOG } from "./hardening.js";
 import {
   USER_ARCHETYPES, accountTechniquePlanted, addUser, buildArchetype, generateUsers,
@@ -962,6 +965,43 @@ function JsonObjectField({ label, help, value, disabled, onChange }) {
   );
 }
 
+// The help under vulns_vars: for each ticked vuln that reads parameters, its
+// keys and a one-line example to copy, in catalog order. With none ticked, the
+// field's plain description.
+function VulnVarsHelp({ vulns, description }) {
+  const ticked = new Set(vulns || []);
+  const ids = VULN_CATALOG.flatMap((g) => g.items.map((i) => i.id)).filter(
+    (id) => ticked.has(id) && VULN_PARAMS[id]
+  );
+  if (!ids.length) {
+    return description ? <span className="rg-field-help">{description}</span> : null;
+  }
+  return (
+    <div className="rg-field-help rg-vuln-params">
+      <span>Keys the ticked vulns read. Merge the examples into one JSON object.</span>
+      {ids.map((id) => (
+        <div key={id} className="rg-vuln-params-item">
+          <span className="rg-vuln-params-label">{VULN_LABEL[id]}</span>
+          <ul>
+            {VULN_PARAMS[id].map((p) => (
+              <li key={p.key}>
+                <code>{p.key}</code>
+                {p.required ? (
+                  <span className="rg-required">required{p.or ? ` (or ${p.or})` : ""}</span>
+                ) : (
+                  <span className="rg-optional">optional</span>
+                )}{" "}
+                {p.about}
+              </li>
+            ))}
+          </ul>
+          <code className="rg-vuln-params-example">{vulnParamsExample(id)}</code>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Field({ name, spec, value, required, onChange, disabled, help: helpOverride }) {
   const label = (
     <span className="rg-field-label">
@@ -1428,6 +1468,14 @@ export function Inspector({
                   }
                   required={required.includes(name)}
                   value={(node.overlay || {})[name]}
+                  help={
+                    name === "vulns_vars" ? (
+                      <VulnVarsHelp
+                        vulns={(node.overlay || {}).vulns}
+                        description={spec.description}
+                      />
+                    ) : undefined
+                  }
                   disabled={readOnly}
                   onChange={(value) =>
                     onOverlayChange(node.id, { ...(node.overlay || {}), [name]: value })
