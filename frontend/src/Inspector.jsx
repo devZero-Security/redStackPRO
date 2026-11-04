@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useState } from "react";
 import { FindingBadge } from "./FindingBadge.jsx";
-import { DRAWN_ROLES, isContainer, roleColor, roleDisplay } from "./topology.js";
+import { isContainer } from "./topology.js";
 import { PROFILES } from "./profiles.js";
 import {
   ACCOUNT_TECHNIQUE_IDS, VULN_CATALOG, VULN_LABEL, VULN_PARAMS, VULN_PROVIDERS,
@@ -12,203 +12,17 @@ import {
   jsonKindFor, numberHelp, optionLabel, placeholderFor, resolveSpec,
 } from "./fieldRules.js";
 import {
-  USER_ARCHETYPES, accountTechniquePlanted, addUser, buildArchetype, generateUsers,
-  plantAccountTechnique, recommendedUserCount, removeAccountTechnique, removeUser,
-  setUsers, updateUser,
+  accountTechniquePlanted, plantAccountTechnique, removeAccountTechnique,
 } from "./rangeUsers.js";
-
-const PRIVILEGES = ["user", "local_admin", "domain_admin", "enterprise_admin"];
-
-// Human labels for the account flaw enum, so the picker reads as techniques
-// rather than snake_case. The ids are the schema enum (overlay_domain.users
-// flaws); an unlabelled one falls back to its id.
-const FLAW_LABELS = {
-  kerberoastable: "Kerberoastable (SPN)",
-  asrep_roastable: "AS-REP roastable (no preauth)",
-  password_in_description: "Password in description",
-  password_never_expires: "Password never expires",
-  weak_password: "Weak password",
-  reversible_encryption: "Reversible encryption",
-  no_preauth: "No Kerberos preauth",
-  spn_set: "SPN set",
-};
-
-// The user accounts on a domain. A person can add one by hand, change its
-// privilege, expand it to edit its email, groups, and misconfigurations, or press
-// Populate to fill the domain with a realistic population so a lab has bodies to
-// hunt through, not just the accounts an attack path needs. The count Populate
-// adds scales with the range's size. See rangeUsers.js and 0049.
-function DomainUsers({ node, rangeHostCount, flawOptions = [], onChange, readOnly }) {
-  const users = (node.overlay || {}).users || [];
-  const fqdn = (node.overlay || {}).fqdn || "example.local";
-  const [name, setName] = useState("");
-  const [open, setOpen] = useState(-1);
-
-  const toggleFlaw = (i, flaw) => {
-    const cur = users[i].flaws || [];
-    const next = cur.includes(flaw) ? cur.filter((f) => f !== flaw) : [...cur, flaw];
-    onChange(updateUser(node, i, { flaws: next.length ? next : undefined }));
-  };
-
-  const add = () => {
-    const username = name.trim();
-    if (!username) return;
-    onChange(addUser(node, { username, privilege: "user", email: `${username}@${fqdn}` }));
-    setName("");
-  };
-  const populate = () => {
-    const count = recommendedUserCount(rangeHostCount);
-    onChange(setUsers(node, [...users, ...generateUsers(count, fqdn, Math.random, users)]));
-  };
-  const addArchetype = (id) => {
-    const u = buildArchetype(id, fqdn, users);
-    if (u) onChange(addUser(node, u));
-  };
-
-  return (
-    <div className="rg-users">
-      <h3>Users{users.length ? ` (${users.length})` : ""}</h3>
-      <p className="rg-hint">
-        Accounts on this domain. Populate fills it with a realistic set sized to
-        the range; add your own for the accounts an attack path turns on.
-      </p>
-      {readOnly ? null : (
-        <div className="rg-users-actions">
-          <button type="button" onClick={populate}>Populate random</button>
-          {users.length ? (
-            <button type="button" className="rg-danger-text" onClick={() => onChange(setUsers(node, []))}>
-              Clear
-            </button>
-          ) : null}
-        </div>
-      )}
-      {readOnly ? null : (
-        <div className="rg-users-archetypes">
-          <span className="rg-field-label">add a class</span>
-          {USER_ARCHETYPES.map((a) => (
-            <button key={a.id} type="button" title={a.blurb} onClick={() => addArchetype(a.id)}>
-              + {a.label}
-            </button>
-          ))}
-        </div>
-      )}
-      {users.length ? (
-        <div className="rg-users-list">
-          {users.map((u, i) => (
-            <div key={i} className={`rg-user ${open === i ? "is-open" : ""}`}>
-              <div className="rg-user-row">
-                <button
-                  type="button"
-                  className="rg-user-name"
-                  title="Edit this account"
-                  onClick={() => setOpen(open === i ? -1 : i)}
-                >
-                  {u.display_name || u.username}
-                </button>
-                <select
-                  className={`rg-user-priv is-${u.privilege || "user"}`}
-                  value={u.privilege || "user"}
-                  disabled={readOnly}
-                  onChange={(e) => onChange(updateUser(node, i, { privilege: e.target.value }))}
-                >
-                  {PRIVILEGES.map((p) => (
-                    <option key={p} value={p}>{p.replace("_", " ")}</option>
-                  ))}
-                </select>
-                {u.flaws?.length ? (
-                  <span className="rg-user-flaws" title={u.flaws.join(", ")}>
-                    {u.flaws.length} flaw{u.flaws.length === 1 ? "" : "s"}
-                  </span>
-                ) : null}
-                {u.assumed_breach ? (
-                  <span className="rg-user-breach" title="Assumed-breach foothold (patient zero): also a local admin on the jumpbox">
-                    breach
-                  </span>
-                ) : null}
-                {readOnly ? null : (
-                  <button
-                    type="button"
-                    className="rg-user-del"
-                    title="Remove user"
-                    onClick={() => onChange(removeUser(node, i))}
-                  >
-                    &times;
-                  </button>
-                )}
-              </div>
-              {open === i ? (
-                <div className="rg-user-detail">
-                  <label className="rg-field">
-                    <span className="rg-field-label">email</span>
-                    <input
-                      value={u.email || ""}
-                      disabled={readOnly}
-                      onChange={(e) => onChange(updateUser(node, i, { email: e.target.value || undefined }))}
-                    />
-                  </label>
-                  <label className="rg-field">
-                    <span className="rg-field-label">groups</span>
-                    <input
-                      value={(u.groups || []).join(", ")}
-                      placeholder="IT, Domain Admins"
-                      disabled={readOnly}
-                      onChange={(e) =>
-                        onChange(updateUser(node, i, {
-                          groups: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
-                        }))
-                      }
-                    />
-                  </label>
-                  <div className="rg-field">
-                    <span className="rg-field-label">misconfigurations</span>
-                    <div className="rg-user-flaw-picks">
-                      {flawOptions.map((flaw) => (
-                        <label key={flaw} className="rg-check" title={flaw}>
-                          <input
-                            type="checkbox"
-                            checked={(u.flaws || []).includes(flaw)}
-                            disabled={readOnly}
-                            onChange={() => toggleFlaw(i, flaw)}
-                          />
-                          {FLAW_LABELS[flaw] || flaw}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <label
-                    className="rg-check"
-                    title="The low-priv patient-zero an operator starts from. Also created as a local admin on the jumpbox (SSH foothold); named in the range briefing."
-                  >
-                    <input
-                      type="checkbox"
-                      checked={!!u.assumed_breach}
-                      disabled={readOnly}
-                      onChange={(e) =>
-                        onChange(updateUser(node, i, { assumed_breach: e.target.checked || undefined }))
-                      }
-                    />
-                    Assumed-breach foothold
-                  </label>
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {readOnly ? null : (
-        <div className="rg-users-add">
-          <input
-            value={name}
-            placeholder="username, e.g. j.smith"
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && add()}
-          />
-          <button type="button" onClick={add} disabled={!name.trim()}>Add</button>
-        </div>
-      )}
-    </div>
-  );
-}
+import { DomainUsers } from "./DomainUsers.jsx";
+import { AclEditor } from "./AclEditor.jsx";
+import { GmsaEditor } from "./GmsaEditor.jsx";
+import { GroupNesting } from "./GroupNesting.jsx";
+import { TrustEditor } from "./TrustEditor.jsx";
+import { EdgeRole, FrontsPorts } from "./EdgeEditors.jsx";
+import { Connections } from "./Connections.jsx";
+import { TopologySettings } from "./TopologySettings.jsx";
+import { nodeName, roleTitle } from "./edgeRoles.js";
 
 // A group starts expanded only when one of its items is already selected, so
 // an applied category stays in view and an empty one stays out of the way.
@@ -539,83 +353,6 @@ function withoutDecoy(spec) {
   return { ...spec, properties };
 }
 
-// A readable label for a GOAD access right, which may arrive as a raw AD string
-// (Ext-User-Force-Change-Password) or a plain one (GenericAll). Prettify without
-// losing the stored value.
-function prettyRight(right) {
-  return (right || "")
-    .replace(/^Ext-/, "")
-    .replace(/-/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2");
-}
-
-// The dangerous access rights on a domain: who can act on whom. This is the
-// attack graph the users and groups sit inside, the same acls GOAD carries and
-// BloodHound walks. Listed and editable here, since a right runs between two
-// principals rather than being a property of one node. See 0052.
-function DomainAcls({ node, onChange, readOnly }) {
-  const acls = (node.overlay || {}).acls || [];
-  const [principal, setPrincipal] = useState("");
-  const [target, setTarget] = useState("");
-  const [right, setRight] = useState("GenericAll");
-
-  const set = (next) => onChange({ ...(node.overlay || {}), acls: next.length ? next : undefined });
-  const add = () => {
-    if (!principal.trim() || !target.trim() || !right.trim()) return;
-    set([...acls, { principal: principal.trim(), target: target.trim(), right: right.trim() }]);
-    setPrincipal("");
-    setTarget("");
-  };
-
-  return (
-    <div className="rg-acls">
-      <h3>Access rights{acls.length ? ` (${acls.length})` : ""}</h3>
-      <p className="rg-hint">
-        Who can act on whom: the escalation edges that make the domain an attack
-        graph. Principal and target are usernames or groups.
-      </p>
-      {acls.length ? (
-        <div className="rg-acls-list">
-          {acls.map((a, i) => (
-            <div key={i} className="rg-acl-row">
-              <span className="rg-acl-pair">
-                <span className="rg-acl-p" title={a.principal}>{a.principal}</span>
-                <span className="rg-acl-arrow" aria-hidden="true">&rarr;</span>
-                <span className="rg-acl-t" title={a.target}>{a.target}</span>
-              </span>
-              <span className="rg-acl-right" title={a.right}>{prettyRight(a.right)}</span>
-              {readOnly ? null : (
-                <button
-                  type="button"
-                  className="rg-user-del"
-                  title="Remove right"
-                  onClick={() => set(acls.filter((_, j) => j !== i))}
-                >
-                  &times;
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {/* Reading order matches the sentence the row makes: principal, target,
-          then the right that connects them, then Add. */}
-      {readOnly ? null : (
-        <div className="rg-acls-add">
-          <input value={principal} placeholder="principal" onChange={(e) => setPrincipal(e.target.value)} />
-          <input value={target} placeholder="target" onChange={(e) => setTarget(e.target.value)} />
-          <select value={right} onChange={(e) => setRight(e.target.value)}>
-            {["GenericAll", "GenericWrite", "WriteDacl", "WriteOwner", "ForceChangePassword", "AddMember"].map((r) => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-          <button type="button" onClick={add} disabled={!principal.trim() || !target.trim()}>Add</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // The operator roster on an offense jumpbox: the people who reach the range. Each
 // becomes a portal account and, on a VPN access mode, gets a personal VPN
 // credential generated on the jumpbox at apply. Reuses the acls row styling. See
@@ -757,85 +494,6 @@ function RangePlacement({ node, document, onJoinDomain, onPlaceSubnet }) {
         </select>
         <span className="rg-field-help">The subnet this host sits on.</span>
       </label>
-    </div>
-  );
-}
-
-// A node's drawn relationships, listed as rows you click to open and edit rather
-// than hunting for a thin line to hit on the canvas. Each row names the role and
-// the other end, coloured the same as the line so the two read as one thing.
-// Below the list, a small form adds a new connection from this node without
-// having to draw it: pick the other end and the role, or leave the role to be
-// inferred from the two kinds.
-function Connections({ node, document, onSelect, onAddEdge, readOnly }) {
-  const [target, setTarget] = useState("");
-  const [role, setRole] = useState("");
-  const others = document.nodes.filter((n) => n.id !== node.id);
-  const rows = document.edges
-    .filter(
-      (e) =>
-        DRAWN_ROLES.includes(e.role) &&
-        (e.source === node.id || e.target === node.id)
-    )
-    .map((e) => {
-      const outgoing = e.source === node.id;
-      const other = outgoing ? e.target : e.source;
-      const detail = e.role === "fronts" ? e.uri_prefix || "" : "";
-      return { id: e.id, role: e.role, outgoing, other, detail };
-    });
-  const add = () => {
-    if (!target) return;
-    onAddEdge?.(node.id, target, role || undefined);
-    setTarget("");
-    setRole("");
-  };
-
-  return (
-    <div className="rg-connections">
-      <h3>Connections</h3>
-      {rows.length === 0 ? (
-        <p className="rg-hint">No connections yet.</p>
-      ) : (
-        rows.map((r) => (
-          <button
-            key={r.id}
-            type="button"
-            className="rg-connection"
-            onClick={() => onSelect?.(r.id)}
-          >
-            <span className="rg-connection-dot" style={{ background: roleColor(r.role) }} />
-            <span className="rg-connection-role">{roleDisplay(r.role)}</span>
-            <span className="rg-connection-dir">{r.outgoing ? "to" : "from"}</span>
-            <span className="rg-connection-other">
-              {document.prefix}-{r.other}
-            </span>
-            {r.detail ? <span className="rg-connection-detail">{r.detail}</span> : null}
-          </button>
-        ))
-      )}
-      {readOnly ? null : (
-        <div className="rg-connection-add">
-          <select value={target} onChange={(e) => setTarget(e.target.value)}>
-            <option value="">connect to...</option>
-            {others.map((n) => (
-              <option key={n.id} value={n.id}>
-                {document.prefix}-{n.id}
-              </option>
-            ))}
-          </select>
-          <select value={role} onChange={(e) => setRole(e.target.value)}>
-            <option value="">auto role</option>
-            {DRAWN_ROLES.map((r) => (
-              <option key={r} value={r}>
-                {roleDisplay(r)}
-              </option>
-            ))}
-          </select>
-          <button type="button" onClick={add} disabled={!target}>
-            Add
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -1346,30 +1004,17 @@ export function Inspector({
   readOnly = false,
   kindLabels = {},
   provider,
+  deployTarget,
+  onTopologyChange,
 }) {
   if (!selection) {
     return (
-      <aside className="rg-panel rg-inspector">
-        <h2>Inspector</h2>
-        <p className="rg-hint">Select a node or an edge.</p>
-        <h3>Topology</h3>
-        <p className="rg-kv">
-          <span>prefix</span>
-          <span>{document.prefix}</span>
-        </p>
-        <p className="rg-kv">
-          <span>mode</span>
-          <span>{document.mode}</span>
-        </p>
-        <p className="rg-kv">
-          <span>nodes</span>
-          <span>{document.nodes.length}</span>
-        </p>
-        <p className="rg-kv">
-          <span>edges</span>
-          <span>{document.edges.length}</span>
-        </p>
-      </aside>
+      <TopologySettings
+        document={document}
+        deployTarget={deployTarget}
+        readOnly={readOnly}
+        onChange={onTopologyChange}
+      />
     );
   }
 
@@ -1378,55 +1023,29 @@ export function Inspector({
     if (!edge) return null;
     return (
       <aside className="rg-panel rg-inspector">
-        <h2>{roleDisplay(edge.role)}</h2>
+        <h2>{roleTitle(edge.role)}</h2>
         <p className="rg-kv">
           <span>from</span>
-          <span>{edge.source}</span>
+          <span>{nodeName(document, edge.source)}</span>
         </p>
         <p className="rg-kv">
           <span>to</span>
-          <span>{edge.target}</span>
+          <span>{nodeName(document, edge.target)}</span>
         </p>
-        <label className="rg-field">
-          <span className="rg-field-label">role</span>
-          <select
-            value={edge.role}
-            disabled={readOnly}
-            onChange={(e) => {
-              const role = e.target.value;
-              if (!role || role === edge.role) return;
-              // Switching to fronts seeds the fields it needs so it validates;
-              // switching away drops them so a stale prefix does not linger.
-              const patch =
-                role === "fronts"
-                  ? {
-                      role,
-                      protocol: edge.protocol || "https",
-                      listen_port: edge.listen_port || 443,
-                      upstream_port: edge.upstream_port || 443,
-                      uri_prefix: edge.uri_prefix || "/cdn/assets",
-                    }
-                  : {
-                      role,
-                      protocol: undefined,
-                      listen_port: undefined,
-                      upstream_port: undefined,
-                      uri_prefix: undefined,
-                    };
-              onEdgeChange(edge.id, patch);
-            }}
-          >
-            {["fronts", "logs_to", "manages", "peers"].map((r) => (
-              <option key={r} value={r}>
-                {roleDisplay(r)}
-              </option>
-            ))}
-          </select>
-          <span className="rg-field-help">
-            What this line is. The role also follows from what it connects; set it
-            here when you want a different one.
-          </span>
-        </label>
+        <EdgeRole
+          edge={edge}
+          document={document}
+          readOnly={readOnly}
+          onEdgeChange={onEdgeChange}
+        />
+        {edge.role === "trusts" ? (
+          <TrustEditor
+            edge={edge}
+            document={document}
+            readOnly={readOnly}
+            onEdgeChange={onEdgeChange}
+          />
+        ) : null}
         {edge.role === "fronts" ? (
           <>
             <Field
@@ -1441,29 +1060,7 @@ export function Inspector({
                 Randomize URI
               </button>
             ) : null}
-            <Field
-              name="protocol"
-              spec={{ enum: ["http", "https", "dns", "tcp"] }}
-              value={edge.protocol}
-              required
-              disabled={readOnly}
-              onChange={(v) => onEdgeChange(edge.id, { protocol: v })}
-            />
-            <Field
-              name="listen_port"
-              spec={{ type: "integer" }}
-              value={edge.listen_port}
-              required
-              disabled={readOnly}
-              onChange={(v) => onEdgeChange(edge.id, { listen_port: v })}
-            />
-            <Field
-              name="upstream_port"
-              spec={{ type: "integer" }}
-              value={edge.upstream_port}
-              disabled={readOnly}
-              onChange={(v) => onEdgeChange(edge.id, { upstream_port: v })}
-            />
+            <FrontsPorts edge={edge} readOnly={readOnly} onEdgeChange={onEdgeChange} />
           </>
         ) : null}
         <FindingList findings={findings} />
@@ -1594,16 +1191,33 @@ export function Inspector({
                 />
               ) : name === "users" ? (
                 <DomainUsers
-                  key={name}
+                  key={`${name}-${node.id}`}
                   node={node}
+                  document={document}
                   rangeHostCount={rangeHostCount}
                   flawOptions={spec.items?.properties?.flaws?.items?.enum || []}
                   readOnly={readOnly}
                   onChange={(overlay) => onOverlayChange(node.id, overlay)}
                 />
               ) : name === "acls" ? (
-                <DomainAcls
-                  key={name}
+                <AclEditor
+                  key={`${name}-${node.id}`}
+                  node={node}
+                  document={document}
+                  readOnly={readOnly}
+                  onChange={(overlay) => onOverlayChange(node.id, overlay)}
+                />
+              ) : name === "gmsa" ? (
+                <GmsaEditor
+                  key={`${name}-${node.id}`}
+                  node={node}
+                  document={document}
+                  readOnly={readOnly}
+                  onChange={(overlay) => onOverlayChange(node.id, overlay)}
+                />
+              ) : name === "group_members" ? (
+                <GroupNesting
+                  key={`${name}-${node.id}`}
                   node={node}
                   readOnly={readOnly}
                   onChange={(overlay) => onOverlayChange(node.id, overlay)}
@@ -1653,6 +1267,7 @@ export function Inspector({
         document={document}
         onSelect={onSelectEdge}
         onAddEdge={onAddEdge}
+        onEdgeChange={onEdgeChange}
         readOnly={readOnly}
       />
       <FindingList findings={findings} />
