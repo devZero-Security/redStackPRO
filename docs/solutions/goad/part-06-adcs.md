@@ -66,8 +66,10 @@ flagged live (see the last table row and Step 1).
 
 - [x] Enumerate the CA and its templates:
   ```bash
-  certipy find -u khal.drogo@essos.local -p horse -dc-ip 192.168.56.12 -vulnerable -stdout
+  certipy find -u khal.drogo@essos.local -p horse -dc-ip 192.168.56.12 -ldap-scheme ldap -vulnerable -stdout
   ```
+  `-ldap-scheme ldap`: certipy 5 defaults to LDAPS, which the essos DC does not
+  serve here, and without it the query ends in an SSL wrapping error.
   `✅` Found **ESSOS-CA** (Web Enrollment enabled over HTTP; SAN enabled),
   CA-level flagged for **ESC6**, **ESC8**, and **ESC11**. Enabled templates
   flagged (verified live 2026-09-28): **RSPESC1** (ESC1), **RSPESC2**

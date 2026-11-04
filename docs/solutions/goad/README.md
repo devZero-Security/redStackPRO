@@ -124,7 +124,9 @@ Two steps change in practice:
   internal IPs. Part 1 sets these up either way, so the commands stay identical.
 
 Azure is supported from 0.10.0 (the minilab, goad-light, and goad-wazuh
-blueprints are validated there). This lab on Azure: TODO-AZURE-GOAD-RESULT.
+blueprints are validated there). This lab is validated on Azure too: both forests
+and the cross-forest trust, ADCS on ESSOS-CA, and MSSQL, with the Part 1, 2, 3, 6 and
+7 checks run through a beacon from an Azure offense range.
 Azure has an allocated public address and network peering, like GCP and AWS. It
 declares no managed private DNS, so resolve range names with static hosts
 entries, as on-prem.

@@ -13,8 +13,12 @@ versioning, and dates are UTC.
   operators) passed `verify.py doors` and `verify.py stack`, with Let's Encrypt on the
   redirector; the `minilab`, `goad-light`, and `goad-wazuh` defense ranges deployed
   clean and validated, including child domain promotion, the parent/child trust,
-  MSSQL, and the Wazuh manager and agents. Full `goad` and `dracarys` on Azure:
-  TODO-AZURE-GOAD-RESULT.
+  MSSQL, and the Wazuh manager and agents. Full `goad` (both forests, the cross-forest
+  trust, ADCS on ESSOS-CA, MSSQL) and `dracarys` (the KeePass vault, a Linux host
+  joined to the domain) deployed clean and validated too. From an Azure offense range,
+  a Sliver beacon launched as patient zero in full GOAD called back through the
+  redirector, and the playbook checks for recon, AS-REP roasting, Kerberoasting, ADCS
+  enumeration, and MSSQL impersonation ran through it.
 - An Azure export builds each range as one resource group (`resource_group` in
   `deploy.tfvars`), in `eastus2` by default, with VNet peering, a NAT gateway per VNet
   for egress from private hosts, and Network Security Group rules. Ingress fails
@@ -81,6 +85,17 @@ versioning, and dates are UTC.
   MSSQL and KeePass vault paths.
 - A failed MSSQL install names the missing service in its error again. A PowerShell
   variable had shadowed the service name.
+- `rsp-launch-beacon`, the headless patient-zero launch on a range jumpbox, works for
+  a Domain Users patient zero. It grants that user batch logon and read on the staged
+  beacon, which a scheduled task needs, and fails with the task's result when the
+  beacon does not start. Before, it reported success with nothing running.
+- The jumpbox's Guacamole schema check retries through the Postgres container's
+  first-start restart instead of failing the jumpbox play on "database system is
+  shutting down".
+- An export's static module read refuses a provider name that is not a bare name, so
+  it can never read outside the bundled module tree.
+- The `deploy.sh` refusal for a stop time too close to the build names `auto_stop.at`,
+  the only setting it applies to, instead of saying to recompile.
 
 ## [0.9.2] (2026-11-04)
 
