@@ -12,6 +12,7 @@ import {
   plantAccountTechnique, recommendedUserCount, removeAccountTechnique, removeUser,
   setUsers, updateUser,
 } from "./rangeUsers.js";
+import { TrustEditor } from "./TrustEditor.jsx";
 import { EdgeRole, FrontsPorts } from "./EdgeEditors.jsx";
 import { Connections } from "./Connections.jsx";
 import { nodeName, roleTitle } from "./edgeRoles.js";
@@ -1174,6 +1175,14 @@ export function Inspector({
           readOnly={readOnly}
           onEdgeChange={onEdgeChange}
         />
+        {edge.role === "trusts" ? (
+          <TrustEditor
+            edge={edge}
+            document={document}
+            readOnly={readOnly}
+            onEdgeChange={onEdgeChange}
+          />
+        ) : null}
         {edge.role === "fronts" ? (
           <>
             <Field
@@ -1359,6 +1368,7 @@ export function Inspector({
         document={document}
         onSelect={onSelectEdge}
         onAddEdge={onAddEdge}
+        onEdgeChange={onEdgeChange}
         readOnly={readOnly}
       />
       <FindingList findings={findings} />

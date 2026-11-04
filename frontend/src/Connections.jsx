@@ -1,14 +1,17 @@
 import React, { useState } from "react";
 import "./widgets.css";
 import { DRAWN_ROLES, roleColor } from "./topology.js";
-import { ROLE_TEXT, connectOptions, nodeName, optionSentence } from "./edgeRoles.js";
+import {
+  ROLE_TEXT, connectOptions, defaultTrustPatch, nodeName, optionSentence,
+} from "./edgeRoles.js";
+import { edgeId } from "./idscheme.js";
 
 // A node's drawn relationships, listed as rows you click to open and edit rather
 // than hunting for a thin line to hit on the canvas. Each row reads as a short
 // sentence about the other end, coloured the same as the line. Below the list,
 // a small form adds a new connection from this node without drawing it: pick
 // the other end and the line it can carry is worked out from the two kinds.
-export function Connections({ node, document, onSelect, onAddEdge, readOnly }) {
+export function Connections({ node, document, onSelect, onAddEdge, onEdgeChange, readOnly }) {
   const [target, setTarget] = useState("");
   const [choice, setChoice] = useState(0);
   const rows = document.edges
@@ -35,6 +38,11 @@ export function Connections({ node, document, onSelect, onAddEdge, readOnly }) {
   const add = () => {
     if (!option) return;
     onAddEdge?.(option.source, option.target, option.role);
+    // A new trust gets its type straight away, the same as opening it would.
+    if (option.role === "trusts" && onEdgeChange) {
+      const patch = defaultTrustPatch(document, { source: option.source, target: option.target });
+      if (patch) onEdgeChange(edgeId(option.source, option.target, "trusts"), patch);
+    }
     setTarget("");
     setChoice(0);
   };

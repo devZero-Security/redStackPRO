@@ -11,7 +11,9 @@ import userEvent from "@testing-library/user-event";
 import SCHEMA from "../../src/redstackpro/schema/topology/0.7.0.json";
 import { Inspector } from "./Inspector.jsx";
 import { addEdge, updateEdge, updateOverlay } from "./topology.js";
-import { rolesFor } from "./edgeRoles.js";
+import {
+  connectOptions, defaultTrustPatch, parentChild, rolesFor,
+} from "./edgeRoles.js";
 
 function Harness({ initial, selection, seen = [], ...rest }) {
   const [doc, setDoc] = useState(initial);
@@ -183,5 +185,121 @@ describe("fronts edge protocol and ports", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Reset to HTTPS 443" }));
     expect(last(seen).edges[0]).toMatchObject({ protocol: "https", listen_port: 443, upstream_port: 443 });
     expect(screen.getByText("HTTPS, 443 to 443")).toBeTruthy();
+  });
+});
+
+// -- trusts
+
+function rangeDoc(edges, extraDomains = []) {
+  return {
+    schema_version: "0.7.0",
+    mode: "defense",
+    prefix: "def",
+    nodes: [
+      { id: "sevenkingdoms", kind: "domain", overlay: { fqdn: "sevenkingdoms.local", netbios: "SEVENKINGDOMS" } },
+      { id: "north", kind: "domain", overlay: { fqdn: "north.sevenkingdoms.local", netbios: "NORTH" } },
+      { id: "essos", kind: "domain", overlay: { fqdn: "essos.local", netbios: "ESSOS" } },
+      ...extraDomains,
+    ],
+    edges,
+  };
+}
+
+describe("trust editor", () => {
+  test("the default type follows the FQDNs, and a parent and child is oriented parent first", () => {
+    const doc = rangeDoc([]);
+    expect(parentChild(doc, "north", "sevenkingdoms")).toEqual({ parent: "sevenkingdoms", child: "north" });
+    expect(defaultTrustPatch(doc, { source: "north", target: "sevenkingdoms" })).toEqual({
+      trust_type: "parent_child", source: "sevenkingdoms", target: "north",
+    });
+    expect(defaultTrustPatch(doc, { source: "sevenkingdoms", target: "essos" })).toEqual({ trust_type: "forest" });
+    const unnamed = rangeDoc([], [{ id: "corp", kind: "domain", overlay: {} }]);
+    expect(defaultTrustPatch(unnamed, { source: "corp", target: "essos" })).toBeNull();
+  });
+
+  test("an untyped trust drawn child to parent is typed and flipped when first shown", () => {
+    const seen = [];
+    render(
+      <Harness
+        initial={rangeDoc([{ id: "t1", role: "trusts", source: "north", target: "sevenkingdoms" }])}
+        selection={{ type: "edge", id: "t1" }}
+        seen={seen}
+      />
+    );
+    expect(last(seen).edges[0]).toMatchObject({
+      trust_type: "parent_child", source: "sevenkingdoms", target: "north",
+    });
+    expect(screen.getByRole("combobox", { name: "trust type" }).value).toBe("parent_child");
+    expect(screen.queryByRole("combobox", { name: "role" })).toBeNull();
+    expect(screen.getByText(/north.sevenkingdoms.local is created as a child domain under sevenkingdoms.local/)).toBeTruthy();
+  });
+
+  test("an untyped trust between two forests becomes a forest trust with plain directions", () => {
+    const seen = [];
+    render(
+      <Harness
+        initial={rangeDoc([{ id: "t1", role: "trusts", source: "sevenkingdoms", target: "essos" }])}
+        selection={{ type: "edge", id: "t1" }}
+        seen={seen}
+      />
+    );
+    expect(last(seen).edges[0].trust_type).toBe("forest");
+    const dir = screen.getByRole("combobox", { name: "trust direction" });
+    expect(within(dir).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Two-way: each domain trusts the other",
+      "One-way: sevenkingdoms.local trusts essos.local",
+      "One-way: essos.local trusts sevenkingdoms.local",
+    ]);
+    expect(screen.getByRole("checkbox", { name: "transitive" }).checked).toBe(true);
+  });
+
+  test("external and tree root say they are not built", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        initial={rangeDoc([{ id: "t1", role: "trusts", source: "sevenkingdoms", target: "essos", trust_type: "forest" }])}
+        selection={{ type: "edge", id: "t1" }}
+      />
+    );
+    const type = screen.getByRole("combobox", { name: "trust type" });
+    expect(within(type).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Parent and child", "Forest", "External", "Tree root",
+    ]);
+    expect(screen.queryByText(/Not built yet/)).toBeNull();
+    await user.selectOptions(type, "external");
+    expect(screen.getByText("Not built yet: this trust type is recorded but not created.")).toBeTruthy();
+    await user.selectOptions(type, "tree_root");
+    expect(screen.getByText("Not built yet: this trust type is recorded but not created.")).toBeTruthy();
+  });
+
+  test("a trust between unnamed domains stays unset and says how it will be decided", () => {
+    const seen = [];
+    render(
+      <Harness
+        initial={rangeDoc(
+          [{ id: "t1", role: "trusts", source: "corp", target: "essos" }],
+          [{ id: "corp", kind: "domain", overlay: {} }]
+        )}
+        selection={{ type: "edge", id: "t1" }}
+        seen={seen}
+      />
+    );
+    expect(seen).toHaveLength(0);
+    expect(screen.getByRole("combobox", { name: "trust type" }).value).toBe("");
+    expect(screen.getByText(/Set both domains' FQDN and it is picked for you/)).toBeTruthy();
+  });
+
+  test("connecting two domains from Connections adds a typed, oriented trust", async () => {
+    const user = userEvent.setup();
+    const seen = [];
+    render(<Harness initial={rangeDoc([])} selection={{ type: "node", id: "north" }} seen={seen} />);
+    expect(connectOptions(rangeDoc([]), { id: "north", kind: "domain" }, { id: "sevenkingdoms", kind: "domain" }))
+      .toEqual([{ role: "trusts", source: "sevenkingdoms", target: "north" }]);
+    await user.selectOptions(screen.getByRole("combobox", { name: "connect to" }), "sevenkingdoms");
+    const connections = within(screen.getByRole("heading", { name: "Connections" }).closest(".rg-connections"));
+    await user.click(connections.getByRole("button", { name: "Add" }));
+    expect(last(seen).edges[0]).toMatchObject({
+      role: "trusts", source: "sevenkingdoms", target: "north", trust_type: "parent_child",
+    });
   });
 });
