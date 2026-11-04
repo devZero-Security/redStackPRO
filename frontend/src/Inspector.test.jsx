@@ -115,7 +115,8 @@ describe("account techniques on the host vuln picker", () => {
     // host's own overlay.vulns.
     const row = domain.getByRole("button", { name: "svc.kerberoast" });
     expect(row).toBeTruthy();
-    expect(within(row.closest(".rg-user")).getByText("2 flaws")).toBeTruthy();
+    // kerberoastable and spn_set are one flaw, counted once.
+    expect(within(row.closest(".rg-user")).getByText("1 flaw")).toBeTruthy();
   });
 
   test("unchecking removes exactly that planted user", async () => {

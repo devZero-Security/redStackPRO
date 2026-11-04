@@ -8,208 +8,14 @@ import {
 } from "./vulns.js";
 import { HARDENING_CATALOG } from "./hardening.js";
 import {
-  USER_ARCHETYPES, accountTechniquePlanted, addUser, buildArchetype, generateUsers,
-  plantAccountTechnique, recommendedUserCount, removeAccountTechnique, removeUser,
-  setUsers, updateUser,
+  accountTechniquePlanted, plantAccountTechnique, removeAccountTechnique,
 } from "./rangeUsers.js";
+import { DomainUsers } from "./DomainUsers.jsx";
 import { AclEditor } from "./AclEditor.jsx";
 import { TrustEditor } from "./TrustEditor.jsx";
 import { EdgeRole, FrontsPorts } from "./EdgeEditors.jsx";
 import { Connections } from "./Connections.jsx";
 import { nodeName, roleTitle } from "./edgeRoles.js";
-
-const PRIVILEGES = ["user", "local_admin", "domain_admin", "enterprise_admin"];
-
-// Human labels for the account flaw enum, so the picker reads as techniques
-// rather than snake_case. The ids are the schema enum (overlay_domain.users
-// flaws); an unlabelled one falls back to its id.
-const FLAW_LABELS = {
-  kerberoastable: "Kerberoastable (SPN)",
-  asrep_roastable: "AS-REP roastable (no preauth)",
-  password_in_description: "Password in description",
-  password_never_expires: "Password never expires",
-  weak_password: "Weak password",
-  reversible_encryption: "Reversible encryption",
-  no_preauth: "No Kerberos preauth",
-  spn_set: "SPN set",
-};
-
-// The user accounts on a domain. A person can add one by hand, change its
-// privilege, expand it to edit its email, groups, and misconfigurations, or press
-// Populate to fill the domain with a realistic population so a lab has bodies to
-// hunt through, not just the accounts an attack path needs. The count Populate
-// adds scales with the range's size. See rangeUsers.js and 0049.
-function DomainUsers({ node, rangeHostCount, flawOptions = [], onChange, readOnly }) {
-  const users = (node.overlay || {}).users || [];
-  const fqdn = (node.overlay || {}).fqdn || "example.local";
-  const [name, setName] = useState("");
-  const [open, setOpen] = useState(-1);
-
-  const toggleFlaw = (i, flaw) => {
-    const cur = users[i].flaws || [];
-    const next = cur.includes(flaw) ? cur.filter((f) => f !== flaw) : [...cur, flaw];
-    onChange(updateUser(node, i, { flaws: next.length ? next : undefined }));
-  };
-
-  const add = () => {
-    const username = name.trim();
-    if (!username) return;
-    onChange(addUser(node, { username, privilege: "user", email: `${username}@${fqdn}` }));
-    setName("");
-  };
-  const populate = () => {
-    const count = recommendedUserCount(rangeHostCount);
-    onChange(setUsers(node, [...users, ...generateUsers(count, fqdn, Math.random, users)]));
-  };
-  const addArchetype = (id) => {
-    const u = buildArchetype(id, fqdn, users);
-    if (u) onChange(addUser(node, u));
-  };
-
-  return (
-    <div className="rg-users">
-      <h3>Users{users.length ? ` (${users.length})` : ""}</h3>
-      <p className="rg-hint">
-        Accounts on this domain. Populate fills it with a realistic set sized to
-        the range; add your own for the accounts an attack path turns on.
-      </p>
-      {readOnly ? null : (
-        <div className="rg-users-actions">
-          <button type="button" onClick={populate}>Populate random</button>
-          {users.length ? (
-            <button type="button" className="rg-danger-text" onClick={() => onChange(setUsers(node, []))}>
-              Clear
-            </button>
-          ) : null}
-        </div>
-      )}
-      {readOnly ? null : (
-        <div className="rg-users-archetypes">
-          <span className="rg-field-label">add a class</span>
-          {USER_ARCHETYPES.map((a) => (
-            <button key={a.id} type="button" title={a.blurb} onClick={() => addArchetype(a.id)}>
-              + {a.label}
-            </button>
-          ))}
-        </div>
-      )}
-      {users.length ? (
-        <div className="rg-users-list">
-          {users.map((u, i) => (
-            <div key={i} className={`rg-user ${open === i ? "is-open" : ""}`}>
-              <div className="rg-user-row">
-                <button
-                  type="button"
-                  className="rg-user-name"
-                  title="Edit this account"
-                  onClick={() => setOpen(open === i ? -1 : i)}
-                >
-                  {u.display_name || u.username}
-                </button>
-                <select
-                  className={`rg-user-priv is-${u.privilege || "user"}`}
-                  value={u.privilege || "user"}
-                  disabled={readOnly}
-                  onChange={(e) => onChange(updateUser(node, i, { privilege: e.target.value }))}
-                >
-                  {PRIVILEGES.map((p) => (
-                    <option key={p} value={p}>{p.replace("_", " ")}</option>
-                  ))}
-                </select>
-                {u.flaws?.length ? (
-                  <span className="rg-user-flaws" title={u.flaws.join(", ")}>
-                    {u.flaws.length} flaw{u.flaws.length === 1 ? "" : "s"}
-                  </span>
-                ) : null}
-                {u.assumed_breach ? (
-                  <span className="rg-user-breach" title="Assumed-breach foothold (patient zero): also a local admin on the jumpbox">
-                    breach
-                  </span>
-                ) : null}
-                {readOnly ? null : (
-                  <button
-                    type="button"
-                    className="rg-user-del"
-                    title="Remove user"
-                    onClick={() => onChange(removeUser(node, i))}
-                  >
-                    &times;
-                  </button>
-                )}
-              </div>
-              {open === i ? (
-                <div className="rg-user-detail">
-                  <label className="rg-field">
-                    <span className="rg-field-label">email</span>
-                    <input
-                      value={u.email || ""}
-                      disabled={readOnly}
-                      onChange={(e) => onChange(updateUser(node, i, { email: e.target.value || undefined }))}
-                    />
-                  </label>
-                  <label className="rg-field">
-                    <span className="rg-field-label">groups</span>
-                    <input
-                      value={(u.groups || []).join(", ")}
-                      placeholder="IT, Domain Admins"
-                      disabled={readOnly}
-                      onChange={(e) =>
-                        onChange(updateUser(node, i, {
-                          groups: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
-                        }))
-                      }
-                    />
-                  </label>
-                  <div className="rg-field">
-                    <span className="rg-field-label">misconfigurations</span>
-                    <div className="rg-user-flaw-picks">
-                      {flawOptions.map((flaw) => (
-                        <label key={flaw} className="rg-check" title={flaw}>
-                          <input
-                            type="checkbox"
-                            checked={(u.flaws || []).includes(flaw)}
-                            disabled={readOnly}
-                            onChange={() => toggleFlaw(i, flaw)}
-                          />
-                          {FLAW_LABELS[flaw] || flaw}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <label
-                    className="rg-check"
-                    title="The low-priv patient-zero an operator starts from. Also created as a local admin on the jumpbox (SSH foothold); named in the range briefing."
-                  >
-                    <input
-                      type="checkbox"
-                      checked={!!u.assumed_breach}
-                      disabled={readOnly}
-                      onChange={(e) =>
-                        onChange(updateUser(node, i, { assumed_breach: e.target.checked || undefined }))
-                      }
-                    />
-                    Assumed-breach foothold
-                  </label>
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {readOnly ? null : (
-        <div className="rg-users-add">
-          <input
-            value={name}
-            placeholder="username, e.g. j.smith"
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && add()}
-          />
-          <button type="button" onClick={add} disabled={!name.trim()}>Add</button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // A group starts expanded only when one of its items is already selected, so
 // an applied category stays in view and an empty one stays out of the way.
@@ -1237,8 +1043,9 @@ export function Inspector({
                 />
               ) : name === "users" ? (
                 <DomainUsers
-                  key={name}
+                  key={`${name}-${node.id}`}
                   node={node}
+                  document={document}
                   rangeHostCount={rangeHostCount}
                   flawOptions={spec.items?.properties?.flaws?.items?.enum || []}
                   readOnly={readOnly}

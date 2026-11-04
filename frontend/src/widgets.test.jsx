@@ -15,6 +15,8 @@ import {
   connectOptions, defaultTrustPatch, parentChild, rolesFor,
 } from "./edgeRoles.js";
 import { domainDirectory, principalStatus, targetStatus } from "./domainDirectory.js";
+import { effectiveFlaws } from "./DomainUsers.jsx";
+import { generateUsers, plantAccountTechnique, seededRng } from "./rangeUsers.js";
 
 function Harness({ initial, selection, seen = [], ...rest }) {
   const [doc, setDoc] = useState(initial);
@@ -403,5 +405,118 @@ describe("ACL editor", () => {
       />
     );
     expect(screen.getByText("AllExtendedRights is not a right redStackPRO applies; this entry is skipped.")).toBeTruthy();
+  });
+});
+
+describe("domain users", () => {
+  const open = async (user, name) => user.click(screen.getByRole("button", { name }));
+
+  test("only working flaws are offered; a saved no-op flaw still shows and can be removed", async () => {
+    const user = userEvent.setup();
+    const seen = [];
+    render(
+      <Harness
+        initial={essosDoc({ users: [{ username: "jorah", flaws: ["password_never_expires", "no_preauth"] }] })}
+        selection={domainSelection}
+        seen={seen}
+      />
+    );
+    await open(user, "jorah");
+    const picks = within(screen.getByText("misconfigurations").closest(".rg-field"));
+    const labels = picks.getAllByRole("checkbox").map((c) => c.closest("label").textContent);
+    expect(labels).toEqual([
+      "Kerberoastable", "AS-REP roastable", "Password in description", "Weak password",
+      "Constrained delegation", "Sensitive, cannot be delegated",
+      "Password never expires (already on for every account)",
+    ]);
+    // no_preauth is the same flaw as AS-REP roastable.
+    expect(picks.getByRole("checkbox", { name: "AS-REP roastable" }).checked).toBe(true);
+    await user.click(picks.getByRole("checkbox", { name: "Password never expires (already on for every account)" }));
+    expect(last(seen).nodes[0].overlay.users[0].flaws).toEqual(["no_preauth"]);
+    await user.click(picks.getByRole("checkbox", { name: "AS-REP roastable" }));
+    expect(last(seen).nodes[0].overlay.users[0].flaws).toBeUndefined();
+  });
+
+  test("each flaw that needs a value shows its input when ticked", async () => {
+    const user = userEvent.setup();
+    const seen = [];
+    render(
+      <Harness
+        initial={essosDoc({ users: [{ username: "sql_svc" }] })}
+        selection={domainSelection}
+        seen={seen}
+      />
+    );
+    await open(user, "sql_svc");
+    expect(screen.queryByRole("textbox", { name: "description" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "SPNs" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "delegate to" })).toBeNull();
+
+    await user.click(screen.getByRole("checkbox", { name: "Password in description" }));
+    await user.type(screen.getByRole("textbox", { name: "description" }), "Temp password: x");
+    expect(screen.getByRole("textbox", { name: "password" })).toBeTruthy();
+
+    await user.click(screen.getByRole("checkbox", { name: "Kerberoastable" }));
+    const spns = screen.getByRole("textbox", { name: "SPNs" });
+    expect(spns.placeholder).toBe("HTTP/braavos.essos.local");
+    await user.type(spns, "HTTP/braavos.essos.local, MSSQLSvc/braavos.essos.local:1433");
+
+    await user.click(screen.getByRole("checkbox", { name: "Constrained delegation" }));
+    await user.type(screen.getByRole("textbox", { name: "delegate to" }), "CIFS/meereen.essos.local");
+
+    expect(last(seen).nodes[0].overlay.users[0]).toMatchObject({
+      flaws: ["password_in_description", "kerberoastable", "constrained_delegation"],
+      description: "Temp password: x",
+      spns: ["HTTP/braavos.essos.local", "MSSQLSvc/braavos.essos.local:1433"],
+      delegate_to: ["CIFS/meereen.essos.local"],
+    });
+  });
+
+  test("groups are picked from this domain's groups and built-ins; a new one is called out", async () => {
+    const user = userEvent.setup();
+    const seen = [];
+    const { container } = render(<Harness initial={essosDoc()} selection={domainSelection} seen={seen} />);
+    await open(user, "viserys.targaryen");
+    const input = screen.getByRole("combobox", { name: "add a group" });
+    const options = [...container.querySelector(`datalist[id="${input.getAttribute("list")}"]`).options].map((o) => o.value);
+    expect(options).toEqual(expect.arrayContaining(["Domain Admins", "Remote Desktop Users", "Dothraki", "Targaryen"]));
+    await user.type(input, "Dragonriders");
+    expect(screen.getByText("Dragonriders is not on this domain yet; it will be created as a new group.")).toBeTruthy();
+    await user.click(within(input.closest(".rg-field")).getByRole("button", { name: "Add" }));
+    expect(last(seen).nodes[0].overlay.users[1].groups).toEqual(["Targaryen", "Dragonriders"]);
+    await user.click(screen.getByRole("button", { name: "Remove Targaryen" }));
+    expect(last(seen).nodes[0].overlay.users[1].groups).toEqual(["Dragonriders"]);
+  });
+
+  test("privilege and foothold tooltips say what the deploy does", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        initial={essosDoc({ users: [{ username: "hodor", privilege: "local_admin", assumed_breach: true }] })}
+        selection={domainSelection}
+      />
+    );
+    expect(screen.getByRole("combobox", { name: "privilege" }).title).toBe(
+      "Added to local Administrators on every Windows member server and workstation in this domain."
+    );
+    await open(user, "hodor");
+    expect(screen.getByRole("checkbox", { name: "Assumed-breach foothold" }).closest("label").title).toMatch(
+      /^The low-privilege user an operator starts as\. Gets a portal tile on one workstation in this domain/
+    );
+  });
+
+  test("generated and planted password-in-description users carry a real password", () => {
+    expect(effectiveFlaws(["kerberoastable", "spn_set", "no_preauth"])).toEqual(["kerberoastable", "asrep_roastable"]);
+    const users = generateUsers(60, "corp.local", seededRng(7));
+    for (const u of users) {
+      expect(u.flaws || []).not.toContain("password_never_expires");
+      if ((u.flaws || []).includes("password_in_description")) {
+        expect(u.description).toContain(u.password);
+      }
+    }
+    const planted = plantAccountTechnique(
+      { id: "d", kind: "domain", overlay: { fqdn: "corp.local" } }, "srv01", "password_in_description"
+    );
+    expect(planted.users[0].description).toContain(planted.users[0].password);
   });
 });
