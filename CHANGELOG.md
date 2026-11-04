@@ -96,6 +96,13 @@ versioning, and dates are UTC.
   it can never read outside the bundled module tree.
 - The `deploy.sh` refusal for a stop time too close to the build names `auto_stop.at`,
   the only setting it applies to, instead of saying to recompile.
+- A ticked host vuln that would plant nothing now raises a validator warning:
+  one declared where no role plants it (`RNG010`, e.g. `constrained_delegation` on a
+  host instead of a user), one missing a required `vulns_vars` key (`RNG011`, e.g.
+  `constrained_delegation_kerberos` with no `delegate_to`), and a `vulns_vars` that is
+  not a JSON object (`RNG012`). The Inspector edits `vulns_vars` as JSON, where it
+  used to show `[object Object]` and save typed text as a string, and lists under it
+  the keys each ticked vuln reads, required or optional, with an example.
 
 ## [0.9.2] (2026-11-04)
 

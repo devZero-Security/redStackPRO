@@ -1201,6 +1201,211 @@ def rng009_user_flaw_as_host_vuln(ctx):
                 name=ctx.name(n["id"]), vuln=vuln)
 
 
+def _runs_sql(node):
+    """The srv role installs SQL Server only on a Windows member with role sql or
+    the mssql service (roles/redstackpro.srv/tasks/main.yml)."""
+    ov = node.get("overlay") or {}
+    return (node["kind"] == "srv"
+            and (ov.get("os") or "windows").startswith("windows")
+            and (ov.get("role") == "sql" or "mssql" in (ov.get("services") or [])))
+
+
+def _misplaced_vuln(node, vuln):
+    """(template, remedy) when no role plants vuln on this host, else None."""
+    kind = node["kind"]
+    if vuln == "constrained_delegation":
+        # The dc role reads it from users[].flaws only (attack_paths.yml).
+        return ("constrained_delegation on {name} plants nothing: protocol "
+                "transition is planted on domain user accounts only, never on a "
+                "host.",
+                "Declare it on a domain user: add constrained_delegation to the "
+                "user's flaws and list the target SPNs in the user's delegate_to. "
+                "For delegation from this computer account, use "
+                "constrained_delegation_kerberos with vulns_vars.delegate_to.")
+    if vuln == "gpo_abuse" and kind != "dc":
+        return ("gpo_abuse on {name} plants nothing: only a domain controller "
+                "creates the editable GPO, and {name} is a {kind}.",
+                "Declare gpo_abuse on the domain controller, with "
+                "vulns_vars.gpo_abuse.principal set.")
+    if vuln == "sysvol_secret" and kind != "dc":
+        return ("sysvol_secret on {name} plants nothing reachable: the script is "
+                "written to the local SYSVOL folder, which only a domain "
+                "controller shares, and {name} is a {kind}.",
+                "Declare sysvol_secret on the domain controller.")
+    if vuln in ("mssql_impersonation", "mssql_linked") and not _runs_sql(node):
+        return ("{vuln} on {name} plants nothing: SQL Server is installed only "
+                "on a Windows member server (srv) with role sql or the mssql "
+                "service.",
+                "Set role to sql or add the mssql service on a member server, "
+                "and declare it there.")
+    return None
+
+
+def rng010_vuln_planted_elsewhere(ctx):
+    """A host declares a technique that no role plants on that kind of host, so
+    it is a no-op there. A warning: the run succeeds without the attack."""
+    if ctx.topology.get("mode") != "defense":
+        return
+    for n in ctx.hosts():
+        for vuln in sorted(set(ctx.overlay(n["id"], "vulns") or [])):
+            hit = _misplaced_vuln(n, vuln)
+            if hit:
+                yield finding("RNG010", "warning", [n["id"]], hit[0],
+                              remedy=hit[1], vuln=vuln, name=n["id"],
+                              kind=n["kind"])
+
+
+# The vulns_vars keys a host technique cannot plant without: its task is skipped
+# (or fails) when they are missing. Keys with a role default are not listed.
+# Each requirement is a tuple of alternatives, any one of which satisfies it; a
+# dotted key is nested. A "domain" entry may be set on any host in the domain,
+# because the compiler gathers it to the CA (ansible._adcs_forest_escs). Kept in
+# step with frontend/src/vulns.js VULN_PARAMS by tests/test_vuln_params_sync.py.
+VULNS_VARS_REQUIRED = {
+    # domain_vulns/tasks/main.yml: an empty list adds no msDS-AllowedToDelegateTo.
+    "constrained_delegation_kerberos": {
+        "keys": [("delegate_to",)],
+        "effect": "no delegation is planted",
+        "example": '{"delegate_to": ["CIFS/<host>.<domain>"]}',
+    },
+    # host_vulns/tasks/rdp_scheduler.yml, responder.yml, ntlm_relay.yml: the bot
+    # task is gated on a user.
+    "rdp_scheduler": {
+        "keys": [("bot_user",)],
+        "effect": "no logon bot is created",
+        "example": '{"bot_user": "<DOMAIN>\\\\<user>"}',
+    },
+    "responder": {
+        "keys": [("bot_user",)],
+        "effect": "no responder bot is created",
+        "example": '{"bot_user": "<DOMAIN>\\\\<user>"}',
+    },
+    "ntlm_relay": {
+        "keys": [("ntlm_relay_user", "bot_user")],
+        "effect": "no relay bot is created",
+        "example": '{"ntlm_relay_user": "<DOMAIN>\\\\<privileged user>"}',
+    },
+    # stored_credential.yml: gated on owner; with no username cmdkey gets an
+    # empty /user and saves nothing usable.
+    "stored_credential": {
+        "keys": [("stored_credential.owner",), ("stored_credential.username",)],
+        "effect": "no usable credential is stored",
+        "example": '{"stored_credential": {"owner": "<DOMAIN>\\\\<user>", '
+                   '"username": "<DOMAIN>\\\\<user>"}}',
+    },
+    # files.yml: loops over an empty list.
+    "files": {
+        "keys": [("files",)],
+        "effect": "no file is planted",
+        "example": '{"files": [{"name": "notes.txt", "content": "<text>"}]}',
+    },
+    # keepass_vault.yml: master_password has no default, so the task errors.
+    "keepass_vault": {
+        "keys": [("keepass_vault.master_password",)],
+        "effect": "the vault task fails and the run stops for this host",
+        "example": '{"keepass_vault": {"master_password": "<password>", '
+                   '"entry_password_user": "<user>"}}',
+    },
+    # dc attack_paths.yml: the GPO task is gated on a principal.
+    "gpo_abuse": {
+        "keys": [("gpo_abuse.principal",)],
+        "effect": "no editable GPO is created",
+        "example": '{"gpo_abuse": {"principal": "<user>"}}',
+    },
+    # adcs ca_config.yml / plant_templates.yml: empty disables the grant.
+    "esc7": {
+        "keys": [("esc7_manager",)],
+        "domain": True,
+        "effect": "no one is granted ManageCA",
+        "example": '{"esc7_manager": "<DOMAIN>\\\\<user>"}',
+    },
+    "esc14": {
+        "keys": [("esc14_target",)],
+        "domain": True,
+        "effect": "no weak certificate mapping is planted",
+        "example": '{"esc14_target": "<user>"}',
+    },
+    # mssql configure.yml: loops over an empty list.
+    "mssql_linked": {
+        "keys": [("mssql_linked_targets",)],
+        "effect": "no linked server is added",
+        "example": '{"mssql_linked_targets": ["<sql host fqdn>"]}',
+    },
+}
+
+
+def _vv_value(vv, dotted):
+    for part in dotted.split("."):
+        if not isinstance(vv, dict):
+            return None
+        vv = vv.get(part)
+    return vv
+
+
+def _domain_vulns_vars(ctx, host_id):
+    """The vulns_vars of every host joined to host_id's domain (or of host_id
+    alone when it joins none), for the parameters gathered domain wide."""
+    domains = {e["target"] for e in ctx.by_role.get("joins", [])
+               if e["source"] == host_id and ctx.kind(e["target"]) == "domain"}
+    if not domains:
+        return [ctx.overlay(host_id, "vulns_vars")]
+    return [ctx.overlay(e["source"], "vulns_vars")
+            for e in ctx.by_role.get("joins", []) if e["target"] in domains]
+
+
+def rng011_vuln_missing_parameter(ctx):
+    """A host declares a technique whose task needs a vulns_vars key it does not
+    set, so the task is skipped (or fails). A vuln RNG010 already reports as
+    misplaced, or a vulns_vars RNG012 reports as malformed, is not repeated."""
+    if ctx.topology.get("mode") != "defense":
+        return
+    for n in ctx.hosts():
+        own = ctx.overlay(n["id"], "vulns_vars")
+        if own is not None and not isinstance(own, dict):
+            continue
+        for vuln in sorted(set(ctx.overlay(n["id"], "vulns") or [])):
+            spec = VULNS_VARS_REQUIRED.get(vuln)
+            if spec is None or _misplaced_vuln(n, vuln):
+                continue
+            pools = (_domain_vulns_vars(ctx, n["id"]) if spec.get("domain")
+                     else [own])
+            missing = [alts for alts in spec["keys"]
+                       if not any(_vv_value(vv, k) for vv in pools for k in alts)]
+            if not missing:
+                continue
+            where = " on any host in its domain" if spec.get("domain") else ""
+            keys = " and no ".join(" or ".join("vulns_vars." + k for k in alts)
+                                for alts in missing)
+            remedy = ("Set vulns_vars to %s" if not own else
+                      "Add to vulns_vars: %s") % spec["example"]
+            if spec.get("domain"):
+                remedy += " on this host or any host in its domain"
+            yield finding(
+                "RNG011", "warning", [n["id"]],
+                "{vuln} on {name} has no {keys}{where}, so {effect}.",
+                remedy=remedy + ".",
+                vuln=vuln, name=n["id"], keys=keys, where=where,
+                effect=spec["effect"])
+
+
+def rng012_vulns_vars_not_an_object(ctx):
+    """A host's vulns_vars that is not a JSON object (a string saved by an older
+    canvas field, say). No task can read a key from it, so every parameter is
+    ignored and each technique falls back to its default or plants nothing."""
+    if ctx.topology.get("mode") != "defense":
+        return
+    for n in ctx.hosts():
+        vv = ctx.overlay(n["id"], "vulns_vars")
+        if vv is not None and not isinstance(vv, dict):
+            yield finding(
+                "RNG012", "warning", [n["id"]],
+                "vulns_vars on {name} is not a JSON object, so none of its "
+                "parameters reach the roles.",
+                remedy='Rewrite it as one object of keys, e.g. '
+                       '{"bot_user": "<DOMAIN>\\\\<user>"}.',
+                name=n["id"])
+
+
 def rng005_domain_without_admin(ctx):
     """A domain that has user accounts but none with a domain-admin privilege.
     A lab domain needs at least one privileged account as the escalation target;
@@ -1382,6 +1587,9 @@ RULES = [
     rng007_duplicate_username,
     rng008_multiple_siem,
     rng009_user_flaw_as_host_vuln,
+    rng010_vuln_planted_elsewhere,
+    rng011_vuln_missing_parameter,
+    rng012_vulns_vars_not_an_object,
     ord001_dependency_cycle,
 ]
 

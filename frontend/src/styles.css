@@ -709,13 +709,36 @@ button:disabled { opacity: 0.5; cursor: default; }
 .rg-required { color: var(--warning); margin-left: 6px; font-size: 10px; }
 .rg-field-help { color: var(--muted); font-size: var(--fs-1); }
 
-.rg-field input, .rg-field select {
+.rg-field input, .rg-field select, .rg-field textarea {
   background: var(--panel-2);
   border: 1px solid var(--line);
   color: var(--text);
   border-radius: 5px;
   padding: 5px 7px;
   font: inherit;
+}
+/* A free-key object (vulns_vars, group_members) edited as JSON. */
+.rg-field textarea {
+  font-family: ui-monospace, monospace;
+  font-size: var(--fs-1);
+  resize: vertical;
+}
+.rg-field-error { color: var(--error-text); font-size: var(--fs-1); }
+.rg-optional { color: var(--muted); margin-left: 6px; font-size: 10px; }
+/* vulns_vars help: per ticked vuln, its keys and a one-line example. The
+   example selects whole on click so it copies in one go. */
+.rg-vuln-params { display: flex; flex-direction: column; gap: 6px; }
+.rg-vuln-params-label { color: var(--text); }
+.rg-vuln-params ul { margin: 2px 0 3px; padding-left: 14px; }
+.rg-vuln-params code { font-family: ui-monospace, monospace; }
+.rg-vuln-params-example {
+  display: block;
+  padding: 3px 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+  user-select: all;
 }
 
 .rg-fieldset { border: 1px solid var(--line); border-radius: 6px; padding: 9px; margin: 0 0 12px; }

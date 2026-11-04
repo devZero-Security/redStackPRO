@@ -11,7 +11,7 @@
 
 import React, { useState } from "react";
 import { describe, expect, test } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { Inspector } from "./Inspector.jsx";
@@ -259,5 +259,103 @@ describe("users and acls on a locked (readOnly) domain", () => {
     expect(acls.queryByPlaceholderText("principal")).toBeNull();
     expect(acls.queryByPlaceholderText("target")).toBeNull();
     expect(acls.queryByRole("button", { name: "Remove right" })).toBeNull();
+  });
+});
+
+// vulns_vars is an object with free keys. It is edited as JSON text that only
+// reaches the document once it parses to an object; it used to be a plain input
+// that showed "[object Object]" and saved what was typed as a string.
+const VV_SCHEMA = {
+  $defs: {
+    overlay_range_host: {
+      properties: {
+        vulns: { type: "array", "x-redstackpro-source": "user", items: {} },
+        vulns_vars: {
+          type: "object",
+          description: "Per-vuln parameters for this host's declared vulns, e.g. a file share path or a delegation target.",
+          additionalProperties: true,
+        },
+      },
+    },
+  },
+};
+
+function HostHarness({ overlay, onChange = () => {} }) {
+  const [document, setDocument] = useState({
+    schema_version: "0.7.0",
+    mode: "defense",
+    prefix: "hv",
+    nodes: [{ id: "wks01", kind: "wks", overlay }],
+    edges: [],
+  });
+  return (
+    <Inspector
+      schema={VV_SCHEMA}
+      selection={{ type: "node", id: "wks01" }}
+      document={document}
+      findings={[]}
+      onOverlayChange={(nodeId, next) => {
+        onChange(next);
+        setDocument((d) => ({
+          ...d,
+          nodes: d.nodes.map((n) => (n.id === nodeId ? { ...n, overlay: next } : n)),
+        }));
+      }}
+      onRename={() => {}}
+      onDelete={() => {}}
+      kindLabels={{}}
+    />
+  );
+}
+
+const vulnsVarsBox = () => screen.getByRole("textbox", { name: "vulns_vars" });
+
+describe("vulns_vars is edited as JSON", () => {
+  test("an existing object shows as JSON, not [object Object]", () => {
+    render(<HostHarness overlay={{ vulns: [], vulns_vars: { bot_user: "T\a" } }} />);
+    expect(JSON.parse(vulnsVarsBox().value)).toEqual({ bot_user: "T\a" });
+  });
+
+  test("valid JSON is saved as an object; invalid JSON keeps the last value", () => {
+    const seen = [];
+    render(<HostHarness overlay={{ vulns: [] }} onChange={(o) => seen.push(o)} />);
+    fireEvent.change(vulnsVarsBox(), { target: { value: '{"delegate_to": ["CIFS/dc01.t.lab"]}' } });
+    expect(seen.at(-1).vulns_vars).toEqual({ delegate_to: ["CIFS/dc01.t.lab"] });
+
+    fireEvent.change(vulnsVarsBox(), { target: { value: '{"delegate_to": [' } });
+    expect(seen).toHaveLength(1);
+    expect(screen.getByText("Not valid JSON yet. The last valid value is kept.")).toBeTruthy();
+
+    fireEvent.change(vulnsVarsBox(), { target: { value: "" } });
+    expect(seen.at(-1).vulns_vars).toBeUndefined();
+  });
+});
+
+describe("vulns_vars help lists the keys of the ticked vulns", () => {
+  const help = () => screen.getByRole("textbox", { name: "vulns_vars" }).closest(".rg-field");
+
+  test("a ticked parameterized vuln lists its keys, required or optional, and an example", () => {
+    render(<HostHarness overlay={{ vulns: ["smbv1", "constrained_delegation_kerberos", "ntlm_relay"] }} />);
+    const box = within(help());
+    expect(box.getByText("Constrained delegation (Kerberos only)")).toBeTruthy();
+    expect(box.getByText("delegate_to")).toBeTruthy();
+    expect(box.getByText('{"delegate_to":["CIFS/srv01.corp.local"]}')).toBeTruthy();
+    expect(box.getByText("ntlm_relay_user")).toBeTruthy();
+    expect(box.getByText("required (or bot_user)")).toBeTruthy();
+    expect(box.getByText("ntlm_relay_target")).toBeTruthy();
+    expect(box.getAllByText("optional")).toHaveLength(1);
+    // smbv1 reads nothing, so it gets no entry.
+    expect(box.queryByText("SMBv1 enabled")).toBeNull();
+    expect(box.queryByText(/a file share path or a delegation target/)).toBeNull();
+  });
+
+  test("with no parameterized vuln ticked it stays the plain one-line help", () => {
+    render(<HostHarness overlay={{ vulns: ["smbv1"] }} />);
+    const box = within(help());
+    expect(
+      box.getByText("Per-vuln parameters for this host's declared vulns, e.g. a file share path or a delegation target.")
+    ).toBeTruthy();
+    expect(box.queryByText("delegate_to")).toBeNull();
+    expect(help().querySelector(".rg-vuln-params")).toBeNull();
   });
 });
