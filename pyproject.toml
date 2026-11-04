@@ -1,6 +1,6 @@
 [project]
 name = "redstackpro"
-version = "0.9.2"
+version = "0.10.0"
 description = "Composition layer for red team infrastructure and cyber ranges"
 requires-python = ">=3.11"
 license = { text = "MIT" }

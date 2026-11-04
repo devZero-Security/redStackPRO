@@ -3,7 +3,7 @@
 All notable changes to redStackPRO are recorded here. The project uses semantic
 versioning, and dates are UTC.
 
-## [0.10.0] (unreleased)
+## [0.10.0] (2026-11-04)
 
 ### Added
 

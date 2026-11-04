@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-MIT-3B9EFF" alt="MIT license">
-  <img src="https://img.shields.io/badge/version-0.9.2-CF2127" alt="version 0.9.2">
+  <img src="https://img.shields.io/badge/version-0.10.0-CF2127" alt="version 0.10.0">
   <img src="https://img.shields.io/badge/providers-GCP%20%7C%20AWS%20%7C%20Azure-3B9EFF" alt="providers GCP, AWS, and Azure">
   <img src="https://img.shields.io/badge/status-prerelease%20beta-A97BFF" alt="status prerelease beta">
   <img src="https://img.shields.io/badge/exports-Terraform%20%2B%20Ansible-844FBA?logo=terraform&logoColor=white" alt="Terraform and Ansible">
