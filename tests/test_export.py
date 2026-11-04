@@ -285,3 +285,14 @@ def test_deployment_guide_documents_managing_the_range(redstack, registry):
     assert "manage.ps1" in guide
     assert "manage.sh" in guide
     assert "teardown" in guide
+
+
+@pytest.mark.parametrize("provider", ["../../roles", "..", "gcp/../aws", "/etc",
+                                      "C:\Windows", "GCP", "", "aws/"])
+def test_static_files_refuses_a_provider_that_is_not_a_bare_name(provider):
+    """provider names a directory under the modules tree. The API and CLI refuse
+    an unknown one first; this keeps the file read itself from walking out of
+    the asset tree (CodeQL py/path-injection) whatever the caller passes."""
+    from redstackpro.export import static_files
+    with pytest.raises(FileNotFoundError):
+        static_files(provider)
