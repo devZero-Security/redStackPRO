@@ -657,7 +657,7 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
     # find it by the *-BRIEFING.md glob. See briefing.py.
     from .briefing import briefing_filename, range_briefing
     files[briefing_filename((document or {}).get("mode"))] = range_briefing(
-        document, registry)
+        document, registry, provider=provider)
 
     # Every file ships with LF line endings, uniformly across all providers and
     # both modes. This is the single choke point every export passes through, so

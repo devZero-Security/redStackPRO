@@ -160,3 +160,43 @@ def test_briefing_omits_the_operator_section_without_vpn_or_roster():
     same as before the feature."""
     md = range_briefing(_offense_with_operators(operators=[]))
     assert "## Operators & VPN access" not in md
+
+
+def _goad_light_briefing(provider, doc=None):
+    doc = doc or load(ROOT / "frontend/public/goad/goad-light.json")
+    files = compile_topology(doc, Registry(), provider=provider)
+    return files["DEFENSE-BRIEFING.md"]
+
+
+def _host_row(md, host):
+    return next(line for line in md.splitlines() if line.startswith("| %s |" % host))
+
+
+def test_the_edr_column_does_not_claim_defender_is_on_when_it_is_off():
+    """edr: defender is a label. Defender real-time protection runs only when
+    defender_enabled is set, so a row that says plain "defender" overstated it."""
+    doc = load(ROOT / "frontend/public/goad/goad-light.json")
+    md = _goad_light_briefing("gcp", doc)
+    assert _host_row(md, "winterfell").rstrip().endswith("| defender (off) |")
+    assert _host_row(md, "castelblack").rstrip().endswith("| none |")
+
+    for n in doc["nodes"]:
+        if n["id"] == "winterfell":
+            n["overlay"]["defender_enabled"] = True
+    md = _goad_light_briefing("gcp", doc)
+    assert _host_row(md, "winterfell").rstrip().endswith("| defender |")
+
+
+def test_vulns_the_provider_drops_are_marked_not_listed_as_planted():
+    """The poisoning family needs a real L2 domain, so a cloud compile drops it
+    (VULN_PROVIDERS). The briefing used to list it as planted anyway."""
+    md = _goad_light_briefing("gcp")
+    line = next(l for l in md.splitlines() if l.startswith("- **winterfell** host vulns"))
+    for vuln in ("llmnr_poisoning", "nbtns_poisoning", "responder", "ntlm_relay"):
+        assert "%s (not on gcp)" % vuln in line, line
+    assert "autologon," in line and "autologon (not" not in line
+
+    md = _goad_light_briefing("proxmox")
+    line = next(l for l in md.splitlines() if l.startswith("- **winterfell** host vulns"))
+    assert "(not on" not in line
+    assert "llmnr_poisoning" in line

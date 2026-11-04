@@ -13,6 +13,7 @@ credential not embedded is the generated lab password, which lives only in the
 Terraform state; the briefing points at `terraform output -raw lab_password`.
 """
 
+from .ansible import VULN_PROVIDERS
 from .naming import platform_account
 from .terraform.plan import HOST_KINDS
 from .validate import Context
@@ -89,7 +90,7 @@ def _dc_of(ctx, domain_id):
     return None
 
 
-def range_briefing(document, registry=None):
+def range_briefing(document, registry=None, provider=None):
     ctx = Context(document, registry)
     account = platform_account(document.get("mode"))
     # Assumed-breach foothold users: patient zero, a jumpbox local admin
@@ -320,9 +321,13 @@ def range_briefing(document, registry=None):
         field = "public_address" if h["kind"] == "jumpbox" else "private_address"
         addr = _tok(ctx, h["id"], field)
         hostname = ov.get("hostname", h["id"])
+        edr = ov.get("edr", "-")
+        # edr is a label; only defender_enabled turns Defender's real-time
+        # protection on (host_vulns), so say when the label overstates it.
+        if edr == "defender" and not ov.get("defender_enabled"):
+            edr = "defender (off)"
         lines.append("| %s | %s | %s | %s | %s | %s |" % (
-            hostname, role, ov.get("os", "-"), domain, addr,
-            ov.get("edr", "-")))
+            hostname, role, ov.get("os", "-"), domain, addr, edr))
     if unbuilt:
         lines += ["", "Not built by this release (on the canvas only): %s."
                   % ", ".join(unbuilt)]
@@ -368,8 +373,16 @@ def range_briefing(document, registry=None):
                     ", ".join(flaws) or "-",
                     pw))
 
-    # -- Attack surface
-    host_vulns = [(h, h.get("overlay", {}).get("vulns") or [])
+    # -- Attack surface. A vuln the compiler drops for this provider (see
+    # ansible.VULN_PROVIDERS) is marked rather than listed as planted.
+    def _vuln_label(vuln):
+        allowed = VULN_PROVIDERS.get(vuln)
+        if allowed and provider not in allowed:
+            return "%s (not on %s)" % (vuln, provider or "this provider")
+        return vuln
+
+    host_vulns = [(h, [_vuln_label(v) for v in
+                       (h.get("overlay", {}).get("vulns") or [])])
                   for h in hosts]
     host_vulns = [(h, v) for h, v in host_vulns if v]
     acl_domains = [d for d in domains if ctx.overlay(d["id"], "acls")]
