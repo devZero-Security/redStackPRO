@@ -10,6 +10,8 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 
 import App from "./App.jsx";
 import { addNode, emptyDocument, paletteGroups, PALETTE_HIDDEN } from "./topology.js";
+import { HOST_PRESETS } from "./presets.js";
+import { VULN_CATALOG } from "./vulns.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -146,4 +148,23 @@ describe("palette offer", () => {
       expect(within(palette).queryByText("Firewall")).toBeNull();
       expect(within(palette).queryByText("Appliance")).toBeNull();
     });
+});
+
+
+describe("presets", () => {
+  test("the File Server preset plants a share through the Open share vuln", () => {
+    const file = HOST_PRESETS.find((p) => p.key === "fileshare");
+    expect(file.overlay.vulns).toContain("openshares");
+    // smb in services installs nothing, so it is not seeded.
+    expect(file.overlay.services || []).not.toContain("smb");
+    const ids = VULN_CATALOG.flatMap((g) => g.items.map((i) => i.id));
+    expect(ids).toContain("openshares");
+    expect(file.blurb).not.toMatch(/NFS/);
+  });
+
+  test("the openshares role the preset relies on exists", () => {
+    const task = join(HERE,
+      "../../src/redstackpro/assets/ansible/roles/redstackpro.host_vulns/tasks/openshares.yml");
+    expect(readFileSync(task, "utf8")).toMatch(/win_share/);
+  });
 });
