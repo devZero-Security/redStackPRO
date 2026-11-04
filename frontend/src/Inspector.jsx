@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useId, useState } from "react";
 import { FindingBadge } from "./FindingBadge.jsx";
 import { DRAWN_ROLES, isContainer, roleColor, roleDisplay } from "./topology.js";
 import { PROFILES } from "./profiles.js";
@@ -889,7 +889,80 @@ function overlaySchemaFor(schema, kind) {
   return defs[`overlay_${name}`] || null;
 }
 
-function Field({ name, spec, value, required, onChange, disabled }) {
+// An object with free keys (vulns_vars, group_members) is edited as JSON text.
+// The text stays local until it parses to an object, so a half-typed brace never
+// reaches the document. It used to fall through to the plain input, which showed
+// "[object Object]" and saved whatever was typed as a string.
+function showJson(value) {
+  if (value == null) return "";
+  return typeof value === "string" ? value : JSON.stringify(value, null, 2);
+}
+
+function sameJson(text, value) {
+  try {
+    const parsed = text.trim() ? JSON.parse(text) : null;
+    return JSON.stringify(parsed) === JSON.stringify(value ?? null);
+  } catch {
+    return false;
+  }
+}
+
+function JsonObjectField({ label, help, value, disabled, onChange }) {
+  const id = useId();
+  const [text, setText] = useState(() => showJson(value));
+  const [error, setError] = useState(null);
+  const committed = typeof value === "string" ? value : JSON.stringify(value ?? null);
+  useEffect(() => {
+    // An outside change (undo, a template load) replaces the text unless the
+    // text already says the same thing.
+    if (!sameJson(text, value)) {
+      setText(showJson(value));
+      setError(null);
+    }
+  }, [committed]);
+
+  const edit = (next) => {
+    setText(next);
+    if (!next.trim()) {
+      setError(null);
+      onChange(undefined);
+      return;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(next);
+    } catch {
+      setError("Not valid JSON yet. The last valid value is kept.");
+      return;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      setError("Must be a JSON object, {...}. The last valid value is kept.");
+      return;
+    }
+    setError(null);
+    onChange(parsed);
+  };
+
+  // The help sits outside the label: a click inside a label moves focus to the
+  // textarea, which would drop a selection made in the help's example.
+  return (
+    <div className="rg-field">
+      <label htmlFor={id}>{label}</label>
+      <textarea
+        id={id}
+        value={text}
+        rows={Math.min(10, Math.max(2, text.split("\n").length))}
+        spellCheck={false}
+        disabled={disabled}
+        onChange={(e) => edit(e.target.value)}
+      />
+      {error ? <span className="rg-field-error">{error}</span> : null}
+      {help}
+    </div>
+  );
+}
+
+function Field({ name, spec, value, required, onChange, disabled, help: helpOverride }) {
   const label = (
     <span className="rg-field-label">
       {spec.title || name}
@@ -897,9 +970,21 @@ function Field({ name, spec, value, required, onChange, disabled }) {
     </span>
   );
 
-  const help = spec.description ? (
+  const help = helpOverride ?? (spec.description ? (
     <span className="rg-field-help">{spec.description}</span>
-  ) : null;
+  ) : null);
+
+  if (spec.type === "object" && !spec.properties) {
+    return (
+      <JsonObjectField
+        label={label}
+        help={help}
+        value={value}
+        disabled={disabled}
+        onChange={onChange}
+      />
+    );
+  }
 
   // An enum is a choice, so it is a select rather than a free text box the
   // validator has to reject afterward.
@@ -1334,7 +1419,9 @@ export function Inspector({
                 />
               ) : (
                 <Field
-                  key={name}
+                  // Keyed by node too, so a JSON field's local text does not
+                  // carry over to the next node selected.
+                  key={`${name}-${node.id}`}
                   name={name}
                   spec={
                     name === "gating" && coverShown ? withoutDecoy(spec) : spec
