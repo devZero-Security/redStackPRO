@@ -27,9 +27,9 @@ ASSETS = Path(__file__).resolve().parent / "assets"
 # What has to be filled in before apply, per provider. The variables differ
 # because the providers do: GCP scopes everything to a project and AWS does not.
 TFVARS_TO_FILL = {
-    "gcp": "project, ssh_public_key, operator_source_ranges",
-    "aws": "ssh_public_key, operator_source_ranges, region",
-    "azure": "subscription_id, ssh_public_key, operator_source_ranges, location",
+    "gcp": "project, operator_source_ranges, region, zone",
+    "aws": "operator_source_ranges, region",
+    "azure": "subscription_id, operator_source_ranges, location",
 }
 
 # Things the account has to have done before apply, which an export cannot do
@@ -86,10 +86,13 @@ CLOUD_AUTH = {
     "gcp": """```bash
 gcloud auth login
 gcloud auth application-default login
+gcloud services enable compute.googleapis.com --project <your-project-id>
 ```
 
-Run both. Terraform reads only the second, and only the first is obvious when it
-lapses, which is how a deploy fails here with everything else set up correctly.""",
+Run the first two. Terraform reads only the second, and only the first is obvious
+when it lapses, which is how a deploy fails here with everything else set up
+correctly. The third turns on the Compute Engine API, which a new project has
+off; it is a no-op once it is on.""",
     "aws": """```bash
 aws configure
 aws sts get-caller-identity   # should name your account
@@ -99,6 +102,49 @@ az login
 ```""",
 }
 
+# The last step-2 bullet: what else in deploy.tfvars to check, per provider.
+CONFIRM_TFVARS = {
+    "gcp": """- `project`: your GCP project ID, not its name or number
+  (`gcloud config get-value project`). Confirm `region` and `zone` are where you
+  mean to deploy; the zone has to be inside the region.""",
+    "aws": """- Confirm `region` is the one you mean to deploy into. Credentials come from your
+  AWS CLI profile, not this file.""",
+    "azure": """- `subscription_id`: `az account show --query id -o tsv`. Confirm `location` is
+  where you mean to deploy. `resource_group` is created by this deploy and deleted
+  by teardown, so it must not already exist; keep one per range.""",
+}
+
+
+def auto_stop_section(document, registry=None, noun="range"):
+    """The guide's auto-stop note, or "" when the topology does not stop
+    itself. Read through TerraformPlan so it states the same schedule the
+    export builds."""
+    from .terraform.plan import TerraformPlan
+    stop = TerraformPlan(document, registry).auto_stop
+    if not stop:
+        return ""
+    hours, at = stop["after_hours"], stop["at_minute"]
+    tz = stop["timezone"]
+    clock = None if at is None else "%02d:%02d %s" % (at // 60, at % 60, tz)
+    if hours and clock:
+        when = ("daily at %s, or %d hours after the first apply if that comes "
+                "first, then daily at that time" % (clock, hours))
+    elif hours:
+        when = "%d hours after the first apply, then daily at that time" % hours
+    else:
+        when = "daily at %s" % clock
+    return """## Auto-stop
+
+This %s stops itself %s.
+Start it again with `manage.sh start`. The instances are stopped, not destroyed,
+so it comes back as it was; disks and reserved addresses still bill while it is
+stopped.
+
+To change the time or turn it off: In the canvas, click empty space, then Topology settings > Auto-stop, and export again.
+
+""" % (noun, when)
+
+
 # The account limits a deploy runs into, per provider. Proxmox and ESXi have none
 # the export can name: the hardware is the operator's own.
 QUOTA_NOTES = {
@@ -106,7 +152,9 @@ QUOTA_NOTES = {
 ## Quotas
 
 A large topology can exceed the default GCP per-project vCPU quota
-(`CPUS_ALL_REGIONS`); raise it before deploying.
+(`CPUS_ALL_REGIONS`, 32 on many new projects); raise it before deploying. Find it
+on the quotas page, https://console.cloud.google.com/iam-admin/quotas, filtered to
+`CPUS_ALL_REGIONS`, and request the increase there.
 """,
     "aws": """
 ## Quotas
@@ -214,16 +262,17 @@ way on all three.
 `deploy.tfvars` is in this folder, beside this guide. The deploy copies it into
 `terraform/` for you, so this is the only config file you edit. Set: **{tfvars}**
 
-- `ssh_public_key`: the one line in `keys/id_ed25519.pub`, the PUBLIC half from
+- `ssh_public_key`: leave it empty and `deploy.sh` fills it from the key in
+  `keys/`, or paste the one line in `keys/id_ed25519.pub`, the PUBLIC half from
   step 1. The PRIVATE half stays in `keys/` and is never pasted anywhere; the two
   halves have to match, since Terraform puts the public half on every host and
   the deploy authenticates with the private half.
 - `operator_source_ranges`: the IPs operators connect from, for example
-  `["203.0.113.5/32", "198.51.100.7/32"]` (one /32 per operator, or a CIDR). This is
+  `["203.0.113.5/32", "198.51.100.7/32"]` (one /32 per operator, or a CIDR). Your
+  own public IP is what `curl https://checkip.amazonaws.com` prints. This is
   what can reach ssh and the portal, so leaving it wide open is a mistake, not a
   shortcut.
-- Confirm the region (and, on GCP, the project) are the ones you mean to deploy
-  into.
+{confirm}
 
 ## 3. Authenticate to your cloud
 
@@ -301,7 +350,7 @@ all; an early play signs that listener from the jumpbox authority and rebinds it
 That first connection is the one place validation is off, it needs no flag from
 you, and a re-run that finds the listener already signed does not repeat it.
 
-## Managing the deployment
+{auto_stop}## Managing the deployment
 
 Once it is up, `manage.ps1` (or `manage.sh` from Git Bash, macOS, or Linux) checks
 on it and tears it down. Same wrapper pattern as the deploy: `.\\manage.ps1` on
@@ -385,16 +434,17 @@ way on all three.
 `deploy.tfvars` is in this folder, beside this guide. The deploy copies it into
 `terraform/` for you, so this is the only config file you edit. Set: **{tfvars}**
 
-- `ssh_public_key`: the one line in `keys/id_ed25519.pub`, the PUBLIC half from
+- `ssh_public_key`: leave it empty and `deploy.sh` fills it from the key in
+  `keys/`, or paste the one line in `keys/id_ed25519.pub`, the PUBLIC half from
   step 1. The PRIVATE half stays in `keys/` and is never pasted anywhere; the two
   halves have to match, since Terraform puts the public half on every host and
   the deploy authenticates with the private half.
 - `operator_source_ranges`: the IPs operators connect from, for example
-  `["203.0.113.5/32", "198.51.100.7/32"]` (one /32 per operator, or a CIDR). This is
+  `["203.0.113.5/32", "198.51.100.7/32"]` (one /32 per operator, or a CIDR). Your
+  own public IP is what `curl https://checkip.amazonaws.com` prints. This is
   what can reach ssh and the portal, so leaving it wide open is a mistake, not a
   shortcut.
-- Confirm the region (and, on GCP, the project) are the ones you mean to deploy
-  into.
+{confirm}
 
 ## 3. Authenticate to your cloud
 
@@ -461,7 +511,7 @@ ssh-add keys/id_ed25519
 
 Working from the jumpbox itself avoids the proxy and the agent entirely.
 
-## Managing the range
+{auto_stop}## Managing the range
 
 Once it is up, `manage.ps1` (or `manage.sh` from Git Bash, macOS, or Linux) checks
 on it and tears it down. Same wrapper pattern as the deploy: `.\\manage.ps1` on
@@ -649,7 +699,12 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
         run_the_deploy=RUN_THE_DEPLOY,
         quotas=QUOTA_NOTES.get(provider, ""),
         preconditions="" if is_range else ACCOUNT_PRECONDITIONS.get(provider, ""),
-        provider_notes=PROVIDER_NOTES.get(provider, ""))
+        provider_notes=PROVIDER_NOTES.get(provider, ""),
+        confirm=CONFIRM_TFVARS.get(
+            provider, "- Confirm the connection values in `deploy.tfvars` are the "
+                      "ones for your environment."),
+        auto_stop=auto_stop_section(document, registry,
+                                    "range" if is_range else "deployment"))
     # The hand-off summary: every box, account, lab user, trust, attack path, and
     # SIEM dashboard, joined from the document and the terraform address tokens.
     # tf_inventory fills the addresses after apply. Named by mode
