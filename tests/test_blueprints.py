@@ -4,6 +4,7 @@ See 0025.
 """
 
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -13,6 +14,14 @@ from fastapi.testclient import TestClient
 from redstackpro.api import create_app
 from redstackpro.api.principal import Principal
 
+
+def _tmp_db():
+    """A fresh SQLite file. mkstemp, not mktemp: the file exists on return, so no
+    other process can take the name in between."""
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    return path
+
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.7.0"
 V1 = "/api/v1"
@@ -20,7 +29,7 @@ V1 = "/api/v1"
 
 @pytest.fixture
 def client():
-    app = create_app("sqlite+pysqlite:///" + tempfile.mktemp(suffix=".db"))
+    app = create_app("sqlite+pysqlite:///" + _tmp_db())
     yield TestClient(app)
     app.state.engine.dispose()
 
@@ -110,7 +119,7 @@ def test_publish_then_unpublish_toggles_membership(client, document):
 # A blueprint a team publishes is scoped to that team's org. See 0028.
 
 def test_a_published_blueprint_is_scoped_to_its_org(document):
-    db_url = "sqlite+pysqlite:///" + tempfile.mktemp(suffix=".db")
+    db_url = "sqlite+pysqlite:///" + _tmp_db()
     owner = TestClient(create_app(db_url))          # the local org, admin
     topology_id = owner.post(
         V1 + "/topologies", json={"name": "team template", "document": document}

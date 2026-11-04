@@ -31,7 +31,7 @@ def test_offense_briefing_gives_the_c2_payload_recipe():
     md = [v for k, v in files.items() if k.endswith("OFFENSE-BRIEFING.md")][0]
 
     assert "## C2 redirectors & payloads" in md
-    assert "c2.acmecorp.net" in md
+    assert re.search(r"Callback domain:\*\* `c2\.acmecorp\.net`", md), md
     m = re.search(r"Gating header:\*\* `([^:]+): ([^`]+)`", md)
     assert m, "the briefing states no gating header"
     header_name, token = m.group(1), m.group(2)
