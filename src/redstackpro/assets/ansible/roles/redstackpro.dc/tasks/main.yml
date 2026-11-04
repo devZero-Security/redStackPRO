@@ -159,7 +159,7 @@
     # must actually match, and a redeploy should correct any drift.
     update_password: always
     password_never_expires: true
-    enabled: true
+    enabled: "{{ item.enabled | default(true) | bool }}"
     state: present
     domain_server: localhost
     path: "{{ ('OU=' ~ item.ou ~ ',' ~ redstackpro_domain_dn) if item.ou is defined else omit }}"

@@ -18,6 +18,7 @@ import yaml
 from . import decoyart, decoyassets
 from .naming import platform_account
 from .registry import Registry
+from .terraform.plan import AD_HOST_KINDS, HOST_KINDS
 from .validate import Context, is_valid
 
 PLACEHOLDER = "<<tf:%s:%s>>"
@@ -204,6 +205,111 @@ def _randomize_gating(topology):
                 gating["header_value"] = value
 
 
+# The Windows build an AD host gets when its os is unset. Matches the image every
+# Terraform backend falls back to, so both halves build the same machine.
+DEFAULT_WINDOWS_OS = "windows_server_2022"
+
+# ACL right names the canvas offers (BloodHound's edge names) mapped to the names
+# apply_acls.ps1 knows. Applied at compile so documents saved with the label work.
+ACL_RIGHT_ALIASES = {
+    "forcechangepassword": "Ext-User-Force-Change-Password",
+    # WriteProperty on the member attribute (Ext-Write-Member in the script).
+    "addmember": "Ext-Write-Member",
+    "writespn": "Ext-Write-SPN",
+}
+
+# Services that are not services: the VPN server follows access_mode alone.
+VPN_SERVICES = ("wireguard", "openvpn")
+
+
+def acl_right(right):
+    """The apply_acls.ps1 name for a canvas right label; unknown names pass."""
+    return ACL_RIGHT_ALIASES.get(str(right or "").lower(), right)
+
+
+def _netbios_default(fqdn):
+    return fqdn.split(".")[0].upper()[:15]
+
+
+def _trust_type_default(source_fqdn, target_fqdn):
+    if source_fqdn and target_fqdn and (
+            source_fqdn.endswith("." + target_fqdn)
+            or target_fqdn.endswith("." + source_fqdn)):
+        return "parent_child"
+    return "forest"
+
+
+# The fallback the dc role sets for a weak_password account with no password.
+WEAK_PASSWORD_DEFAULT = "Summer2024!"
+
+
+def _plant_password_in_description(user):
+    """password_in_description writes the account's password into its AD
+    description. An account with no password of its own would otherwise run on
+    the shared lab password, which is also every Administrator's, so it gets
+    one of its own here: the weak_password value when that flaw is set, else a
+    random one. The dc role then sets it like any declared password."""
+    if "password_in_description" not in (user.get("flaws") or []):
+        return
+    if not user.get("password"):
+        if "weak_password" in (user.get("flaws") or []):
+            user["password"] = user.get("weak_password") or WEAK_PASSWORD_DEFAULT
+        else:
+            user["password"] = secrets.token_urlsafe(9)
+    description = user.get("description") or ""
+    if user["password"] not in description:
+        base = description or user.get("display_name") or user["username"]
+        user["description"] = "%s (Password : %s)" % (base, user["password"])
+
+
+def apply_compile_defaults(topology):
+    """Fill the fields a canvas document may leave empty with what the build
+    needs, so an unset field compiles to a working host instead of failing in
+    Ansible. In place and idempotent; callers pass a copy.
+
+    - dc/srv/wks with no os: windows_server_2022, the image Terraform picks.
+    - dc/srv/wks with no hostname: the node id, the name the hosts files and
+      the FQDN already use.
+    - a domain with no netbios: its first fqdn label, uppercased, 15 max.
+    - a trust with no trust_type: parent_child when one fqdn is under the
+      other, else forest. A parent_child edge is turned to run parent to
+      child, the direction the dc role reads. direction and transitive take
+      the schema defaults.
+    - a user flagged password_in_description: its password in the description.
+    """
+    nodes = {n.get("id"): n for n in topology.get("nodes", [])}
+    for node in nodes.values():
+        kind = node.get("kind")
+        if kind in AD_HOST_KINDS:
+            ov = node.setdefault("overlay", {})
+            if not ov.get("os"):
+                ov["os"] = DEFAULT_WINDOWS_OS
+            if not ov.get("hostname"):
+                ov["hostname"] = node["id"]
+        elif kind == "domain":
+            ov = node.setdefault("overlay", {})
+            if ov.get("fqdn") and not ov.get("netbios"):
+                ov["netbios"] = _netbios_default(ov["fqdn"])
+            for user in ov.get("users") or []:
+                _plant_password_in_description(user)
+
+    def fqdn(node_id):
+        return ((nodes.get(node_id) or {}).get("overlay") or {}).get("fqdn")
+
+    for edge in topology.get("edges", []):
+        if edge.get("role") != "trusts":
+            continue
+        src, dst = fqdn(edge.get("source")), fqdn(edge.get("target"))
+        if not edge.get("trust_type"):
+            edge["trust_type"] = _trust_type_default(src, dst)
+        if (edge["trust_type"] == "parent_child" and src and dst
+                and src.endswith("." + dst)):
+            edge["source"], edge["target"] = edge["target"], edge["source"]
+        edge.setdefault("direction", "bidirectional")
+        edge.setdefault("transitive", True)
+    return topology
+
+
 class AnsiblePlan:
     """Everything the Ansible half of an export needs, before serialization."""
 
@@ -225,9 +331,16 @@ class AnsiblePlan:
 
     # -- groups
 
+    def hosts(self):
+        """The hosts Terraform builds. fw and appliance nodes are drawn on the
+        canvas but get no machine and no role, so an inventory entry for one
+        would carry an address nothing fills and a play for a role that does
+        not exist."""
+        return [n for n in self.ctx.hosts() if n["kind"] in HOST_KINDS]
+
     def _groups(self):
         groups = {}
-        for node in self.ctx.hosts():
+        for node in self.hosts():
             group = self.registry.kinds[node["kind"]].get("ansible_group")
             if not group:
                 raise GenerationError(
@@ -242,7 +355,7 @@ class AnsiblePlan:
         play a target, and it is emitted only when there is a Windows host, so a
         topology with none keeps the play list it had. See 0022."""
         return sorted(self.ctx.name(node["id"])
-                      for node in self.ctx.hosts()
+                      for node in self.hosts()
                       if self._is_windows(node))
 
     # -- variables
@@ -344,7 +457,7 @@ class AnsiblePlan:
                 segments = {s for s in self.ctx.nodes
                             if self.ctx.kind(s) == "segment"
                             and self.ctx.network_of_segment(s) == scope}
-            return [h["id"] for h in self.ctx.hosts()
+            return [h["id"] for h in self.hosts()
                     if set(self.ctx.segments_of(h["id"])) & segments]
         raise GenerationError("unknown inject target %r" % into)
 
@@ -354,7 +467,7 @@ class AnsiblePlan:
         # host and the jumpbox need to agree on the answer.
         landing = self._breach_landing() if self._is_range() else {}
         out = {}
-        for node in self.ctx.hosts():
+        for node in self.hosts():
             nid = node["id"]
             vars_ = {
                 "redstackpro_node_id": nid,
@@ -577,8 +690,13 @@ class AnsiblePlan:
         """Read off the overlay rather than the kind, because os is a per node
         choice and an operators group holds both. Any Windows build counts: the
         attack side names it "windows" and a range names "windows_server_2019",
-        while a Linux server or a SIEM names a non-Windows os."""
-        return node.get("overlay", {}).get("os", "").startswith("windows")
+        while a Linux server or a SIEM names a non-Windows os. With no os, an AD
+        host kind is Windows, the same answer as plan.is_windows, so the host
+        Terraform builds as Windows is also driven over WinRM."""
+        os_ = (node.get("overlay") or {}).get("os") or ""
+        if os_:
+            return os_.startswith("windows")
+        return node.get("kind") in AD_HOST_KINDS
 
     # -- AD / range
 
@@ -643,7 +761,7 @@ class AnsiblePlan:
             if not users:
                 continue
             candidates = [
-                h for h in self.ctx.hosts()
+                h for h in self.hosts()
                 if h["kind"] in ("srv", "wks")
                 and self._is_windows(h)
                 and self._domain_of(h["id"]) == node["id"]
@@ -840,7 +958,7 @@ class AnsiblePlan:
                                           if target_dc else None),
                     "type": e.get("trust_type"),
                     "direction": e.get("direction"),
-                    "transitive": e.get("transitive", False),
+                    "transitive": e.get("transitive", True),
                 })
             # The domain's member hosts and the vulns planted on each, so the dc
             # role can apply the domain-level attack paths (a computer's
@@ -852,6 +970,8 @@ class AnsiblePlan:
                 if e["target"] != domain["id"]:
                     continue
                 host = self.ctx.nodes.get(e["source"], {})
+                if host.get("kind") not in HOST_KINDS:
+                    continue
                 host_overlay = host.get("overlay", {}) or {}
                 members.append({
                     "hostname": host_overlay.get("hostname", e["source"]),
@@ -869,7 +989,8 @@ class AnsiblePlan:
                 "groups": groups,
                 "group_members": group_members,
                 "ous": overlay.get("ous", []) or [],
-                "acls": overlay.get("acls", []) or [],
+                "acls": [dict(a, right=acl_right(a.get("right")))
+                         for a in overlay.get("acls", []) or []],
                 "trusts": trusts,
                 "members": members,
                 # Group-managed service accounts and LAPS reader delegations are
@@ -903,19 +1024,24 @@ class AnsiblePlan:
         service task and pins the port the role listens on, so the value Terraform
         opens (plan.vpn_access) and the value Ansible binds are the same one.
 
-        Left to public mode this does nothing. A defense range ignores the fields
-        and keeps the public portal (VPN002), but the compiler honors them
-        wherever they are set rather than second-guessing the mode, the same way
-        plan.vpn_access does. The default port lives in the role, so vpn_port is
-        emitted only when the overlay pins a non-default one."""
+        access_mode alone decides the VPN server. A wireguard or openvpn entry
+        in services is dropped: it used to install a listener Terraform never
+        opened a port for. A defense range keeps the public portal (VPN002), so
+        it gets no VPN server either, matching plan.vpn_access. The default port
+        lives in the role, so vpn_port is emitted only when the overlay pins a
+        non-default one."""
         ov = node.get("overlay", {}) or {}
         mode = ov.get("access_mode", "public")
-        if mode not in ("wireguard", "openvpn"):
+        if "redstackpro_jumpbox_services" in vars_:
+            services = [s for s in vars_["redstackpro_jumpbox_services"] or []
+                        if s not in VPN_SERVICES]
+            # The role refuses an empty list, and ssh is how Ansible reaches it.
+            vars_["redstackpro_jumpbox_services"] = services or ["ssh"]
+        if mode not in VPN_SERVICES or self._is_range():
             return
-        services = list(vars_.get("redstackpro_jumpbox_services") or [])
-        if mode not in services:
-            services.append(mode)
-            vars_["redstackpro_jumpbox_services"] = services
+        services = list(vars_.get("redstackpro_jumpbox_services") or ["ssh"])
+        services.append(mode)
+        vars_["redstackpro_jumpbox_services"] = services
         port = ov.get("vpn_port")
         if mode == "wireguard":
             if port:
@@ -1074,7 +1200,7 @@ class AnsiblePlan:
             return present + [g for g in self.groups if g not in present]
 
         deps = {}
-        for node in self.ctx.hosts():
+        for node in self.hosts():
             deps.setdefault(node["id"], set())
         for edge in self.ctx.edges:
             role = self.registry.roles.get(edge["role"])
@@ -1146,6 +1272,7 @@ def generate(topology, registry=None, skip_validation=False, provider=None):
     # randomized secret lives only in this export.
     topology = copy.deepcopy(topology)
     _randomize_gating(topology)
+    apply_compile_defaults(topology)
     plan = AnsiblePlan(topology, registry, provider=provider)
     files = {}
 

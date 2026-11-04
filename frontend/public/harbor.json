@@ -174,7 +174,14 @@
         "edr": "defender",
         "vulns": [
           "stored_credential"
-        ]
+        ],
+        "vulns_vars": {
+          "stored_credential": {
+            "owner": "FREIGHT\\dana.brooks",
+            "username": "FREIGHT\\svc.reports",
+            "target": "TERMSRV/fr-app01"
+          }
+        }
       }
     },
     {

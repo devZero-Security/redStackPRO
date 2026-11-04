@@ -13,7 +13,7 @@ a page instead of a pointer.
 - `kingslanding` - DC, Wazuh agent, `forcechangepassword`, `genericwrite`, `writedacl`, `ldap_signing_off`
 - `winterfell` - DC, Wazuh agent, `kerberoasting`, `asreproasting`, `unconstrained_delegation`, `llmnr_poisoning`, `ldap_signing_off`
 - `castelblack` - member (MSSQL + IIS), Wazuh agent, `iis_webshell`, `mssql_impersonation`, `gpp_password`, `password_in_description`, `weak_password`
-- `ws01` - Windows 10 workstation, Defender
+- `ws01` - Windows 10 workstation (Server 2022 on GCP and AWS), no planted vulns, no hardening; edr reads defender but real-time protection is off unless `defender_enabled` is set
 - `wazuh` - the SIEM (Ubuntu)
 - `jumpbox`
 
@@ -118,7 +118,7 @@ not verified live:
 | 1 recon | yes | six hosts across two domains |
 | 2 find users | yes | |
 | 3 enumeration with user | yes | kerberoasting and AS-REP are both planted |
-| 4 poison and relay | yes | `llmnr_poisoning` on winterfell |
+| 4 poison and relay | partial | `llmnr_poisoning` on winterfell, on Proxmox and ESXi only; a cloud network drops the broadcast it needs |
 | 5 exploit with user | no | none of the five credential-material techniques are set |
 | 6 ADCS | no | no CA and no ESC template |
 | 7 MSSQL | partial | `mssql_impersonation` on castelblack; no linked server, so the cross-forest hop drops |

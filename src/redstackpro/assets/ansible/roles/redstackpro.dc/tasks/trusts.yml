@@ -46,7 +46,11 @@
         $ctx = New-Object System.DirectoryServices.ActiveDirectory.DirectoryContext(
           "Forest", $TargetForest, "Administrator@$TargetForest", $Pass)
         $tgt = [System.DirectoryServices.ActiveDirectory.Forest]::GetForest($ctx)
-        $dir = if ($Direction -eq "bidirectional") { "Bidirectional" } else { "Outbound" }
+        $dir = switch ($Direction) {
+          "inbound" { "Inbound" }
+          "outbound" { "Outbound" }
+          default { "Bidirectional" }
+        }
         $src.CreateTrustRelationship($tgt, $dir)
       }
     parameters:

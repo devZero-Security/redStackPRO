@@ -149,9 +149,10 @@ if [ "$RSP_STOP_LEAD" -lt "${REDSTACKPRO_MIN_STOP_LEAD:-150}" ]; then
   echo "Provisioning takes up to 75 minutes, so the range would stop part-built."
   echo
   echo "  Override: REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh"
-  echo "  Or move auto_stop.at later and export again. It is a daily clock time, so"
-  echo "  re-exporting with the same value changes nothing; after_hours counts from"
-  echo "  the apply and never trips this check."
+  echo "  Or set a later stop time:"
+  echo "  In the canvas, click empty space, then Topology settings > Auto-stop, and export again."
+  echo "  It is a daily clock time, so exporting again with the same time changes"
+  echo "  nothing; a stop after N hours counts from the apply and never trips this check."
   exit 1
 fi
 """
@@ -210,11 +211,11 @@ _FIND_PYTHON = r'''# Find a Python that actually RUNS, rather than one that mere
 PY=""
 for c in python3 python py; do
   command -v "$c" >/dev/null 2>&1 || continue
-  "$c" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)' \
+  "$c" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' \
     >/dev/null 2>&1 && { PY="$c"; break; }
 done
 [ -n "$PY" ] || {
-  echo "no working Python 3.8 or newer found (tried: python3, python, py)."
+  echo "no working Python 3.11 or newer found (tried: python3, python, py)."
   echo "One of them may be on PATH but not runnable -- on Windows the Microsoft"
   echo "Store stub does exactly that. Install Python and re-run."
   exit 1
@@ -232,8 +233,60 @@ def _jumpbox_name(ctx):
 _AWS_TTL_IAM_NOTE = """# auto_stop creates an IAM role and policy for the shutdown schedule, the stack's
 # first IAM resources. A caller who cannot create roles fails there, on a resource
 # they did not add by hand, so say so before the apply rather than after.
-echo "note: this range has an auto-stop schedule; the AWS apply needs iam:CreateRole and iam:PutRolePolicy, or it fails creating the scheduler role. Grant those, or recompile without an auto_stop TTL."
+echo "note: this range has an auto-stop schedule; the AWS apply needs iam:CreateRole and iam:PutRolePolicy, or it fails creating the scheduler role. Grant those, or turn auto-stop off. In the canvas, click empty space, then Topology settings > Auto-stop, and export again."
 """
+
+
+# Values in deploy.tfvars that otherwise fail deep inside terraform. A value set
+# in the file wins over TF_VAR_*, the same precedence terraform applies, so the
+# environment is read only when the file leaves the line out.
+_TFVAR_HELPER = r'''rsp_tfvar(){
+  if grep -Eq "^[[:space:]]*$1[[:space:]]*=" deploy.tfvars 2>/dev/null; then
+    grep -E "^[[:space:]]*$1[[:space:]]*=" deploy.tfvars | tail -1 \
+      | sed -E 's/[^=]*=[[:space:]]*"?([^"#]*)"?.*/\1/' | tr -d '[:space:]'
+  else
+    rsp_env="TF_VAR_$1"
+    printf '%s' "${!rsp_env:-}"
+  fi
+}
+'''
+
+_TFVARS_PREFLIGHT = {
+    "gcp": _TFVAR_HELPER + r'''if [ -f deploy.tfvars ]; then
+  RSP_PROJECT="$(rsp_tfvar project)"
+  if [ -z "$RSP_PROJECT" ]; then
+    echo "project is empty in deploy.tfvars. Set it to your GCP project ID (gcloud config get-value project)."
+    exit 1
+  fi
+  RSP_REGION="$(rsp_tfvar region)"; RSP_ZONE="$(rsp_tfvar zone)"
+  if [ -n "$RSP_REGION" ] && [ -n "$RSP_ZONE" ]; then
+    case "$RSP_ZONE" in
+      "$RSP_REGION"-*) ;;
+      *) echo "zone $RSP_ZONE is not in region $RSP_REGION. Pick a zone that starts with $RSP_REGION-, e.g. $RSP_REGION-a."; exit 1 ;;
+    esac
+  fi
+fi
+''',
+    "aws": _TFVAR_HELPER + r'''if [ -f deploy.tfvars ]; then
+  RSP_REGION="$(rsp_tfvar region)"; RSP_ZONE="$(rsp_tfvar availability_zone)"
+  if [ -n "$RSP_REGION" ] && [ -n "$RSP_ZONE" ] && [ "$RSP_ZONE" != "null" ]; then
+    case "$RSP_ZONE" in
+      "$RSP_REGION"[a-z]) ;;
+      *) echo "availability_zone $RSP_ZONE is not in region $RSP_REGION. Pick a zone that starts with $RSP_REGION, e.g. ${RSP_REGION}a."; exit 1 ;;
+    esac
+  fi
+fi
+''',
+    "azure": _TFVAR_HELPER + r'''if [ -f deploy.tfvars ]; then
+  RSP_SUB="$(rsp_tfvar subscription_id)"
+  # azurerm falls back to ARM_SUBSCRIPTION_ID when subscription_id is empty.
+  if [ -z "$RSP_SUB" ] && [ -z "${ARM_SUBSCRIPTION_ID:-}" ]; then
+    echo "subscription_id is empty in deploy.tfvars. Set it to: az account show --query id -o tsv"
+    exit 1
+  fi
+fi
+''',
+}
 
 
 def generate_deploy_script(topology, registry=None, provider=None):
@@ -396,6 +449,7 @@ def generate_deploy_script(topology, registry=None, provider=None):
                             is_range="true" if is_range else "false",
                             gate=gate, limit=limit, dns_actions=dns_actions,
                             cloud_preflight=cloud_preflight,
+                            tfvars_preflight=_TFVARS_PREFLIGHT.get(provider, ""),
                             apply_preflight=apply_preflight,
                             logging_setup=logging_setup,
                             find_python=_FIND_PYTHON)
@@ -409,7 +463,7 @@ _TEMPLATE = r"""#!/usr/bin/env bash
 # jumpbox and provisions from there. Run it from the export root (the directory
 # holding this script, terraform/ and ansible/).
 #
-# Needs on your machine: terraform, ssh, tar, and a Python 3. Ansible is installed
+# Needs on your machine: terraform, ssh, tar, and Python 3.11+. Ansible is installed
 # on the jumpbox automatically -- you do not need it locally. Every one of these
 # ships with Git for Windows, macOS and any Linux, so this runs the same way on
 # all three. On Windows run it from Git Bash, or use deploy.ps1 beside this file.
@@ -508,6 +562,12 @@ SSH="ssh -i $SSHKEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o 
 if [ -f deploy.tfvars ] && ! grep -Eq '^[[:space:]]*operator_source_ranges[[:space:]]*=[[:space:]]*\[[^]]*"' deploy.tfvars; then
   echo "operator_source_ranges is not set in deploy.tfvars."
   echo '  Set it to the IP/CIDR operators connect from, for example ["203.0.113.5/32"].'
+  # A hint only: omitted when the lookup fails or returns something unexpected.
+  RSP_MYIP="$(curl -s --max-time 5 https://checkip.amazonaws.com 2>/dev/null | tr -d '[:space:]')"
+  case "$RSP_MYIP" in
+    ''|*[!0-9.]*) ;;
+    *) echo "  Your current public IP looks like $RSP_MYIP; use [\"$RSP_MYIP/32\"]." ;;
+  esac
   echo "  A range is never exposed by default, so the deploy stops until you set this."
   exit 1
 fi
@@ -527,7 +587,7 @@ if grep -Eq 'operator_source_ranges[^#]*"0\.0\.0\.0/0"' deploy.tfvars 2>/dev/nul
     exit 1
   fi
 fi
-# deploy.tfvars is the one config file you edit, here in the export root. Terraform
+{tfvars_preflight}# deploy.tfvars is the one config file you edit, here in the export root. Terraform
 # auto-loads terraform/terraform.tfvars, so copy it into place for apply and destroy.
 [ -f deploy.tfvars ] || {{ echo "deploy.tfvars not found next to this script. Fill it in first (see DEPLOYMENT-GUIDE.md)."; exit 1; }}
 cp deploy.tfvars terraform/terraform.tfvars
@@ -764,7 +824,7 @@ _MANAGE_SWEEP = {
     # order. The plain `teardown` (no --force) still uses terraform destroy, which is
     # enough after a clean apply.
     RG="$(grep -E '^[[:space:]]*resource_group[[:space:]]*=' deploy.tfvars 2>/dev/null | head -1 | sed -E 's/[^=]*=[[:space:]]*"?([^"]*)"?.*/\1/')"
-    RG="${RG:-redstackpro-range}"
+    RG="${RG:-@@DEFAULT_RG@@}"
     if command -v az >/dev/null 2>&1; then
       echo "  deleting resource group $RG and every resource in it"
       az group delete -n "$RG" --yes 2>/dev/null || echo "  az group delete did not finish; terraform destroy will try next"
@@ -918,6 +978,10 @@ def generate_manage_script(topology, registry=None, provider=None):
         return None
     provider_block = _MANAGE_PROVIDER_BLOCK.get(provider, _MANAGE_NO_LIVE_CONTROL)
     sweep = _MANAGE_SWEEP.get(provider, _MANAGE_SWEEP_NONE)
+    if provider == "azure":
+        from .terraform.azure import default_resource_group
+        sweep = sweep.replace("@@DEFAULT_RG@@", default_resource_group(
+            TerraformPlan(topology, registry, provider="azure")))
     teardown = _MANAGE_TEARDOWN_HEAD + sweep + _MANAGE_TEARDOWN_TAIL
     return (_MANAGE_HEAD + _FIND_PYTHON + teardown + _MANAGE_STATUS_PORTAL
             + provider_block)

@@ -898,3 +898,78 @@ def test_manage_fails_loudly_when_the_cloud_cli_is_missing_or_fails(tmp_path, pr
     assert failing.returncode != 0, failing.stdout + failing.stderr
     working = _manage_staged(tmp_path / "working", provider, "exit 0")
     assert working.returncode == 0, working.stdout + working.stderr
+
+
+# -- deploy.tfvars values that otherwise fail deep inside terraform
+
+def _tfvars(export, body):
+    (export / "deploy.tfvars").write_text(body, encoding="utf-8", newline="\n")
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_unset_ingress_suggests_the_callers_public_ip(staged):
+    export, stubs = staged
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    _stub(stubs, "gcloud", "exit 0")
+    _stub(stubs, "curl", "echo 198.51.100.23")
+    done = _run(export, stubs)
+    assert done.returncode == 1
+    assert ('Your current public IP looks like 198.51.100.23; use '
+            '["198.51.100.23/32"].') in done.stdout, done.stdout
+
+    _stub(stubs, "curl", "exit 7")
+    done = _run(export, stubs)
+    assert done.returncode == 1
+    assert "operator_source_ranges is not set" in done.stdout
+    assert "looks like" not in done.stdout, done.stdout
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_an_empty_gcp_project_stops_before_terraform(staged):
+    export, stubs = staged
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    _stub(stubs, "gcloud", "exit 0")
+    _tfvars(export, 'project        = ""\nregion = "us-central1"\nzone = "us-central1-a"\n'
+                    'ssh_public_key = ""\noperator_source_ranges = ["203.0.113.5/32"]\n')
+    done = _run(export, stubs)
+    assert done.returncode == 1
+    assert ("project is empty in deploy.tfvars. Set it to your GCP project ID "
+            "(gcloud config get-value project).") in done.stdout, done.stdout
+    assert "terraform apply" not in done.stdout
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_a_zone_outside_the_region_stops_before_terraform(staged):
+    export, stubs = staged
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    _stub(stubs, "gcloud", "exit 0")
+    _tfvars(export, 'project = "p"\nregion = "us-central1"\nzone   = "us-east4-a"  # moved\n'
+                    'ssh_public_key = ""\noperator_source_ranges = ["203.0.113.5/32"]\n')
+    done = _run(export, stubs)
+    assert done.returncode == 1
+    assert ("zone us-east4-a is not in region us-central1. Pick a zone that starts "
+            "with us-central1-, e.g. us-central1-a.") in done.stdout, done.stdout
+    assert "terraform apply" not in done.stdout
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_an_empty_azure_subscription_stops_unless_the_environment_names_one(azure_staged):
+    export, stubs = azure_staged
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    _stub(stubs, "az", "exit 0")
+    _tfvars(export, 'subscription_id = ""\nlocation = "eastus2"\n'
+                    'ssh_public_key = "ssh-ed25519 AAAATEST test"\n'
+                    'operator_source_ranges = ["203.0.113.5/32"]\n')
+    done = _run(export, stubs)
+    assert done.returncode == 1
+    assert ("subscription_id is empty in deploy.tfvars. Set it to: az account show "
+            "--query id -o tsv") in done.stdout, done.stdout
+
+    done = _run(export, stubs, env_extra={"ARM_SUBSCRIPTION_ID": "s"})
+    assert "subscription_id is empty" not in done.stdout, done.stdout
+
+
+def test_aws_checks_the_availability_zone_against_the_region():
+    body = generate_deploy_script(example("redstack.json"), Registry(), provider="aws")
+    assert "availability_zone $RSP_ZONE is not in region $RSP_REGION" in body
+    assert body.index("rsp_tfvar availability_zone") < body.index('say "terraform apply"')

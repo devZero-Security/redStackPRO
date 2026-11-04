@@ -105,8 +105,10 @@ through the portal's patient-zero RDP tile as in the GOAD methodology (she has t
 be a Remote Desktop Users member on `fr-wks01` for the tile to open, which the
 range grants). She is a plain
 `freight.harbor.corp` domain user. `fr-wks01` also carries `stored_credential`:
-check the Windows Credential Manager on the box for a saved credential that gives
-an early second identity.
+her Credential Manager vault holds a saved `TERMSRV/fr-app01` credential for
+`FREIGHT\svc.reports`, an early second identity and a shortcut past the roast in
+step 2. `cmdkey /list` shows it; the password comes out of the vault with a DPAPI
+tool run as her.
 
 ```
 proxychains cmdkey /list                 # from a beacon on fr-wks01
@@ -135,7 +137,11 @@ Run the beacon in the `dana.brooks` session so the chain starts at patient zero.
 `fr-dc01` declares `llmnr_poisoning` and `nbtns_poisoning`, so the flat subnet
 answers LLMNR and NBT-NS broadcasts. Run Responder over the pivot to catch a
 NetNTLM hash from routine name-resolution failures, an alternative first
-credential if the patient-zero context is thin:
+credential if the patient-zero context is thin.
+
+This step works on Proxmox and ESXi only. A cloud network (GCP, AWS, Azure) drops
+the broadcast and multicast it needs, so the compiler leaves both vulns out there
+and `DEFENSE-BRIEFING.md` marks them as not on that provider.
 
 ```
 proxychains responder -I <iface>         # capture NetNTLMv2, then crack offline

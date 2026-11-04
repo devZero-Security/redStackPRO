@@ -44,7 +44,8 @@ class FakeArm:
     """ARM and the token endpoint, keyed on the URL. Records every call."""
 
     def __init__(self, skus=None, compute=None, network=None, providers=None,
-                 fail=()):
+                 fail=(), groups=()):
+        self.groups = {g.lower() for g in groups}
         self.skus = skus if skus is not None else [
             sku("Standard_D2as_v5", "standardDASv5Family"),
             sku("Standard_D4as_v5", "standardDASv5Family", 4, 16),
@@ -81,6 +82,11 @@ class FakeArm:
             return {"value": self.compute}
         if "/Microsoft.Network/locations/eastus2/usages" in url:
             return {"value": self.network}
+        if "/resourcegroups/" in url:
+            name = url.split("/resourcegroups/")[1].split("?")[0].lower()
+            if name in self.groups:
+                return {"name": name, "location": "eastus2"}
+            raise ap.ApiError("HTTP 404 ResourceGroupNotFound", status=404)
         ns = url.split("/providers/")[1].split("?")[0]
         return {"namespace": ns,
                 "registrationState": self.providers.get(ns, "Registered")}
@@ -386,3 +392,73 @@ def test_a_proposal_with_less_memory_says_so(export):
     assert rc == 1, text
     assert set(proposed(text).values()) == {"Standard_F2as_v7"}
     assert "jumpbox gets Standard_F2as_v7 with 4 GB, less than the 8 GB" in text
+
+
+# -- the resource group the deploy creates
+
+def _rg(root):
+    return ap.read_tfvars(root / "deploy.tfvars")["resource_group"]
+
+
+def test_each_range_gets_its_own_resource_group_by_default(redstack):
+    """Every export used to default to redstackpro-range, so a second range in
+    the same subscription failed at apply, and teardown --force deleted the group
+    the first range lived in."""
+    files = compile_topology(redstack, Registry(), provider="azure")
+    tfvars = files["deploy.tfvars"]
+    m = re.search(r'(?m)^resource_group\s*=\s*"([^"]+)"', tfvars)
+    assert m, tfvars
+    rg = m.group(1)
+    assert rg.startswith("off-") and rg.endswith("-rg")
+    assert re.fullmatch(r"[a-z0-9-]{1,90}", rg)
+    assert ("# Created by this deploy and deleted by teardown. Must not already "
+            "exist; use one per range.") in tfvars
+    assert 'default     = "%s"' % rg in files["terraform/variables.tf"]
+    assert 'RG="${RG:-%s}"' % rg in files["manage.sh"]
+    assert json.loads(files["terraform/preflight.json"])["default_resource_group"] == rg
+
+    other = json.loads(json.dumps(redstack))
+    other["name"] = "Another Range!"
+    files = compile_topology(other, Registry(), provider="azure")
+    assert 'resource_group  = "off-another-range-rg"' in files["deploy.tfvars"]
+
+    long = json.loads(json.dumps(redstack))
+    long["name"] = "x" * 200
+    files = compile_topology(long, Registry(), provider="azure")
+    rg = re.search(r'(?m)^resource_group\s*=\s*"([^"]+)"', files["deploy.tfvars"]).group(1)
+    assert len(rg) == 90 and rg.endswith("-rg")
+
+
+def test_an_existing_resource_group_outside_this_state_fails(export):
+    rg = _rg(export)
+    rc, text = run(export, FakeArm(groups=[rg.upper()]))
+    assert rc == 1, text
+    assert ("FAIL: resource group %s already exists. This deploy creates its own; "
+            "set another resource_group in deploy.tfvars, or tear down the range "
+            "that owns it." % rg) in text
+
+
+def test_a_resource_group_this_state_owns_passes(export):
+    rg = _rg(export)
+    state = {"resources": [
+        {"mode": "managed", "type": "azurerm_resource_group", "name": "this",
+         "instances": [{"attributes": {"name": rg}}]}]}
+    (export / "terraform/terraform.tfstate").write_text(json.dumps(state), encoding="utf-8")
+    arm = FakeArm(groups=[rg])
+    rc, text = run(export, arm)
+    assert rc == 0, text
+    # Owned by this state: the group is not even asked about.
+    assert not any("/resourcegroups/" in url for _, url in arm.calls)
+
+
+def test_a_resource_group_check_that_cannot_run_warns_and_passes(export):
+    rc, text = run(export, FakeArm(fail=("/resourcegroups/",)))
+    assert rc == 0, text
+    assert "could not check whether resource group %s exists" % _rg(export) in text
+
+
+def test_the_resource_group_check_is_a_read(export):
+    arm = FakeArm()
+    run(export, arm)
+    assert all(method in ("GET", "POST") for method, _ in arm.calls)
+    assert [m for m, u in arm.calls if "/resourcegroups/" in u] == ["GET"]

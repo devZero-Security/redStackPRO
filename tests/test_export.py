@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from redstackpro import Registry
 from redstackpro.deploy import generate_deploy_script
 from redstackpro.export import compile_topology, static_files
 
@@ -102,7 +103,8 @@ def test_a_build_that_would_stop_mid_provision_refuses_to_start(registry):
     # The one-line fix has to be named: a refusal the operator cannot act on is
     # just an obstacle. The guard is only emitted for a fixed `at`, so the fix is
     # moving that time (re-exporting the same value changes nothing).
-    assert "move auto_stop.at later" in body
+    assert ("In the canvas, click empty space, then Topology settings > "
+            "Auto-stop, and export again.") in body
     assert "re-run the compile now" not in body
     assert "REDSTACKPRO_MIN_STOP_LEAD=0" in body, "an override must exist"
 
@@ -298,3 +300,79 @@ def test_static_files_refuses_a_provider_that_is_not_a_bare_name(provider):
     from redstackpro.export import static_files
     with pytest.raises(FileNotFoundError):
         static_files(provider)
+
+
+# -- the deployment guide and deploy.tfvars
+
+CHANGE_AUTO_STOP = ("In the canvas, click empty space, then Topology settings > "
+                    "Auto-stop, and export again.")
+
+
+def _guide(doc, provider="gcp"):
+    return compile_topology(doc, Registry(), provider=provider)["DEPLOYMENT-GUIDE.md"]
+
+
+def _goad_light():
+    return json.loads(GOAD_LIGHT.read_text(encoding="utf-8"))
+
+
+def test_the_guide_says_when_the_range_stops_itself():
+    """Every shipped blueprint stops itself 8 hours after apply, and the guide
+    never said so."""
+    doc = _goad_light()
+    guide = _guide(doc)
+    assert ("This range stops itself 8 hours after the first apply, then daily "
+            "at that time.") in guide
+    assert "Start it again with `manage.sh start`." in guide
+    assert CHANGE_AUTO_STOP in guide
+
+    doc["auto_stop"] = {"enabled": True, "at": "21:30", "timezone": "Europe/London"}
+    assert "This range stops itself daily at 21:30 Europe/London." in _guide(doc)
+
+    doc["auto_stop"] = {"enabled": False}
+    assert "## Auto-stop" not in _guide(doc)
+
+
+@pytest.mark.parametrize("provider,expect,absent", [
+    ("gcp", "`project`: your GCP project ID", "subscription_id"),
+    ("aws", "Confirm `region` is the one you mean to deploy into.", "`project`"),
+    ("azure", "`resource_group` is created by this deploy and deleted", "`project`"),
+])
+def test_the_guide_names_what_to_confirm_per_provider(provider, expect, absent):
+    guide = _guide(_goad_light(), provider)
+    assert expect in guide
+    assert absent not in guide.split("## 3.")[0].split("## 2.")[1]
+    assert "(and, on GCP, the project)" not in guide
+    assert "Python 3.11+" in guide and "3.8" not in guide
+
+
+def test_the_gcp_guide_enables_compute_and_points_at_the_quota_page():
+    guide = _guide(_goad_light(), "gcp")
+    assert "gcloud services enable compute.googleapis.com" in guide
+    assert "https://console.cloud.google.com/iam-admin/quotas" in guide
+
+
+@pytest.mark.parametrize("provider", ["gcp", "aws", "azure"])
+def test_tfvars_explain_each_entry(provider):
+    files = compile_topology(_goad_light(), Registry(), provider=provider)
+    tfvars = files["deploy.tfvars"]
+    assert "project conventions" not in tfvars
+    assert "# REQUIRED: your public IP as /32. Find it: curl https://checkip.amazonaws.com" in tfvars
+    assert "# Leave empty: deploy.sh fills it from keys/id_ed25519." in tfvars
+    # lab_password is a real variable on every backend, so the hint is honest.
+    assert "# lab_password = \"\"" in tfvars
+    assert 'variable "lab_password"' in files["terraform/variables.tf"]
+    assert ("# Values come from deploy.tfvars in the export root."
+            in files["terraform/variables.tf"])
+    hints = {
+        "gcp": ["# GCP project ID (not its name or number). Find it: gcloud config get-value project",
+                "gcloud compute zones list --filter=region:us-east4"],
+        "aws": ["# Credentials come from your AWS CLI profile: set AWS_PROFILE=<name> "
+                "or run aws configure (or aws sso login)."],
+        "azure": ["# subscription_id: az account show --query id -o tsv",
+                  "# location: az account list-locations -o table",
+                  "# Created by this deploy and deleted by teardown. Must not already "
+                  "exist; use one per range."],
+    }[provider]
+    for hint in hints:
+        assert hint in tfvars, hint

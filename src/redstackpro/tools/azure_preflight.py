@@ -6,8 +6,9 @@
 deploy.sh runs it after terraform init. It asks the subscription what an apply
 would otherwise find out halfway through: whether each VM size is offered here
 and not restricted for this subscription, whether the regional and per-family
-vCPU quotas have room, whether the public IP quota has room, and whether the
-resource providers the HCL needs are registered.
+vCPU quotas have room, whether the public IP quota has room, whether the
+resource providers the HCL needs are registered, and whether the resource group
+it would create already exists outside this export's state.
 
 Read only, stdlib only. The hosts and roles come from terraform/preflight.json,
 written at compile. The effective size per role comes from terraform itself
@@ -34,6 +35,7 @@ import urllib.request
 from pathlib import Path
 
 ARM = "https://management.azure.com"
+RESOURCE_GROUP_API = "2021-04-01"
 SKU_API = "2021-07-01"
 COMPUTE_USAGE_API = "2023-07-01"
 NETWORK_USAGE_API = "2023-09-01"
@@ -50,7 +52,12 @@ SKIP_ENV = "REDSTACKPRO_SKIP_PREFLIGHT"
 
 
 class ApiError(Exception):
-    """One Azure call did not complete. Reported as a warning, never a pass."""
+    """One Azure call did not complete. Reported as a warning, never a pass.
+    status is the HTTP code when there was one, so a 404 can mean "absent"."""
+
+    def __init__(self, message, status=None):
+        super().__init__(message)
+        self.status = status
 
 
 # ---------------------------------------------------------------- http
@@ -69,7 +76,7 @@ def _http(method, url, headers=None, body=None):
             code = err.get("code", "") if isinstance(err, dict) else str(err or "")
         except (ValueError, AttributeError, OSError):
             pass
-        raise ApiError("HTTP %d %s" % (exc.code, code)) from None
+        raise ApiError("HTTP %d %s" % (exc.code, code), status=exc.code) from None
     except (urllib.error.URLError, OSError, ValueError) as exc:
         raise ApiError(str(getattr(exc, "reason", exc))) from None
 
@@ -173,13 +180,14 @@ def _strip_comments(text):
 
 def read_tfvars(path):
     """The values the preflight needs from a tfvars file: subscription_id,
-    location and the vm_sizes map. Anything absent is left out."""
+    location, resource_group and the vm_sizes map. Anything absent is left
+    out."""
     try:
         text = _strip_comments(Path(path).read_text(encoding="utf-8"))
     except OSError:
         return {}
     found = {}
-    for key in ("subscription_id", "location"):
+    for key in ("subscription_id", "location", "resource_group"):
         m = re.findall(r'(?m)^\s*%s\s*=\s*"([^"]*)"' % key, text)
         if m:
             found[key] = m[-1]
@@ -195,7 +203,8 @@ def terraform_settings(tfdir, env, run=subprocess.run):
     them, or None when terraform cannot say (not initialised, a variable with no
     value, terraform absent)."""
     expr = ("jsonencode({vm_sizes = local.vm_sizes, location = var.location, "
-            "subscription_id = var.subscription_id})\n")
+            "subscription_id = var.subscription_id, "
+            "resource_group = var.resource_group})\n")
     try:
         done = run(["terraform", "-chdir=%s" % tfdir, "console"], input=expr,
                    capture_output=True, text=True, timeout=300,
@@ -222,6 +231,7 @@ def resolve_settings(root, manifest, env, run=subprocess.run):
         sizes = tf["vm_sizes"]
         location = tf.get("location") or ""
         subscription = tf.get("subscription_id") or ""
+        resource_group = tf.get("resource_group") or ""
         source = "terraform (defaults merged with vm_sizes)"
     else:
         tfvars = root / "deploy.tfvars"
@@ -233,11 +243,14 @@ def resolve_settings(root, manifest, env, run=subprocess.run):
                     or manifest.get("default_location", ""))
         subscription = (found.get("subscription_id")
                         or env.get("TF_VAR_subscription_id") or "")
+        resource_group = (found.get("resource_group")
+                          or env.get("TF_VAR_resource_group")
+                          or manifest.get("default_resource_group", ""))
         source = "%s (terraform console did not answer)" % tfvars.name
     # azurerm falls back to ARM_SUBSCRIPTION_ID when subscription_id is empty.
     subscription = subscription or env.get("ARM_SUBSCRIPTION_ID", "")
     return {"sizes": sizes, "location": location, "subscription": subscription,
-            "source": source}
+            "resource_group": resource_group, "source": source}
 
 
 def state_usage(tfdir):
@@ -258,6 +271,38 @@ def state_usage(tfdir):
             elif res.get("type") == "azurerm_public_ip":
                 ips += 1
     return sizes, ips
+
+
+def state_resource_groups(tfdir):
+    """Lowercased names of the resource groups this export's state owns. Azure
+    group names are case-insensitive."""
+    try:
+        state = json.loads((Path(tfdir) / "terraform.tfstate").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    return {((inst.get("attributes") or {}).get("name") or "").lower()
+            for res in state.get("resources", [])
+            if res.get("mode") == "managed"
+            and res.get("type") == "azurerm_resource_group"
+            for inst in res.get("instances", [])} - {""}
+
+
+def check_resource_group(az, sub, rg, owned):
+    """(fail lines, warning): a group of this name that already exists and is
+    not in this export's state would make apply fail, or worse, teardown delete
+    another range. Read only."""
+    if not rg or rg.lower() in owned:
+        return None, None
+    try:
+        az.get("%s/resourcegroups/%s" % (sub, urllib.parse.quote(rg)),
+               **{"api-version": RESOURCE_GROUP_API})
+    except ApiError as exc:
+        if exc.status == 404:
+            return None, None
+        return None, "could not check whether resource group %s exists (%s); not checked." % (rg, exc)
+    return ["resource group %s already exists. This deploy creates its own; set "
+            "another resource_group in deploy.tfvars, or tear down the range "
+            "that owns it." % rg], None
 
 
 # ---------------------------------------------------------------- azure facts
@@ -680,6 +725,13 @@ def main(argv=None, env=None, http=_http, run=subprocess.run, out=print):
 
     lines, fails, fix, more = assess(manifest, settings, skus, compute, network,
                                      providers, state_usage(root / "terraform"))
+    rg_fail, rg_warn = check_resource_group(
+        az, sub, settings.get("resource_group", ""),
+        state_resource_groups(root / "terraform"))
+    if rg_fail:
+        fails.insert(0, rg_fail)
+    if rg_warn:
+        warns.append(rg_warn)
     while lines and not lines[-1]:
         lines.pop()
     out("")
