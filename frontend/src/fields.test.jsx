@@ -9,11 +9,11 @@ import userEvent from "@testing-library/user-event";
 
 import SCHEMA from "../../src/redstackpro/schema/topology/0.7.0.json";
 import { Inspector } from "./Inspector.jsx";
-import { jsonKindFor, resolveSpec } from "./fieldRules.js";
+import { fieldRule, jsonKindFor, resolveSpec } from "./fieldRules.js";
 
 // Renders one node in the Inspector over a local document, the way App wires
 // onOverlayChange. `seen` collects every overlay the panel writes.
-function Panel({ node, mode = "defense", schema = SCHEMA, findings = [], seen, extraNodes = [] }) {
+function Panel({ node, mode = "defense", schema = SCHEMA, findings = [], seen, extraNodes = [], placement = false }) {
   const [document, setDocument] = useState({
     schema_version: "0.7.0",
     mode,
@@ -37,6 +37,8 @@ function Panel({ node, mode = "defense", schema = SCHEMA, findings = [], seen, e
       onRename={() => {}}
       onDelete={() => {}}
       kindLabels={{}}
+      onJoinDomain={placement ? () => {} : undefined}
+      onPlaceSubnet={placement ? () => {} : undefined}
     />
   );
 }
@@ -277,5 +279,266 @@ describe("the empty option names the default", () => {
     render(<Panel node={{ id: "dc01", kind: "dc", overlay: {} }} />);
     const ip = inputNamed("internal_ip");
     expect(ip.getAttribute("placeholder")).toBe("e.g. 10.30.10.5");
+  });
+});
+
+// Whether a field label is on screen.
+const hasField = (title) =>
+  screen.queryAllByText(
+    (_, el) => el?.classList?.contains("rg-field-label") && el.firstChild?.textContent === title
+  ).length > 0;
+
+describe("fields that mean nothing on this node are hidden", () => {
+  test("a defense jumpbox hides the VPN fields and the roster, and locks public_address", () => {
+    render(<Panel node={{ id: "jump01", kind: "jumpbox", overlay: { services: ["ssh"] } }} />);
+    for (const name of ["access_mode", "vpn_port", "vpn_protocol"]) expect(hasField(name)).toBe(false);
+    expect(screen.queryByText(/^Operators/)).toBeNull();
+    const pub = screen.getByRole("checkbox", { name: /public_address/ });
+    expect(pub.checked).toBe(true);
+    expect(pub.disabled).toBe(true);
+    expect(within(fieldOf(pub)).getByText(/always takes a public address/)).toBeTruthy();
+  });
+
+  test("a stored value on a hidden field stays visible with the reason", () => {
+    render(
+      <Panel node={{ id: "jump01", kind: "jumpbox", overlay: { services: ["ssh"], access_mode: "wireguard" } }} />
+    );
+    const field = fieldNamed("access_mode");
+    expect(within(field).getByText(/Not used here: a defense range keeps the public portal/)).toBeTruthy();
+  });
+
+  test("vpn fields follow the offense access mode", () => {
+    const { unmount } = render(
+      <Panel mode="offense" node={{ id: "jump01", kind: "jumpbox", overlay: { services: ["ssh"] } }} />
+    );
+    expect(hasField("access_mode")).toBe(true);
+    expect(hasField("vpn_port")).toBe(false);
+    expect(hasField("vpn_protocol")).toBe(false);
+    unmount();
+    render(
+      <Panel
+        mode="offense"
+        node={{ id: "jump01", kind: "jumpbox", overlay: { services: ["ssh"], access_mode: "wireguard" } }}
+      />
+    );
+    expect(hasField("vpn_port")).toBe(true);
+    expect(inputNamed("vpn_port").getAttribute("placeholder")).toBe("51820");
+    expect(hasField("vpn_protocol")).toBe(false);
+  });
+
+  test("offensive_toolkit shows the compiler's default for the mode", () => {
+    const box = () => screen.getByRole("checkbox", { name: /offensive_toolkit/ });
+    const jump = (overlay) => ({ id: "jump01", kind: "jumpbox", overlay: { services: ["ssh"], ...overlay } });
+    let r = render(<Panel node={jump({})} />);
+    expect(box().checked).toBe(true);
+    r.unmount();
+    r = render(<Panel node={jump({ offensive_toolkit: false })} />);
+    expect(box().checked).toBe(false);
+    r.unmount();
+    render(<Panel mode="offense" node={jump({})} />);
+    expect(box().checked).toBe(false);
+  });
+
+  test("sudo_groups and ssh_groups show only on a Linux member server", () => {
+    let r = render(<Panel node={{ id: "srv01", kind: "srv", overlay: {} }} />);
+    expect(hasField("sudo_groups")).toBe(false);
+    expect(hasField("ssh_groups")).toBe(false);
+    r.unmount();
+    r = render(<Panel node={{ id: "dc01", kind: "dc", overlay: { os: "linux" } }} />);
+    expect(hasField("sudo_groups")).toBe(false);
+    r.unmount();
+    render(<Panel node={{ id: "lx-srv01", kind: "srv", overlay: { os: "linux" } }} />);
+    expect(hasField("sudo_groups")).toBe(true);
+    expect(hasField("ssh_groups")).toBe(true);
+  });
+
+  test("Defender and telemetry toggles are Windows only", () => {
+    const r = render(<Panel node={{ id: "dc01", kind: "dc", overlay: {} }} />);
+    expect(hasField("defender_enabled")).toBe(true);
+    expect(hasField("endpoint_telemetry")).toBe(true);
+    r.unmount();
+    render(<Panel node={{ id: "lx-srv01", kind: "srv", overlay: { os: "linux" } }} />);
+    expect(hasField("defender_enabled")).toBe(false);
+    expect(hasField("endpoint_telemetry")).toBe(false);
+  });
+
+  test("desktop is hidden on a Windows operator", () => {
+    const r = render(<Panel mode="offense" node={{ id: "win-op01", kind: "operator", overlay: { os: "windows" } }} />);
+    expect(hasField("desktop")).toBe(false);
+    r.unmount();
+    render(<Panel mode="offense" node={{ id: "kali-op01", kind: "operator", overlay: { os: "kali" } }} />);
+    expect(hasField("desktop")).toBe(true);
+  });
+
+  test("teamserver version shows only for Mythic and Adaptix", () => {
+    for (const [c2, shown] of [["mythic", true], ["adaptix", true], ["sliver", false], ["none", false]]) {
+      const r = render(<Panel mode="offense" node={{ id: "ts01", kind: "teamserver", overlay: { c2 } }} />);
+      expect(hasField("version")).toBe(shown);
+      r.unmount();
+    }
+  });
+
+  test("a network's provider and a collector's shipper are hidden", () => {
+    const r = render(
+      <Panel mode="offense" node={{ id: "main-net01", kind: "network", overlay: { cidr: "10.30.0.0/16" } }} />
+    );
+    expect(hasField("provider")).toBe(false);
+    expect(hasField("cidr")).toBe(true);
+    r.unmount();
+    render(
+      <Panel
+        mode="offense"
+        node={{ id: "log01", kind: "collector", overlay: { sink: "opensearch", shipper: "filebeat" } }}
+      />
+    );
+    expect(hasField("shipper")).toBe(false);
+  });
+
+  test("an offense teamserver's public_address is locked off unless it holds the wrong value", () => {
+    const r = render(<Panel mode="offense" node={{ id: "ts01", kind: "teamserver", overlay: { c2: "mythic" } }} />);
+    let pub = screen.getByRole("checkbox", { name: /public_address/ });
+    expect(pub.checked).toBe(false);
+    expect(pub.disabled).toBe(true);
+    r.unmount();
+    render(
+      <Panel mode="offense" node={{ id: "ts01", kind: "teamserver", overlay: { c2: "mythic", public_address: true } }} />
+    );
+    pub = screen.getByRole("checkbox", { name: /public_address/ });
+    expect(pub.checked).toBe(true);
+    expect(pub.disabled).toBe(false);
+  });
+});
+
+describe("firewall and appliance hosts", () => {
+  test("offer Linux os only, no vuln picker, and no domain picker", () => {
+    for (const kind of ["fw", "appliance"]) {
+      const r = render(<Panel placement node={{ id: `${kind}01`, kind, overlay: {} }} />);
+      const os = selectNamed("os");
+      expect(optionTexts(os).some((t) => /Windows/.test(t))).toBe(false);
+      expect(optionTexts(os)[0]).toBe("default (Linux (Debian))");
+      expect(screen.queryByText(/^vulnerabilities/)).toBeNull();
+      expect(hasField("domain")).toBe(false);
+      expect(hasField("subnet")).toBe(true);
+      r.unmount();
+    }
+  });
+
+  test("a srv keeps its domain picker", () => {
+    render(<Panel placement node={{ id: "srv01", kind: "srv", overlay: {} }} />);
+    expect(hasField("domain")).toBe(true);
+  });
+});
+
+describe("hardening is recorded, not deployed", () => {
+  test("the picker is disabled, says so, and keeps stored values visible", async () => {
+    const user = userEvent.setup();
+    render(<Panel node={{ id: "ws01", kind: "wks", overlay: { hardening: ["runasppl", "asr"] } }} />);
+    expect(screen.getByText("Not applied yet: these controls are recorded but not deployed.")).toBeTruthy();
+    const ppl = screen.getByRole("checkbox", { name: "RunAsPPL (LSASS as a protected process)" });
+    expect(ppl.checked).toBe(true);
+    expect(ppl.disabled).toBe(true);
+    await user.click(screen.getByRole("button", { name: /Network protocols/ }));
+    expect(screen.getByRole("checkbox", { name: "SMB signing required" }).disabled).toBe(true);
+  });
+});
+
+describe("services", () => {
+  test("a jumpbox offers ssh and guacamole; the VPN follows Access mode", async () => {
+    const user = userEvent.setup();
+    const seen = [];
+    render(
+      <Panel
+        mode="offense"
+        seen={seen}
+        node={{ id: "jump01", kind: "jumpbox", overlay: { services: ["ssh", "wireguard"] } }}
+      />
+    );
+    const field = fieldNamed("services");
+    const boxes = within(field).getAllByRole("checkbox").map((b) => b.closest("label").textContent);
+    expect(boxes).toEqual(["SSH", "Guacamole portal"]);
+    expect(within(field).getByText("The VPN server follows Access mode.")).toBeTruthy();
+    const chip = within(field).getByText("WireGuard").closest(".rg-chip");
+    expect(chip.getAttribute("title")).toBe("Ignored. The VPN server follows Access mode.");
+    await user.click(within(chip).getByRole("button", { name: "Remove wireguard" }));
+    expect(seen.at(-1).services).toEqual(["ssh"]);
+  });
+
+  test("on a defense jumpbox the note does not point at the hidden Access mode", () => {
+    render(<Panel node={{ id: "jump01", kind: "jumpbox", overlay: { services: ["ssh", "wireguard"] } }} />);
+    const field = fieldNamed("services");
+    const note = "A defense range runs no VPN server; operators use the public portal.";
+    expect(within(field).getByText(note)).toBeTruthy();
+    expect(within(field).getByText("WireGuard").closest(".rg-chip").getAttribute("title")).toBe(`Ignored. ${note}`);
+  });
+
+  test("a member server gets a checklist of what a role installs; unknown values are chips", async () => {
+    const user = userEvent.setup();
+    const seen = [];
+    render(<Panel seen={seen} node={{ id: "file-srv01", kind: "srv", overlay: { services: ["smb"] } }} />);
+    const field = fieldNamed("services");
+    const boxes = within(field).getAllByRole("checkbox").map((b) => b.closest("label").textContent);
+    expect(boxes).toEqual(["SQL Server (mssql)", "IIS", "Exchange"]);
+    const chip = within(field).getByText("SMB").closest(".rg-chip");
+    expect(chip.getAttribute("title")).toBe("smb does nothing: no role installs it.");
+    await user.click(within(field).getByRole("checkbox", { name: "IIS" }));
+    expect(seen.at(-1).services).toEqual(["smb", "iis"]);
+  });
+
+  test("on a dc, services are hidden, or shown as unused chips when set", () => {
+    const r = render(<Panel node={{ id: "dc01", kind: "dc", overlay: {} }} />);
+    expect(hasField("services")).toBe(false);
+    r.unmount();
+    render(<Panel node={{ id: "dc01", kind: "dc", overlay: { role: "adcs", services: ["adcs"] } }} />);
+    const field = fieldNamed("services");
+    expect(within(field).queryAllByRole("checkbox")).toHaveLength(0);
+    expect(within(field).getByText(/Not used here: only a member server/)).toBeTruthy();
+    expect(within(field).getByText("AD CS").closest(".rg-chip").getAttribute("title")).toBe(
+      "adcs does nothing: no role installs it. Set Role to AD CS instead."
+    );
+  });
+});
+
+describe("role", () => {
+  test("the chosen role says what it installs", async () => {
+    const user = userEvent.setup();
+    render(<Panel node={{ id: "srv01", kind: "srv", overlay: {} }} />);
+    const role = selectNamed("role");
+    expect(role.options[role.selectedIndex].textContent).toBe("default (Generic)");
+    expect(within(fieldNamed("role")).getByText("Installs nothing.")).toBeTruthy();
+    await user.selectOptions(role, "SQL Server");
+    expect(within(fieldNamed("role")).getByText("Installs SQL Server.")).toBeTruthy();
+    await user.selectOptions(selectNamed("role"), "Web server");
+    expect(
+      within(fieldNamed("role")).getByText("Badge only. Tick IIS under Services to install IIS.")
+    ).toBeTruthy();
+  });
+
+  test("a dc offers Generic and AD CS only; a workstation has no role", () => {
+    const r = render(<Panel node={{ id: "dc01", kind: "dc", overlay: {} }} />);
+    expect(optionTexts(selectNamed("role"))).toEqual(["default (Generic)", "Generic", "AD CS"]);
+    r.unmount();
+    render(<Panel node={{ id: "wks01", kind: "wks", overlay: { role: "generic" } }} />);
+    expect(hasField("role")).toBe(false);
+  });
+});
+
+describe("operator roster", () => {
+  test("the role input says it is a display label", () => {
+    render(<Panel mode="offense" node={{ id: "jump01", kind: "jumpbox", overlay: { services: ["ssh"] } }} />);
+    expect(screen.getByPlaceholderText("label, e.g. lead (display only)")).toBeTruthy();
+  });
+});
+
+describe("fieldRule", () => {
+  test("hide only when empty or default; otherwise flag it ignored", () => {
+    const ctx = { kind: "teamserver", mode: "offense", overlay: { c2: "sliver" } };
+    expect(fieldRule("version", { type: "string" }, ctx, undefined).hide).toBe(true);
+    expect(fieldRule("version", { type: "string" }, ctx, "v1.2").ignored).toMatch(/Sliver/);
+    expect(fieldRule("version", { type: "string" }, { ...ctx, overlay: { c2: "mythic" } }, undefined).hide).toBeFalsy();
+  });
+
+  test("no context leaves the spec alone", () => {
+    const spec = { enum: ["a"] };
+    expect(fieldRule("os", spec, undefined, "a")).toEqual({ spec });
   });
 });

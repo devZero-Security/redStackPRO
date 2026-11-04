@@ -8,7 +8,7 @@ import {
 } from "./vulns.js";
 import { HARDENING_CATALOG } from "./hardening.js";
 import {
-  defaultFor, emptyOptionLabel, fieldLabel, jsonKindFor, numberHelp, optionLabel,
+  defaultFor, emptyOptionLabel, fieldLabel, fieldRule, jsonKindFor, numberHelp, optionLabel,
   placeholderFor, resolveSpec,
 } from "./fieldRules.js";
 import {
@@ -227,11 +227,12 @@ function initialCollapsed(catalog, selected) {
 // The defensive-controls picker: the same grouped checklist as the vuln picker
 // above, over hardening.js. Each group states what that family buys you, which
 // is the job the schema description used to do in one run-on sentence.
-function HardeningPicker({ value, onChange, disabled, title = "hardening" }) {
+//
+// Read-only for now: no role reads overlay.hardening, so ticking a control would
+// promise a locked-down host that deploys unhardened. Stored values stay visible.
+function HardeningPicker({ value, title = "hardening", ignored }) {
   const set = value || [];
   const [collapsed, setCollapsed] = useState(() => initialCollapsed(HARDENING_CATALOG, set));
-  const toggle = (id) =>
-    onChange(set.includes(id) ? set.filter((v) => v !== id) : [...set, id]);
   const toggleGroup = (key) =>
     setCollapsed((cur) => {
       const next = new Set(cur);
@@ -244,6 +245,10 @@ function HardeningPicker({ value, onChange, disabled, title = "hardening" }) {
       <span className="rg-field-label">
         {title}{set.length ? ` (${set.length})` : ""}
       </span>
+      <span className="rg-field-ignored">
+        Not applied yet: these controls are recorded but not deployed.
+      </span>
+      {ignored ? <span className="rg-field-ignored">Not used here: {ignored}</span> : null}
       <div className="rg-vulns rg-hardening">
         {HARDENING_CATALOG.map((group) => {
           const selectedCount = group.items.filter((item) => set.includes(item.id)).length;
@@ -275,12 +280,7 @@ function HardeningPicker({ value, onChange, disabled, title = "hardening" }) {
                         className={`rg-check${isSelected ? " is-selected" : ""}`}
                         title={item.blurb}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          disabled={disabled}
-                          onChange={() => toggle(item.id)}
-                        />
+                        <input type="checkbox" checked={isSelected} disabled readOnly />
                         {item.label}
                       </label>
                     );
@@ -318,6 +318,7 @@ const ACCOUNT_TECHNIQUE_ITEMS = VULN_CATALOG.flatMap((g) => g.items).filter((ite
 // rangeUsers.js plantAccountTechnique.
 function VulnPicker({
   value, onChange, disabled, provider, document, hostId, onOverlayChange, title = "vulnerabilities",
+  ignored,
 }) {
   const set = value || [];
   const [collapsed, setCollapsed] = useState(() => initialCollapsed(VULN_CATALOG, set));
@@ -349,6 +350,7 @@ function VulnPicker({
       <span className="rg-field-label">
         {title}{set.length ? ` (${set.length})` : ""}
       </span>
+      {ignored ? <span className="rg-field-ignored">Not used here: {ignored}</span> : null}
       <div className="rg-vulns">
         {VULN_CATALOG.map((group) => {
           const items = group.items.filter((item) => !ACCOUNT_TECHNIQUE_IDS.has(item.id));
@@ -624,7 +626,7 @@ function DomainAcls({ node, onChange, readOnly }) {
 // to a single short line (VPN006), rather than letting a bad value through to fail
 // only at compile.
 const OPERATOR_HANDLE_RE = /^[a-z0-9][a-z0-9._-]*$/;
-function Operators({ node, onChange, readOnly }) {
+function Operators({ node, onChange, readOnly, ignored }) {
   const operators = (node.overlay || {}).operators || [];
   const [handle, setHandle] = useState("");
   const [role, setRole] = useState("");
@@ -662,6 +664,7 @@ function Operators({ node, onChange, readOnly }) {
         access mode, a personal VPN credential generated on the jumpbox. Handles are
         lowercase and unique.
       </p>
+      {ignored ? <p className="rg-field-ignored">Not used here: {ignored}</p> : null}
       {operators.length ? (
         <div className="rg-acls-list">
           {operators.map((o, i) => (
@@ -689,7 +692,7 @@ function Operators({ node, onChange, readOnly }) {
       {readOnly ? null : (
         <div className="rg-acls-add">
           <input value={handle} placeholder="handle" onChange={(e) => setHandle(e.target.value)} />
-          <input value={role} placeholder="role (optional)" onChange={(e) => setRole(e.target.value)} />
+          <input value={role} placeholder="label, e.g. lead (display only)" onChange={(e) => setRole(e.target.value)} />
           <button type="button" onClick={add} disabled={!handle.trim()}>Add</button>
         </div>
       )}
@@ -699,9 +702,9 @@ function Operators({ node, onChange, readOnly }) {
 }
 
 // The range host kinds that join a domain. Standalone range boxes (jumpbox,
-// SIEM, appliance) sit on a subnet but do not join a domain, so they get the
-// subnet control but not the domain one.
-const DOMAIN_JOINERS = new Set(["dc", "srv", "wks", "fw"]);
+// SIEM, firewall, appliance) sit on a subnet but do not join a domain, so they
+// get the subnet control but not the domain one.
+const DOMAIN_JOINERS = new Set(["dc", "srv", "wks"]);
 const SUBNET_PLACEABLE = new Set(["dc", "srv", "wks", "fw", "jumpbox", "siem", "appliance"]);
 
 // Placing a range host without drawing a line: pick its domain and its subnet
@@ -888,9 +891,10 @@ function Manages({ node, document, onSelectNode }) {
 // Fields marked derived never appear, because the compiler computes them and a
 // person cannot supply them.
 
-// The range host kinds (dc, srv, wks, fw) all share one overlay definition, so
-// their forms resolve to it rather than a per-kind def that does not exist.
-const RANGE_HOST_KINDS = new Set(["dc", "srv", "wks", "fw"]);
+// The range host kinds (dc, srv, wks, fw, appliance) all share one overlay
+// definition, so their forms resolve to it rather than a per-kind def that does
+// not exist. appliance used to miss here and showed no fields at all.
+const RANGE_HOST_KINDS = new Set(["dc", "srv", "wks", "fw", "appliance"]);
 
 function overlaySchemaFor(schema, kind) {
   const defs = schema?.$defs || {};
@@ -1058,10 +1062,17 @@ function VulnVarsHelp({ vulns, description }) {
 // on ({id, kind, mode, overlay}); together they pick the default an empty field
 // compiles to. Both are optional, so a bare spec (an edge field) still renders.
 function Field({
-  name, path = name, spec: rawSpec, value, required, onChange, disabled,
+  name, path = name, spec: rawSpec, value: rawValue, required, onChange, disabled,
   help: helpOverride, defs, ctx,
 }) {
-  const spec = resolveSpec(rawSpec, defs) || {};
+  // The node's rules can hide the field, flag a stored value as unused here, or
+  // lock it at the one value the compiler accepts. See fieldRules.js.
+  const rule = fieldRule(path, resolveSpec(rawSpec, defs) || {}, ctx, rawValue);
+  if (rule.hide) return null;
+  const spec = rule.spec;
+  const locked = rule.locked;
+  const value = locked ? locked.value : rawValue;
+  if (locked) disabled = true;
   const title = fieldLabel(name, spec);
   const def = defaultFor(path, spec, ctx);
   const label = (
@@ -1071,9 +1082,19 @@ function Field({
     </span>
   );
 
-  const help = helpOverride ?? (spec.description ? (
-    <span className="rg-field-help">{spec.description}</span>
-  ) : null);
+  const autoHelp = spec.type === "integer" || spec.type === "number" ? numberHelp(spec, def) : "";
+  const helpText = locked ? locked.reason : spec.description || autoHelp;
+  const help = (
+    <>
+      {locked ? null : helpOverride}
+      {(locked || helpOverride == null) && helpText ? (
+        <span className="rg-field-help">{helpText}</span>
+      ) : null}
+      {rule.ignored ? (
+        <span className="rg-field-ignored">Not used here: {rule.ignored}</span>
+      ) : null}
+    </>
+  );
 
   // Never a text box for structured data: it showed "[object Object]" and any
   // keystroke replaced the structure with a string.
@@ -1099,6 +1120,7 @@ function Field({
   if (spec.enum) {
     const unset = value == null || value === "";
     const offered = unset || spec.enum.includes(value);
+    const optionHelp = spec["x-ui-option-help"]?.[unset ? def : value];
     return (
       <label className="rg-field">
         {label}
@@ -1121,6 +1143,7 @@ function Field({
             </option>
           ))}
         </select>
+        {optionHelp ? <span className="rg-field-help rg-option-help">{optionHelp}</span> : null}
         {help}
       </label>
     );
@@ -1151,7 +1174,6 @@ function Field({
   }
 
   if (spec.type === "integer" || spec.type === "number") {
-    const autoHelp = numberHelp(spec, def);
     return (
       <label className="rg-field">
         {label}
@@ -1167,7 +1189,7 @@ function Field({
             onChange(e.target.value === "" ? undefined : Number(e.target.value))
           }
         />
-        {help ?? (autoHelp ? <span className="rg-field-help">{autoHelp}</span> : null)}
+        {help}
       </label>
     );
   }
@@ -1176,28 +1198,55 @@ function Field({
     const items = value || [];
     const options = spec.items?.enum;
     if (options) {
+      const set = (next) => onChange(next.length ? next : undefined);
+      // Stored values the checklist does not offer: shown as chips that say why
+      // they do nothing, removable, never silently dropped.
+      const unknown = items.filter((i) => !options.includes(i));
+      const unknownTitle = spec["x-ui-unknown-title"];
       return (
         <div className="rg-field">
           {label}
-          <div className="rg-checks">
-            {options.map((option) => (
-              <label key={option} className="rg-check">
-                <input
-                  type="checkbox"
-                  checked={items.includes(option)}
-                  disabled={disabled}
-                  onChange={(e) =>
-                    onChange(
-                      e.target.checked
-                        ? [...items, option]
-                        : items.filter((i) => i !== option)
-                    )
-                  }
-                />
-                {optionLabel(name, option)}
-              </label>
-            ))}
-          </div>
+          {options.length ? (
+            <div className="rg-checks">
+              {options.map((option) => (
+                <label key={option} className="rg-check">
+                  <input
+                    type="checkbox"
+                    checked={items.includes(option)}
+                    disabled={disabled}
+                    onChange={(e) =>
+                      set(e.target.checked ? [...items, option] : items.filter((i) => i !== option))
+                    }
+                  />
+                  {optionLabel(name, option)}
+                </label>
+              ))}
+            </div>
+          ) : null}
+          {unknown.length ? (
+            <div className="rg-chips">
+              {unknown.map((v) => (
+                <span
+                  key={v}
+                  className="rg-chip"
+                  title={unknownTitle ? unknownTitle(v) : `${v} is not one of the choices.`}
+                >
+                  {optionLabel(name, v)}
+                  {disabled ? null : (
+                    <button
+                      type="button"
+                      className="rg-chip-del"
+                      aria-label={`Remove ${v}`}
+                      onClick={() => set(items.filter((i) => i !== v))}
+                    >
+                      &times;
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {spec["x-ui-note"] ? <span className="rg-field-help">{spec["x-ui-note"]}</span> : null}
           {help}
         </div>
       );
@@ -1219,6 +1268,7 @@ function Field({
       <fieldset className="rg-fieldset">
         <legend>{title}</legend>
         {spec.description ? <p className="rg-field-help">{spec.description}</p> : null}
+        {rule.ignored ? <p className="rg-field-ignored">Not used here: {rule.ignored}</p> : null}
         {Object.entries(spec.properties).map(([child, childSpec]) => (
           <Field
             key={child}
@@ -1426,6 +1476,7 @@ export function Inspector({
   const coverShown = node.kind === "redirector" && onApplyCover && !readOnly;
   // What a field's rules read: the node it sits on and the canvas mode.
   const fieldCtx = { id: node.id, kind: node.kind, mode: document.mode, overlay: node.overlay || {} };
+  const ruleOf = (name, spec) => fieldRule(name, spec, fieldCtx, fieldCtx.overlay[name]);
 
   return (
     <aside className="rg-panel rg-inspector">
@@ -1486,12 +1537,14 @@ export function Inspector({
         ? Object.entries(overlaySchema.properties || {})
             .map(([name, spec]) => [name, resolveSpec(spec, schema?.$defs)])
             .filter(([, spec]) => spec["x-redstackpro-source"] !== "derived")
+            .filter(([name, spec]) => !ruleOf(name, spec).hide)
             .map(([name, spec]) =>
               name === "vulns" ? (
                 <VulnPicker
                   key={`${name}-${node.id}`}
                   value={(node.overlay || {}).vulns}
                   title={spec.title}
+                  ignored={ruleOf(name, spec).ignored}
                   disabled={readOnly}
                   provider={provider}
                   document={document}
@@ -1506,6 +1559,7 @@ export function Inspector({
                   key={`${name}-${node.id}`}
                   value={(node.overlay || {}).hardening}
                   title={spec.title}
+                  ignored={ruleOf(name, spec).ignored}
                   disabled={readOnly}
                   onChange={(value) =>
                     onOverlayChange(node.id, {
@@ -1534,6 +1588,7 @@ export function Inspector({
                 <Operators
                   key={name}
                   node={node}
+                  ignored={ruleOf(name, spec).ignored}
                   readOnly={readOnly}
                   onChange={(overlay) => onOverlayChange(node.id, overlay)}
                 />

@@ -221,6 +221,147 @@ export function emptyOptionLabel(path, spec, ctx) {
   return def == null ? "not set" : `default (${optionLabel(leaf(path), def)})`;
 }
 
+// ----------------------------------------------------------------- context
+
+function isWindowsHost(ctx) {
+  if (LINUX_ONLY_KINDS.has(ctx.kind)) return false;
+  const os = ctx.overlay?.os;
+  if (os) return String(os).startsWith("windows");
+  return AD_KINDS.has(ctx.kind);
+}
+
+// A field that holds nothing worth showing: empty, or equal to its default.
+export function isEmptyValue(value, def) {
+  if (value == null || value === "" || value === false) return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === "object") return Object.keys(value).length === 0;
+  return def !== undefined && value === def;
+}
+
+const VPN_OFFENSE_ONLY = new Set(["access_mode", "vpn_port", "vpn_protocol", "operators"]);
+const NOTHING_INSTALLED = new Set([
+  "vulns", "vulns_vars", "hardening", "services", "role", "edr",
+  "defender_enabled", "endpoint_telemetry", "sudo_groups", "ssh_groups",
+]);
+
+// Why a field means nothing on this node, or null when it does.
+function unusedReason(path, ctx) {
+  const { kind, mode } = ctx;
+  const ov = ctx.overlay || {};
+  const access = ov.access_mode || "public";
+  if (kind === "jumpbox") {
+    if (mode === "defense" && VPN_OFFENSE_ONLY.has(path)) {
+      return "a defense range keeps the public portal. VPN access and the operator roster are offense features.";
+    }
+    if ((path === "vpn_port" || path === "vpn_protocol") && access === "public") {
+      return "used only when Access mode is WireGuard or OpenVPN.";
+    }
+    if (path === "vpn_protocol" && access === "wireguard") return "WireGuard is UDP only.";
+  }
+  if (kind === "network" && path === "provider") return "nothing reads it yet.";
+  if (kind === "collector" && path === "shipper") return "Filebeat is the only shipper.";
+  if (kind === "teamserver" && path === "version") {
+    if (ov.c2 === "sliver") return "Sliver always installs the current release.";
+    if (ov.c2 === "none") return "no C2 is installed, so there is no version to pick.";
+  }
+  if (kind === "operator" && path === "desktop" && ov.os === "windows") {
+    return "a Windows operator already has a desktop over RDP.";
+  }
+  if (RANGE_HOST_KINDS.has(kind)) {
+    if (LINUX_ONLY_KINDS.has(kind) && NOTHING_INSTALLED.has(path)) {
+      return "redStackPRO installs nothing on this host yet.";
+    }
+    if ((path === "sudo_groups" || path === "ssh_groups") && (kind !== "srv" || isWindowsHost(ctx))) {
+      return "only a Linux member server reads this.";
+    }
+    if ((path === "defender_enabled" || path === "endpoint_telemetry") && !isWindowsHost(ctx)) {
+      return "Windows hosts only.";
+    }
+    if (path === "services" && kind !== "srv") {
+      return "only a member server (srv) installs services.";
+    }
+    if (path === "role" && kind === "wks") return "nothing reads the role on a workstation.";
+  }
+  return null;
+}
+
+// Offense hosts whose public address is fixed by kind: EXP001 and EXP002 accept
+// exactly one value, so the box is shown locked unless it holds the wrong one.
+const OFFENSE_PUBLIC = { jumpbox: true, redirector: true, teamserver: false, collector: false, operator: false };
+
+function lockedPublicAddress(ctx, value) {
+  if (ctx.kind === "jumpbox" && ctx.mode === "defense") {
+    return { value: true, reason: "A range jumpbox always takes a public address: it is the only way in." };
+  }
+  if (ctx.mode !== "offense" || !(ctx.kind in OFFENSE_PUBLIC)) return null;
+  const forced = OFFENSE_PUBLIC[ctx.kind];
+  if (value !== undefined && value !== forced) return null;
+  return forced
+    ? { value: true, reason: `A ${ctx.kind} always takes a public address.` }
+    : { value: false, reason: `A ${ctx.kind} never takes a public address. Reach it through the jumpbox.` };
+}
+
+function unknownServiceTitle(value) {
+  const known = { adcs: "Set Role to AD CS instead.", mecm: "Set Role to MECM instead." }[value];
+  return `${value} does nothing: no role installs it.${known ? " " + known : ""}`;
+}
+
+// The spec as it applies to this node, plus how to show it:
+//   hide     render nothing
+//   ignored  render, with a note saying why the value is not used here
+//   locked   render read-only at a fixed value, with the reason as help
+export function fieldRule(path, spec, ctx, value) {
+  if (!spec || !ctx) return { spec };
+  const def = defaultFor(path, spec, ctx);
+  let out = spec;
+  let locked = null;
+
+  if (path === "public_address") locked = lockedPublicAddress(ctx, value);
+
+  if (path === "offensive_toolkit" && ctx.kind === "jumpbox") {
+    // The compiler turns it on for a range jumpbox unless the overlay says no.
+    out = { ...out, default: ctx.mode === "defense" };
+  }
+  if (path === "vpn_port") out = { ...out, default: def };
+
+  if (path === "os" && LINUX_ONLY_KINDS.has(ctx.kind) && out.enum) {
+    out = { ...out, enum: out.enum.filter((v) => !String(v).startsWith("windows")) };
+  }
+
+  if (path === "role" && RANGE_HOST_KINDS.has(ctx.kind) && out.enum) {
+    const enumFor = ctx.kind === "dc" ? out.enum.filter((v) => v === "generic" || v === "adcs") : out.enum;
+    out = { ...out, enum: enumFor, "x-ui-option-help": ROLE_HELP };
+  }
+
+  if (path === "services" && ctx.kind === "jumpbox" && out.items?.enum) {
+    // Access mode is hidden on a defense jumpbox, so the note there cannot
+    // point at it.
+    const vpn = ctx.mode === "defense"
+      ? "A defense range runs no VPN server; operators use the public portal."
+      : "The VPN server follows Access mode.";
+    out = {
+      ...out,
+      items: { ...out.items, enum: out.items.enum.filter((v) => v !== "wireguard" && v !== "openvpn") },
+      "x-ui-note": vpn,
+      "x-ui-unknown-title": () => `Ignored. ${vpn}`,
+    };
+  }
+  if (path === "services" && RANGE_HOST_KINDS.has(ctx.kind)) {
+    out = {
+      ...out,
+      items: { ...(out.items || {}), enum: ctx.kind === "srv" ? RANGE_SERVICES : [] },
+      "x-ui-unknown-title": unknownServiceTitle,
+    };
+  }
+
+  const reason = unusedReason(path, ctx);
+  if (reason) {
+    if (isEmptyValue(value, def)) return { spec: out, hide: true };
+    return { spec: out, ignored: reason };
+  }
+  return { spec: out, locked };
+}
+
 // ----------------------------------------------------------------- placeholders
 
 const IPV4 = "^([0-9]{1,3}\\.){3}[0-9]{1,3}$";
