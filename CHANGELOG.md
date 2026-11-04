@@ -3,6 +3,31 @@
 All notable changes to redStackPRO are recorded here. The project uses semantic
 versioning, and dates are UTC.
 
+## [0.9.2] (2026-11-04)
+
+### Fixed
+
+- Leaving `ssh_public_key` empty in `deploy.tfvars` now works, as 0.9.1 described.
+  The derived key was exported as a `TF_VAR_` environment variable, which Terraform
+  ranks below the copied `terraform.tfvars`, so the empty value won and the run
+  stopped at variable validation. The derived key is now written to
+  `terraform/zz-derived.auto.tfvars`, which Terraform loads last, and the file stays
+  so a later teardown still has it.
+- The tagged 0.9.1 source predates the redirector DNS reminder fix listed under
+  0.9.1 (the published 0.9.1 image carried it). 0.9.2 carries it in both.
+- The Kali operator role installs `gnupg` before adding the Kali apt repository, so it
+  provisions on a minimal Debian base that ships without it.
+
+### Changed
+
+- Azure provider work toward a later release: VNet peering, the offense firewall
+  rules, NAT gateway egress, fail-closed ingress, a credential preflight that accepts
+  `az login` or a service principal, `manage.sh` status/start/stop and
+  `teardown --force` on Azure, Gen2 Windows images, and IANA timezones for auto-stop.
+  Azure is still preview and not selectable in the canvas.
+- The generated DEPLOYMENT-GUIDE covers recovering from an interrupted deploy with
+  `manage.sh teardown --force`.
+
 ## [0.9.1] (2026-10-03)
 
 ### Fixed
