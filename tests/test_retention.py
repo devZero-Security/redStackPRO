@@ -4,6 +4,7 @@ actually fires on the compile and create paths rather than only in a unit test.
 """
 
 import json
+import os
 import tempfile
 from datetime import timedelta
 from pathlib import Path
@@ -15,6 +16,14 @@ from sqlalchemy import select
 from redstackpro.api import create_app, db, retention
 from shipped import example
 
+
+def _tmp_db():
+    """A fresh SQLite file. mkstemp, not mktemp: the file exists on return, so no
+    other process can take the name in between."""
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    return path
+
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.7.0"
 V1 = "/api/v1"
@@ -22,7 +31,7 @@ V1 = "/api/v1"
 
 @pytest.fixture
 def session():
-    engine = db.make_engine("sqlite+pysqlite:///" + tempfile.mktemp(suffix=".db"))
+    engine = db.make_engine("sqlite+pysqlite:///" + _tmp_db())
     db.Base.metadata.create_all(engine)
     sess = db.make_session_factory(engine)()
     yield sess
@@ -96,7 +105,7 @@ def test_a_garbage_window_falls_back_to_the_default(session, monkeypatch):
 
 @pytest.fixture
 def app():
-    application = create_app("sqlite+pysqlite:///" + tempfile.mktemp(suffix=".db"))
+    application = create_app("sqlite+pysqlite:///" + _tmp_db())
     yield application
     application.state.engine.dispose()
 

@@ -10,6 +10,8 @@ under src/redstackpro/assets/ rather than at the repo root.
 """
 
 import copy
+import os
+import re
 from pathlib import Path
 
 from .ansible import generate as generate_ansible, _randomize_gating
@@ -518,7 +520,15 @@ def static_files(provider="gcp"):
     """
     files = {}
 
-    modules = ASSETS / "terraform/modules" / provider
+    # provider names a directory, so it must stay a bare name inside modules/.
+    # The API and CLI already refuse an unknown provider; this keeps the file
+    # read safe on its own (no "../" walk out of the asset tree).
+    base = os.path.normpath(str(ASSETS / "terraform/modules"))
+    target = os.path.normpath(os.path.join(base, str(provider)))
+    if (not re.fullmatch(r"[a-z][a-z0-9_]*", str(provider))
+            or not target.startswith(base + os.sep)):
+        raise FileNotFoundError("no static modules for provider %r" % provider)
+    modules = Path(target)
     if not modules.is_dir():
         raise FileNotFoundError(
             "no static modules for provider %r; expected %s" % (provider, modules))

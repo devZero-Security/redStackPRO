@@ -139,6 +139,12 @@
       -d {{ redstackpro_guacamole_db_name }} -tAc
       "SELECT to_regclass('public.guacamole_connection')"
   register: rsp_schema
+  # pg_isready can answer during the image's first-start init server, which then
+  # shuts down and restarts; a query in that gap fails "database system is
+  # shutting down". Retry through the restart.
+  until: rsp_schema.rc == 0
+  retries: 15
+  delay: 3
   changed_when: false
 
 - name: Generate and load the schema on first run

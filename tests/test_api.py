@@ -4,6 +4,7 @@ what 0009 and 0010 decided, not the happy path.
 """
 
 import json
+import os
 import tempfile
 import zipfile
 from io import BytesIO
@@ -17,6 +18,14 @@ from redstackpro.api.principal import LOCAL_ORG_ID, Principal
 from shipped import example
 from sqlalchemy import select
 
+
+def _tmp_db():
+    """A fresh SQLite file. mkstemp, not mktemp: the file exists on return, so no
+    other process can take the name in between."""
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    return path
+
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.7.0"
 V1 = "/api/v1"
@@ -24,7 +33,7 @@ V1 = "/api/v1"
 
 @pytest.fixture
 def app():
-    url = "sqlite+pysqlite:///" + tempfile.mktemp(suffix=".db")
+    url = "sqlite+pysqlite:///" + _tmp_db()
     application = create_app(url)
     yield application
     application.state.engine.dispose()

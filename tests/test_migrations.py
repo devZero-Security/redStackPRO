@@ -3,6 +3,7 @@ real database. If those drift, a deployment ends up with a schema the code does
 not expect. These tests assert they cannot.
 """
 
+import os
 import tempfile
 
 import pytest
@@ -17,8 +18,16 @@ from redstackpro.api import db
 from redstackpro.api.migrate_db import _config, upgrade_to_head
 
 
+def _tmp_db():
+    """A fresh SQLite file. mkstemp, not mktemp: the file exists on return, so no
+    other process can take the name in between."""
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    return path
+
+
 def _sqlite_url():
-    return "sqlite+pysqlite:///" + tempfile.mktemp(suffix=".db")
+    return "sqlite+pysqlite:///" + _tmp_db()
 
 
 def test_config_preserves_percent_in_url():
