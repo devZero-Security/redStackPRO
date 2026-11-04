@@ -764,7 +764,7 @@ _MANAGE_SWEEP = {
     # order. The plain `teardown` (no --force) still uses terraform destroy, which is
     # enough after a clean apply.
     RG="$(grep -E '^[[:space:]]*resource_group[[:space:]]*=' deploy.tfvars 2>/dev/null | head -1 | sed -E 's/[^=]*=[[:space:]]*"?([^"]*)"?.*/\1/')"
-    RG="${RG:-redstackpro-range}"
+    RG="${RG:-@@DEFAULT_RG@@}"
     if command -v az >/dev/null 2>&1; then
       echo "  deleting resource group $RG and every resource in it"
       az group delete -n "$RG" --yes 2>/dev/null || echo "  az group delete did not finish; terraform destroy will try next"
@@ -918,6 +918,10 @@ def generate_manage_script(topology, registry=None, provider=None):
         return None
     provider_block = _MANAGE_PROVIDER_BLOCK.get(provider, _MANAGE_NO_LIVE_CONTROL)
     sweep = _MANAGE_SWEEP.get(provider, _MANAGE_SWEEP_NONE)
+    if provider == "azure":
+        from .terraform.azure import default_resource_group
+        sweep = sweep.replace("@@DEFAULT_RG@@", default_resource_group(
+            TerraformPlan(topology, registry, provider="azure")))
     teardown = _MANAGE_TEARDOWN_HEAD + sweep + _MANAGE_TEARDOWN_TAIL
     return (_MANAGE_HEAD + _FIND_PYTHON + teardown + _MANAGE_STATUS_PORTAL
             + provider_block)
