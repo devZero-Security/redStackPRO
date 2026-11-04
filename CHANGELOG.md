@@ -3,6 +3,85 @@
 All notable changes to redStackPRO are recorded here. The project uses semantic
 versioning, and dates are UTC.
 
+## [0.10.0] (unreleased)
+
+### Added
+
+- Azure is a supported provider and selectable in the canvas, alongside GCP and AWS.
+  Validated live on Azure: the `minimalc2-cli` and full `redstack` offense stacks
+  (Mythic, Sliver, and Adaptix teamservers, the collector, and the Windows and Kali
+  operators) passed `verify.py doors` and `verify.py stack`, with Let's Encrypt on the
+  redirector; the `minilab`, `goad-light`, and `goad-wazuh` defense ranges deployed
+  clean and validated, including child domain promotion, the parent/child trust,
+  MSSQL, and the Wazuh manager and agents. Full `goad` and `dracarys` on Azure:
+  TODO-AZURE-GOAD-RESULT.
+- An Azure export builds each range as one resource group (`resource_group` in
+  `deploy.tfvars`), in `eastus2` by default, with VNet peering, a NAT gateway per VNet
+  for egress from private hosts, and Network Security Group rules. Ingress fails
+  closed as on GCP and AWS: the deploy stops until `operator_source_ranges` is set.
+  The Kali operator starts from a Debian 13 image that the operator role converts to
+  Kali, so no Marketplace plan acceptance is needed.
+- Azure VM sizes per role. The defaults are the AMD v5 family: `Standard_D2as_v5`,
+  `Standard_D4as_v5` for the SIEM, and `Standard_B2as_v2` for workstations.
+  `deploy.tfvars` ships a commented `vm_sizes` map listing the topology's roles, and a
+  partial map overrides only the roles it names.
+- An Azure preflight. Before apply, `deploy.sh` runs `azure_preflight.py`, which ships
+  in the export and also runs alone as `python azure_preflight.py .`. It is read only
+  and checks that each VM size is offered and not restricted for the subscription in
+  the region, the regional and per-family vCPU quotas, the public IP quota, and that
+  the needed resource providers are registered. On a problem it stops before anything
+  is created and prints a `vm_sizes` block that fits, the quota to raise, or the
+  `az provider register` command. If it cannot reach Azure it warns and the deploy
+  continues. `REDSTACKPRO_SKIP_PREFLIGHT=1` skips it.
+- Azure lifecycle. `manage.sh status`, `start`, and `stop` run through the Azure CLI;
+  `stop` deallocates the VMs, which halts compute billing, and the jumpbox keeps its
+  public IP. `manage.sh teardown --force` deletes the whole resource group with
+  `az group delete`. Those four need `az` installed and logged in. `deploy.sh` works with either `az login` or a
+  service principal in `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_TENANT_ID`, and
+  `ARM_SUBSCRIPTION_ID`.
+- Azure auto-stop, as a per-VM DevTestLab shutdown schedule (it needs
+  `Microsoft.DevTestLab` registered, which the preflight checks). The schedule takes a
+  Windows timezone id: common IANA names in the topology are translated, and any other
+  IANA name is refused at compile.
+- The generated DEPLOYMENT-GUIDE has a Quotas section for each cloud provider in both
+  modes, and an Azure section on `vm_sizes` and the preflight.
+
+### Changed
+
+- As on GCP and AWS, the broadcast and multicast poisoning techniques
+  (`llmnr_poisoning`, `nbtns_poisoning`, `responder`, `ntlm_relay`,
+  `ldap_signing_off`) are not planted on Azure, whose network drops L2 broadcast and
+  multicast. They stay limited to Proxmox and ESXi.
+- `--provider` on `redstackpro compile`, `redstackpro validate`, and
+  `python -m redstackpro.tools.registry` is checked against the registry, case
+  insensitive, and an unknown name lists the valid providers instead of ending in a
+  traceback.
+- `manage.sh status`, `start`, and `stop` check that the cloud CLI (`gcloud`, `aws`,
+  or `az`) is installed first, and exit nonzero when the call fails on any instance.
+- `deploy.sh` prints the AWS IAM note for any auto-stop, `after_hours` included, not
+  only a fixed `at`.
+- The `auto_stop.after_hours` schema description is corrected: the stop time counts
+  from the first apply and is kept in Terraform state, so a re-apply does not move it.
+  Only recreating the range, or replacing `time_offset.auto_stop`, does.
+- The README and wiki say the AWS Kali Marketplace subscription is once per account,
+  not per region.
+- Security reports go to GitHub issues, and `SECURITY.md` is removed.
+
+### Fixed
+
+- `manage.ps1` forwards every argument to `manage.sh`, so
+  `.\manage.ps1 teardown --force` works on Windows.
+- `verify.py stack` reaches a defense range's jumpbox at its public address rather
+  than its private one.
+- `verify.py stack` finds the SSH key where `deploy.sh` does (`--key` or
+  `REDSTACKPRO_SSH_KEY`, then the one key in `keys/`, then `~/.ssh/id_ed25519`), and
+  when SSH cannot get in it says so once instead of reporting every check as failed.
+- Windows hosts whose image ships a .NET Framework older than 4.8 (Azure's Windows
+  Server 2019 ships 4.7.2) get 4.8 installed before chocolatey, which needs it, on the
+  MSSQL and KeePass vault paths.
+- A failed MSSQL install names the missing service in its error again. A PowerShell
+  variable had shadowed the service name.
+
 ## [0.9.2] (2026-11-04)
 
 ### Fixed
