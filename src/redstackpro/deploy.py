@@ -148,10 +148,10 @@ if [ "$RSP_STOP_LEAD" -lt "${REDSTACKPRO_MIN_STOP_LEAD:-150}" ]; then
   echo "This build stops itself at %(hour)02d:%(minute)02d %(timezone)s, which is $RSP_STOP_LEAD minutes away."
   echo "Provisioning takes up to 75 minutes, so the range would stop part-built."
   echo
-  echo "  Override: REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh -- use this when you are"
-  echo "            re-deploying an existing export, where there is no compile to re-run."
-  echo "  Recompile: re-run the compile now -- auto_stop.after_hours counts from the"
-  echo "            COMPILE, not the apply, so a fresh compile resets the clock."
+  echo "  Override: REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh"
+  echo "  Or move auto_stop.at later and export again. It is a daily clock time, so"
+  echo "  re-exporting with the same value changes nothing; after_hours counts from"
+  echo "  the apply and never trips this check."
   exit 1
 fi
 """
