@@ -70,6 +70,7 @@ import {
   updateOverlay,
 } from "./topology.js";
 import { presetsFor } from "./presets.js";
+import { countBySeverity, findingSelection, sortFindings } from "./findingSeverity.js";
 import { useHistory } from "./useHistory.js";
 
 const PREFIX_HELP =
@@ -738,7 +739,7 @@ function Editor() {
     api
       .validate(settled, provider)
       .then((body) => {
-        if (!cancelled) setFindings(body.findings);
+        if (!cancelled) setFindings(sortFindings(body.findings));
       })
       .catch((error) => {
         if (!cancelled) {
@@ -1486,8 +1487,7 @@ function Editor() {
     setTimeout(() => flow.fitView({ padding: 0.15, duration: 300 }), 60);
   }, [flow, history]);
 
-  const errors = findings.filter((f) => f.severity === "error");
-  const warnings = findings.filter((f) => f.severity === "warning");
+  const counts = countBySeverity(findings);
 
   return (
     <div className={`rg-app rg-mode-${document.mode || "offense"}`}>
@@ -1575,10 +1575,16 @@ function Editor() {
           }
         />
         <span className="rg-spacer" />
-        <span className={`rg-count ${errors.length ? "is-error" : "is-ok"}`}>
-          {errors.length} errors
+        <span className={`rg-count ${counts.error ? "is-error" : "is-ok"}`}>
+          {counts.error} errors
         </span>
-        <span className="rg-count is-warning">{warnings.length} warnings</span>
+        <span className="rg-count is-warning">{counts.warning} warnings</span>
+        <span
+          className="rg-count is-info"
+          title="Notices. They never block a compile."
+        >
+          {counts.info} info
+        </span>
         <span
           className={`rg-saved ${dirty ? "is-dirty" : ""}`}
           title={topology ? `${topology.name}, version ${topology.version}` : "Never saved"}
@@ -1880,24 +1886,28 @@ function Editor() {
               No findings.
             </span>
           ) : (
+            // Sorted worst first, so the notices trail the problems under a
+            // label of their own.
             findings.map((finding, index) => (
-              <button
-                key={index}
-                className={`rg-finding is-${finding.severity}`}
-                onClick={() =>
-                  setSelection({
-                    type: document.edges.some((e) => e.id === finding.target_ids[0])
-                      ? "edge"
-                      : "node",
-                    id: finding.target_ids[0],
-                  })
-                }
-              >
-                <FindingBadge code={finding.code} /> {finding.message}
-                {finding.remedy ? (
-                  <span className="rg-remedy">{finding.remedy}</span>
+              <React.Fragment key={index}>
+                {finding.severity === "info" && findings[index - 1]?.severity !== "info" ? (
+                  <span className="rg-hint">Info, not blocking:</span>
                 ) : null}
-              </button>
+                <button
+                  className={`rg-finding is-${finding.severity}`}
+                  onClick={() => {
+                    const next = findingSelection(document, finding);
+                    setSelection(next);
+                    // A document-level finding lands on Topology settings.
+                    if (!next) setPanel("inspector");
+                  }}
+                >
+                  <FindingBadge code={finding.code} /> {finding.message}
+                  {finding.remedy ? (
+                    <span className="rg-remedy">{finding.remedy}</span>
+                  ) : null}
+                </button>
+              </React.Fragment>
             ))
           )}
         </div>

@@ -1,5 +1,6 @@
-// The app shell over the merged widgets: how a new trust is typed and what
-// the legend calls each line.
+// The app shell over the merged widgets and validator: how a new trust is
+// typed, what the legend calls each line, and how the footer reads findings of
+// each severity, including the info notices and document-level findings.
 
 import React from "react";
 import { describe, expect, test, vi, beforeEach } from "vitest";
@@ -9,6 +10,7 @@ import userEvent from "@testing-library/user-event";
 import App from "./App.jsx";
 import { connectEdge, emptyDocument, legendItems } from "./topology.js";
 import { edgeId } from "./idscheme.js";
+import { countBySeverity, findingSelection, sortFindings } from "./findingSeverity.js";
 
 const PALETTE = {
   topology: [
@@ -144,6 +146,69 @@ describe("legend", () => {
       "Trusts, same forest", "Trusts, across forests",
     ]);
     expect(labels.join(" ")).not.toMatch(/URIs|logs_to|peers/);
+  });
+});
+
+
+describe("findings by severity", () => {
+  const FINDINGS = [
+    { code: "SVC002", severity: "info", target_ids: ["corp"], message: "A notice.", remedy: "" },
+    { code: "RNG013", severity: "warning", target_ids: ["essos"], message: "A warning.", remedy: "" },
+    { code: "SCH001", severity: "error", target_ids: ["topology"], field: "prefix",
+      message: "prefix on topology: bad.", remedy: "" },
+  ];
+
+  test("sorted worst first, counted apart, and a notice never counts as a warning", () => {
+    expect(sortFindings(FINDINGS).map((f) => f.severity)).toEqual(["error", "warning", "info"]);
+    expect(countBySeverity(FINDINGS)).toEqual({ error: 1, warning: 1, info: 1 });
+    expect(countBySeverity([FINDINGS[0]])).toEqual({ error: 0, warning: 0, info: 1 });
+  });
+
+  test("a document-level finding selects nothing, so Topology settings show", () => {
+    expect(findingSelection(DOMAINS, FINDINGS[2])).toBeNull();
+    expect(findingSelection(DOMAINS, FINDINGS[1])).toEqual({ type: "node", id: "essos" });
+    expect(findingSelection(DOMAINS, { target_ids: ["gone"] })).toBeNull();
+  });
+
+  test("the header counts info apart and the footer lists it last, not as a failure",
+    async () => {
+      openUrl("?topology=g1");
+      fakeBackend({ documents: { g1: DOMAINS }, findings: FINDINGS });
+      render(<App />);
+
+      expect(await screen.findByText("1 info")).toBeTruthy();
+      expect(screen.getByText("1 warnings")).toBeTruthy();
+      expect(screen.getByText("1 errors")).toBeTruthy();
+
+      const footer = window.document.querySelector(".rg-findings");
+      const buttons = [...footer.querySelectorAll("button.rg-finding")];
+      expect(buttons.map((b) => b.className)).toEqual([
+        "rg-finding is-error", "rg-finding is-warning", "rg-finding is-info",
+      ]);
+      const label = within(footer).getByText("Info, not blocking:");
+      expect(label.nextElementSibling).toBe(buttons[2]);
+    });
+
+  test("only notices: nothing reads as an error", async () => {
+    openUrl("?topology=g1");
+    fakeBackend({ documents: { g1: DOMAINS }, findings: [FINDINGS[0]] });
+    render(<App />);
+    expect(await screen.findByText("1 info")).toBeTruthy();
+    expect(screen.getByText("0 errors").className).toMatch(/is-ok/);
+    expect(screen.getByText("0 warnings")).toBeTruthy();
+  });
+
+  test("clicking a topology finding clears the selection to Topology settings", async () => {
+    openUrl("?topology=g1");
+    fakeBackend({ documents: { g1: DOMAINS }, findings: FINDINGS });
+    const user = userEvent.setup();
+    render(<App />);
+    fireEvent.click(await screen.findByText("north"));
+    await screen.findByRole("combobox", { name: "connect to" });
+    expect(screen.queryByText("Topology settings")).toBeNull();
+
+    await user.click(await screen.findByText("prefix on topology: bad."));
+    expect(await screen.findByText("Topology settings")).toBeTruthy();
   });
 });
 
