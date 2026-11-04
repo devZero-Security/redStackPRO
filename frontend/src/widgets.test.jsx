@@ -408,6 +408,67 @@ describe("ACL editor", () => {
   });
 });
 
+describe("gMSA and group nesting editors", () => {
+  const goadEssos = () =>
+    essosDoc({
+      gmsa: [{ name: "gmsaDragon", dns: "gmsaDragon.essos.local", spns: ["HTTP/braavos", "HTTP/braavos.essos.local"], hosts: ["braavos"] }],
+      group_members: { QueenProtector: ["Dragons"], "Domain Admins": ["QueenProtector"] },
+    });
+
+  test("neither ever shows [object Object]", () => {
+    const { container } = render(<Harness initial={goadEssos()} selection={domainSelection} />);
+    expect(container.textContent).not.toContain("[object Object]");
+    for (const el of container.querySelectorAll("input, textarea")) {
+      expect(el.value).not.toContain("[object Object]");
+    }
+  });
+
+  test("a gMSA shows its name, the computers that can read it, and its SPNs", async () => {
+    const user = userEvent.setup();
+    const seen = [];
+    render(<Harness initial={goadEssos()} selection={domainSelection} seen={seen} />);
+    expect(screen.getByRole("textbox", { name: "gMSA name" }).value).toBe("gmsaDragon");
+    expect(screen.getByRole("textbox", { name: "SPNs" }).value).toBe("HTTP/braavos, HTTP/braavos.essos.local");
+    const braavos = screen.getByRole("checkbox", { name: "braavos" });
+    const meereen = screen.getByRole("checkbox", { name: "meereen" });
+    expect(braavos.checked).toBe(true);
+    expect(meereen.checked).toBe(false);
+
+    await user.click(meereen);
+    expect(last(seen).nodes[0].overlay.gmsa[0].hosts).toEqual(["braavos", "meereen"]);
+    await user.click(screen.getByRole("checkbox", { name: "braavos" }));
+    await user.click(screen.getByRole("checkbox", { name: "meereen" }));
+    expect(last(seen).nodes[0].overlay.gmsa[0].hosts).toBeUndefined();
+    expect(screen.getByText("No computer on this domain is ticked, so this account is not created.")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "+ Add gMSA" }));
+    expect(last(seen).nodes[0].overlay.gmsa[1]).toEqual({ name: "gmsaService" });
+  });
+
+  test("group nesting lists each member and parent and adds a pair", async () => {
+    const user = userEvent.setup();
+    const seen = [];
+    render(<Harness initial={goadEssos()} selection={domainSelection} seen={seen} />);
+    const box = within(screen.getByText(/^Group nesting/).closest(".rg-nesting"));
+    expect(box.getByText("Dragons")).toBeTruthy();
+    expect(box.getAllByText("QueenProtector")).toHaveLength(2);
+    expect(box.getAllByText("member of")).toHaveLength(2);
+
+    await user.type(box.getByRole("combobox", { name: "member group" }), "Dothraki");
+    await user.type(box.getByRole("combobox", { name: "parent group" }), "Khalasar");
+    expect(box.getByText("Khalasar is not on this domain yet; it will be created as a new group.")).toBeTruthy();
+    await user.click(box.getByRole("button", { name: "Add" }));
+    expect(last(seen).nodes[0].overlay.group_members).toEqual({
+      QueenProtector: ["Dragons"], "Domain Admins": ["QueenProtector"], Khalasar: ["Dothraki"],
+    });
+
+    await user.click(box.getAllByRole("button", { name: "Remove nesting" })[0]);
+    expect(last(seen).nodes[0].overlay.group_members).toEqual({
+      "Domain Admins": ["QueenProtector"], Khalasar: ["Dothraki"],
+    });
+  });
+});
+
 describe("domain users", () => {
   const open = async (user, name) => user.click(screen.getByRole("button", { name }));
 

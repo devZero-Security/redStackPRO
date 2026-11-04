@@ -12,6 +12,8 @@ import {
 } from "./rangeUsers.js";
 import { DomainUsers } from "./DomainUsers.jsx";
 import { AclEditor } from "./AclEditor.jsx";
+import { GmsaEditor } from "./GmsaEditor.jsx";
+import { GroupNesting } from "./GroupNesting.jsx";
 import { TrustEditor } from "./TrustEditor.jsx";
 import { EdgeRole, FrontsPorts } from "./EdgeEditors.jsx";
 import { Connections } from "./Connections.jsx";
@@ -1056,6 +1058,21 @@ export function Inspector({
                   key={`${name}-${node.id}`}
                   node={node}
                   document={document}
+                  readOnly={readOnly}
+                  onChange={(overlay) => onOverlayChange(node.id, overlay)}
+                />
+              ) : name === "gmsa" ? (
+                <GmsaEditor
+                  key={`${name}-${node.id}`}
+                  node={node}
+                  document={document}
+                  readOnly={readOnly}
+                  onChange={(overlay) => onOverlayChange(node.id, overlay)}
+                />
+              ) : name === "group_members" ? (
+                <GroupNesting
+                  key={`${name}-${node.id}`}
+                  node={node}
                   readOnly={readOnly}
                   onChange={(overlay) => onOverlayChange(node.id, overlay)}
                 />
