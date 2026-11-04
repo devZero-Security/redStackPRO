@@ -287,9 +287,9 @@ def test_offense_windows_operator_takes_the_setup_on_aws_and_azure(redstack):
     of its own), GCP fetches it from the metadata server. All three name the
     range in operator_hosts and gate on the offense Windows operator."""
     for provider in ("aws", "azure"):
-        # Azure's peering capability trips on this ops fixture (CAP004), which is
-        # unrelated to the boot wiring under test; skip validation to exercise the
-        # codegen. AWS validates cleanly and is checked the same way.
+        # skip_validation: this ops fixture leaves the redirector hostname unset
+        # (RDR001), unrelated to the boot wiring under test. Azure now renders
+        # peering, so CAP004 no longer applies. AWS is checked the same way.
         winop = _modules_for(redstack, provider=provider,
                              skip_validation=True)["off_win_op01"]
         assert winop["operator_setup"] is True, provider
@@ -321,6 +321,22 @@ def test_the_aws_operator_boot_script_fits_in_user_data():
     assert total < 16384, (
         "AWS user_data would be %d bytes, over the 16384 limit "
         "(payload %d + wrapper %d)" % (total, payload, len(wrapper)))
+
+
+def test_azure_operator_script_rides_in_custom_data_not_the_command_line():
+    """Windows caps a CustomScript extension's commandToExecute near 8 KB, and the
+    operator kit's base64 is ~13.8KB, so inlining it there failed apply with "The
+    command line is too long" (seen live). The Windows CustomScript extension has no
+    `script` property (that is Linux only), so the script rides in the VM's custom_data,
+    which the azure-edition agent decodes to C:\\AzureData\\CustomData.bin, and the
+    command reads it from there. Keep the big blob out of the command line."""
+    host = (ROOT / "src/redstackpro/assets/terraform/modules/azure/host/main.tf").read_text(encoding="utf-8")
+    # The Windows VM carries the script in custom_data.
+    assert "custom_data" in host and "operator_setup_script_b64" in host
+    # The command reads the decoded script from disk, it does not inline it.
+    assert "CustomData.bin" in host
+    # The old bug: the whole script base64 inlined into commandToExecute.
+    assert "FromBase64String('${var.operator_setup_script_b64}')" not in host
 
 
 def test_setup_script_is_shipped_for_every_provider(redstack):
@@ -1178,6 +1194,16 @@ def test_MANAGE_azure_emits_vms_nsg_rules_and_winrm():
     assert "foothold" in fw                              # jumpbox foothold ingress
 
 
+def test_azure_provider_lets_teardown_delete_a_nonempty_resource_group():
+    """A range is one dedicated resource group and teardown deletes it whole. azurerm
+    defaults prevent_deletion_if_contains_resources to true, which refuses the RG
+    delete when a failed or interrupted apply left untracked resources behind, and
+    strands the deploy (seen live: destroy removed what it tracked, then could not
+    delete the group). The provider turns it off so destroy always clears the group."""
+    versions = files(_MANAGE_doc(), provider="azure")["terraform/versions.tf"]
+    assert "prevent_deletion_if_contains_resources = false" in versions
+
+
 def test_MANAGE_esxi_uses_vsphere_datasources_static_ips_and_no_firewall():
     """The ESXi range: vSphere data sources resolved once, VMs with static
     addresses (Linux from an OVA, Windows cloned from a template), and no
@@ -1576,8 +1602,8 @@ def test_after_hours_emits_the_offset_and_reads_it_on_every_provider(redstack):
 
     gcp = generate(redstack, provider="gcp")
     aws = generate(redstack, provider="aws")
-    # Azure refuses an ops topology on CAP004 (no peering module), which is
-    # correct and not what this test is about.
+    # skip_validation: the fixture leaves the redirector hostname unset (RDR001).
+    # Azure now renders peering, so CAP004 no longer applies here.
     azure = generate(redstack, provider="azure", skip_validation=True)
 
     for files in (gcp, aws, azure):
@@ -1607,8 +1633,8 @@ def test_a_fixed_at_is_still_a_literal_and_pulls_in_no_provider(redstack):
 
     gcp = generate(redstack, provider="gcp")
     aws = generate(redstack, provider="aws")
-    # Azure refuses an ops topology on CAP004 (no peering module), which is
-    # correct and not what this test is about.
+    # skip_validation: the fixture leaves the redirector hostname unset (RDR001).
+    # Azure now renders peering, so CAP004 no longer applies here.
     azure = generate(redstack, provider="azure", skip_validation=True)
 
     for files in (gcp, aws, azure):
@@ -1618,6 +1644,84 @@ def test_a_fixed_at_is_still_a_literal_and_pulls_in_no_provider(redstack):
     assert 'schedule = "0 22 * * *"' in gcp["terraform/main.tf"]
     assert 'cron(0 22 * * ? *)' in aws["terraform/main.tf"]
     assert 'auto_stop_at       = "2200"' in azure["terraform/main.tf"]
+
+
+def test_azure_renders_peering_and_an_offense_portal(redstack):
+    """Azure offense used to refuse on CAP004 (no peering module) and, past that,
+    emitted no lab_password output because guac/portal were gated on is_range. It
+    now renders the peering module and, because a jumpbox is present, provisions the
+    shared password and the portal outputs in offense too."""
+    set_redirector_hostname(redstack, "cdn.redops.design")
+    azure = generate(redstack, provider="azure")  # full validation: no CAP004
+    main = azure["terraform/main.tf"]
+    assert "./modules/azure/peering" in main
+    assert 'output "lab_password"' in main
+    assert 'output "guacamole"' in main
+    peering = ROOT / "src/redstackpro/assets/terraform/modules/azure/peering/main.tf"
+    assert peering.is_file()
+    assert "azurerm_virtual_network_peering" in peering.read_text(encoding="utf-8")
+
+
+def test_azure_offense_firewall_covers_the_families_with_unique_priorities(redstack):
+    """Azure's NSG rules used to cover only manages + ad_intra. They now emit the
+    full offense set (fronts ingress + forward, ACME 80, C2 control ports, log
+    shipping, and the internally-open stack rule), and every rule carries a priority
+    unique within its NSG, which Azure requires."""
+    set_redirector_hostname(redstack, "cdn.redops.design")
+    fw = generate(redstack, provider="azure")["terraform/firewall.tf"]
+    for prefix in ("in_off_apache_rd01", "fwd_off_apache_rd01",
+                   "acme_in_off_apache_rd01", "ctl_off_", "log_off_", "intra_off_"):
+        assert prefix in fw, prefix
+    # Resource names must be unique per module (terraform validate rejects a
+    # collision): a redirector fronting three teamservers emits one ingress rule,
+    # not three. Caught live by terraform validate; locked in here.
+    names = re.findall(r'resource "azurerm_network_security_rule" "([^"]+)"', fw)
+    assert names and len(names) == len(set(names)), "duplicate NSG rule name"
+    seen = set()
+    for b in re.split(r'resource "azurerm_network_security_rule"', fw)[1:]:
+        nsg = re.search(r"network_security_group_name\s*=\s*(.+)", b)
+        pri = re.search(r"priority\s*=\s*(\d+)", b)
+        if nsg and pri:
+            key = (nsg.group(1).strip(), pri.group(1))
+            assert key not in seen, "duplicate NSG priority %s" % (key,)
+            seen.add(key)
+    assert len(seen) >= 20
+
+
+def test_azure_segment_gets_a_nat_gateway_for_private_egress(redstack):
+    """A private host (no public IP) in an egress-allowed segment needs a route out.
+    The NAT gateway is created ONCE per VNet (the network module, create_nat) and
+    shared by its subnets, mirroring the AWS network-level NAT: Azure caps public IPs
+    per region, so one gateway per subnet (one IP each) busted the cap. The segment
+    only associates to the VNet's shared gateway. gcp decides egress the same way
+    (Cloud NAT coexists with public IPs)."""
+    set_redirector_hostname(redstack, "cdn.redops.design")
+    main = generate(redstack, provider="azure")["terraform/main.tf"]
+    assert re.search(r"nat\s*=\s*true", main), "a segment should need egress"
+    assert re.search(r"create_nat\s*=\s*true", main), "its VNet should create a NAT gateway"
+    assert "nat_gateway_id = module." in main, "the segment reads the VNet's shared gateway"
+    # The gateway and its single public IP live on the network module, not the segment.
+    net = (ROOT / "src/redstackpro/assets/terraform/modules/azure/network/main.tf").read_text(encoding="utf-8")
+    assert "azurerm_nat_gateway" in net
+    assert "azurerm_public_ip" in net
+    seg = (ROOT / "src/redstackpro/assets/terraform/modules/azure/segment/main.tf").read_text(encoding="utf-8")
+    assert "azurerm_subnet_nat_gateway_association" in seg
+    assert "azurerm_nat_gateway" not in seg, "the gateway moved to the network module"
+
+
+def test_azure_auto_stop_translates_iana_to_a_windows_timezone(redstack):
+    """Azure's shutdown schedule needs a Windows timezone id. A common IANA zone is
+    translated (America/New_York -> Eastern Standard Time), so a non-UTC auto_stop
+    works; an unmapped IANA zone is refused rather than guessed into the wrong zone.
+    UTC and an already-Windows id pass through (the latter in the test above)."""
+    redstack["auto_stop"] = {"enabled": True, "at": "22:00",
+                             "timezone": "America/New_York"}
+    main = generate(redstack, provider="azure",
+                    skip_validation=True)["terraform/main.tf"]
+    assert 'auto_stop_timezone = "Eastern Standard Time"' in main
+    redstack["auto_stop"]["timezone"] = "Antarctica/Troll"  # not in the map
+    with pytest.raises(GenerationError, match="no Windows timezone mapping"):
+        generate(redstack, provider="azure", skip_validation=True)
 
 
 def test_with_both_fields_the_earlier_still_wins_but_in_hcl(redstack):

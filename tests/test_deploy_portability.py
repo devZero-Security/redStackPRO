@@ -475,6 +475,66 @@ def test_an_empty_lab_password_aborts_before_provisioning_a_blank_credential(sta
     assert "lab_password came back empty" in done.stdout, done.stdout + done.stderr
 
 
+@pytest.fixture
+def azure_staged(tmp_path):
+    """A compiled AZURE export plus a stub PATH, no cloud credentials anywhere.
+    Azure's deploy.sh preflight (az account show) and its fail-closed ingress are
+    exercised the same executed way as the gcp path above."""
+    files = compile_topology(example("redstack.json"), Registry(), provider="azure")
+    export = tmp_path / "export"
+    for path, contents in files.items():
+        target = export / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(contents, encoding="utf-8", newline="\n")
+    (export / "keys").mkdir(exist_ok=True)
+    (export / "keys/id_ed25519").write_text("not a real key", encoding="utf-8")
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    for tool in ("terraform", "ssh", "tar"):
+        _stub(stubs, tool, "exit 0")
+    return export, stubs
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_azure_deploy_aborts_without_az_credentials(azure_staged):
+    """deploy.sh emitted no credential preflight for azure before; a missing az
+    login now aborts early with a one-line fix, not a terraform stack trace."""
+    export, stubs = azure_staged
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    # az is absent from the stub PATH, so `az account show` fails -> abort.
+    done = _run(export, stubs)
+    assert done.returncode == 1
+    assert "Azure credentials are not set" in done.stdout, done.stdout + done.stderr
+    assert "terraform apply" not in done.stdout
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_azure_deploy_aborts_on_unset_ingress(azure_staged):
+    """The azure tfvars ships operator_source_ranges commented out (fail closed), so
+    a run past the az credential check stops until the operator sets it."""
+    export, stubs = azure_staged
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    _stub(stubs, "az", "exit 0")  # pass the credential preflight
+    done = _run(export, stubs)
+    assert done.returncode == 1
+    assert "operator_source_ranges is not set" in done.stdout, done.stdout
+    assert "terraform apply" not in done.stdout
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_azure_service_principal_env_passes_the_credential_preflight(azure_staged):
+    """The deploy accepts a service principal (ARM_* env) in place of an az login
+    session: with ARM_CLIENT_ID set the preflight passes even when az is absent, so
+    the run gets past credentials to the ingress check."""
+    export, stubs = azure_staged
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    # az absent from PATH, but a service principal is in the environment.
+    done = _run(export, stubs,
+                env_extra={"ARM_CLIENT_ID": "00000000-0000-0000-0000-000000000000"})
+    assert "Azure credentials are not set" not in done.stdout, done.stdout
+    assert "operator_source_ranges is not set" in done.stdout, done.stdout
+
+
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
 def test_unset_operator_source_ranges_aborts_until_set(staged):
     """The export now ships operator_source_ranges commented out (fail closed), so a
@@ -517,10 +577,19 @@ def test_explicit_open_ingress_aborts_and_the_override_reaches_apply(staged):
 def test_an_empty_ssh_public_key_is_derived_from_the_private_key(script):
     """The operator need not copy keys/<name>.pub into deploy.tfvars: when it is left
     empty, deploy.sh derives the public half from the private key it already found,
-    so the two halves cannot drift and a manual copy step disappears."""
+    so the two halves cannot drift and a manual copy step disappears.
+
+    The derived key must land where terraform actually reads it. A tfvars value beats
+    a TF_VAR_ env var, so exporting TF_VAR_ssh_public_key (the old approach) was silently
+    overridden by the empty ssh_public_key in the copied terraform.tfvars and apply
+    failed the variable validation. The key is written to a *.auto.tfvars instead, which
+    terraform loads after terraform.tfvars and so wins, and which persists for teardown."""
     code = _code(script)
     assert "ssh-keygen -y -f" in code
-    assert "TF_VAR_ssh_public_key" in code
+    # Written to an auto-loaded overriding tfvars, not exported as an env var that loses.
+    assert ".auto.tfvars" in code
+    assert "ssh_public_key = " in code
+    assert "TF_VAR_ssh_public_key" not in code
 
 
 # -- the deployment log (issue-triage artifact)
@@ -658,13 +727,28 @@ def test_aws_auto_stop_warns_about_iam_before_apply():
 
 
 def test_an_untested_provider_still_gets_teardown_but_says_so_for_the_rest():
-    """Only aws and gcp are wired for live status/start/stop. A provider without
+    """aws, gcp and azure are wired for live status/start/stop. A provider without
     that support must not block the export or the teardown path, which is
     provider agnostic; it just has to say plainly that the rest is not there."""
-    other = generate_manage_script(example("redstack.json"), Registry(), provider="azure")
+    other = generate_manage_script(example("redstack.json"), Registry(), provider="proxmox")
     assert other is not None
     assert "terraform -chdir=terraform destroy -auto-approve" in other
     assert "not implemented" in other
+
+
+def test_azure_is_wired_for_live_control_and_a_credential_preflight():
+    """Azure gained status/start/stop (stop via deallocate so it halts billing), a
+    --force teardown that deletes the whole dedicated resource group, and an
+    `az account show` credential preflight it did not have before (deploy.sh emitted
+    an empty preflight for azure)."""
+    manage = generate_manage_script(example("redstack.json"), Registry(), provider="azure")
+    assert "az vm start" in manage and "az vm deallocate" in manage
+    # --force deletes the whole range resource group, so an interrupted apply that
+    # stranded an untracked NIC (which pins its subnet, then the VNet) still clears.
+    assert "az group delete" in manage
+    assert "not implemented" not in manage
+    deploy = generate_deploy_script(example("redstack.json"), Registry(), provider="azure")
+    assert "az account show" in deploy
 
 
 def test_MANAGE_sh_is_syntactically_valid_bash(manage_script):

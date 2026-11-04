@@ -15,6 +15,22 @@
   ansible.builtin.set_fact:
     redstackpro_is_kali: "{{ ansible_facts['distribution'] | lower == 'kali' }}"
 
+# apt_repository needs the gpg binary even when the repo line carries signed-by, and a
+# minimal Debian base (azure maps kali to debian to dodge Marketplace plan acceptance)
+# ships neither gpg nor the removed apt-key. A real Kali image already has it, so this
+# only fires on the conversion path. Without it the archive task fails with "Either
+# apt-key or gpg binary is required". Found on the first live azure operator provision.
+- name: Ensure gpg is present for apt_repository (a minimal Debian base lacks it)
+  ansible.builtin.apt:
+    name: gnupg
+    state: present
+    update_cache: true
+  register: redstackpro_operator_gnupg
+  retries: 5
+  delay: 15
+  until: redstackpro_operator_gnupg is succeeded
+  when: not redstackpro_is_kali
+
 - name: Ensure the apt keyrings directory exists
   ansible.builtin.file:
     path: /etc/apt/keyrings

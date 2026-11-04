@@ -14,15 +14,21 @@ import base64
 import ipaddress
 
 from .plan import (  # noqa: F401  GenerationError re-exported
-    GenerationError, align, operator_hosts_hcl, time_provider)
+    GenerationError, align, operator_hosts_hcl,
+    operator_source_ranges_check, time_provider)
 
-# Marketplace image (publisher, offer, sku, version) per build.
+# Marketplace image (publisher, offer, sku, version) per build. These must be the
+# Gen2 (hypervisor generation 2) SKUs: the default sizes (the AMD Dasv5 family and
+# newer) are Gen2 only, so a Gen1 SKU (plain "2019-Datacenter", "win10-22h2-pro")
+# fails apply with "cannot boot Hypervisor Generation 1". The Gen2 SKU is the one
+# suffixed -gensecond or -g2 (2022-datacenter-azure-edition and win11 are Gen2
+# already). Caught on the first live azure defense deploy.
 WINDOWS_IMAGES = {
     # 2016 is pinned to 2019 ahead of Microsoft EOS on 2027-01-12; see aws.py.
-    "windows_server_2016": ("MicrosoftWindowsServer", "WindowsServer", "2019-Datacenter", "latest"),
-    "windows_server_2019": ("MicrosoftWindowsServer", "WindowsServer", "2019-Datacenter", "latest"),
+    "windows_server_2016": ("MicrosoftWindowsServer", "WindowsServer", "2019-datacenter-gensecond", "latest"),
+    "windows_server_2019": ("MicrosoftWindowsServer", "WindowsServer", "2019-datacenter-gensecond", "latest"),
     "windows_server_2022": ("MicrosoftWindowsServer", "WindowsServer", "2022-datacenter-azure-edition", "latest"),
-    "windows_10": ("MicrosoftWindowsDesktop", "Windows-10", "win10-22h2-pro", "latest"),
+    "windows_10": ("MicrosoftWindowsDesktop", "Windows-10", "win10-22h2-pro-g2", "latest"),
     "windows_11": ("MicrosoftWindowsDesktop", "windows-11", "win11-23h2-pro", "latest"),
 }
 _DEFAULT_WINDOWS = WINDOWS_IMAGES["windows_server_2022"]
@@ -43,27 +49,90 @@ LINUX_IMAGES = {
     "kali": ("Debian", "debian-13", "13-gen2", "latest"),
 }
 
+# AMD v5 generation (Dasv5/Basv2). Newer than the Dsv3 that eastus chronically
+# capacity-restricts (SkuNotAvailable), broadly available across regions, and
+# usually cheaper. Gen2 images (debian-13-gen2, 2022-datacenter-azure-edition)
+# run on these. wks is burstable, sized like the gcp/aws small default.
 DEFAULT_MACHINE = {
-    "collector": "Standard_D2s_v3",
-    "operator": "Standard_D2s_v3",
-    "dc": "Standard_D2s_v3",
-    "srv": "Standard_D2s_v3",
-    "wks": "Standard_B2s",
-    "siem": "Standard_D4s_v3",
+    "collector": "Standard_D2as_v5",
+    "operator": "Standard_D2as_v5",
+    "dc": "Standard_D2as_v5",
+    "srv": "Standard_D2as_v5",
+    "wks": "Standard_B2as_v2",
+    "siem": "Standard_D4as_v5",
+}
+
+# IANA -> Windows timezone id for Azure's shutdown schedule, which (unlike gcp/aws)
+# does not accept IANA names. The CLDR default per zone. Only the common zones an
+# operator is likely to pick; an unmapped IANA zone is refused at compile rather
+# than guessed, and UTC or an already-Windows id passes through untouched.
+_WINDOWS_TZ = {
+    "UTC": "UTC", "Etc/UTC": "UTC",
+    "America/New_York": "Eastern Standard Time",
+    "America/Toronto": "Eastern Standard Time",
+    "America/Chicago": "Central Standard Time",
+    "America/Denver": "Mountain Standard Time",
+    "America/Phoenix": "US Mountain Standard Time",
+    "America/Los_Angeles": "Pacific Standard Time",
+    "America/Anchorage": "Alaskan Standard Time",
+    "America/Halifax": "Atlantic Standard Time",
+    "America/Sao_Paulo": "E. South America Standard Time",
+    "Europe/London": "GMT Standard Time",
+    "Europe/Dublin": "GMT Standard Time",
+    "Europe/Lisbon": "GMT Standard Time",
+    "Europe/Berlin": "W. Europe Standard Time",
+    "Europe/Amsterdam": "W. Europe Standard Time",
+    "Europe/Rome": "W. Europe Standard Time",
+    "Europe/Stockholm": "W. Europe Standard Time",
+    "Europe/Zurich": "W. Europe Standard Time",
+    "Europe/Vienna": "W. Europe Standard Time",
+    "Europe/Paris": "Romance Standard Time",
+    "Europe/Madrid": "Romance Standard Time",
+    "Europe/Brussels": "Romance Standard Time",
+    "Europe/Warsaw": "Central European Standard Time",
+    "Europe/Prague": "Central European Standard Time",
+    "Europe/Budapest": "Central European Standard Time",
+    "Europe/Athens": "GTB Standard Time",
+    "Europe/Bucharest": "GTB Standard Time",
+    "Europe/Helsinki": "FLE Standard Time",
+    "Europe/Kyiv": "FLE Standard Time", "Europe/Kiev": "FLE Standard Time",
+    "Europe/Moscow": "Russian Standard Time",
+    "Asia/Jerusalem": "Israel Standard Time",
+    "Asia/Dubai": "Arabian Standard Time",
+    "Asia/Kolkata": "India Standard Time",
+    "Asia/Singapore": "Singapore Standard Time",
+    "Asia/Shanghai": "China Standard Time",
+    "Asia/Hong_Kong": "China Standard Time",
+    "Asia/Tokyo": "Tokyo Standard Time",
+    "Asia/Seoul": "Korea Standard Time",
+    "Australia/Sydney": "AUS Eastern Standard Time",
+    "Australia/Melbourne": "AUS Eastern Standard Time",
+    "Australia/Perth": "W. Australia Standard Time",
+    "Pacific/Auckland": "New Zealand Standard Time",
 }
 
 
-def is_windows(node):
-    os_ = node.get("overlay", {}).get("os", "")
-    if node["kind"] == "operator":
-        return os_.startswith("windows")
-    return os_ in WINDOWS_IMAGES or (
-        node["kind"] in ("dc", "srv", "wks") and not os_.startswith(("debian", "ubuntu", "linux")))
+def _windows_tz(tz):
+    """IANA zone -> Windows timezone id for Azure's shutdown schedule. UTC and an
+    already-Windows id (no "/") pass through; a mapped IANA zone is translated; an
+    unmapped IANA zone is refused rather than guessed into the wrong zone."""
+    if "/" not in tz:  # UTC or an already-Windows id
+        return tz
+    win = _WINDOWS_TZ.get(tz)
+    if win:
+        return win
+    raise GenerationError(
+        "azure auto_stop: no Windows timezone mapping for the IANA zone %r. Use "
+        "UTC, one of the common zones redStackPRO maps, or a Windows id directly "
+        '(for example "GMT Standard Time"); or use gcp or aws for this range.' % tz)
 
 
-def image_for(node):
+def image_for(plan, node):
+    # One source of truth for OS classification: plan.is_windows, the same call the
+    # firewall and gcp/aws use, rather than a second module-level rule that could
+    # drift from it. Mirrors aws.image_for(plan, node).
     overlay = node.get("overlay", {})
-    if is_windows(node):
+    if plan.is_windows(node):
         return WINDOWS_IMAGES.get(overlay.get("os"), _DEFAULT_WINDOWS)
     return LINUX_IMAGES.get(overlay.get("os", "debian"), LINUX_IMAGES["debian"])
 
@@ -104,7 +173,16 @@ terraform {
 }""" % time_provider(plan) + """
 
 provider "azurerm" {
-  features {}
+  features {
+    # A range is one dedicated resource group, and teardown deletes that whole group.
+    # The default (true) refuses to delete a group that still holds resources, which
+    # strands a failed or interrupted deploy: terraform removes what it tracked, then
+    # cannot delete the group because untracked leftovers remain (seen live). Deleting
+    # the dedicated group and everything in it is the intent here. See 0001.
+    resource_group {
+      prevent_deletion_if_contains_resources = false
+    }
+  }
   subscription_id = var.subscription_id
 }
 """
@@ -134,12 +212,16 @@ variable "resource_group" {
 variable "ssh_public_key" {
   description = "Authorized key for the admin account, supplied at run time."
   type        = string
+  validation {
+    condition     = can(regex("^(ssh-|ecdsa-|sk-)", var.ssh_public_key))
+    error_message = "ssh_public_key must be an SSH public key line (a key type, the base64 key, then a comment). deploy.sh fills it from your private key; or paste keys/<name>.pub into deploy.tfvars."
+  }
 }
 
 variable "operator_source_ranges" {
   description = "Where management access is accepted from. Narrow this."
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = []
 }
 
 variable "lab_password" {
@@ -156,14 +238,14 @@ def _tfvars(plan):
 # Never commit this file with real values. See the project conventions.
 
 subscription_id = ""
-location        = "eastus"
+location        = "%s"
 resource_group  = "redstackpro-range"
 ssh_public_key  = ""
 
-# Narrow this to the addresses operators connect from. You can list several:
-# add one /32 per operator, or a CIDR, e.g. ["203.0.113.5/32", "198.51.100.7/32"].
-operator_source_ranges = ["0.0.0.0/0"]
-"""
+# REQUIRED: the addresses operators connect from. deploy.sh aborts until you set
+# this, so a range is never exposed by default. One /32 per operator, or a CIDR:
+# operator_source_ranges = ["203.0.113.5/32", "198.51.100.7/32"]
+""" % plan.region
 
 
 # ---------------------------------------------------------------- addressing
@@ -193,9 +275,47 @@ def _host_ips(plan):
 
 # ---------------------------------------------------------------- root module
 
+def _needs_nat(plan, segment_id):
+    """Whether a subnet needs a NAT gateway of its own. Azure's NAT gateway serves
+    the instances without a public IP and coexists with the ones that have one
+    (like GCP Cloud NAT, unlike an AWS route table), so an internet-exposed subnet
+    still gives its private members (a collector, an operator) their own egress. A
+    segment needs it when egress is allowed and it holds any member that took no
+    public address. Mirrors gcp._needs_nat; without it a private collector in an
+    exposed subnet has no route out and its package install hangs."""
+    seg = plan.ctx.nodes[segment_id]
+    if seg["overlay"].get("egress") != "allowed":
+        return False
+    members = [h for h in plan.hosts()
+               if segment_id in plan.ctx.segments_of(h["id"])]
+    if not members:
+        return True
+    return any(not plan.is_public(h) for h in members)
+
+
+def _network_needs_nat(plan, network_id):
+    """A VNet gets one shared NAT gateway when any of its segments needs egress.
+    Azure caps public IPs per region, so the gateway is created once per VNet (the
+    AWS network-level NAT model) and every private subnet associates to it, rather
+    than one gateway and one public IP per subnet, which busted the cap."""
+    return any(_needs_nat(plan, s["id"]) for s in plan.segments()
+               if plan.ctx.network_of_segment(s["id"]) == network_id)
+
+
 def _main(plan):
     is_range = plan.is_range()
+    # The jumpbox runs Guacamole and keys into every box for the portal tiles in
+    # both modes, so its password and key pair are provisioned whenever a jumpbox
+    # exists, not only for ranges (mirrors gcp/aws). Without this an offense export
+    # emitted no lab_password output and deploy.sh's `terraform output -raw
+    # lab_password` failed.
+    has_jumpbox = any(n["kind"] == "jumpbox" for n in plan.hosts())
     host_ip = _host_ips(plan)
+
+    # Azure's shutdown schedule reads a WINDOWS timezone id, not the IANA name
+    # gcp/aws want, so translate it (common zones mapped, unmapped ones refused).
+    stop = plan.auto_stop
+    az_timezone = _windows_tz(stop["timezone"]) if stop else None
 
     lines = [
         "# Generated by redStackPRO. Do not edit.",
@@ -207,11 +327,13 @@ def _main(plan):
         "  location = var.location",
         "}",
     ]
+    # Fail closed on wide-open management ingress, same precondition as gcp/aws.
+    lines += operator_source_ranges_check()
 
     # Once at the root, above the module blocks that read the locals it defines.
     lines += plan.auto_stop_block()
 
-    if is_range:
+    if has_jumpbox:
         lines += [
             "",
             "# One shared lab password, generated at apply unless the operator set one.",
@@ -239,6 +361,7 @@ def _main(plan):
             ("resource_group", "azurerm_resource_group.this.name"),
             ("location", "azurerm_resource_group.this.location"),
             ("cidr", '"%s"' % node["overlay"]["cidr"]),
+            ("create_nat", "true" if _network_needs_nat(plan, node["id"]) else "false"),
         ]) + ["}"]
 
     for node in plan.segments():
@@ -250,12 +373,16 @@ def _main(plan):
             ("location", "azurerm_resource_group.this.location"),
             ("vnet_name", "module.%s.name" % plan.ref(network)),
             ("cidr", '"%s"' % node["overlay"]["cidr"]),
+            ("nat", "true" if _needs_nat(plan, node["id"]) else "false"),
+            # The shared NAT gateway lives on the VNet; associate only when this
+            # subnet needs egress (nat = true). Mirrors aws.py's nat_gateway_id.
+            ("nat_gateway_id", "module.%s.nat_gateway_id" % plan.ref(network)),
         ]) + ["}"]
 
     for node in plan.hosts():
         segment = plan.primary_segment(node)
-        windows = is_windows(node)
-        pub, off, sku, ver = image_for(node)
+        windows = plan.is_windows(node)
+        pub, off, sku, ver = image_for(plan, node)
         pairs = [
             ("source", '"./modules/azure/host"'),
             ("name", '"%s"' % plan.tag(node["id"])),
@@ -272,7 +399,7 @@ def _main(plan):
              "true" if (plan.is_public(node)
                         or (is_range and node["kind"] == "jumpbox"))
              else "false"),
-            ("size", '"%s"' % DEFAULT_MACHINE.get(node["kind"], "Standard_D2s_v3")),
+            ("size", '"%s"' % DEFAULT_MACHINE.get(node["kind"], "Standard_D2as_v5")),
             ("windows", "true" if windows else "false"),
             ("image_publisher", '"%s"' % pub),
             ("image_offer", '"%s"' % off),
@@ -291,24 +418,31 @@ def _main(plan):
         services = node.get("overlay", {}).get("services") or []
         disk = 128 if ("exchange" in services or windows) else 40
         pairs.append(("disk_size", str(disk)))
-        # Auto stop, when the canvas asked for one. Azure takes HHmm and a
-        # WINDOWS timezone id rather than the IANA name GCP wants, so the value
-        # is passed through as given rather than translated: the two vocabularies
-        # agree only on UTC, and guessing a mapping would fail silently at 2am.
-        # See 0057.
-        stop = plan.auto_stop
+        # Auto stop, when the canvas asked for one. Azure takes HHmm and a WINDOWS
+        # timezone id rather than the IANA name GCP wants; az_timezone (computed
+        # above) is the translation, with an unmapped IANA zone already refused. See 0057.
         if stop:
             pairs += [
+                # A static bool so the schedule's count is known at plan. In TTL
+                # mode auto_stop_at is local.rsp_stop_hhmm, computed at apply, and
+                # a count keyed on `auto_stop_at == ""` cannot be resolved at plan
+                # ("Invalid count argument"). Whether a schedule exists is known
+                # now, so the module counts on this instead.
+                ("auto_stop_enabled", "true"),
                 # HHMM with no separator, so it needs zero padding the cron
                 # schedules do not: "${h}${m}" would render 1 and 5 as "15"
                 # rather than "0105". Padded in a local, or a literal when the
                 # clock is fixed.
                 ("auto_stop_at", stop["hhmm_expr"]),
-                ("auto_stop_timezone", '"%s"' % stop["timezone"]),
+                ("auto_stop_timezone", '"%s"' % az_timezone),
             ]
-        if is_range:
+        if has_jumpbox:
             pairs += [
-                ("enable_winrm", "true" if windows else "false"),
+                # WinRM is the range's Windows provisioning path (the boot script
+                # stands up an HTTPS listener for Ansible). An offense Windows
+                # operator self-provisions at boot and is never managed over WinRM,
+                # so the listener is range-only.
+                ("enable_winrm", "true" if (is_range and windows) else "false"),
                 ("lab_password", "local.lab_password"),
                 ("guac_public_key", "tls_private_key.guacamole.public_key_openssh"),
                 ("guac_private_key",
@@ -337,7 +471,23 @@ def _main(plan):
             ]
         lines += ["", 'module "%s" {' % plan.ref(node["id"])] + align(pairs) + ["}"]
 
-    if is_range:
+    # peers: a VNet peering, both directions. Azure needs one resource per
+    # direction (like gcp), each created in its own VNet naming the other's id;
+    # routes exchange on their own once both exist. NSGs do not cross a peering, so
+    # cross-peering firewall paths match by subnet CIDR, the same as gcp.
+    for edge in plan.ctx.by_role.get("peers", []):
+        a, b = edge["source"], edge["target"]
+        lines += ["", 'module "%s" {' % plan.ref(edge["id"])] + align([
+            ("source", '"./modules/azure/peering"'),
+            ("name", '"%s"' % plan.tag(edge["id"])),
+            ("resource_group", "azurerm_resource_group.this.name"),
+            ("vnet_a_name", "module.%s.name" % plan.ref(a)),
+            ("vnet_a_id", "module.%s.id" % plan.ref(a)),
+            ("vnet_b_name", "module.%s.name" % plan.ref(b)),
+            ("vnet_b_id", "module.%s.id" % plan.ref(b)),
+        ]) + ["}"]
+
+    if has_jumpbox:
         jumps = [n for n in plan.hosts() if n["kind"] == "jumpbox"]
         if jumps:
             jref = plan.ref(jumps[0]["id"])
@@ -386,23 +536,45 @@ def _firewall(plan):
     def seg_cidr(host_id):
         return ctx.overlay(seg_of(host_id), "cidr")
 
-    # Accumulate rules per segment NSG so priorities are unique within it.
+    # Accumulate rules per segment NSG so priorities are unique within it. A rule
+    # name is also the azurerm resource name, which terraform requires to be unique
+    # per module, so the same name is emitted once (first wins): a redirector that
+    # fronts three teamservers yields one public-ingress rule, not three, and a
+    # host reachable from several manages edges is opened once. Mirrors gcp's seen.
     by_seg = {}
+    seen = set()
 
     def add(seg_id, name, port, source, dest, proto="Tcp"):
+        if name in seen:
+            return
+        seen.add(name)
         by_seg.setdefault(seg_id, []).append(
             {"name": name, "port": port, "source": source, "dest": dest,
              "proto": proto})
+
+    def az_proto(p):
+        return {"tcp": "Tcp", "udp": "Udp", "all": "*", "*": "*"}.get(p, "Tcp")
+
+    def ip_list(ids):
+        return "[%s]" % ", ".join('"%s"' % host_ip[i] for i in ids)
 
     for edge in ctx.by_role.get("manages", []):
         jump = edge["source"]
         jseg = seg_of(jump)
         add(jseg, "operator_ssh_%s" % plan.ref(jump), "22",
             "var.operator_source_ranges", '["%s"]' % host_ip[jump])
-        # Guacamole runs on the jumpbox in every mode (range and offense), so open
-        # 443 to the portal regardless of range/ops.
-        add(jseg, "operator_guacamole_%s" % plan.ref(jump), "443",
-            "var.operator_source_ranges", '["%s"]' % host_ip[jump])
+        # In a VPN access mode (offense) the jumpbox opens its VPN listen port and
+        # the Guacamole portal rides the tunnel rather than being exposed on 443;
+        # otherwise the portal is open on 443. Mirrors gcp/aws.
+        vpn = plan.vpn_access(ctx.nodes[jump])
+        if vpn:
+            _mode, vport, vproto = vpn
+            add(jseg, "operator_vpn_%s" % plan.ref(jump), str(vport),
+                "var.operator_source_ranges", '["%s"]' % host_ip[jump],
+                proto=az_proto(vproto))
+        else:
+            add(jseg, "operator_guacamole_%s" % plan.ref(jump), "443",
+                "var.operator_source_ranges", '["%s"]' % host_ip[jump])
         # The jumpbox is the range foothold: it must receive traffic range hosts
         # initiate back to it (coerced/relayed NTLM to an operator listener, a
         # pivoted callback). Internal (segment) surface only; its internet
@@ -417,11 +589,64 @@ def _firewall(plan):
                 "mgmt_%s" % plan.ref(host["id"]),
                 str(plan.management_port(host)),
                 '["%s"]' % host_ip[jump], '["%s"]' % host_ip[host["id"]])
-            # guacd on the jumpbox reaches a Windows box's RDP tile on 3389.
-            if plan.is_windows(host):
+            # guacd on the jumpbox reaches a Windows box's RDP tile (or a
+            # desktop-mode Kali operator's) on 3389.
+            if plan.is_windows(host) or plan.is_gui_operator(host):
                 add(seg_of(host["id"]),
                     "mgmt_rdp_%s" % plan.ref(host["id"]), "3389",
                     '["%s"]' % host_ip[jump], '["%s"]' % host_ip[host["id"]])
+
+    # The operator's own stack, internally open (offense only). Every segment
+    # accepts all traffic from every stack network's CIDR, so a peered redirector,
+    # teamserver, and operator all reach each other. Azure matches by CIDR, which
+    # carries across a peering, so there is no same-net-vs-peered split to make. A
+    # range keeps strictly edge-derived rules, so this does not apply there.
+    if not plan.is_range():
+        stack_cidrs = [c for c in (ctx.overlay(n["id"], "cidr")
+                                   for n in plan.networks()) if c]
+        src = "[%s]" % ", ".join('"%s"' % c for c in stack_cidrs)
+        for seg in plan.segments():
+            add(seg["id"], "intra_%s" % plan.ref(seg["id"]), "*",
+                src, '["%s"]' % ctx.overlay(seg["id"], "cidr"), proto="*")
+
+    # fronts: public ingress to the redirector, then redirector to teamserver.
+    for edge in ctx.by_role.get("fronts", []):
+        rdir, ts = edge["source"], edge["target"]
+        proto = az_proto("tcp" if edge["protocol"] != "dns" else "udp")
+        listen = edge["listen_port"]
+        upstream = edge.get("upstream_port", listen)
+        add(seg_of(rdir), "in_%s_%s" % (plan.ref(rdir), listen), str(listen),
+            '["0.0.0.0/0"]', '["%s"]' % host_ip[rdir], proto=proto)
+        add(seg_of(ts), "fwd_%s_%s" % (plan.ref(rdir), plan.ref(ts)), str(upstream),
+            ip_list([rdir]), '["%s"]' % host_ip[ts], proto=proto)
+
+    # A redirector keeps 80 open to the internet for Certbot's ACME http-01
+    # challenge, whatever its cert source, so renewals keep working.
+    for node in plan.hosts():
+        if ctx.kind(node["id"]) != "redirector":
+            continue
+        add(seg_of(node["id"]), "acme_in_%s" % plan.ref(node["id"]), "80",
+            '["0.0.0.0/0"]', '["%s"]' % host_ip[node["id"]])
+
+    # ctl: an operator drives a teamserver from inside over the C2 control port(s).
+    # The beacon channel itself rides the fronts edge through the redirector; this
+    # is the separate operator -> teamserver management path. One rule per port.
+    operators = sorted(plan.operators(), key=lambda h: h["id"])
+    if operators:
+        op_src = ip_list([o["id"] for o in operators])
+        for ts in sorted(plan.hosts(), key=lambda h: h["id"]):
+            for port in plan.control_ports(ts) or []:
+                add(seg_of(ts["id"]), "ctl_%s_%s" % (plan.ref(ts["id"]), port),
+                    str(port), op_src, '["%s"]' % host_ip[ts["id"]])
+
+    # logs_to: senders reach the collector on its ingest port and nothing else.
+    sinks = {}
+    for edge in ctx.by_role.get("logs_to", []):
+        sinks.setdefault(edge["target"], []).append(edge["source"])
+    for collector, senders in sorted(sinks.items()):
+        port = ctx.overlay(collector, "ingest_port", 5044)
+        add(seg_of(collector), "log_%s" % plan.ref(collector), str(port),
+            ip_list(sorted(senders)), '["%s"]' % host_ip[collector])
 
     for host in plan.intra_segment_hosts():
         add(seg_of(host["id"]), "ad_intra_%s" % plan.ref(host["id"]), "*",
@@ -445,12 +670,9 @@ def _firewall(plan):
                 ("source_port_range", '"*"'),
                 ("destination_port_range", '"%s"' % r["port"]),
             ]
-            # A source that is a variable list is emitted as an expression; a
-            # literal address list is emitted as an HCL list.
-            if r["source"].startswith("var."):
-                body.append(("source_address_prefixes", r["source"]))
-            else:
-                body.append(("source_address_prefixes", r["source"]))
+            # source is already valid HCL: either a variable list expression
+            # (var.operator_source_ranges) or a literal list of addresses/CIDRs.
+            body.append(("source_address_prefixes", r["source"]))
             body.append(("destination_address_prefixes", r["dest"]))
             lines += align(body) + ["}"]
 

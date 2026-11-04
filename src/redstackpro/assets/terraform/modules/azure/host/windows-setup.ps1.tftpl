@@ -8,6 +8,16 @@
 $ErrorActionPreference = "Stop"
 $pass = ConvertTo-SecureString "${lab_password}" -AsPlainText -Force
 
+# Azure forbids "Administrator" as the VM admin username and renames the built-in
+# admin (RID 500) to whatever it was given, so "Administrator" does not resolve by
+# name (Set-LocalUser then fails with "User Administrator was not found"). Find the
+# built-in admin by its SID (ends in -500), rename it back to Administrator, and set
+# the shared password on it, so Ansible connects as Administrator the same as the
+# other clouds and the account carries into the domain Administrator after promotion.
+$builtin = Get-LocalUser | Where-Object { $_.SID.Value.EndsWith("-500") }
+if ($builtin -and $builtin.Name -ne "Administrator") {
+    Rename-LocalUser -Name $builtin.Name -NewName "Administrator"
+}
 Set-LocalUser -Name "Administrator" -Password $pass
 Enable-LocalUser -Name "Administrator"
 

@@ -31,7 +31,7 @@ class GenerationError(Exception):
 
 # A default region per cloud provider, used when neither the compile nor the
 # document names one. Proxmox has no region.
-DEFAULT_REGION = {"aws": "us-east-1", "gcp": "us-east4"}
+DEFAULT_REGION = {"aws": "us-east-1", "gcp": "us-east4", "azure": "eastus2"}
 
 # Operator-facing control-plane ports per C2 product on a teamserver. An
 # operator drives the teamserver over these from an operator box; the beacon
@@ -615,10 +615,10 @@ def outputs(plan):
 
     # Per-host identifiers for manage.sh (status/start/stop), so those act on
     # exactly this range's own instances and never the whole account or
-    # project. Only aws and gcp are wired: aws targets an instance by id, gcp
-    # by name plus zone, and every host module already exposes what its
+    # project. aws targets an instance by id, gcp by name plus zone, azure by
+    # name plus resource group; every host module already exposes what its
     # provider needs. See deploy.py generate_manage_script.
-    if plan.provider in ("aws", "gcp"):
+    if plan.provider in ("aws", "gcp", "azure"):
         lines += [
             "",
             "# Consumed by manage.sh (status/start/stop). Not the whole account",
@@ -631,9 +631,15 @@ def outputs(plan):
             lines.append('    "%s" = {' % plan.tag(node["id"]))
             if plan.provider == "aws":
                 lines.append("      instance_id = module.%s.instance_id" % ref)
-            else:
+            elif plan.provider == "gcp":
                 lines.append("      name = module.%s.name" % ref)
                 lines.append("      zone = var.zone")
+            else:  # azure
+                # Two keys of different widths in one block, so align the = the way
+                # terraform fmt would (gcp's name/zone happen to be equal width).
+                lines.append("      %s = module.%s.name" % ("name".ljust(14), ref))
+                lines.append("      %s = var.resource_group"
+                             % "resource_group".ljust(14))
             lines.append("    }")
         lines += ["  }", "}"]
 

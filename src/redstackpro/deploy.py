@@ -113,11 +113,19 @@ trap finish EXIT
 _TTL_PREFLIGHT = """# Refuse to start a build that would stop itself before it finishes.
 RSP_STOP_LEAD=$("$PY" -c '
 import datetime as dt
+TZ = "%(timezone)s"
 try:
     from zoneinfo import ZoneInfo
-    tz = ZoneInfo("%(timezone)s")
+    tz = ZoneInfo(TZ)
 except Exception:
-    tz = dt.timezone.utc
+    # A missing IANA tz database still lets an IANA name mean UTC closely enough to
+    # guard on; a non-IANA id (an Azure Windows zone like "GMT Standard Time")
+    # cannot, so the lead is left uncomputed and the "could not run" branch below
+    # handles it honestly rather than guessing the stop time in the wrong zone.
+    if "/" in TZ or TZ == "UTC":
+        tz = dt.timezone.utc
+    else:
+        raise SystemExit(1)
 now = dt.datetime.now(tz)
 stop = now.replace(hour=%(hour)d, minute=%(minute)d, second=0, microsecond=0)
 if stop <= now:
@@ -259,6 +267,17 @@ def generate_deploy_script(topology, registry=None, provider=None):
             'echo "note: an AWS range needs Elastic IP and vCPU quota headroom, and a '
             "Kali operator needs a one-time Marketplace subscription; see "
             'DEPLOYMENT-GUIDE.md if apply hits a limit or an OptInRequired error."\n'
+        )
+    elif provider == "azure":
+        # Accept either auth path: an `az login` session (az account show) OR a
+        # service principal in the environment (ARM_CLIENT_ID et al, which the
+        # azurerm provider reads directly and which az account show does not see).
+        cloud_preflight = (
+            'if ! az account show >/dev/null 2>&1 && [ -z "${ARM_CLIENT_ID:-}" ]; then\n'
+            '  echo "Azure credentials are not set. Run:  az login  (or set '
+            "ARM_CLIENT_ID/ARM_CLIENT_SECRET/ARM_TENANT_ID/ARM_SUBSCRIPTION_ID for a "
+            'service principal)"; exit 1\n'
+            "fi\n"
         )
 
     # Resolved through TerraformPlan rather than re-read from the topology, so the
@@ -499,16 +518,22 @@ fi
 # deploy.tfvars is the one config file you edit, here in the export root. Terraform
 # auto-loads terraform/terraform.tfvars, so copy it into place for apply and destroy.
 [ -f deploy.tfvars ] || {{ echo "deploy.tfvars not found next to this script. Fill it in first (see DEPLOYMENT-GUIDE.md)."; exit 1; }}
+cp deploy.tfvars terraform/terraform.tfvars
 # If ssh_public_key is left empty, derive it from the private key resolved above so
 # the operator never hand-copies it and the two halves cannot drift. A value the
-# operator set is kept. stdin from /dev/null so an unexpectedly passphrased key
-# fails fast instead of prompting. TF_VAR_ overrides the empty tfvars value.
+# operator set is kept. A tfvars value beats a TF_VAR_ env var, so the derived key
+# cannot ride in the environment: the empty ssh_public_key in terraform.tfvars would
+# win. Write it to a *.auto.tfvars instead, which terraform loads AFTER
+# terraform.tfvars and so overrides the empty value. The file persists in terraform/,
+# so a later `manage.sh teardown` (which re-copies the empty deploy.tfvars, and has no
+# key to re-derive from) still destroys cleanly. stdin from /dev/null so a passphrased
+# key fails fast instead of prompting.
+rm -f terraform/zz-derived.auto.tfvars
 if grep -Eq '^[[:space:]]*ssh_public_key[[:space:]]*=[[:space:]]*""[[:space:]]*$' deploy.tfvars; then
-  TF_VAR_ssh_public_key="$(ssh-keygen -y -f "$SSHKEY" </dev/null 2>/dev/null)" || {{ echo "ssh_public_key is empty and deriving it from $KEY failed -- paste keys/<name>.pub into deploy.tfvars"; exit 1; }}
-  export TF_VAR_ssh_public_key
+  RSP_PUBKEY="$(ssh-keygen -y -f "$SSHKEY" </dev/null 2>/dev/null)" || {{ echo "ssh_public_key is empty and deriving it from $KEY failed -- paste keys/<name>.pub into deploy.tfvars"; exit 1; }}
+  printf 'ssh_public_key = "%s"\n' "$RSP_PUBKEY" > terraform/zz-derived.auto.tfvars
   echo "note: ssh_public_key was empty in deploy.tfvars; derived it from $KEY"
 fi
-cp deploy.tfvars terraform/terraform.tfvars
 # Fail fast from here on. Without this a failed apply ran on and the user saw a
 # misleading "unfilled address placeholders remain" instead of the real error;
 # the tolerant spots below guard themselves (|| true, trailing true, if/&&).
@@ -718,6 +743,25 @@ _MANAGE_SWEEP = {
       aws ec2 wait instance-terminated $REG_ARG --instance-ids $SWEEP_IDS 2>/dev/null || true
     fi
 ''',
+    "azure": r'''    say "force teardown: deleting the whole resource group (clears anything a failed apply left behind)"
+    # A range is one dedicated resource group, so the sure way to clear an interrupted
+    # deploy is to delete the group itself. terraform destroy alone stalls when a failed
+    # apply left a resource it does not fully track (a stranded NIC pins its subnet, which
+    # pins the VNet), and azurerm will not delete a group that still holds resources. az
+    # group delete removes the group and everything in it server side, in dependency
+    # order. The plain `teardown` (no --force) still uses terraform destroy, which is
+    # enough after a clean apply.
+    RG="$(grep -E '^[[:space:]]*resource_group[[:space:]]*=' deploy.tfvars 2>/dev/null | head -1 | sed -E 's/[^=]*=[[:space:]]*"?([^"]*)"?.*/\1/')"
+    RG="${RG:-redstackpro-range}"
+    if command -v az >/dev/null 2>&1; then
+      echo "  deleting resource group $RG and every resource in it"
+      az group delete -n "$RG" --yes 2>/dev/null || echo "  az group delete did not finish; terraform destroy will try next"
+    else
+      echo "  the az CLI is not installed, so a forced resource-group delete is not available here."
+      echo "  terraform destroy runs next; if it stalls on resources a partial apply left untracked,"
+      echo "  install az and re-run, or delete the resource group $RG in the portal."
+    fi
+''',
 }
 
 # Providers without a wired sweep still accept --force; it just means "plain
@@ -811,6 +855,27 @@ for zone, names in z.items():
     print(zone, ' '.join(names))")
   [ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
 fi
+''',
+    "azure": r'''INSTANCES="$(terraform -chdir=terraform output -json redstackpro_instances 2>/dev/null)"
+if [ -z "$INSTANCES" ] || [ "$INSTANCES" = "null" ]; then
+  echo "no redstackpro_instances output found -- has terraform applied yet?"
+  exit 1
+fi
+# Target this range's own VMs by name + resource group (from the output). stop
+# uses deallocate, which halts billing; a plain `az vm stop` would keep charging.
+RSP_ANY=0
+while IFS=' ' read -r vm rg; do
+  [ -n "$vm" ] || continue
+  RSP_ANY=1
+  case "$cmd" in
+    status) az vm show -g "$rg" -n "$vm" -d --query "{name:name,state:powerState,ip:publicIps}" -o table ;;
+    start)  az vm start -g "$rg" -n "$vm" ;;
+    stop)   az vm deallocate -g "$rg" -n "$vm" ;;
+  esac
+done < <(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
+for v in json.load(sys.stdin).values():
+    print(v['name'], v['resource_group'])")
+[ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
 ''',
 }
 
