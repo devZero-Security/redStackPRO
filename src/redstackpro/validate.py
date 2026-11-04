@@ -1,7 +1,8 @@
 """Topology layer validation.
 
-Rules are documented in docs/validation.md. JSON Schema covers document shape;
-everything here is topology semantics. The compiler refuses to run on any error.
+Rules are documented in docs/validation.md. SCH001 applies the JSON schema
+(schemacheck.py); everything else here is topology semantics. The compiler
+refuses to run on any error.
 
 Each rule is a function taking a Context and yielding Findings. Adding a rule
 means adding a function and listing it in RULES.
@@ -10,6 +11,7 @@ means adding a function and listing it in RULES.
 import ipaddress
 import re
 
+from . import schemacheck
 from .findings import finding
 from .migrate import PUBLIC_BY_DEFAULT
 from .naming import abbrev_of, compose, ordinal_of, too_long
@@ -154,6 +156,23 @@ class Context:
 
 def self_name(ctx, node):
     return ctx.name(node["id"])
+
+
+def display_name(ctx, node_id):
+    """How a finding names a node: the composed name on offense, the bare id on
+    a range, which keeps canonical GOAD names. See 0047."""
+    if ctx.topology.get("mode") == "defense":
+        return node_id
+    return ctx.name(node_id)
+
+
+# ---------------------------------------------------------------- schema
+
+def sch001_schema(ctx):
+    """The document against its JSON schema. One finding per bad field, with
+    the field's dotted path under its node in `field` for the canvas."""
+    yield from schemacheck.check(ctx.topology,
+                                 lambda node_id: display_name(ctx, node_id))
 
 
 # ---------------------------------------------------------------- naming
@@ -1539,6 +1558,7 @@ def ord001_dependency_cycle(ctx):
 
 
 RULES = [
+    sch001_schema,
     nam001_id_matches_kind,
     nam002_two_digit_ordinal,
     nam003_netbios_length,
@@ -1602,8 +1622,17 @@ def validate(topology, provider=None, registry=None):
     reg = registry
     if provider and reg is None:
         reg = Registry()
-    ctx = Context(topology, reg)
 
+    order = {"error": 0, "warning": 1, "info": 2}
+    if not _sound(topology):
+        # The semantic rules index nodes and edges by id, kind and role, so a
+        # document missing those can only be reported by the schema check.
+        findings = list(schemacheck.check(
+            topology, lambda node_id: str(node_id)))
+        findings.sort(key=lambda f: (order[f.severity], f.code, f.target_ids))
+        return findings
+
+    ctx = Context(topology, reg)
     findings = []
     for rule in RULES:
         findings.extend(rule(ctx))
@@ -1612,9 +1641,28 @@ def validate(topology, provider=None, registry=None):
         findings.extend(cap004_network_peering(ctx, provider))
         findings.extend(net006_internal_ip_in_reserved_range(ctx, provider))
 
-    order = {"error": 0, "warning": 1, "info": 2}
     findings.sort(key=lambda f: (order[f.severity], f.code, f.target_ids))
     return findings
+
+
+def _sound(topology):
+    """Whether the rules can index this document without raising."""
+    if not isinstance(topology, dict):
+        return False
+    nodes, edges = topology.get("nodes", []), topology.get("edges", [])
+    if not isinstance(nodes, list) or not isinstance(edges, list):
+        return False
+    for n in nodes:
+        if not (isinstance(n, dict) and isinstance(n.get("id"), str)
+                and isinstance(n.get("kind"), str)
+                and isinstance(n.get("overlay", {}), dict)):
+            return False
+    for e in edges:
+        if not (isinstance(e, dict) and all(
+                isinstance(e.get(k), str)
+                for k in ("id", "role", "source", "target"))):
+            return False
+    return True
 
 
 def is_valid(topology, provider=None, registry=None):

@@ -85,3 +85,148 @@ def test_every_named_linux_os_maps_to_an_image_on_each_cloud():
         assert os in aws.LINUX_IMAGES, os
         assert os in azure.LINUX_IMAGES, os
     assert set(siem_os) == set(LINUX)
+
+
+# -- SCH001, the schema applied inside validate()
+
+from redstackpro import validate  # noqa: E402
+from shipped import example  # noqa: E402
+
+
+def _sch(doc):
+    return [f for f in validate(doc) if f.code == "SCH001"]
+
+
+def _node(doc, kind):
+    return next(n for n in doc["nodes"] if n["kind"] == kind)
+
+
+def test_a_clean_document_has_no_schema_finding():
+    assert not _sch(example("redstack.json"))
+
+
+@pytest.mark.parametrize("mutate, target, field, words", [
+    (lambda d: d.update(prefix="R_T"), "topology", "prefix",
+     "1 to 8 lowercase letters"),
+    (lambda d: _node(d, "segment")["overlay"].update(cidr="10.30.0.0"),
+     "mgmt-sub01", "cidr", "CIDR form"),
+    (lambda d: _node(d, "segment")["overlay"].update(cidr="10.30.10.5/24"),
+     "mgmt-sub01", "cidr", "10.30.10.0/24"),
+    (lambda d: _node(d, "redirector")["overlay"].update(
+        hostname="https://cdn.x.net/"), "apache-rd01", "hostname", "no scheme"),
+    (lambda d: _node(d, "redirector")["overlay"]["gating"].update(
+        header_name="X Request Id"), "apache-rd01", "gating.header_name",
+     "X-Request-Id"),
+    (lambda d: _node(d, "redirector")["overlay"]["tls"].update(
+        cert_source="provided"), "apache-rd01", "tls.cert_source",
+     "must be one of letsencrypt, self_signed"),
+    (lambda d: _node(d, "collector")["overlay"].pop("sink"), "open-log01", "sink",
+     "is required"),
+    (lambda d: _node(d, "collector")["overlay"].update(sink="splunk"),
+     "open-log01", "sink", "must be one of"),
+    (lambda d: d.update(auto_stop={"enabled": True, "at": "25:00"}), "topology",
+     "auto_stop.at", "HH:MM"),
+])
+def test_a_bad_value_is_one_finding_naming_its_field(mutate, target, field, words):
+    doc = example("redstack.json")
+    mutate(doc)
+    found = _sch(doc)
+    assert len(found) == 1, [f.message for f in found]
+    f = found[0]
+    assert f.severity == "error"
+    assert f.target_ids == (target,)
+    assert f.field == field
+    assert words in f.message
+    assert f.message.startswith(field + " on ")
+
+
+def test_a_fronts_edge_field_is_reported_on_the_edge():
+    doc = example("redstack.json")
+    edge = next(e for e in doc["edges"] if e["role"] == "fronts")
+    edge["uri_prefix"] = "api/v1"
+    edge["listen_port"] = "443"
+    found = {f.field: f for f in _sch(doc)}
+    assert set(found) == {"uri_prefix", "listen_port"}
+    assert found["uri_prefix"].target_ids == (edge["id"],)
+    assert "Example: /cdn/assets" in found["uri_prefix"].message
+    assert "must be a whole number" in found["listen_port"].message
+
+
+def test_a_field_no_kind_has_is_reported_once_per_key():
+    doc = example("redstack.json")
+    node = _node(doc, "collector")
+    node["name"] = "RT-LOG"
+    node["overlay"]["colour"] = "red"
+    found = sorted(f.field for f in _sch(doc))
+    assert found == ["colour", "name"]
+
+
+def test_a_range_internal_ip_and_hostname_are_checked():
+    doc = json.loads((ROOT / "frontend/public/goad/goad-light.json").read_text())
+    dc = _node(doc, "dc")
+    dc["overlay"]["internal_ip"] = "10.30.10.300"
+    dc["overlay"]["hostname"] = "kingslanding-keep"
+    found = {f.field: f for f in _sch(doc)}
+    assert set(found) == {"internal_ip", "hostname"}
+    # A range names hosts by bare id.
+    assert found["hostname"].message.startswith("hostname on %s:" % dc["id"])
+
+
+def test_problems_another_rule_reports_are_not_repeated():
+    doc = example("redstack.json")
+    jb = _node(doc, "jumpbox")
+    jb["overlay"]["access_mode"] = "wireguard"
+    jb["overlay"]["operators"] = [{"handle": "Bad Name"}]
+    _node(doc, "redirector")["overlay"]["hostname"] = ""
+    codes = [f.code for f in validate(doc)]
+    assert "VPN005" in codes and "RDR001" in codes
+    assert not _sch(doc)
+
+
+def test_a_document_missing_ids_reports_instead_of_raising():
+    doc = example("minimal.json")
+    doc["nodes"][0].pop("id")
+    found = validate(doc)
+    assert [f.code for f in found] == ["SCH001"]
+    assert found[0].target_ids == ("topology",)
+    assert found[0].field == "nodes.0.id"
+
+
+def test_an_unknown_schema_version_is_one_finding():
+    doc = example("minimal.json")
+    doc["schema_version"] = "9.9.9"
+    found = _sch(doc)
+    assert len(found) == 1 and found[0].field == "schema_version"
+
+
+def test_an_older_document_is_checked_against_its_own_version():
+    doc = json.loads((ROOT / "src/redstackpro/schema/topology/examples/0.6.0/"
+                      "redstack.json").read_text())
+    assert doc["schema_version"] == "0.6.0"
+    assert not _sch(doc)
+
+
+def test_the_api_serializes_the_field_path(tmp_path):
+    from fastapi.testclient import TestClient
+    from redstackpro.api import create_app
+    app = create_app("sqlite+pysqlite:///" + str(tmp_path / "t.db"))
+    try:
+        doc = example("redstack.json")
+        _node(doc, "redirector")["overlay"]["tls"]["cert_source"] = "provided"
+        body = TestClient(app).post("/api/v1/validate",
+                                    json={"document": doc}).json()
+        sch = [f for f in body["findings"] if f["code"] == "SCH001"]
+        assert sch == [{
+            "code": "SCH001", "severity": "error",
+            "target_ids": ["apache-rd01"],
+            "template": "{path} on {node}: {reason}.",
+            "values": {"path": "tls.cert_source", "node": "off-apache-rd01",
+                       "reason": "must be one of letsencrypt, self_signed"},
+            "message": "tls.cert_source on off-apache-rd01: must be one of "
+                       "letsencrypt, self_signed.",
+            "remedy": "Pick one of the listed values.",
+            "field": "tls.cert_source",
+        }]
+        assert body["valid"] is False and body["infos"] == 0
+    finally:
+        app.state.engine.dispose()

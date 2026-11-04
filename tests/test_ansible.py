@@ -547,12 +547,12 @@ def test_an_overlay_value_reaches_host_vars_unchanged(redstack):
     for node in redstack["nodes"]:
         if node["id"] in ("apache-rd01", "apache-rd02"):
             node["overlay"]["gating"]["header_value"] = "off"
-            node["overlay"]["hostname"] = "007"
+            node["overlay"]["hostname"] = "1.50"
     out = files(redstack)
     ts = load(out, "ansible/host_vars/off-myth-ts01.yml")
     assert ts["gating_header_value"] == "off", "became a boolean"
     rdir = load(out, "ansible/host_vars/off-apache-rd01.yml")
-    assert rdir["redstackpro_redirector_hostname"] == "007", "became a number"
+    assert rdir["redstackpro_redirector_hostname"] == "1.50", "became a number"
 
 
 def test_a_windows_path_is_not_mangled_by_escapes():

@@ -8,7 +8,6 @@
     "schema_version",
     "mode",
     "name",
-    "prefix",
     "nodes",
     "edges"
   ],
@@ -37,7 +36,7 @@
       "title": "Name prefix",
       "type": "string",
       "pattern": "^[a-z][a-z0-9]{0,7}$",
-      "description": "1 to 8 lowercase letters or digits, starting with a letter. Prepended to every host's name, e.g. off plus myth-ts01 gives off-myth-ts01. Prefix plus each host id must fit in 15 characters, so 3 to 4 letters is best (off, acme). Give each range you run at the same time its own prefix so their host names stay apart."
+      "description": "1 to 8 lowercase letters or digits, starting with a letter. Prepended to every host's name, e.g. off plus myth-ts01 gives off-myth-ts01. Empty uses off on the offense canvas and def on the defense canvas. Prefix plus each host id must fit in 15 characters, so 3 to 4 letters is best (off, acme). Give each range you run at the same time its own prefix so their host names stay apart."
     },
     "description": {
       "title": "Description",
@@ -136,13 +135,13 @@
     "cidr": {
       "title": "Address range",
       "type": "string",
-      "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
+      "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])/(3[0-2]|[12]?[0-9])$",
       "description": "An IPv4 range in CIDR form, e.g. 10.30.0.0/16."
     },
     "ipv4": {
       "title": "IPv4 address",
       "type": "string",
-      "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}$",
+      "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$",
       "description": "An IPv4 address, e.g. 10.30.10.5."
     },
     "port": {

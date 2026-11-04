@@ -1,18 +1,40 @@
 # Validator rules, schema 0.7.0
 
-JSON Schema covers document shape only. Everything below is topology semantics and
-belongs in the topology layer validator, not in the compiler. Every rule carries a
-machine-readable code and prose written for a reader, because the eventual agent
-harness iterates on the prose.
+`SCH001` applies the JSON schema to the document. Everything after it is topology
+semantics and belongs in the topology layer validator, not in the compiler. Every
+rule carries a machine-readable code and prose written for a reader, because the
+eventual agent harness iterates on the prose.
 
 Four-digit codes (00NN) are internal design-decision references and are not
 published with this repo.
 
-Severity is `error` or `warning`. The compiler refuses to run on any error.
+Severity is `error`, `warning` or `info`. The compiler refuses to run on any error.
+An `info` finding is a notice: the export is fine, it just may not be what you
+expect. A finding about one field carries that field's dotted path under its node
+or edge in `field` (for example `tls.cert_source`), so the canvas can mark the
+field itself.
 
 Implemented in `src/redstackpro/validate.py`, one function per rule, with a negative
-test per rule in `tests/test_validate.py`. Rules marked not implemented below are
-described but not yet written.
+test per rule in `tests/test_validate.py` and `tests/test_ux_rules.py`. Rules
+marked not implemented below are described but not yet written.
+
+## Schema
+
+- `SCH001` error. A value the topology schema rejects: a wrong type, a value
+  outside an enum, a missing required field, a field the node or edge does not
+  have, or a value that misses its pattern (a prefix with an underscore, a cidr
+  with no mask, a domain with a scheme). The message is
+  `{field} on {node}: {reason}. Example: {example}.` A node is checked against
+  the one definition its `kind` selects and an edge against the one its `role`
+  selects, so a bad field is one finding rather than one per branch of the
+  schema's `oneOf`. A cidr with host bits set (`10.30.10.5/24`) is reported here
+  too, since the clouds take a network address only. A document is checked
+  against the schema of its own `schema_version`; the API migrates to the latest
+  first. A document-level finding points at the target `topology`. Problems
+  another rule words better are left to it: an operator handle or role
+  (`VPN005`, `VPN006`), a `vulns_vars` that is not an object (`RNG012`), and an
+  empty redirector domain (`RDR001`). A document whose nodes or edges lack an
+  id, kind or role gets only `SCH001`, since the other rules cannot index it.
 
 ## Naming
 
