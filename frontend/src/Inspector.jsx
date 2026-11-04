@@ -864,12 +864,18 @@ export function Inspector({
   deployTarget,
   onTopologyChange,
 }) {
-  if (!selection) {
+  // A document finding targets "topology", which is no node or edge.
+  const onTopology =
+    selection?.id === "topology" &&
+    !document.nodes.some((n) => n.id === "topology") &&
+    !document.edges.some((e) => e.id === "topology");
+  if (!selection || onTopology) {
     return (
       <TopologySettings
         document={document}
         deployTarget={deployTarget}
         readOnly={readOnly}
+        findings={findings}
         onChange={onTopologyChange}
       />
     );

@@ -689,6 +689,28 @@ describe("topology settings", () => {
     expect("region" in last(seen)).toBe(false);
   });
 
+  test("a click on a document finding opens these settings, each finding by its field", () => {
+    const findings = [
+      { code: "SCH001", severity: "error", target_ids: ["topology"], field: "auto_stop.at", message: "Stop at must be HH:MM." },
+      { code: "SCH001", severity: "error", target_ids: ["topology"], field: "prefix", message: "The prefix is too long." },
+      { code: "SCH001", severity: "info", target_ids: ["topology"], field: "region", message: "Region note." },
+    ];
+    render(
+      <Harness
+        initial={base({ auto_stop: { enabled: true, at: "25:00" } })}
+        selection={{ type: "node", id: "topology" }}
+        findings={findings}
+      />
+    );
+    expect(screen.getByRole("heading", { name: "Topology settings" })).toBeTruthy();
+    const autoStop = screen.getByRole("heading", { name: "Auto-stop" }).closest(".rg-settings-section");
+    expect(within(autoStop).getByText(/Stop at must be HH:MM\./)).toBeTruthy();
+    expect(within(autoStop).queryByText(/The prefix is too long/)).toBeNull();
+    expect(screen.getByText(/The prefix is too long\./)).toBeTruthy();
+    const region = screen.getByRole("textbox", { name: "region" }).closest(".rg-field");
+    expect(region.nextElementSibling.textContent).toContain("Region note.");
+  });
+
   test("a locked topology shows the settings but cannot change them", () => {
     render(<Harness initial={base({ auto_stop: { enabled: true, after_hours: 8 } })} selection={null} readOnly />);
     expect(screen.getByRole("checkbox", { name: "Stop the range automatically" }).disabled).toBe(true);

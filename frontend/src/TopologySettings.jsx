@@ -1,6 +1,7 @@
 import React from "react";
 import "./widgets.css";
 import { AZURE_TIMEZONES } from "./azureTimezones.js";
+import { FindingBadge } from "./FindingBadge.jsx";
 
 // The region the export uses when the topology names none, per deploy target.
 // Mirrors DEFAULT_REGION in src/redstackpro/terraform/plan.py.
@@ -27,6 +28,26 @@ function allTimezones() {
   return ["UTC", ...zones.filter((z) => z !== "UTC")];
 }
 
+// The fields this panel edits. A document finding on one of them shows under
+// it; any other (prefix, name) is listed at the top.
+const PANEL_FIELDS = ["description", "region", "base_cidr", "auto_stop"];
+
+const onField = (finding, path) =>
+  finding.field === path || (finding.field || "").startsWith(`${path}.`);
+
+function Findings({ findings }) {
+  if (!findings?.length) return null;
+  return (
+    <div className="rg-inline-findings">
+      {findings.map((f, i) => (
+        <p key={i} className={`rg-finding is-${f.severity}`}>
+          <FindingBadge code={f.code} /> {f.message}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 // Drops empty keys so the document never carries auto_stop: {}.
 function cleanStop(stop) {
   const out = {};
@@ -34,7 +55,7 @@ function cleanStop(stop) {
   return Object.keys(out).length ? out : undefined;
 }
 
-function AutoStop({ stop, deployTarget, disabled, onChange }) {
+function AutoStop({ stop, deployTarget, disabled, onChange, findings }) {
   const enabled = !!stop.enabled;
   const hasAt = !!stop.at;
   const hasAfter = stop.after_hours != null;
@@ -54,6 +75,7 @@ function AutoStop({ stop, deployTarget, disabled, onChange }) {
         The range stops itself at this time each day (or N hours after the first
         apply). Start it again with manage.sh start.
       </p>
+      <Findings findings={findings} />
       <label className="rg-field">
         <span className="rg-check-row">
           <input
@@ -178,11 +200,13 @@ function AutoStop({ stop, deployTarget, disabled, onChange }) {
 
 // The settings that belong to the whole topology rather than to one node,
 // shown when nothing is selected.
-export function TopologySettings({ document, deployTarget, readOnly, onChange }) {
+export function TopologySettings({ document, deployTarget, readOnly, onChange, findings = [] }) {
   const disabled = readOnly || !onChange;
   const set = (patch) => onChange?.(patch);
   const regionDefault = DEFAULT_REGION[deployTarget];
   const cidrBad = document.base_cidr && !CIDR_RE.test(document.base_cidr);
+  const at = (path) => findings.filter((f) => onField(f, path));
+  const elsewhere = findings.filter((f) => !PANEL_FIELDS.some((path) => onField(f, path)));
 
   return (
     <aside className="rg-panel rg-inspector">
@@ -191,6 +215,7 @@ export function TopologySettings({ document, deployTarget, readOnly, onChange })
         These apply to the whole topology. Select a node or a line to edit it
         instead.
       </p>
+      <Findings findings={elsewhere} />
 
       <label className="rg-field">
         <span className="rg-field-label">description</span>
@@ -203,6 +228,7 @@ export function TopologySettings({ document, deployTarget, readOnly, onChange })
         />
         <span className="rg-field-help">A note for you and your team. Not deployed.</span>
       </label>
+      <Findings findings={at("description")} />
 
       <label className="rg-field">
         <span className="rg-field-label">region</span>
@@ -219,6 +245,7 @@ export function TopologySettings({ document, deployTarget, readOnly, onChange })
             : "Cloud region the export deploys to. Ignored by on-prem targets."}
         </span>
       </label>
+      <Findings findings={at("region")} />
 
       <label className="rg-field">
         <span className="rg-field-label">address range</span>
@@ -237,11 +264,13 @@ export function TopologySettings({ document, deployTarget, readOnly, onChange })
           <span className="rg-field-error">Use an address and prefix length, e.g. 10.0.0.0/8.</span>
         ) : null}
       </label>
+      <Findings findings={at("base_cidr")} />
 
       <AutoStop
         stop={document.auto_stop || {}}
         deployTarget={deployTarget}
         disabled={disabled}
+        findings={at("auto_stop")}
         onChange={(auto_stop) => set({ auto_stop })}
       />
 
