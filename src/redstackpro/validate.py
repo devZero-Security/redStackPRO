@@ -1475,7 +1475,7 @@ def rng004_siem_without_product(ctx):
             yield finding(
                 "RNG004", "warning", [n["id"]],
                 "{name} has no telemetry product set.",
-                remedy="Set its product to wazuh, elk, or splunk.",
+                remedy="Set its product to wazuh or elk.",
                 name=n["id"])
 
 
