@@ -11,6 +11,7 @@ import App from "./App.jsx";
 import { connectEdge, emptyDocument, legendItems } from "./topology.js";
 import { edgeId } from "./idscheme.js";
 import { countBySeverity, findingSelection, sortFindings } from "./findingSeverity.js";
+import { TEMPLATES } from "./templates.js";
 
 const PALETTE = {
   topology: [
@@ -212,3 +213,11 @@ describe("findings by severity", () => {
   });
 });
 
+
+describe("blueprint picker text", () => {
+  test("MINILAB says its workstation boots Server 2022 on GCP and AWS", () => {
+    const minilab = TEMPLATES.defense.find((t) => t.name === "MINILAB");
+    expect(minilab.blurb).toMatch(/Windows 10 workstation/);
+    expect(minilab.blurb).toMatch(/Server 2022 on GCP and AWS/);
+  });
+});

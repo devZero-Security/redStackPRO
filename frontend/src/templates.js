@@ -109,10 +109,12 @@ export const TEMPLATES = {
       file: "goad/minilab",
       name: "MINILAB",
       group: "GOAD",
-      blurb: "A minimal lab: one DC and one Windows 10 workstation.",
+      blurb:
+        "A minimal lab: one DC and one Windows 10 workstation, which boots " +
+        "Windows Server 2022 on GCP and AWS.",
       teaches:
         "The smallest thing that still behaves like a domain. Stored " +
-        "credentials, CredSSP and a weak password, with a real workstation to " +
+        "credentials, CredSSP and a weak password, with a workstation to " +
         "land on.",
     },
     {
