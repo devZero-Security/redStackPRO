@@ -13,6 +13,7 @@ import { addNode, emptyDocument, paletteGroups, PALETTE_HIDDEN } from "./topolog
 import { HOST_PRESETS } from "./presets.js";
 import { VULN_CATALOG } from "./vulns.js";
 import { EXTENSIONS } from "./extensions.js";
+import { TEMPLATES } from "./templates.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -183,5 +184,17 @@ describe("extensions", () => {
     // Defender is off on a range host unless defender_enabled is set, and the
     // blurb has to say which of the two this box gets.
     if (!overlay.defender_enabled) expect(ws01.blurb).toMatch(/Defender is turned off/);
+  });
+});
+
+
+describe("blueprint picker text", () => {
+  test("any blueprint that mentions poisoning says it plants on Proxmox and ESXi only", () => {
+    for (const t of Object.values(TEMPLATES).flat()) {
+      const words = `${t.blurb} ${t.teaches || ""}`;
+      if (/poison/i.test(words)) {
+        expect(words, t.name).toMatch(/Proxmox and ESXi/);
+      }
+    }
   });
 });

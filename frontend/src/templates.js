@@ -45,7 +45,8 @@ export const TEMPLATES = {
         "The reference range, and the one the written solution follows. The full " +
         "sevenkingdoms ACL killchain, a cross-forest trust to essos, ADCS from " +
         "ESC1 to ESC15, constrained and unconstrained delegation, MSSQL links " +
-        "and impersonation, and the poisoning and relay path.",
+        "and impersonation. The poisoning and relay path plants on Proxmox and " +
+        "ESXi only, since cloud networks drop the broadcast it needs.",
     },
     {
       file: "goad/goad-light",
@@ -57,9 +58,10 @@ export const TEMPLATES = {
         "Two domains in one forest, three machines. No essos, and ADCS narrowed " +
         "to ESC1.",
       teaches:
-        "GOAD with the essos forest removed. The same ACL chain, delegation, " +
-        "MSSQL and relay path over a single forest, so the trust hop is the only " +
-        "thing missing. Stands up in about half the time.",
+        "GOAD with the essos forest removed. The same ACL chain, delegation " +
+        "and MSSQL over a single forest, so the trust hop is the only thing " +
+        "missing. The poisoning and relay path plants on Proxmox and ESXi only. " +
+        "Stands up in about half the time.",
     },
     {
       file: "goad/goad-mini",
@@ -125,9 +127,9 @@ export const TEMPLATES = {
         "attack path has something reporting on it.",
       teaches:
         "The detection axis. Every technique here is meant to be caught as well " +
-        "as run, so it is the range to point a detection at: poisoning, " +
-        "roasting, unconstrained delegation and GPP passwords, with a SIEM " +
-        "already collecting.",
+        "as run, so it is the range to point a detection at: roasting, " +
+        "unconstrained delegation and GPP passwords, with a SIEM already " +
+        "collecting. Poisoning plants on Proxmox and ESXi only.",
     },
     {
       file: "harbor",
@@ -136,10 +138,10 @@ export const TEMPLATES = {
         "A small corporate forest: a root domain and a child domain over the parent child trust, with the ordinary path from a phished workstation user to the forest.",
       teaches:
         "Ours, and deliberately not a puzzle. An ordinary corporate forest with " +
-        "the mistakes ordinary forests have: poisoning, roastable service " +
-        "accounts, unconstrained delegation, open shares and a stored " +
-        "credential. The plain path from a phished workstation user to the " +
-        "forest, with no theme in the way.",
+        "the mistakes ordinary forests have: roastable service accounts, " +
+        "unconstrained delegation, open shares and a stored credential, plus " +
+        "poisoning on Proxmox and ESXi. The plain path from a phished " +
+        "workstation user to the forest, with no theme in the way.",
     },
   ],
 };
