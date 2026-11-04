@@ -9,7 +9,7 @@ import userEvent from "@testing-library/user-event";
 
 import SCHEMA from "../../src/redstackpro/schema/topology/0.7.0.json";
 import { Inspector } from "./Inspector.jsx";
-import { fieldRule, jsonKindFor, resolveSpec } from "./fieldRules.js";
+import { checkValue, fieldRule, jsonKindFor, resolveSpec } from "./fieldRules.js";
 
 // Renders one node in the Inspector over a local document, the way App wires
 // onOverlayChange. `seen` collects every overlay the panel writes.
@@ -540,5 +540,140 @@ describe("fieldRule", () => {
   test("no context leaves the spec alone", () => {
     const spec = { enum: ["a"] };
     expect(fieldRule("os", spec, undefined, "a")).toEqual({ spec });
+  });
+});
+
+const errorsIn = (field) => [...field.querySelectorAll(".rg-field-error")].map((e) => e.textContent);
+
+describe("inline validation", () => {
+  test("checkValue speaks in the server's style", () => {
+    const ip = resolveSpec({ $ref: "#/$defs/ipv4" }, SCHEMA.$defs);
+    expect(checkValue("Internal IP", ip, "10.30.10.5")).toBeNull();
+    expect(checkValue("Internal IP", ip, "10.30.10")).toBe(
+      "Internal IP: use an IPv4 address. Example: 10.30.10.5."
+    );
+    expect(checkValue("Internal IP", ip, "10.30.10.300")).toBe(
+      "Internal IP: each of the four numbers must be 0 to 255. Example: 10.30.10.5."
+    );
+    const cidr = resolveSpec({ $ref: "#/$defs/cidr" }, SCHEMA.$defs);
+    expect(checkValue("cidr", cidr, "10.30.0.0")).toBe(
+      "cidr: use an address range in CIDR form. Example: 10.30.0.0/16."
+    );
+    expect(checkValue("cidr", cidr, "10.30.0.0/33")).toBe(
+      "cidr: the number after the slash must be 0 to 32. Example: 10.30.0.0/16."
+    );
+    const port = resolveSpec({ $ref: "#/$defs/port", default: 5044 }, SCHEMA.$defs);
+    expect(checkValue("ingest_port", port, 70000)).toBe(
+      "ingest_port: use a number from 1 to 65535. Example: 5044."
+    );
+    expect(checkValue("ingest_port", port, 5044.5)).toBe("ingest_port: use a whole number. Example: 5044.");
+    expect(checkValue("services", { type: "array", minItems: 1 }, [])).toBe("services: pick at least 1.");
+    expect(checkValue("os", { enum: ["linux"] }, "windows_10", () => "Windows 10")).toBe(
+      "os: Windows 10 is not one of the choices here. Pick one from the list."
+    );
+    // An unknown pattern still gets a plain sentence.
+    expect(checkValue("tag", { type: "string", pattern: "^x$" }, "y")).toBe(
+      "tag: this is not in the expected format."
+    );
+    expect(checkValue("tag", { type: "string", pattern: "^x$" }, "")).toBeNull();
+  });
+
+  test("a bad address turns the field red with the reason under it", () => {
+    render(<Panel node={{ id: "dc01", kind: "dc", overlay: {} }} />);
+    const ip = inputNamed("internal_ip");
+    expect(fieldOf(ip).classList.contains("is-invalid")).toBe(false);
+    fireEvent.change(ip, { target: { value: "10.30.10.300" } });
+    expect(fieldOf(ip).classList.contains("is-invalid")).toBe(true);
+    expect(errorsIn(fieldOf(ip))).toEqual([
+      "internal_ip: each of the four numbers must be 0 to 255. Example: 10.30.10.5.",
+    ]);
+    fireEvent.change(ip, { target: { value: "10.30.10.30" } });
+    expect(fieldOf(ip).classList.contains("is-invalid")).toBe(false);
+  });
+
+  test("the message uses the field's title when it has one", () => {
+    const titled = withTitles({ "overlay_range_host.internal_ip": "Internal IP" });
+    render(<Panel schema={titled} node={{ id: "dc01", kind: "dc", overlay: { internal_ip: "10.30.10" } }} />);
+    expect(errorsIn(fieldOf(inputNamed("Internal IP")))).toEqual([
+      "Internal IP: use an IPv4 address. Example: 10.30.10.5.",
+    ]);
+  });
+
+  test("a nested pattern field and a port are checked", () => {
+    render(
+      <Panel
+        mode="offense"
+        node={{
+          id: "cdn-rdr01",
+          kind: "redirector",
+          overlay: { server: "nginx", tls: {}, gating: { header_name: "X Request Id" } },
+        }}
+      />
+    );
+    expect(errorsIn(fieldNamed("header_name"))).toEqual([
+      "header_name: use letters, digits and hyphens, starting with a letter. Example: X-Request-Id.",
+    ]);
+    expect(inputNamed("header_name").getAttribute("placeholder")).toBe("e.g. X-Request-Id");
+  });
+
+  test("a port out of range is red", () => {
+    render(<Panel mode="offense" node={{ id: "log01", kind: "collector", overlay: { sink: "opensearch", ingest_port: 70000 } }} />);
+    expect(errorsIn(fieldNamed("ingest_port"))).toEqual([
+      "ingest_port: use a number from 1 to 65535. Example: 5044.",
+    ]);
+  });
+
+  test("a stored os a firewall cannot take is red", () => {
+    render(<Panel node={{ id: "fw01", kind: "fw", overlay: { os: "windows_server_2019" } }} />);
+    expect(errorsIn(fieldNamed("os"))).toEqual([
+      "os: Windows Server 2019 is not one of the choices here. Pick one from the list.",
+    ]);
+  });
+});
+
+describe("server findings that name a field", () => {
+  const finding = (field, message, id = "cdn-rdr01") => ({
+    code: "SCH001", severity: "error", target_ids: [id], field, message, remedy: "",
+  });
+  const rdr = { id: "cdn-rdr01", kind: "redirector", overlay: { server: "nginx", tls: { cert_source: "letsencrypt" } } };
+
+  test("mark the named field red with the message under it", () => {
+    const message = "cert_source on cdn-rdr01: pick Let's Encrypt or Self-signed.";
+    render(<Panel mode="offense" node={rdr} findings={[finding("tls.cert_source", message)]} />);
+    const field = fieldNamed("cert_source");
+    expect(field.classList.contains("is-invalid")).toBe(true);
+    expect(errorsIn(field)).toEqual([message]);
+    // Only that field: its sibling select and the fieldset stay clean.
+    expect(fieldNamed("server").classList.contains("is-invalid")).toBe(false);
+    // Still in the node's finding list too.
+    expect(screen.getAllByText(message)).toHaveLength(2);
+  });
+
+  test("an overlay. prefix and the node id are understood", () => {
+    render(
+      <Panel
+        mode="offense"
+        node={rdr}
+        findings={[finding("overlay.server", "server: pick one."), finding("id", "id: use lowercase.")]}
+      />
+    );
+    expect(errorsIn(fieldNamed("server"))).toEqual(["server: pick one."]);
+    expect(errorsIn(fieldNamed("id"))).toEqual(["id: use lowercase."]);
+  });
+
+  test("a server message replaces the client one on the same field", () => {
+    render(
+      <Panel
+        node={{ id: "dc01", kind: "dc", overlay: { internal_ip: "10.30.10" } }}
+        findings={[finding("internal_ip", "internal_ip on dc01: use an IPv4 address.", "dc01")]}
+      />
+    );
+    expect(errorsIn(fieldNamed("internal_ip"))).toEqual(["internal_ip on dc01: use an IPv4 address."]);
+  });
+
+  test("a finding with no field marks nothing", () => {
+    const plain = { code: "RDR001", severity: "error", target_ids: ["cdn-rdr01"], message: "no hostname", remedy: "" };
+    render(<Panel mode="offense" node={rdr} findings={[plain]} />);
+    expect(document.querySelectorAll(".rg-field.is-invalid")).toHaveLength(0);
   });
 });

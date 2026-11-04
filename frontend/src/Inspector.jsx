@@ -8,8 +8,8 @@ import {
 } from "./vulns.js";
 import { HARDENING_CATALOG } from "./hardening.js";
 import {
-  defaultFor, emptyOptionLabel, fieldLabel, fieldRule, jsonKindFor, numberHelp, optionLabel,
-  placeholderFor, resolveSpec,
+  checkValue, defaultFor, emptyOptionLabel, fieldFindings, fieldLabel, fieldRule, findingsAt,
+  jsonKindFor, numberHelp, optionLabel, placeholderFor, resolveSpec,
 } from "./fieldRules.js";
 import {
   USER_ARCHETYPES, accountTechniquePlanted, addUser, buildArchetype, generateUsers,
@@ -922,7 +922,7 @@ function sameJson(text, value) {
 
 // `expect` is the shape the field holds: "object" ({...}) or "array" ([...]), so
 // a list of objects (gmsa, say) gets the same editor instead of a text box.
-function JsonObjectField({ label, help, value, disabled, onChange, expect = "object" }) {
+function JsonObjectField({ label, help, value, disabled, onChange, expect = "object", className = "rg-field" }) {
   const id = useId();
   const [text, setText] = useState(() => showJson(value));
   const [error, setError] = useState(null);
@@ -969,7 +969,7 @@ function JsonObjectField({ label, help, value, disabled, onChange, expect = "obj
   // The help sits outside the label: a click inside a label moves focus to the
   // textarea, which would drop a selection made in the help's example.
   return (
-    <div className="rg-field">
+    <div className={className}>
       <label htmlFor={id}>{label}</label>
       <textarea
         id={id}
@@ -1061,9 +1061,11 @@ function VulnVarsHelp({ vulns, description }) {
 // `path` is the dotted overlay path (tls.cert_source) and `ctx` the node it sits
 // on ({id, kind, mode, overlay}); together they pick the default an empty field
 // compiles to. Both are optional, so a bare spec (an edge field) still renders.
+// `findings` are the server findings that name a field on this node
+// ({field, message}); the ones at `path` mark this field red.
 function Field({
   name, path = name, spec: rawSpec, value: rawValue, required, onChange, disabled,
-  help: helpOverride, defs, ctx,
+  help: helpOverride, defs, ctx, findings,
 }) {
   // The node's rules can hide the field, flag a stored value as unused here, or
   // lock it at the one value the compiler accepts. See fieldRules.js.
@@ -1075,6 +1077,17 @@ function Field({
   if (locked) disabled = true;
   const title = fieldLabel(name, spec);
   const def = defaultFor(path, spec, ctx);
+  // A server finding on this field wins; the client check covers the gap until
+  // the next validation lands, in the same words.
+  const isFieldset = spec.type === "object" && !!spec.properties;
+  const serverErrors = findingsAt(findings, path, !isFieldset).map((f) => f.message);
+  const clientError =
+    serverErrors.length || locked ? null : checkValue(title, spec, value, (v) => optionLabel(name, v));
+  const errors = serverErrors.length ? serverErrors : clientError ? [clientError] : [];
+  const cls = errors.length ? "rg-field is-invalid" : "rg-field";
+  const errorList = errors.map((message, i) => (
+    <span key={i} className="rg-field-error">{message}</span>
+  ));
   const label = (
     <span className="rg-field-label">
       {title}
@@ -1093,6 +1106,7 @@ function Field({
       {rule.ignored ? (
         <span className="rg-field-ignored">Not used here: {rule.ignored}</span>
       ) : null}
+      {errorList}
     </>
   );
 
@@ -1108,6 +1122,7 @@ function Field({
         disabled={disabled}
         onChange={onChange}
         expect={jsonKind}
+        className={cls}
       />
     );
   }
@@ -1122,7 +1137,7 @@ function Field({
     const offered = unset || spec.enum.includes(value);
     const optionHelp = spec["x-ui-option-help"]?.[unset ? def : value];
     return (
-      <label className="rg-field">
+      <label className={cls}>
         {label}
         <select
           value={value ?? ""}
@@ -1158,7 +1173,7 @@ function Field({
     // in a narrow right-hand column. Every boolean sat at a different height
     // from its neighbours and the rail read as ragged.
     return (
-      <label className="rg-field">
+      <label className={cls}>
         <span className="rg-check-row">
           <input
             type="checkbox"
@@ -1175,7 +1190,7 @@ function Field({
 
   if (spec.type === "integer" || spec.type === "number") {
     return (
-      <label className="rg-field">
+      <label className={cls}>
         {label}
         <input
           type="number"
@@ -1204,7 +1219,7 @@ function Field({
       const unknown = items.filter((i) => !options.includes(i));
       const unknownTitle = spec["x-ui-unknown-title"];
       return (
-        <div className="rg-field">
+        <div className={cls}>
           {label}
           {options.length ? (
             <div className="rg-checks">
@@ -1255,6 +1270,7 @@ function Field({
       <ListField
         label={label}
         help={help}
+        className={cls}
         value={items}
         placeholder={placeholderFor(path, spec, ctx)}
         disabled={disabled}
@@ -1269,6 +1285,7 @@ function Field({
         <legend>{title}</legend>
         {spec.description ? <p className="rg-field-help">{spec.description}</p> : null}
         {rule.ignored ? <p className="rg-field-ignored">Not used here: {rule.ignored}</p> : null}
+        {errorList}
         {Object.entries(spec.properties).map(([child, childSpec]) => (
           <Field
             key={child}
@@ -1280,6 +1297,7 @@ function Field({
             disabled={disabled}
             defs={defs}
             ctx={ctx}
+            findings={findings}
             onChange={(next) => onChange({ ...(value || {}), [child]: next })}
           />
         ))}
@@ -1288,7 +1306,7 @@ function Field({
   }
 
   return (
-    <label className="rg-field">
+    <label className={cls}>
       {label}
       <input
         value={value ?? ""}
@@ -1477,6 +1495,9 @@ export function Inspector({
   // What a field's rules read: the node it sits on and the canvas mode.
   const fieldCtx = { id: node.id, kind: node.kind, mode: document.mode, overlay: node.overlay || {} };
   const ruleOf = (name, spec) => fieldRule(name, spec, fieldCtx, fieldCtx.overlay[name]);
+  // Findings that name a field (SCH001) show under that field as well.
+  const onField = fieldFindings(findings);
+  const idErrors = findingsAt(onField, "id");
 
   return (
     <aside className="rg-panel rg-inspector">
@@ -1487,13 +1508,16 @@ export function Inspector({
         <span>kind</span>
         <span>{kindLabels[node.kind] || node.kind}</span>
       </p>
-      <label className="rg-field">
+      <label className={idErrors.length ? "rg-field is-invalid" : "rg-field"}>
         <span className="rg-field-label">id</span>
         <input
           value={node.id}
           disabled={readOnly}
           onChange={(e) => onRename(node.id, e.target.value)}
         />
+        {idErrors.map((f, i) => (
+          <span key={i} className="rg-field-error">{f.message}</span>
+        ))}
         <span className="rg-field-help">
           Lowercase kebab: a purpose slug, the kind tag, and a two digit
           ordinal, e.g. main-net01. Left as is, it tracks what the node
@@ -1614,6 +1638,7 @@ export function Inspector({
                   disabled={readOnly}
                   defs={schema?.$defs}
                   ctx={fieldCtx}
+                  findings={onField}
                   onChange={(value) =>
                     onOverlayChange(node.id, { ...(node.overlay || {}), [name]: value })
                   }

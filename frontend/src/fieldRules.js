@@ -424,3 +424,86 @@ export function numberHelp(spec, def) {
   if (def != null) parts.push(`Empty uses ${def}.`);
   return parts.join(" ");
 }
+
+// ----------------------------------------------------------------- checks
+
+function sentence(label, reason, example) {
+  return `${label}: ${reason}.${example != null ? ` Example: ${example}.` : ""}`;
+}
+
+function testPattern(pattern, value) {
+  try {
+    return new RegExp(pattern, "u").test(value);
+  } catch {
+    return true;
+  }
+}
+
+function addressReason(spec, value) {
+  const isCidr = spec["x-ui-def"] === "cidr" || spec.pattern === CIDR;
+  const isIp = spec["x-ui-def"] === "ipv4" || spec.pattern === IPV4;
+  if (!isCidr && !isIp) return null;
+  const [addr, prefix] = value.split("/");
+  if (addr.split(".").some((o) => Number(o) > 255)) return "each of the four numbers must be 0 to 255";
+  if (isCidr && Number(prefix) > 32) return "the number after the slash must be 0 to 32";
+  return null;
+}
+
+// A plain message when a value misses the schema's pattern, bounds or choices,
+// in the server's style: "{label}: {reason}. Example: {example}." Null if fine.
+export function checkValue(label, spec, value, display = String) {
+  if (!spec || value == null || value === "") return null;
+  if (spec.enum) {
+    return spec.enum.includes(value)
+      ? null
+      : `${label}: ${display(value)} is not one of the choices here. Pick one from the list.`;
+  }
+  const example = exampleFor(spec);
+  if (spec.type === "integer" || spec.type === "number") {
+    if (typeof value !== "number" || Number.isNaN(value)) return sentence(label, "use a number", spec.default ?? example);
+    if (spec.type === "integer" && !Number.isInteger(value)) {
+      return sentence(label, "use a whole number", spec.default ?? example);
+    }
+    const { minimum: min, maximum: max } = spec;
+    if ((min != null && value < min) || (max != null && value > max)) {
+      const range = min != null && max != null ? `from ${min} to ${max}` : min != null ? `of at least ${min}` : `of at most ${max}`;
+      return sentence(label, `use a number ${range}`, spec.default ?? example);
+    }
+    return null;
+  }
+  if (spec.type === "array" && Array.isArray(value)) {
+    if (spec.minItems && value.length < spec.minItems) {
+      return sentence(label, `pick at least ${spec.minItems}`);
+    }
+    return null;
+  }
+  if (typeof value !== "string") return null;
+  if (spec.minLength && value.length < spec.minLength) {
+    return sentence(label, `use at least ${spec.minLength} characters`, example);
+  }
+  if (spec.maxLength && value.length > spec.maxLength) {
+    return sentence(label, `use at most ${spec.maxLength} characters`, example);
+  }
+  if (spec.pattern && !testPattern(spec.pattern, value)) {
+    return sentence(label, PATTERNS[spec.pattern]?.reason ?? "this is not in the expected format", example);
+  }
+  const address = addressReason(spec, value);
+  if (address) return sentence(label, address, example);
+  return null;
+}
+
+// Server findings that name a field on the node, as {field, message}. The path
+// is relative to the overlay; a leading "overlay." is tolerated.
+export function fieldFindings(findings) {
+  return (findings || [])
+    .filter((f) => typeof f?.field === "string" && f.field)
+    .map((f) => ({ field: f.field.replace(/^overlay\./, ""), message: f.message, severity: f.severity }));
+}
+
+// The findings that belong to the field at `path`. A leaf also takes findings
+// on anything under it (an array item), a fieldset only its own.
+export function findingsAt(list, path, leafField = true) {
+  return (list || []).filter(
+    (f) => f.field === path || (leafField && f.field.startsWith(`${path}.`))
+  );
+}
