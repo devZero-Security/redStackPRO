@@ -427,3 +427,24 @@ describe("loading a shipped blueprint", () => {
     expect(screen.getByText(/Saved, version 1/)).toBeTruthy();
   });
 });
+
+
+describe("host card", () => {
+  test("recorded hardening does not badge the host as hardened", async () => {
+    const doc = {
+      schema_version: "0.7.0", mode: "defense", name: "Range", prefix: "def",
+      nodes: [{
+        id: "ws01", kind: "wks", position: { x: 0, y: 0 },
+        overlay: { os: "windows_10", hardening: ["asr", "runasppl"] },
+      }],
+      edges: [],
+    };
+    openUrl("?topology=g8");
+    fakeBackend({ documents: { g8: doc } });
+    render(<App />);
+    expect(await screen.findByText("ws01")).toBeTruthy();
+    const badge = screen.getByText("hardening off");
+    expect(badge.title).toMatch(/does not apply them/);
+    expect(screen.queryByText(/\d hardened/)).toBeNull();
+  });
+});
