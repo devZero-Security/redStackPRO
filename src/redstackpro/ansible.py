@@ -705,6 +705,9 @@ class AnsiblePlan:
             ho = self.ctx.nodes.get(e["source"], {}).get("overlay", {}) or {}
             escs.update(v for v in (ho.get("vulns") or []) if v.startswith("esc"))
             vv = ho.get("vulns_vars") or {}
+            if not isinstance(vv, dict):
+                # A string saved by the old canvas field; RNG012 reports it.
+                vv = {}
             # Every per-technique knob a host can set. A key missing from this
             # tuple is silently dropped on the way to the CA, so the technique
             # plants with its default and the topology's value is never applied.

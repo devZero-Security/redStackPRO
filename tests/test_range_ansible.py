@@ -750,3 +750,16 @@ def test_chocolatey_gets_dotnet_48_first():
         assert "528040" in text, "%s does not check for .NET 4.8" % path
         assert text.index("Install .NET Framework 4.8") < text.index(before), path
         assert "win_reboot" in text, path
+
+
+def test_a_string_vulns_vars_does_not_break_the_esc_gathering():
+    """The canvas once saved vulns_vars as the raw text typed into it. A string
+    that mentions esc7_manager used to pass the `k in vv` test and then crash on
+    vv[k]. It is ignored now (RNG012 tells the author)."""
+    doc = json.loads(json.dumps(GOAD_FULL))
+    for n in doc["nodes"]:
+        if n["id"] == "meereen":
+            n["overlay"]["vulns_vars"] = '{"esc7_manager": "ESSOS\\viserys.targaryen"}'
+    files = generate(doc)
+    braavos = yaml.safe_load(files["ansible/host_vars/def-braavos.yml"])
+    assert "esc7_manager" not in (braavos.get("redstackpro_adcs_esc_vars") or {})
