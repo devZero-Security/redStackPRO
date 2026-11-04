@@ -2,6 +2,7 @@ import React from "react";
 import "./widgets.css";
 import { ROLE_TEXT, roleTitle, rolesFor } from "./edgeRoles.js";
 
+const FRONTS_DEFAULTS = { protocol: "https", listen_port: 443, upstream_port: 443 };
 const FRONTS_FIELDS = { protocol: undefined, listen_port: undefined, upstream_port: undefined, uri_prefix: undefined };
 const TRUST_FIELDS = { trust_type: undefined, direction: undefined, transitive: undefined };
 
@@ -66,5 +67,48 @@ export function EdgeRole({ edge, document, readOnly, onEdgeChange }) {
           : `A ${sourceKind} to a ${targetKind} cannot carry this role. Pick one it can.`}
       </span>
     </label>
+  );
+}
+
+const atDefault = (edge) =>
+  (edge.protocol ?? "https") === "https" &&
+  (edge.listen_port ?? 443) === 443 &&
+  (edge.upstream_port ?? 443) === 443;
+
+// A redirector serves HTTPS on 443 and proxies to the teamserver on 443, so the
+// protocol and ports of a fronts edge are shown rather than edited. A document
+// carrying other values is told what they do and offered the reset.
+export function FrontsPorts({ edge, readOnly, onEdgeChange }) {
+  const protocol = (edge.protocol ?? "https").toUpperCase();
+  const listen = edge.listen_port ?? 443;
+  const upstream = edge.upstream_port ?? 443;
+  const ok = atDefault(edge);
+  return (
+    <div className="rg-field">
+      <span className="rg-field-label">protocol and ports</span>
+      <span className="rg-fronts-ports">
+        {protocol}, {listen} to {upstream}
+      </span>
+      {ok ? (
+        <span className="rg-field-help">
+          The redirector answers HTTPS on 443 and forwards to the teamserver on 443.
+        </span>
+      ) : (
+        <>
+          <span className="rg-widget-warn">
+            Redirectors serve HTTPS on 443 only; other values open a port nothing answers on.
+          </span>
+          {readOnly ? null : (
+            <button
+              type="button"
+              className="rg-inline-btn"
+              onClick={() => onEdgeChange(edge.id, FRONTS_DEFAULTS)}
+            >
+              Reset to HTTPS 443
+            </button>
+          )}
+        </>
+      )}
+    </div>
   );
 }

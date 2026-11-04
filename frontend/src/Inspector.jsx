@@ -12,7 +12,7 @@ import {
   plantAccountTechnique, recommendedUserCount, removeAccountTechnique, removeUser,
   setUsers, updateUser,
 } from "./rangeUsers.js";
-import { EdgeRole } from "./EdgeEditors.jsx";
+import { EdgeRole, FrontsPorts } from "./EdgeEditors.jsx";
 import { Connections } from "./Connections.jsx";
 import { nodeName, roleTitle } from "./edgeRoles.js";
 
@@ -1188,29 +1188,7 @@ export function Inspector({
                 Randomize URI
               </button>
             ) : null}
-            <Field
-              name="protocol"
-              spec={{ enum: ["http", "https", "dns", "tcp"] }}
-              value={edge.protocol}
-              required
-              disabled={readOnly}
-              onChange={(v) => onEdgeChange(edge.id, { protocol: v })}
-            />
-            <Field
-              name="listen_port"
-              spec={{ type: "integer" }}
-              value={edge.listen_port}
-              required
-              disabled={readOnly}
-              onChange={(v) => onEdgeChange(edge.id, { listen_port: v })}
-            />
-            <Field
-              name="upstream_port"
-              spec={{ type: "integer" }}
-              value={edge.upstream_port}
-              disabled={readOnly}
-              onChange={(v) => onEdgeChange(edge.id, { upstream_port: v })}
-            />
+            <FrontsPorts edge={edge} readOnly={readOnly} onEdgeChange={onEdgeChange} />
           </>
         ) : null}
         <FindingList findings={findings} />

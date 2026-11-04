@@ -140,3 +140,48 @@ describe("edge roles follow the endpoint kinds", () => {
     expect(row.textContent).toContain("off-myth-ts01");
   });
 });
+
+// -- fronts ports
+
+describe("fronts edge protocol and ports", () => {
+  const doc = (extra) => ({
+    schema_version: "0.7.0",
+    mode: "offense",
+    prefix: "off",
+    nodes: [
+      { id: "rdr01", kind: "redirector", overlay: {} },
+      { id: "ts01", kind: "teamserver", overlay: {} },
+    ],
+    edges: [{ id: "e1", role: "fronts", source: "rdr01", target: "ts01", uri_prefix: "/cdn", ...extra }],
+  });
+
+  test("defaults read as HTTPS, 443 to 443 with nothing to edit", () => {
+    render(
+      <Harness
+        initial={doc({ protocol: "https", listen_port: 443, upstream_port: 443 })}
+        selection={{ type: "edge", id: "e1" }}
+      />
+    );
+    expect(screen.getByText("HTTPS, 443 to 443")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Reset to HTTPS 443" })).toBeNull();
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+  });
+
+  test("other values are explained and reset", async () => {
+    const seen = [];
+    render(
+      <Harness
+        initial={doc({ protocol: "dns", listen_port: 8443, upstream_port: 80 })}
+        selection={{ type: "edge", id: "e1" }}
+        seen={seen}
+      />
+    );
+    expect(screen.getByText("DNS, 8443 to 80")).toBeTruthy();
+    expect(
+      screen.getByText("Redirectors serve HTTPS on 443 only; other values open a port nothing answers on.")
+    ).toBeTruthy();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Reset to HTTPS 443" }));
+    expect(last(seen).edges[0]).toMatchObject({ protocol: "https", listen_port: 443, upstream_port: 443 });
+    expect(screen.getByText("HTTPS, 443 to 443")).toBeTruthy();
+  });
+});
