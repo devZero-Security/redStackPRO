@@ -21,6 +21,7 @@ import { ExportPanel } from "./Export.jsx";
 import { TopologyPicker } from "./TopologyPicker.jsx";
 import { ProviderPicker } from "./ProviderPicker.jsx";
 import { providersFor, resolveProvider, selectableProviders } from "./providers.js";
+import { targetFor } from "./deployTarget.js";
 import { Library } from "./Library.jsx";
 import { ConflictDialog } from "./Conflict.jsx";
 import { ConfirmDialog } from "./ConfirmDialog.jsx";
@@ -145,7 +146,13 @@ function Editor() {
   // The running server version, shown in a corner of the canvas. Empty until the
   // health call answers, and stays empty if it does not, so it never shows an error.
   const [appVersion, setAppVersion] = useState("");
-  const [provider, setProvider] = useState("gcp");
+  // The session's deploy target, used when the open document saves none. A
+  // document's own provider wins, so a reload or an undo puts the picker back
+  // where that topology was left. Carried into the next document on a switch.
+  const [chosenProvider, setChosenProvider] = useState("gcp");
+  const provider = targetFor(document.mode, providers, document.provider, chosenProvider);
+  const providerRef = useRef(provider);
+  providerRef.current = provider;
   const [selection, setSelection] = useState(null);
   const [findings, setFindings] = useState([]);
   const [status, setStatus] = useState("");
@@ -193,6 +200,18 @@ function Editor() {
   // screen. Cleared when the card is dismissed, so it is not document state.
   const [summary, setSummary] = useState(null);
   const readOnly = document.mode === "defense" && templateView;
+
+  // Picking a deploy target is an edit: it saves with the topology. A locked
+  // blueprint is only being looked at, so there it stays a session choice and
+  // does not mark the view unsaved.
+  const chooseProvider = useCallback((name) => {
+    if (readOnly && !docRef.current.provider) {
+      setChosenProvider(name);
+      return;
+    }
+    history.mutate((current) =>
+      current.provider === name ? current : { ...current, provider: name });
+  }, [history, readOnly]);
 
   // Copy the full diagnostics (recent events, document shape, environment) to the
   // clipboard, or log them if the clipboard is unavailable, so a canvas problem
@@ -287,7 +306,7 @@ function Editor() {
   // means what is on screen is what gets compiled.
   useEffect(() => {
     if (!providers.length) return;
-    setProvider((current) => resolveProvider(document.mode, providers, current));
+    setChosenProvider((current) => resolveProvider(document.mode, providers, current));
   }, [document.mode, providers]);
 
   // The palette is the current canvas's kinds, so it re-fetches when the mode
@@ -353,6 +372,7 @@ function Editor() {
         // deterministic, so what is on screen is what a reload reproduces.
         const doc = layoutIfNeeded(body.document);
         pinned.current = new Set(offSchemeIds(doc));
+        setChosenProvider(providerRef.current);
         // Opening a topology is a session boundary, not an edit: undo has
         // nothing to say about whatever was open before.
         history.reset(doc);
@@ -384,6 +404,7 @@ function Editor() {
   const resetToEmpty = useCallback((mode = "offense") => {
     const doc = emptyDocument(mode);
     pinned.current = new Set();
+    setChosenProvider(providerRef.current);
     history.reset(doc); // a new topology is a session boundary, not an undo step
     setSaved(doc);
     setDomainsText("");
@@ -1429,6 +1450,7 @@ function Editor() {
       record("load-template", { url, nodes: doc.nodes.length });
       // Pinned so retitle leaves the shipped names alone and the load stays clean.
       pinned.current = new Set(offSchemeIds(doc));
+      setChosenProvider(providerRef.current);
       // A loaded template is a session boundary, not an edit to undo back
       // through.
       history.reset(doc);
@@ -1564,10 +1586,10 @@ function Editor() {
           />
         </label>
         <ProviderPicker
-          provider={resolveProvider(document.mode, providers, provider)}
+          provider={provider}
           providers={providersFor(document.mode, providers)}
           selectable={selectableProviders(document.mode, providers)}
-          onChange={setProvider}
+          onChange={chooseProvider}
           title={
             document.mode === "defense"
               ? "Deploy target. Every target listed compiles the range natively."

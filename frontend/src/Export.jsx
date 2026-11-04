@@ -231,7 +231,7 @@ export function ExportPanel({ document, provider }) {
           </select>
         </label>
         <button className="rg-primary" onClick={download}>
-          Download
+          Download ({cloud})
         </button>
       </div>
 

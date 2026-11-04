@@ -1,8 +1,11 @@
 // The app shell over the merged widgets and validator: how a new trust is
-// typed, what the legend calls each line, and how the footer reads findings of
-// each severity, including the info notices and document-level findings.
+// typed, what the legend calls each line, how the footer reads findings of
+// each severity, and how a topology remembers where it deploys.
 
 import React from "react";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { describe, expect, test, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -12,6 +15,9 @@ import { connectEdge, emptyDocument, legendItems } from "./topology.js";
 import { edgeId } from "./idscheme.js";
 import { countBySeverity, findingSelection, sortFindings } from "./findingSeverity.js";
 import { TEMPLATES } from "./templates.js";
+import { targetFor } from "./deployTarget.js";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 const PALETTE = {
   topology: [
@@ -32,31 +38,46 @@ function respond(status, body) {
   };
 }
 
-function fakeBackend({ documents = {}, findings = [] } = {}) {
+const GCP_ONLY = [{ name: "gcp", capabilities: ["windows_image"], maturity: "proven" }];
+
+// Serves the registry, saved documents and the shipped blueprint files from
+// public/, and records every call so a test can read what was saved.
+function fakeBackend({ documents = {}, findings = [], providers = GCP_ONLY, editable = true } = {}) {
+  const calls = [];
   global.fetch = vi.fn(async (url, options = {}) => {
     const method = options.method || "GET";
+    calls.push({ url, method, body: options.body ? JSON.parse(options.body) : null });
     if (url.includes("/registry/palette")) return respond(200, { groups: PALETTE });
     if (url.includes("/registry/schema")) return respond(200, { $defs: {} });
-    if (url.includes("/registry/providers")) {
-      return respond(200, { providers: [
-        { name: "gcp", capabilities: ["windows_image"], maturity: "proven" },
-      ] });
-    }
+    if (url.includes("/registry/providers")) return respond(200, { providers });
     if (url.includes("/health")) return respond(200, { status: "ok", app_version: "9.9.9" });
     if (url.endsWith("/validate")) return respond(200, { findings });
+    if (url.endsWith("/compile")) {
+      return respond(200, { compile_id: "c1", files: [{ path: "deploy.tfvars", contents: "" }] });
+    }
     if (url.includes("/topologies?") && method === "GET") return respond(200, []);
+    const summary = (id, mode) => ({
+      id, name: "Range", mode, visibility: "private", schema_version: "0.7.0",
+      version: 1, owner_id: "u1", is_blueprint: false, editable,
+    });
+    if (url.endsWith("/topologies") && method === "POST") {
+      return respond(201, { ...summary("g9", "defense"), editable: true });
+    }
     const match = url.match(/\/topologies\/([^/?]+)$/);
     if (match && method === "GET" && documents[match[1]]) {
       return respond(200, {
-        topology: {
-          id: match[1], name: "Range", mode: documents[match[1]].mode, visibility: "private",
-          schema_version: "0.7.0", version: 1, owner_id: "u1", is_blueprint: false, editable: true,
-        },
+        topology: summary(match[1], documents[match[1]].mode),
         document: documents[match[1]],
       });
     }
+    if (match && method === "PUT") return respond(200, { ...summary(match[1], "defense"), version: 2 });
+    if (url.endsWith(".json") && !url.includes("/api/")) {
+      const file = join(HERE, "../public", url.replace(/^\//, ""));
+      return respond(200, JSON.parse(readFileSync(file, "utf8")));
+    }
     return respond(404, { code: "not_found", message: "no route: " + url });
   });
+  return calls;
 }
 
 const openUrl = (search) => window.history.replaceState({}, "", "/" + (search || ""));
@@ -221,3 +242,83 @@ describe("blueprint picker text", () => {
     expect(minilab.blurb).toMatch(/Server 2022 on GCP and AWS/);
   });
 });
+
+
+describe("the deploy target saves with the topology", () => {
+  const THREE = [
+    { name: "gcp", capabilities: ["windows_image"], maturity: "proven" },
+    { name: "aws", capabilities: ["windows_image"], maturity: "proven" },
+    { name: "azure", capabilities: ["windows_image"], maturity: "proven" },
+  ];
+  const OFFENSE_ONLY = [...THREE, { name: "linuxonly", capabilities: [], maturity: "proven" }];
+  const SAVED = {
+    schema_version: "0.7.0", mode: "offense", name: "Range", prefix: "off", provider: "azure",
+    nodes: [{ id: "c2-net01", kind: "network", overlay: { cidr: "10.30.0.0/16" }, position: { x: 0, y: 0 } }],
+    edges: [],
+  };
+
+  test("targetFor prefers a provider the mode can build, else the session choice", () => {
+    expect(targetFor("offense", THREE, "azure", "gcp")).toBe("azure");
+    expect(targetFor("offense", THREE, undefined, "aws")).toBe("aws");
+    // Before the registry answers, the saved one stands.
+    expect(targetFor("offense", [], "azure", "gcp")).toBe("azure");
+    // A defense range cannot deploy where there is no Windows image.
+    expect(targetFor("defense", OFFENSE_ONLY, "linuxonly", "aws")).toBe("aws");
+    expect(targetFor("offense", THREE, "nowhere", "gcp")).toBe("gcp");
+  });
+
+  test("a reload restores the saved target, a pick marks unsaved and saves, undo puts it back",
+    async () => {
+      openUrl("?topology=g1");
+      const calls = fakeBackend({ documents: { g1: SAVED }, providers: THREE });
+      const user = userEvent.setup();
+      render(<App />);
+      expect(await screen.findByRole("button", { name: "Deploy target: Azure" })).toBeTruthy();
+      expect(screen.getByText(/Saved, version 1/)).toBeTruthy();
+
+      await user.click(screen.getByRole("button", { name: "Deploy target: Azure" }));
+      await user.click(screen.getByRole("option", { name: /AWS/ }));
+      expect(await screen.findByText("Unsaved changes")).toBeTruthy();
+
+      await user.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() =>
+        expect(calls.some((c) => c.method === "PUT")).toBe(true));
+      const put = calls.find((c) => c.method === "PUT");
+      expect(put.body.document.provider).toBe("aws");
+
+      fireEvent.click(screen.getByRole("button", { name: "Deploy target: AWS" }));
+      await user.click(screen.getByRole("option", { name: /GCP/ }));
+      await screen.findByRole("button", { name: "Deploy target: GCP" });
+      window.document.body.focus();
+      await user.click(screen.getByRole("button", { name: "Undo" }));
+      expect(await screen.findByRole("button", { name: "Deploy target: AWS" })).toBeTruthy();
+    });
+
+  test("the download button names the target", async () => {
+    openUrl("?topology=g1");
+    fakeBackend({ documents: { g1: SAVED }, providers: THREE });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("button", { name: "Deploy target: Azure" });
+    await user.click(screen.getByRole("button", { name: "Export" }));
+    expect(await screen.findByRole("button", { name: "Download (Azure)" })).toBeTruthy();
+  });
+
+  test("on a locked blueprint a pick is a session choice and the view stays clean",
+    async () => {
+      fakeBackend({ providers: THREE });
+      const user = userEvent.setup();
+      render(<App />);
+      await user.click(await screen.findByRole("tab", { name: "Defense" }));
+      await user.click(await screen.findByRole("button", { name: "Load blueprint" }));
+      const dialog = await screen.findByRole("dialog", { name: "Load a blueprint" });
+      await user.click(within(dialog).getByText("GOAD-Light").closest("button"));
+      await screen.findByText("Unlock to edit");
+
+      await user.click(screen.getByRole("button", { name: /Deploy target:/ }));
+      await user.click(screen.getByRole("option", { name: /AWS/ }));
+      expect(await screen.findByRole("button", { name: "Deploy target: AWS" })).toBeTruthy();
+      expect(screen.getByText("Not saved")).toBeTruthy();
+    });
+});
+
