@@ -1,6 +1,6 @@
 // The principals a domain will hold once it is built, read off the topology:
-// its users, the groups they and the nesting name, the computers joined to it,
-// its gMSAs and OUs. The Inspector's domain editors offer these as choices and
+// its users, its extra groups and the groups users and nesting name, the
+// computers joined to it, its gMSAs and OUs. The Inspector's domain editors offer these as choices and
 // flag a name that is not among them. Names compare without case, as AD does.
 
 // Groups every domain has after promotion. Enterprise Admins and Schema Admins
@@ -48,11 +48,12 @@ export function joinedHosts(document, domainId) {
     .map((n) => ({ id: n.id, kind: n.kind, name: n.overlay?.hostname || n.id }));
 }
 
-// Groups this domain defines itself: every group a user is in plus every
-// group the nesting names. The dc role creates each one.
+// Groups this domain defines itself: its extra groups (overlay.groups), every
+// group a user is in, and every group the nesting names. The dc role creates
+// each one.
 export function customGroups(overlay) {
   const ov = overlay || {};
-  const names = [];
+  const names = Array.isArray(ov.groups) ? [...ov.groups] : [];
   for (const u of ov.users || []) names.push(...(u.groups || []));
   const nesting = ov.group_members && typeof ov.group_members === "object" ? ov.group_members : {};
   for (const [parent, members] of Object.entries(nesting)) {
