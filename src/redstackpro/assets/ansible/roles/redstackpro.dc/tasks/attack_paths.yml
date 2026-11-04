@@ -144,8 +144,10 @@
     label: "{{ item.username }}"
 
 # The ACL escalation chain: the marquee GOAD path, applied from the domain's own
-# acls list. The script creates any group the chain references but the directory
-# does not have yet, skips a target it cannot resolve, and reports what it did.
+# acls list. The script creates any plain name or OU the chain references but the
+# directory does not have yet (a plain name becomes an empty global group),
+# skips a computer (name$) or DOMAIN\name target it cannot resolve, and reports
+# what it did.
 - name: Apply the ACL escalation chain
   ansible.windows.win_powershell:
     script: "{{ lookup('ansible.builtin.file', 'apply_acls.ps1') }}"
