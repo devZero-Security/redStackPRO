@@ -1435,10 +1435,12 @@ def rng011_vuln_missing_parameter(ctx):
             # A missing master_password fails the vault task and stops the run
             # for the host; every other missing key only skips its task.
             severity = "error" if spec.get("fails") else "warning"
+            # The field is the first missing key, so the canvas form shows the
+            # finding at that key's input.
             yield finding(
                 "RNG011", severity, [n["id"]],
                 "{vuln} on {name} has no {keys}{where}, so {effect}.",
-                remedy=remedy + ".",
+                remedy=remedy + ".", field="vulns_vars." + missing[0][0],
                 vuln=vuln, name=n["id"], keys=keys, where=where,
                 effect=spec["effect"])
 

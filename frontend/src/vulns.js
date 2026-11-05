@@ -158,95 +158,100 @@ export const VULN_PROVIDERS = Object.fromEntries(
 // required key is one the task cannot plant without (it is skipped, or for
 // keepass_vault fails); `or` names a key that satisfies it instead. Every other
 // key has a role default, given in `about`. A dotted key is nested. `example`
-// feeds the one-line JSON the Inspector shows (vulnParamsExample). The
-// validator warns on a missing required key (RNG011) from its own copy,
-// redstackpro.validate.VULNS_VARS_REQUIRED, which tests/test_vuln_params_sync.py
-// keeps equal to the required keys here. One key per line: that test reads
-// this block line by line.
+// feeds the one-line JSON (vulnParamsExample) and the placeholder of a typed
+// input. The validator warns on a missing required key (RNG011) from its own
+// copy, redstackpro.validate.VULNS_VARS_REQUIRED, which
+// tests/test_vuln_params_sync.py keeps equal to the required keys here. One key
+// per line: that test reads this block line by line.
+//
+// `pick` names what the Inspector's form offers for the key, from the topology
+// or a fixed list (vulnForm.js PICKS says the format each one writes). `input`
+// shapes a typed key: number, multiline, lines (one per line) or files. A key
+// with neither is one line of text.
 export const VULN_PARAMS = {
   constrained_delegation_kerberos: [
-    { key: "delegate_to", required: true, about: "SPNs this computer account may delegate to (Kerberos only).", example: ["CIFS/srv01.corp.local"] },
+    { key: "delegate_to", required: true, pick: "spns", about: "SPNs this computer account may delegate to (Kerberos only).", example: ["CIFS/srv01.corp.local"] },
   ],
   gpo_abuse: [
-    { key: "gpo_abuse.principal", required: true, about: "User granted edit rights on the GPO. Domain controller only.", example: "samwell.tarly" },
+    { key: "gpo_abuse.principal", required: true, pick: "bare_user", about: "User granted edit rights on the GPO. Domain controller only.", example: "samwell.tarly" },
     { key: "gpo_abuse.name", about: "GPO name. Default StarkWallpaper.", example: "StarkWallpaper" },
-    { key: "gpo_abuse.link", about: "DN the GPO is linked to. Default the domain root." },
+    { key: "gpo_abuse.link", pick: "ou", about: "Where the GPO is linked, as a distinguished name. Default the domain root." },
   ],
   rdp_scheduler: [
-    { key: "bot_user", required: true, about: "Domain user the logon bot runs as, every minute.", example: "NORTH\\robb.stark" },
+    { key: "bot_user", required: true, pick: "domain_user", about: "Domain user the logon bot runs as, every minute.", example: "NORTH\\robb.stark" },
   ],
   responder: [
-    { key: "bot_user", required: true, about: "Domain user whose bot opens an unresolvable share every 2 minutes.", example: "NORTH\\robb.stark" },
-    { key: "responder_target", about: "UNC path the bot opens. Default \\\\Bravos\\private.", example: "\\\\Bravos\\private" },
+    { key: "bot_user", required: true, pick: "domain_user", about: "Domain user whose bot opens an unresolvable share every 2 minutes.", example: "NORTH\\robb.stark" },
+    { key: "responder_target", about: "UNC path the bot opens. Name a host that does not resolve, so the lookup falls through to LLMNR and NBT-NS. Default \\\\Bravos\\private.", example: "\\\\Bravos\\private" },
   ],
   ntlm_relay: [
-    { key: "ntlm_relay_user", required: true, or: "bot_user", about: "Privileged domain user the relay bot runs as, every 5 minutes.", example: "NORTH\\eddard.stark" },
-    { key: "ntlm_relay_target", about: "UNC path the bot authenticates to. Default \\\\Meren\\Private.", example: "\\\\Meren\\Private" },
+    { key: "ntlm_relay_user", required: true, or: "bot_user", pick: "domain_user", about: "Privileged domain user the relay bot runs as, every 5 minutes.", example: "NORTH\\eddard.stark" },
+    { key: "ntlm_relay_target", about: "UNC path the bot authenticates to. Name a host that does not resolve, so a poisoner answers and relays it. Default \\\\Meren\\Private.", example: "\\\\Meren\\Private" },
   ],
   stored_credential: [
-    { key: "stored_credential.owner", required: true, about: "Domain user whose Credential Manager vault gets the credential.", example: "NORTH\\robb.stark" },
-    { key: "stored_credential.username", required: true, about: "Account the saved credential is for.", example: "NORTH\\robb.stark" },
-    { key: "stored_credential.target", about: "Credential target. Default TERMSRV/castelblack.", example: "TERMSRV/castelblack" },
+    { key: "stored_credential.owner", required: true, pick: "domain_user", about: "Domain user whose Credential Manager vault gets the credential.", example: "NORTH\\robb.stark" },
+    { key: "stored_credential.username", required: true, pick: "domain_user", about: "Account the saved credential is for.", example: "NORTH\\robb.stark" },
+    { key: "stored_credential.target", pick: "termsrv", about: "Credential target, TERMSRV/<host> for an RDP credential. Default TERMSRV/castelblack.", example: "TERMSRV/castelblack" },
   ],
   sysvol_secret: [
-    { key: "sysvol_secret.account", about: "Account whose password is written into the script. Default svc-backup.", example: "NORTH\\robb.stark" },
+    { key: "sysvol_secret.account", pick: "domain_user", about: "Account whose password is written into the script. Default svc-backup.", example: "NORTH\\robb.stark" },
     { key: "sysvol_secret.name", about: "Script name under SYSVOL\\domain\\scripts. Default secret.ps1.", example: "secret.ps1" },
   ],
   writable_share: [
     { key: "permissions.path", about: "Folder to loosen. Default C:\\inetpub\\wwwroot\\upload.", example: "C:\\inetpub\\wwwroot\\upload" },
     { key: "permissions.user", about: "Identity granted the rights. Default IIS_IUSRS.", example: "IIS_IUSRS" },
-    { key: "permissions.rights", about: "NTFS rights granted. Default FullControl.", example: "FullControl" },
+    { key: "permissions.rights", pick: "fs_rights", about: "NTFS rights granted. Default FullControl.", example: "FullControl" },
   ],
   iis_webshell: [
     { key: "iis_webshell.path", about: "Upload folder made writable and script-executable. Default C:\\inetpub\\wwwroot\\upload.", example: "C:\\inetpub\\wwwroot\\upload" },
     { key: "iis_webshell.user", about: "Worker identity given full control. Default IIS_IUSRS.", example: "IIS_IUSRS" },
   ],
   schedule: [
-    { key: "schedule.user", about: "Domain user the task runs as. Unset runs it as SYSTEM, which leaves no user credential to capture.", example: "NORTH\\robb.stark" },
+    { key: "schedule.user", pick: "domain_user", about: "Domain user the task runs as. Unset runs it as SYSTEM, which leaves no user credential to capture.", example: "NORTH\\robb.stark" },
     { key: "schedule.command", about: "PowerShell the task runs. Default Start-Sleep -Seconds 5.", example: "Start-Sleep -Seconds 5" },
-    { key: "schedule.interval_minutes", about: "Repeat interval. Default 1.", example: 1 },
+    { key: "schedule.interval_minutes", input: "number", about: "Repeat interval in minutes. Default 1.", example: 1 },
     { key: "schedule.name", about: "Task name. Default connect_bot." },
     { key: "schedule.script_path", about: "Where script_content is written, if set." },
-    { key: "schedule.script_content", about: "Script body written to script_path." },
+    { key: "schedule.script_content", input: "multiline", about: "Script body written to script_path." },
   ],
   keepass_vault: [
     { key: "keepass_vault.master_password", required: true, about: "Master password of the generated vault. No default: the vault task fails without it.", example: "Vault-Pass-1" },
-    { key: "keepass_vault.entry_password_user", about: "Lab user whose deployed password fills the entry. Default the shared lab password.", example: "drogon" },
-    { key: "keepass_vault.entry_user", about: "Username stored in the entry. Default administrator.", example: "drogon" },
+    { key: "keepass_vault.entry_password_user", pick: "bare_user", about: "Lab user whose deployed password fills the entry. Default the shared lab password.", example: "drogon" },
+    { key: "keepass_vault.entry_user", pick: "bare_user", about: "Username stored in the entry. Default administrator.", example: "drogon" },
     { key: "keepass_vault.entry_title", about: "Entry title. Default domain-admin." },
     { key: "keepass_vault.db_path", about: "Vault file. Default C:\\vault.kdbx." },
   ],
   files: [
-    { key: "files", required: true, about: "Files to drop, each {name, content}.", example: [{ name: "notes.txt", content: "text" }] },
+    { key: "files", required: true, input: "files", about: "Files to drop, each {name, content}.", example: [{ name: "notes.txt", content: "text" }] },
     { key: "files_dir", about: "Folder they land in. Default C:\\redstackpro." },
   ],
   directory: [
-    { key: "directory", about: "Folders to create. Default C:\\redstackpro\\staging.", example: ["C:\\staging"] },
+    { key: "directory", input: "lines", about: "Folders to create, one per line. Default C:\\redstackpro\\staging.", example: ["C:\\staging"] },
   ],
   administrator_folder: [
     { key: "administrator_folder.name", about: "Flag file on the Administrator desktop. Default flag.txt.", example: "flag.txt" },
     { key: "administrator_folder.content", about: "Flag text. Default flag{<host>_owned}." },
   ],
   esc5: [
-    { key: "esc5_principal", about: "Who gets write control over the PKI objects. Default Domain Users. Any host in the domain may set it.", example: "ESSOS\\khal.drogo" },
+    { key: "esc5_principal", pick: "principal", about: "Who gets write control over the PKI objects. Default Domain Users. Any host in the domain may set it.", example: "ESSOS\\khal.drogo" },
   ],
   esc7: [
-    { key: "esc7_manager", required: true, about: "User granted ManageCA on the CA. Any host in the domain may set it.", example: "ESSOS\\viserys.targaryen" },
+    { key: "esc7_manager", required: true, pick: "domain_user", about: "User granted ManageCA on the CA. Any host in the domain may set it.", example: "ESSOS\\viserys.targaryen" },
   ],
   esc13: [
-    { key: "esc13_group", about: "Group the issuance policy links to. Default greatmaster. Any host in the domain may set it.", example: "greatmaster" },
+    { key: "esc13_group", pick: "group", about: "Group the issuance policy links to. A name the domain does not have is created as an empty group. Default greatmaster. Any host in the domain may set it.", example: "greatmaster" },
   ],
   esc14: [
-    { key: "esc14_target", required: true, about: "Account given the weak explicit mapping. Any host in the domain may set it.", example: "missandei" },
-    { key: "esc14_subject", about: "Subject the mapping accepts. Default CN=rsp-esc14.", example: "CN=missandei.esc14" },
+    { key: "esc14_target", required: true, pick: "bare_user", about: "Account given the weak explicit mapping. Any host in the domain may set it.", example: "missandei" },
+    { key: "esc14_subject", about: "Subject the mapping accepts. Default CN=rsp-esc14. Any host in the domain may set it.", example: "CN=missandei.esc14" },
   ],
   mssql_linked: [
-    { key: "mssql_linked_targets", required: true, about: "SQL hosts added as linked servers.", example: ["sql02.corp.local"] },
-    { key: "mssql_linked_logins", about: "Per target, a fixed remote login the link uses, each {target, remote_user, remote_password}. Default the caller's own login.", example: [{ target: "sql02.corp.local", remote_user: "sa" }] },
+    { key: "mssql_linked_targets", required: true, pick: "sql_hosts", about: "SQL hosts added as linked servers, by FQDN.", example: ["sql02.corp.local"] },
+    { key: "mssql_linked_logins", pick: "linked_logins", about: "Per linked server, a fixed remote login the link uses, each {target, remote_user, remote_password}. Default the caller's own login.", example: [{ target: "sql02.corp.local", remote_user: "sa" }] },
   ],
   mssql_impersonation: [
-    { key: "mssql_execas_logins", about: "Extra login-level EXECUTE AS grants, each {login, target}. Without any, Domain Users may impersonate sa.", example: [{ login: "NORTH\\samwell.tarly", target: "sa" }] },
-    { key: "mssql_execas_users", about: "Database-level EXECUTE AS USER grants, each {user, db, impersonate}." },
+    { key: "mssql_execas_logins", pick: "execas_logins", about: "Extra login-level EXECUTE AS grants, each {login, target}. Without any, Domain Users may impersonate sa.", example: [{ login: "NORTH\\samwell.tarly", target: "sa" }] },
+    { key: "mssql_execas_users", pick: "execas_users", about: "Database-level EXECUTE AS USER grants, each {user, db, impersonate}." },
   ],
 };
 

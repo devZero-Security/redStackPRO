@@ -6,8 +6,19 @@ import { joinedHosts } from "./domainDirectory.js";
 const WINDOWS_KINDS = new Set(["dc", "srv", "wks"]);
 const LINUX_OS = /^(debian|ubuntu|linux|kali)/;
 
-function isWindows(node) {
+export function isWindowsHost(node) {
   return WINDOWS_KINDS.has(node?.kind) && !LINUX_OS.test(node?.overlay?.os || "");
+}
+
+const servicesOf = (node) => (Array.isArray(node?.overlay?.services) ? node.overlay.services : []);
+
+// The srv role installs SQL Server for role sql or an mssql service.
+export function runsSql(node) {
+  return node?.overlay?.role === "sql" || servicesOf(node).includes("mssql");
+}
+
+export function runsIis(node) {
+  return servicesOf(node).includes("iis");
 }
 
 // The domain a host joins, or null.
@@ -27,27 +38,51 @@ export function spnChoices(document, domainId, { exclude } = {}) {
   for (const h of joinedHosts(document, domainId)) {
     if (h.id === exclude) continue;
     const node = document.nodes.find((n) => n.id === h.id);
-    if (!isWindows(node)) continue;
+    if (!isWindowsHost(node)) continue;
     const fq = `${h.name}.${fqdn}`;
-    const ov = node.overlay || {};
-    const services = Array.isArray(ov.services) ? ov.services : [];
     const spns = [{ spn: `CIFS/${fq}`, label: "CIFS", about: "file and admin shares" }];
     if (node.kind === "dc") {
       spns.push({ spn: `LDAP/${fq}`, label: "LDAP", about: "directory access, DCSync" });
     }
-    if (ov.role === "sql" || services.includes("mssql")) {
+    if (runsSql(node)) {
       spns.push({ spn: `MSSQLSvc/${fq}:1433`, label: "MSSQL", about: "SQL Server" });
     }
     // HTTP maps to the computer account by default, so it is a live target with
     // or without IIS (GOAD's castelblack delegates to HTTP/winterfell).
     spns.push({
       spn: `HTTP/${fq}`, label: "HTTP",
-      about: services.includes("iis") ? "IIS web and WinRM" : "WinRM",
+      about: runsIis(node) ? "IIS web and WinRM" : "WinRM",
     });
     spns.push({ spn: `HOST/${fq}`, label: "HOST", about: "services and scheduled tasks" });
     groups.push({ host: h.name, kind: node.kind, spns });
   }
   return groups.sort((a, b) => (a.kind === "dc" ? 0 : 1) - (b.kind === "dc" ? 0 : 1));
+}
+
+// spnChoices() in the [{label, options}] shape the pickers take.
+export function spnOptionGroups(groups) {
+  return groups.map((g) => ({
+    label: g.host,
+    options: g.spns.map((s) => ({ value: s.spn, label: s.label, about: s.about })),
+  }));
+}
+
+// SPNs a service account (a Kerberoastable user) can carry: SQL Server and IIS
+// on the domain's hosts. Never HOST, CIFS or LDAP: those sit on the computer
+// account, so a user carrying one is a duplicate SPN.
+export function userSpnChoices(document, domainId) {
+  const domain = (document?.nodes || []).find((n) => n.id === domainId);
+  const fqdn = domain?.overlay?.fqdn;
+  if (!fqdn) return [];
+  const out = [];
+  for (const h of joinedHosts(document, domainId)) {
+    const node = document.nodes.find((n) => n.id === h.id);
+    if (!isWindowsHost(node)) continue;
+    const fq = `${h.name}.${fqdn}`;
+    if (runsSql(node)) out.push({ spn: `MSSQLSvc/${fq}:1433`, about: `SQL Server on ${h.name}` });
+    if (runsIis(node)) out.push({ spn: `HTTP/${fq}`, about: `IIS on ${h.name}` });
+  }
+  return out;
 }
 
 // What a fresh delegation points at: CIFS on the domain controller, the classic
