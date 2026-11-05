@@ -13,5 +13,21 @@
   ansible.windows.win_powershell:
     script: |
       $ErrorActionPreference = "SilentlyContinue"
-      Enable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart | Out-Null
-  changed_when: true
+      $Ansible.Changed = $false
+      $f = Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol
+      if (-not $f) { return @{ reboot = $false } }
+      if ($f.State -ne "Enabled") {
+        Enable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -All -NoRestart | Out-Null
+        $Ansible.Changed = $true
+      }
+      Set-SmbServerConfiguration -EnableSMB1Protocol $true -Force
+      @{ reboot = -not (Get-SmbServerConfiguration).EnableSMB1Protocol }
+  register: rsp_smb1_feature
+
+# The SMB1 drivers load at boot. Until then the server keeps reporting
+# EnableSMB1Protocol False, whatever the registry and the cmdlet say (seen live
+# on an Azure Windows 10 image).
+- name: Reboot so the SMB1 drivers load
+  ansible.windows.win_reboot:
+    reboot_timeout: 900
+  when: (rsp_smb1_feature.output | default([{}]) | last).reboot | default(false)

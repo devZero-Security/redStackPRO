@@ -349,6 +349,34 @@ def test_the_stored_credential_owner_gets_batch_logon():
         "Plant a Credential Manager credential in a user's vault")
 
 
+def test_the_stored_credential_owner_can_read_its_script_and_a_miss_fails():
+    """The plant script is written as admin into C:\\Windows\\Temp, where Users may
+    create files but not read anyone else's, so the owner's task could not open
+    it. The role reported changed anyway; found live on Azure 2026-11-05."""
+    tasks = yaml.safe_load((ROLES / "redstackpro.host_vulns/tasks/stored_credential.yml")
+                           .read_text(encoding="utf-8"))
+    names = [t["name"] for t in tasks]
+    script = tasks[names.index("Plant a Credential Manager credential in a user's vault")][
+        "ansible.windows.win_powershell"]["script"]
+    assert '/grant "${Owner}:(RX)"' in script
+    assert script.index("/grant") < script.index("Register-ScheduledTask")
+    assert "throw" in script, "a credential that was not saved must fail the task"
+    assert "Remove-Item $script" in script, "the script holds the password in clear"
+
+
+def test_smbv1_reboots_until_the_server_dialect_is_on():
+    """Enabling the SMB1 feature does nothing until the drivers load at boot; the
+    role used -NoRestart and never rebooted, so the dialect stayed off."""
+    tasks = yaml.safe_load((ROLES / "redstackpro.host_vulns/tasks/smbv1.yml")
+                           .read_text(encoding="utf-8"))
+    feature = next(t for t in tasks if t.get("register") == "rsp_smb1_feature")
+    assert "Get-SmbServerConfiguration).EnableSMB1Protocol" in feature[
+        "ansible.windows.win_powershell"]["script"]
+    reboot = next(t for t in tasks if "ansible.windows.win_reboot" in t)
+    assert "rsp_smb1_feature" in reboot["when"]
+    assert tasks.index(feature) < tasks.index(reboot)
+
+
 @pytest.mark.parametrize("task_file", [
     "rdp_scheduler.yml", "responder.yml", "ntlm_relay.yml", "schedule.yml",
 ])
