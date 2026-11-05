@@ -227,7 +227,8 @@ versioning, and dates are UTC.
 - A new workstation (`wks`) defaults to Windows 11: the canvas seeds `windows_11`,
   and a workstation with no `os` compiles to it (a `dc` or `srv` stays Windows Server
   2022). GCP and AWS still boot Windows Server 2022 for it (`CAP005`). On Azure that
-  is the `windows-11` Marketplace image.
+  is the `windows-11` Marketplace image, release `win11-26h2-pro` (the 23H2 SKU the
+  earlier mapping named is no longer offered).
 - Windows 10 is marked past end of support (Microsoft ended it on 2025-10-14). The
   Inspector lists it as "Windows 10 (past end of support)" with the date under the
   picker, and a host set to `windows_10` on Azure, Proxmox or ESXi gets an info note

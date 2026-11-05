@@ -31,7 +31,9 @@ WINDOWS_IMAGES = {
     "windows_server_2019": ("MicrosoftWindowsServer", "WindowsServer", "2019-datacenter-gensecond", "latest"),
     "windows_server_2022": ("MicrosoftWindowsServer", "WindowsServer", "2022-datacenter-azure-edition", "latest"),
     "windows_10": ("MicrosoftWindowsDesktop", "Windows-10", "win10-22h2-pro-g2", "latest"),
-    "windows_11": ("MicrosoftWindowsDesktop", "windows-11", "win11-23h2-pro", "latest"),
+    # Current release; Azure dropped the 23H2 Pro SKU (only 24h2/25h2/26h2 listed in
+    # eastus2 on 2026-11-05), so an older pin fails apply with image not found.
+    "windows_11": ("MicrosoftWindowsDesktop", "windows-11", "win11-26h2-pro", "latest"),
 }
 _DEFAULT_WINDOWS = WINDOWS_IMAGES["windows_server_2022"]
 

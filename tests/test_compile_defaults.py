@@ -77,7 +77,7 @@ def test_a_wks_with_no_os_is_windows_11_in_both_halves(provider):
     assert hv["ansible_connection"] == "psrp"
     image = {"gcp": "windows-cloud/windows-2022",
              "aws": "Windows_Server-2022-English-Full-Base",
-             "azure": '"win11-23h2-pro"'}[provider]
+             "azure": '"win11-26h2-pro"'}[provider]
     assert image in files["terraform/main.tf"]
 
 
@@ -100,7 +100,7 @@ def test_azure_terraform_falls_back_to_the_build_ansible_defaults_to():
         node = {"id": "%s01" % kind, "kind": kind, "overlay": {}}
         assert azure.image_for(plan, node) == azure.WINDOWS_IMAGES[build], kind
     assert azure.WINDOWS_IMAGES["windows_11"][:3] == (
-        "MicrosoftWindowsDesktop", "windows-11", "win11-23h2-pro")
+        "MicrosoftWindowsDesktop", "windows-11", "win11-26h2-pro")
 
 
 def test_a_dc_with_no_hostname_takes_its_node_id():
