@@ -79,7 +79,7 @@ def test_it_exports_the_operator_and_the_agent(tmp_path):
                     "CommandLine": "whoami", "StartDate": 1789000000,
                     "User": "NT AUTHORITY\\SYSTEM", "Computer": "BRAAVOS"}],
             agents=[{"Id": "a77", "Name": "beacon-1", "Listener": "http",
-                     "ExternalIP": "34.1.2.3", "Domain": "ESSOS",
+                     "ExternalIP": "203.0.113.23", "Domain": "ESSOS",
                      "Username": "khal.drogo", "Computer": "BRAAVOS"}])
     n, lines = run(tmp_path)
     assert n == 1

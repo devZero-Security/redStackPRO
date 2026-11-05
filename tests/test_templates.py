@@ -108,8 +108,8 @@ def test_hardening_values_are_in_the_schema_enum(doc):
 def test_every_shipped_template_stops_itself():
     """A range deployed and forgotten bills until someone remembers it, and the
     person most likely to forget is the one trying the product for the first
-    time. Michael's call 2026-09-13 after goad full turned out to be the one
-    range with nothing to stop it.
+    time. Added after goad full turned out to be the one range with nothing to
+    stop it.
 
     auto_stop is implemented for GCP and Azure; AWS gained it the same day. It is
     still ignored by proxmox and esxi, which are on-prem and bill nothing, so the

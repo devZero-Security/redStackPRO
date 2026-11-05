@@ -314,7 +314,7 @@ function Editor() {
   }, [document.mode, providers]);
 
   // The palette is the current canvas's kinds, so it re-fetches when the mode
-  // changes: redStackPRO shows the red-team kinds, Cyber Ranges the range kinds.
+  // changes: offense shows the attack kinds, defense the range kinds.
   useEffect(() => {
     api.palette(document.mode).then((body) => setPalette(body.groups)).catch(() => {});
   }, [document.mode]);

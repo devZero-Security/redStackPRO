@@ -85,7 +85,7 @@ function makeUser(rng, fqdn, taken, { privilege = "user", flaws = [] } = {}) {
 }
 
 // How many users a range of a given size wants. Small ranges (a handful of
-// hosts) get 10 to 20, larger ones 30 to 50, the counts Michael asked for. The
+// hosts) get 10 to 20, larger ones 30 to 50. The
 // caller passes the host count; the rng decides where in the band it lands.
 export function recommendedUserCount(hostCount, rng = Math.random) {
   const [lo, hi] = hostCount >= 5 ? [30, 50] : [10, 20];

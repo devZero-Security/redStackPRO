@@ -1003,7 +1003,7 @@ def _smoketest_gl():
 
 _TFVARS = {
     "azure": 'subscription_id = "s"\nlocation = "westus3"\nresource_group = "smk-lab-rg"\n',
-    "gcp": 'project = "dz-rt-range"\nregion = "us-central1"\nzone = "us-central1-a"\n',
+    "gcp": 'project = "example-project"\nregion = "us-central1"\nzone = "us-central1-a"\n',
     "aws": 'region = "eu-west-2"\n',
     "proxmox": 'proxmox_endpoint = "https://pve.lab:8006/"\n',
 }
@@ -1089,7 +1089,7 @@ _HELP_ROWS = {
 # The box rows under the title, after the wordmark.
 _HELP_HEAD = {
     "azure": [" Provider        Azure westus3", " Resource group  smk-lab-rg"],
-    "gcp": [" Provider        GCP us-central1", " Project         dz-rt-range"],
+    "gcp": [" Provider        GCP us-central1", " Project         example-project"],
     "aws": [" Provider        AWS eu-west-2", " Profile         default"],
 }
 # A (parenthesized) command is never split over two lines.
@@ -1324,15 +1324,15 @@ def _sweep_export(tmp_path, provider, state):
 
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
 @pytest.mark.parametrize("provider,swept", [
-    ("gcp", ["gcloud compute instances list --project dz-rt-range "
+    ("gcp", ["gcloud compute instances list --project example-project "
              "--filter=labels.redstackpro_deploy=abcd1234 "
              "--format=value(name,zone.basename())",
              "gcloud compute instances delete smk-dc01 --zone us-central1-b "
-             "--project dz-rt-range --quiet",
+             "--project example-project --quiet",
              "gcloud compute instances delete smk-jump --zone us-central1-a "
-             "--project dz-rt-range --quiet",
+             "--project example-project --quiet",
              "gcloud compute instances delete smk-orphan --zone us-central1-a "
-             "--project dz-rt-range --quiet"]),
+             "--project example-project --quiet"]),
     ("aws", ["aws ec2 describe-instances --region eu-west-2 --filters "
              "Name=tag:redstackpro_deploy,Values=abcd1234 "
              "Name=instance-state-name,Values=pending,running,stopping,stopped "
@@ -1389,7 +1389,7 @@ def test_teardown_on_a_terminal_deletes_only_on_the_name_or_yes(tmp_path, answer
     finally:
         os.close(follower)
         os.close(leader)
-    assert "\n Project         dz-rt-range\n" in done.stdout
+    assert "\n Project         example-project\n" in done.stdout
     assert "Type the range name (smoketest-gl) or yes to delete it: " in done.stdout
     ran = _calls(calls)
     if deleted:
@@ -1409,7 +1409,7 @@ def test_the_teardown_summary_manage_ps1_reads_is_the_same_text(tmp_path):
     assert done.stdout.splitlines() == [
         "=" * 62, " TEARDOWN   smoketest-gl", "-" * 62,
         " Provider        GCP us-central1",
-        " Project         dz-rt-range",
+        " Project         example-project",
         " --force         first deletes this range's instances, also",
         "                 any left out of its state",
         "=" * 62, "",
@@ -1489,7 +1489,7 @@ def test_MANAGE_ps1_prints_the_powershell_help_from_a_real_export(tmp_path):
 @pytest.mark.parametrize("provider,expect", [
     ("azure", "az vm list -g smk-lab-rg -d --query sort_by([?contains(['smk-dc01','smk-jump'], "
               "name)], &name)[].{Name:name, State:powerState, PublicIP:publicIps} -o table"),
-    ("gcp", "gcloud compute instances list --project dz-rt-range --zones "
+    ("gcp", "gcloud compute instances list --project example-project --zones "
             "us-central1-a,us-central1-b --filter=name=(smk-dc01 smk-jump) --sort-by=name "
             "--format=table(name,zone.basename(),status,"
             "networkInterfaces[0].accessConfigs[0].natIP:label=EXTERNAL_IP)"),
@@ -1615,7 +1615,7 @@ from redstackpro.deploy import DEPLOY_PS1, PHASE_WIDTH, output_helpers, phase_ti
 from shipped import load
 
 GOAD_LIGHT = TEMPLATES / "goad/goad-light.json"
-JUMP_IP = "20.114.255.159"
+JUMP_IP = "198.51.100.159"
 
 
 @pytest.mark.parametrize("provider", ["gcp", "aws", "azure"])

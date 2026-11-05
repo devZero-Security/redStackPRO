@@ -25,9 +25,8 @@ const LABELS = {
   esxi: "ESXi",
 };
 
-// Familiarity first, and GCP leads because it is the one the initial customer
-// runs. A provider we have no label for falls back to its registry name, so the
-// chooser lists it rather than hiding it.
+// Familiarity first, GCP leading. A provider we have no label for falls back to
+// its registry name, so the chooser lists it rather than hiding it.
 const ORDER = ["gcp", "aws", "azure", "proxmox", "esxi"];
 
 export function labelFor(name) {
