@@ -82,8 +82,8 @@ versioning, and dates are UTC.
     SPNs, Delegate to and Weak password inputs where a flaw needs them.
   - Delegate to, on a user with constrained delegation and on a computer with
     constrained delegation (Kerberos only), is picked from the services the
-    domain's Windows hosts run (CIFS, LDAP on a DC, MSSQL, HTTP, HOST), or typed by
-    hand. Ticking the delegation fills in CIFS on the domain controller.
+    domain's Windows hosts run (CIFS, HTTP, HOST, LDAP on a DC, MSSQL where SQL
+    Server runs), or typed by hand. Ticking the delegation fills in CIFS on the domain controller.
 - A domain takes a `groups` list for groups that only an access right names. The
   GOAD blueprints list theirs, so the domain controller creates them up front.
 
