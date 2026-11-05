@@ -59,4 +59,23 @@ test("the panel opens on deploy.tfvars, the one file a person must edit", () => 
   assert.ok(!preferred.includes("firewall.tf"));
 });
 
+const { api } = await import("./api.js");
+
+test("the download carries the browser's timezone offset", () => {
+  assert.equal(api.archiveUrl("abc", 300), "/api/v1/compile/abc/archive?tz_offset=300");
+  assert.equal(api.archiveUrl("abc", -330), "/api/v1/compile/abc/archive?tz_offset=-330");
+  assert.equal(
+    api.archiveUrl("abc"),
+    `/api/v1/compile/abc/archive?tz_offset=${new Date().getTimezoneOffset()}`
+  );
+});
+
+test("both download buttons take the archive URL from api.js", () => {
+  for (const file of ["src/Export.jsx", "src/App.jsx"]) {
+    const text = readFileSync(file, "utf8");
+    assert.ok(text.includes("fetch(api.archiveUrl(result.compile_id))"), file);
+    assert.ok(!text.includes("/archive`"), `${file} builds its own archive URL`);
+  }
+});
+
 console.log(`\n${passed} passed`);
