@@ -17,9 +17,10 @@ test("north offers the services its hosts really run, the DC first", () => {
   assert.ok(spns.includes("LDAP/winterfell.north.sevenkingdoms.local"));
   assert.ok(spns.includes("MSSQLSvc/castelblack.north.sevenkingdoms.local:1433"));
   assert.ok(spns.includes("HTTP/castelblack.north.sevenkingdoms.local"));
-  // No SQL or IIS on the DC, so neither is offered there.
+  // No SQL on the DC, so MSSQL is not offered there. HTTP is, as it maps to the
+  // computer account (GOAD's castelblack delegates to HTTP/winterfell).
   assert.ok(!spns.includes("MSSQLSvc/winterfell.north.sevenkingdoms.local:1433"));
-  assert.ok(!spns.includes("HTTP/winterfell.north.sevenkingdoms.local"));
+  assert.ok(spns.includes("HTTP/winterfell.north.sevenkingdoms.local"));
 });
 
 test("a computer is never offered as its own delegation target", () => {

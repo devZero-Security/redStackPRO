@@ -38,9 +38,12 @@ export function spnChoices(document, domainId, { exclude } = {}) {
     if (ov.role === "sql" || services.includes("mssql")) {
       spns.push({ spn: `MSSQLSvc/${fq}:1433`, label: "MSSQL", about: "SQL Server" });
     }
-    if (services.includes("iis")) {
-      spns.push({ spn: `HTTP/${fq}`, label: "HTTP", about: "IIS web" });
-    }
+    // HTTP maps to the computer account by default, so it is a live target with
+    // or without IIS (GOAD's castelblack delegates to HTTP/winterfell).
+    spns.push({
+      spn: `HTTP/${fq}`, label: "HTTP",
+      about: services.includes("iis") ? "IIS web and WinRM" : "WinRM",
+    });
     spns.push({ spn: `HOST/${fq}`, label: "HOST", about: "services and scheduled tasks" });
     groups.push({ host: h.name, kind: node.kind, spns });
   }
