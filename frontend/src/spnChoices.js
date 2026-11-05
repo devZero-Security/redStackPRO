@@ -67,6 +67,24 @@ export function spnOptionGroups(groups) {
   }));
 }
 
+// SPNs a service account (a Kerberoastable user) can carry: SQL Server and IIS
+// on the domain's hosts. Never HOST, CIFS or LDAP: those sit on the computer
+// account, so a user carrying one is a duplicate SPN.
+export function userSpnChoices(document, domainId) {
+  const domain = (document?.nodes || []).find((n) => n.id === domainId);
+  const fqdn = domain?.overlay?.fqdn;
+  if (!fqdn) return [];
+  const out = [];
+  for (const h of joinedHosts(document, domainId)) {
+    const node = document.nodes.find((n) => n.id === h.id);
+    if (!isWindowsHost(node)) continue;
+    const fq = `${h.name}.${fqdn}`;
+    if (runsSql(node)) out.push({ spn: `MSSQLSvc/${fq}:1433`, about: `SQL Server on ${h.name}` });
+    if (runsIis(node)) out.push({ spn: `HTTP/${fq}`, about: `IIS on ${h.name}` });
+  }
+  return out;
+}
+
 // What a fresh delegation points at: CIFS on the domain controller, the classic
 // target, else CIFS on the first other Windows host.
 export function defaultDelegateTo(document, domainId, opts) {

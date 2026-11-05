@@ -302,3 +302,25 @@ describe("read-only blueprints and accessibility", () => {
     }
   });
 });
+
+describe("user SPN suggestions", () => {
+  test("a Kerberoastable user is offered the domain's SQL and IIS SPNs only", () => {
+    const seen = [];
+    render(<Panel blueprint={LIGHT} id="north" seen={seen} />);
+    fireEvent.click(screen.getByRole("button", { name: "Sansa Stark" }));
+    const suggest = screen.getByRole("combobox", { name: "Add a service SPN" });
+    const offered = optionValues(suggest).filter(Boolean);
+    expect(offered).toEqual([
+      "MSSQLSvc/castelblack.north.sevenkingdoms.local:1433",
+      "HTTP/castelblack.north.sevenkingdoms.local",
+    ]);
+    fireEvent.change(suggest, { target: { value: "HTTP/castelblack.north.sevenkingdoms.local" } });
+    const sansa = seen.at(-1).users.find((u) => u.username === "sansa.stark");
+    expect(sansa.spns).toEqual([
+      "HTTP/eyrie.north.sevenkingdoms.local", "HTTP/castelblack.north.sevenkingdoms.local",
+    ]);
+    expect(optionValues(screen.getByRole("combobox", { name: "Add a service SPN" })).filter(Boolean)).toEqual([
+      "MSSQLSvc/castelblack.north.sevenkingdoms.local:1433",
+    ]);
+  });
+});

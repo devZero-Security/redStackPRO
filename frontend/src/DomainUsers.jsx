@@ -6,7 +6,7 @@ import {
 } from "./rangeUsers.js";
 import { allGroups, groupKnown, joinedHosts } from "./domainDirectory.js";
 import { DelegateToPicker } from "./DelegateToPicker.jsx";
-import { defaultDelegateTo, spnChoices } from "./spnChoices.js";
+import { defaultDelegateTo, spnChoices, userSpnChoices } from "./spnChoices.js";
 
 const PRIVILEGES = ["user", "local_admin", "domain_admin", "enterprise_admin"];
 
@@ -165,6 +165,26 @@ function ListField({ label, value, placeholder, help, disabled, onChange }) {
   );
 }
 
+// Service SPNs on this domain's hosts that a user can carry, offered next to
+// the free list. Picking one adds it; the list stays editable by hand.
+function SpnSuggest({ value, choices, onAdd }) {
+  const have = new Set((value || []).map((v) => v.toLowerCase()));
+  const left = choices.filter((c) => !have.has(c.spn.toLowerCase()));
+  if (!left.length) return null;
+  return (
+    <div className="rg-field">
+      <select aria-label="Add a service SPN" value="" onChange={(e) => e.target.value && onAdd(e.target.value)}>
+        <option value="">Add a service SPN from this domain</option>
+        {left.map((c) => (
+          <option key={c.spn} value={c.spn}>
+            {c.spn} ({c.about})
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 // The user accounts on a domain. A person can add one by hand, change its
 // privilege, expand it to edit its email, groups, and misconfigurations, or press
 // Populate to fill the domain with a realistic population so a lab has bodies to
@@ -181,6 +201,7 @@ export function DomainUsers({ node, document, rangeHostCount, flawOptions = [], 
   const offered = SHOWN_FLAWS.filter((f) => !flawOptions.length || flawOptions.includes(f.id));
   const member = joinedHosts(document, node.id).find((h) => h.kind !== "dc");
   const spnGroups = spnChoices(document, node.id);
+  const userSpns = userSpnChoices(document, node.id);
 
   const patch = (i, p) => onChange(updateUser(node, i, p));
 
@@ -367,14 +388,23 @@ export function DomainUsers({ node, document, rangeHostCount, flawOptions = [], 
                       />
                     ) : null}
                     {hasFlaw(u, "kerberoastable") || u.spns?.length ? (
-                      <ListField
-                        label="SPNs"
-                        value={u.spns}
-                        placeholder={`HTTP/${member ? member.name : "srv01"}.${fqdn}`}
-                        help={`Comma separated. Empty sets MSSQLSvc/${u.username}.${fqdn}:1433.`}
-                        disabled={readOnly}
-                        onChange={(v) => patch(i, { spns: v })}
-                      />
+                      <>
+                        <ListField
+                          label="SPNs"
+                          value={u.spns}
+                          placeholder={`HTTP/${member ? member.name : "srv01"}.${fqdn}`}
+                          help={`Comma separated. Empty sets MSSQLSvc/${u.username}.${fqdn}:1433.`}
+                          disabled={readOnly}
+                          onChange={(v) => patch(i, { spns: v })}
+                        />
+                        {readOnly ? null : (
+                          <SpnSuggest
+                            value={u.spns}
+                            choices={userSpns}
+                            onAdd={(spn) => patch(i, { spns: [...(u.spns || []), spn] })}
+                          />
+                        )}
+                      </>
                     ) : null}
                     {hasFlaw(u, "constrained_delegation") || u.delegate_to?.length ? (
                       <DelegateToPicker

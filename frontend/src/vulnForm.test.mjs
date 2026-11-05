@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { VULN_PARAMS } from "./vulns.js";
+import { userSpnChoices } from "./spnChoices.js";
 import {
   FS_RIGHTS, PICKS, ROW_KINDS, bareUserChoices, choicesFor, defaultLinkedTargets,
   domainUserChoices, formSections, getVar, groupChoices, keysOutsideForm, matchOption,
@@ -247,6 +248,25 @@ test("an ESC key set on another host in the domain is found", () => {
     { host: "meereen", value: "ESSOS\\viserys.targaryen" });
   assert.strictEqual(setElsewhere(goad, "meereen", "esc7_manager"), null);
   assert.strictEqual(setElsewhere(goad, "braavos", "bot_user"), null, "only the domain-wide keys");
+});
+
+test("user SPN suggestions are SQL and IIS service SPNs only", () => {
+  const spns = userSpnChoices(light, "north").map((c) => c.spn);
+  assert.deepStrictEqual(spns, [
+    "MSSQLSvc/castelblack.north.sevenkingdoms.local:1433",
+    "HTTP/castelblack.north.sevenkingdoms.local",
+  ]);
+  for (const doc of Object.values(BLUEPRINTS)) {
+    for (const d of doc.nodes.filter((n) => n.kind === "domain")) {
+      for (const { spn } of userSpnChoices(doc, d.id)) {
+        assert.match(spn, /^(MSSQLSvc\/[^/]+:1433|HTTP\/[^/]+)$/);
+      }
+    }
+  }
+  assert.deepStrictEqual(userSpnChoices(light, "sevenkingdoms"), [], "no SQL or IIS there");
+  assert.deepStrictEqual(userSpnChoices(nha, "academy").map((c) => c.spn), [
+    "HTTP/web.academy.ninja.lan", "MSSQLSvc/sql.academy.ninja.lan:1433",
+  ]);
 });
 
 console.log(`vulnForm: ${passed} passed`);
