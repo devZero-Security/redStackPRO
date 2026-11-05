@@ -99,10 +99,13 @@ body {
 
 /* header */
 
+/* Wraps onto a second row whenever its items do not fit, at any width. A header
+   wider than the window made the whole page scroll sideways. */
 .rg-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 6px 10px;
   padding: 8px 12px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
@@ -1669,7 +1672,6 @@ body:has(.rg-resizer.is-dragging) { cursor: col-resize; user-select: none; }
 
 /* Toolbar wraps before its controls get pushed off-screen. */
 @media (max-width: 1300px) {
-  .rg-header { flex-wrap: wrap; }
   .rg-name { min-width: 140px; }
 }
 

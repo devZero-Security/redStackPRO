@@ -4,11 +4,12 @@ import React, { useCallback, useState } from "react";
 // a per-viewer convenience, never part of a topology.
 // One width for the right panel, whichever tab is open, so switching between
 // Inspector and Export never jumps.
-export const PANEL_DEFAULTS = { palette: 250, right: 480 };
 export const PANEL_LIMITS = {
   palette: [200, 520],
   right: [320, 960],
 };
+// The canvas keeps at least this much when the panels open at their widest.
+export const CANVAS_MIN = 480;
 const KEY = "rsp.panelWidths";
 const STEP = 16;
 
@@ -17,16 +18,29 @@ export function clampWidth(panel, width) {
   return Math.round(Math.min(max, Math.max(min, width)));
 }
 
+// Both panels open at their widest, scaled down together only as far as it
+// takes to leave the canvas CANVAS_MIN on a narrower screen.
+export function defaultWidths(viewport) {
+  const vw = Number.isFinite(viewport) ? viewport
+    : typeof window !== "undefined" ? window.innerWidth : 1920;
+  const want = { palette: PANEL_LIMITS.palette[1], right: PANEL_LIMITS.right[1] };
+  const total = want.palette + want.right;
+  const room = vw - CANVAS_MIN;
+  if (room >= total) return want;
+  const k = Math.max(0, room) / total;
+  return { palette: clampWidth("palette", want.palette * k), right: clampWidth("right", want.right * k) };
+}
+
 function load() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(KEY) || "{}");
-    const out = { ...PANEL_DEFAULTS };
-    for (const panel of Object.keys(PANEL_DEFAULTS)) {
+    const out = defaultWidths();
+    for (const panel of Object.keys(PANEL_LIMITS)) {
       if (Number.isFinite(saved[panel])) out[panel] = clampWidth(panel, saved[panel]);
     }
     return out;
   } catch {
-    return { ...PANEL_DEFAULTS };
+    return defaultWidths();
   }
 }
 
@@ -47,7 +61,7 @@ export function usePanelWidths() {
       return next;
     });
   }, []);
-  const reset = useCallback((panel) => setWidth(panel, PANEL_DEFAULTS[panel]), [setWidth]);
+  const reset = useCallback((panel) => setWidth(panel, defaultWidths()[panel]), [setWidth]);
   return { widths, setWidth, reset };
 }
 

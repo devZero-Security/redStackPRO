@@ -2,8 +2,10 @@ import React from "react";
 import { beforeEach, describe, expect, test } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import {
-  PANEL_DEFAULTS, PANEL_LIMITS, PanelResizer, clampWidth, usePanelWidths,
+  CANVAS_MIN, PANEL_LIMITS, PanelResizer, clampWidth, defaultWidths, usePanelWidths,
 } from "./PanelResizer.jsx";
+
+const PANEL_DEFAULTS = defaultWidths();
 
 function Harness() {
   const { widths, setWidth, reset } = usePanelWidths();
@@ -22,6 +24,20 @@ const now = (name) => Number(handle(name).getAttribute("aria-valuenow"));
 
 describe("side panel resizing", () => {
   beforeEach(() => window.localStorage.clear());
+
+  test("panels open at their widest when the screen has room", () => {
+    expect(defaultWidths(2560)).toEqual({ palette: PANEL_LIMITS.palette[1], right: PANEL_LIMITS.right[1] });
+  });
+
+  test("on a narrower screen both shrink together and the canvas keeps its minimum", () => {
+    for (const vw of [1920, 1438, 1280, 1100]) {
+      const w = defaultWidths(vw);
+      expect(w.palette + w.right).toBeLessThanOrEqual(vw - CANVAS_MIN + 1);
+      expect(w.palette).toBeGreaterThanOrEqual(PANEL_LIMITS.palette[0]);
+      expect(w.right).toBeGreaterThanOrEqual(PANEL_LIMITS.right[0]);
+      expect(w.right).toBeGreaterThan(w.palette);
+    }
+  });
 
   test("starts at the defaults, one right width for both tabs", () => {
     render(<Harness />);
