@@ -338,14 +338,20 @@ describe("vulns_vars help lists the keys of the ticked vulns", () => {
   // The keys used to be a help list under the JSON; they are now the form above
   // it (vulnForm.test.jsx covers the inputs), and the JSON is its advanced view.
   test("a ticked parameterized vuln lists its keys, required or optional, in the form", () => {
-    render(<HostHarness overlay={{ vulns: ["smbv1", "constrained_delegation_kerberos", "ntlm_relay"] }} />);
+    render(
+      <HostHarness overlay={{ vulns: ["smbv1", "constrained_delegation_kerberos", "sysvol_secret", "ntlm_relay"] }} />
+    );
     const box = within(document.querySelector(".rg-vuln-form"));
     expect(box.getByText("Constrained delegation (Kerberos only)")).toBeTruthy();
     expect(box.getByText("delegate_to")).toBeTruthy();
-    expect(box.getByText("ntlm_relay_user")).toBeTruthy();
-    expect(box.getByText("required (or bot_user)")).toBeTruthy();
-    expect(box.getByText("ntlm_relay_target")).toBeTruthy();
-    expect(box.getAllByText("optional")).toHaveLength(1);
+    expect(box.getByText("required")).toBeTruthy();
+    expect(box.getByText("sysvol_secret.account")).toBeTruthy();
+    expect(box.getByText("sysvol_secret.name")).toBeTruthy();
+    expect(box.getAllByText("optional")).toHaveLength(2);
+    // A User activity vuln keeps its box, pointing there, and shows no key twice.
+    const relay = within(box.getByText("NTLM relay posture").closest("fieldset"));
+    expect(relay.getByText("Set under User activity above.")).toBeTruthy();
+    expect(box.queryByText("ntlm_relay_user")).toBeNull();
     // smbv1 reads nothing, so it gets no entry.
     expect(box.queryByText("SMBv1 enabled")).toBeNull();
     const jsonField = screen.getByRole("textbox", { name: "Edit as JSON" }).closest(".rg-field");

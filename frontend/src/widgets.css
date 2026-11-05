@@ -86,3 +86,32 @@
 .rg-vuln-rows-add textarea { grid-column: 1 / -1; }
 .rg-vuln-rows-cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .rg-vuln-rows-add button { padding: 4px 10px; }
+
+/* User activity: one row per simulated person, read as a sentence whose
+   blanks are the pickers. The sentence wraps, so a narrow panel stacks them. */
+.rg-activities { gap: 6px; }
+.rg-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.rg-activity.is-on { border-color: var(--muted); }
+.rg-activity-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rg-activity-sentence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  font-size: var(--fs-2);
+}
+.rg-activity-sentence select, .rg-activity-sentence input { min-width: 0; max-width: 100%; }
+.rg-activity-pick { display: inline-flex; flex-direction: column; gap: 3px; min-width: 0; max-width: 100%; }
+.rg-activity-wide { flex: 1 1 12em; }
+.rg-activity-num { width: 4.5em; }
+.rg-activity-sub { display: flex; align-items: center; gap: 6px; font-size: var(--fs-1); color: var(--muted); }
+.rg-activity-sub input { flex: 1; min-width: 0; }
+.rg-activity-script { display: flex; flex-direction: column; gap: 4px; }
+.rg-activity > .rg-widget-warn, .rg-activity-script > .rg-widget-warn { display: block; }

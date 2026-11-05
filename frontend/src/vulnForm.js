@@ -307,8 +307,10 @@ export function setVar(vars, key, value) {
 
 // The ticked vulns that read settings, in catalog order, each with the keys it
 // shows. A key two vulns read (bot_user) shows once, under the first; the other
-// lists it in `shared` with the vuln it shows under.
-export function formSections(vulns) {
+// lists it in `shared` with the vuln it shows under. A vuln in `elsewhere` (the
+// User activity ids) is marked so: its keys are edited there, not in the form,
+// but still count as the form's for the JSON view.
+export function formSections(vulns, elsewhere = null) {
   const ticked = new Set(vulns || []);
   const seen = new Map();
   const out = [];
@@ -324,7 +326,7 @@ export function formSections(vulns) {
       seen.set(p.key, VULN_LABEL[id]);
       params.push(p);
     }
-    out.push({ vuln: id, label: VULN_LABEL[id], params, shared });
+    out.push({ vuln: id, label: VULN_LABEL[id], params, shared, elsewhere: !!elsewhere?.has(id) });
   }
   return out;
 }
