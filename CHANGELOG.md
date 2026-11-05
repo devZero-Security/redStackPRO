@@ -80,6 +80,10 @@ versioning, and dates are UTC.
   - gMSA accounts and group nesting, which used to show `[object Object]`.
   - Domain users show only the flaws that take effect, with Description, Password,
     SPNs, Delegate to and Weak password inputs where a flaw needs them.
+  - Delegate to, on a user with constrained delegation and on a computer with
+    constrained delegation (Kerberos only), is picked from the services the
+    domain's Windows hosts run (CIFS, LDAP on a DC, MSSQL, HTTP, HOST), or typed by
+    hand. Ticking the delegation fills in CIFS on the domain controller.
 - A domain takes a `groups` list for groups that only an access right names. The
   GOAD blueprints list theirs, so the domain controller creates them up front.
 
@@ -212,6 +216,10 @@ versioning, and dates are UTC.
   timezone, hours off the requested stop.
 - A comma typed into a list field was deleted, so a second entry could only be
   pasted.
+- A box on the canvas with contents but no stored size was drawn at least 420 by
+  260, so in dracarys, minilab, nha and sccm a domain covered the jumpbox or the
+  domain below it. Such a box now fits its contents; an empty one keeps the larger
+  size as a drop target.
 
 ## [0.9.2] (2026-11-04)
 
