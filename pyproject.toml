@@ -18,6 +18,13 @@ dependencies = [
 [project.scripts]
 redstackpro = "redstackpro.cli:main"
 
+[project.urls]
+Homepage = "https://redstackpro.com"
+Repository = "https://github.com/devZero-Security/redStackPRO"
+Documentation = "https://github.com/devZero-Security/redStackPRO/wiki"
+Issues = "https://github.com/devZero-Security/redStackPRO/issues"
+Changelog = "https://github.com/devZero-Security/redStackPRO/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
 # alembic in dev to author revisions and run the drift guard; in postgres because
 # a real deployment upgrades the schema on startup. The core install stays free

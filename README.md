@@ -32,23 +32,26 @@ canvas modes are **Offense** (attack infrastructure) and **Defense** (defensive 
 export names its handoff `OFFENSE-BRIEFING.md` or `DEFENSE-BRIEFING.md` to match.
 
 Split horizon C2, attack infrastructure: two front doors that do not share a fate,
-Apache fronting Sliver and Nginx fronting Mythic, each redirector on its own peered
-network, with the teamservers, collector, and operators behind a jumpbox.
+Apache fronting Sliver and Nginx fronting Mythic and Adaptix, each redirector on its
+own peered network, with the teamservers, collector, and operators behind a jumpbox.
 
-![Split horizon C2 on the canvas: two redirector networks, Apache fronting Sliver and Nginx fronting Mythic, over a shared C2 subnet with the teamservers, an OpenSearch collector, operators and a jumpbox.](docs/images/split-horizon.png)
+![Split horizon C2 on the canvas: two redirector networks, Apache fronting Sliver and Nginx fronting Mythic and Adaptix, over a shared C2 subnet with the teamservers, an OpenSearch collector, operators and a jumpbox.](docs/images/split-horizon.png)
 
 **Multiple operators, one stack.** An attack-infrastructure jumpbox can name a
 list of `operators` (handle plus role), and each gets a Guacamole portal login
 on the shared lab password. Set the jumpbox's `access_mode` to `wireguard` or
 `openvpn` (default is a public portal) and every operator also gets a personal
-VPN credential generated on the jumpbox at apply: the keys never leave the box
-or enter the export, only the client config file does. The portal logins today
-share the one lab password, so per-operator isolation comes from each operator's
-own VPN credential, not the portal login; individual portal passwords are on the
-roadmap. On a VPN access mode the portal closes to the internet and moves behind
-the tunnel, while SSH stays open so the admin can keep deploying and managing the
-box. Add or remove a teammate on a running jumpbox with
-`sudo rsp-operator add <handle>`. See the
+VPN credential, generated on the jumpbox during provisioning: the keys never
+enter the export, and each operator's client config, which holds their private
+key, waits on the jumpbox for you to fetch and hand over. The portal logins of
+the operators named in the topology share the one lab password, so per-operator
+isolation comes from each operator's own VPN credential, not the portal login;
+individual portal passwords for them are on the roadmap. On a VPN access mode the
+portal closes to the internet and moves behind the tunnel, while SSH stays open
+so the admin can keep deploying and managing the box, and
+`sudo rsp-operator add <handle>` (also `remove` and `list`) adds a teammate to
+the running jumpbox, printing their VPN credential and a portal password of
+their own. See the
 wiki [Deploying a Range](https://github.com/devZero-Security/redStackPRO/wiki/Deploying-a-Range).
 
 Harbor, a target range: a small corporate forest, a root domain and a child over a
@@ -63,7 +66,8 @@ the reference range the written solution follows.
 
 > [!IMPORTANT]
 > **The export is the boundary.** The canvas generates files; you run them under
-> your own credentials. redStackPRO never deploys anything and never holds a secret.
+> your own credentials. redStackPRO never deploys anything and never holds your
+> cloud credentials or keys.
 
 > [!CAUTION]
 > **Authorized use only.** redStackPRO builds offensive infrastructure and
@@ -103,7 +107,8 @@ build):
 
 The canvas listens on 8000 inside the container. To serve it on a different host
 port, change the left half of the mapping (`-p 8787:8000`), or set
-`REDSTACKPRO_PORT` for compose (`REDSTACKPRO_PORT=8787 docker compose up`).
+`REDSTACKPRO_PORT` for compose (`REDSTACKPRO_PORT=8787 docker compose up` in bash,
+`$env:REDSTACKPRO_PORT=8787; docker compose up` in PowerShell).
 
 Compose also carries an optional Postgres backend for a shared deployment:
 
@@ -120,20 +125,25 @@ own machine, exactly as in the from-source flow below.
 
 Python 3.11 or newer, and Node 24 for the canvas.
 
-    git clone <this repo> && cd redStackPRO
-    python -m venv .venv && . .venv/bin/activate
+    git clone https://github.com/devZero-Security/redStackPRO.git && cd redStackPRO
+    python -m venv .venv
+    . .venv/bin/activate            # bash (Linux, macOS)
+    .venv\Scripts\Activate.ps1      # PowerShell (Windows)
     pip install -e ".[dev]"
 
 **The canvas** is two processes, the API and the web app:
 
-    redstackpro serve                            # http://127.0.0.1:8000
-    cd frontend && npm install && npm run dev
+    redstackpro serve                            # the API, http://127.0.0.1:8000
+    cd frontend && npm install && npm run dev    # the canvas, http://localhost:5173
 
 `redstackpro serve --port 8787` moves the API to a different port. Point the
-canvas dev server at it with `REDSTACKPRO_API=http://127.0.0.1:8787`.
+canvas dev server at it by starting it with the variable set:
 
-Open it, use **Load blueprint** (the button, or the mode palette) to open a
-shipped starting point, choose your cloud in the toolbar
+    REDSTACKPRO_API=http://127.0.0.1:8787 npm run dev               # bash
+    $env:REDSTACKPRO_API = 'http://127.0.0.1:8787'; npm run dev     # PowerShell
+
+Open `http://localhost:5173`, use **Load blueprint** (the button, or the mode
+palette) to open a shipped starting point, choose your cloud in the toolbar
 provider selector (GCP, AWS, or Azure), open the Export tab (it compiles as you go), then
 Download. You get a zip of the working directory described below. Extract it to
 its own folder and run every step from there; the Export tab lists the steps for
@@ -145,11 +155,14 @@ line, same compiler, same output:
     redstackpro compile frontend/public/goad/goad-light.json -o export
 
 The command line defaults to GCP. Pass `--provider aws` for AWS or
-`--provider azure` for Azure.
+`--provider azure` for Azure. `-o` replaces the folder it writes to: compile a
+changed topology into a new folder, because recompiling over a deployed export
+deletes its key and its Terraform state.
 
 That writes about **200 files**: Terraform for the cloud, Ansible for everything
-that happens on the boxes, a `deploy.sh`, and a `DEFENSE-BRIEFING.md` telling you the
-credentials and what is planted where. `goad-light` is a two-domain Active
+that happens on the boxes, a `deploy.sh`, a `DEPLOYMENT-GUIDE.md` with the steps for
+this export, and a `DEFENSE-BRIEFING.md` telling you the credentials and what is
+planted where. `goad-light` is a two-domain Active
 Directory range: `sevenkingdoms` and its child `north`, a parent-child trust in
 one forest, two domain controllers and a member server, plus a jumpbox.
 
@@ -157,7 +170,7 @@ one forest, two domain controllers and a member server, plus a jumpbox.
 > **Two things before you deploy.** Your cloud identity needs permission to
 > create the resources the export builds (VPCs or networks, subnets, security
 > groups or firewall rules, instances, elastic or static IPs), and your machine
-> needs `terraform`, `ssh`, `tar`, Python 3.8 or newer, and your cloud's CLI
+> needs Terraform 1.5 or newer, `ssh`, `tar`, Python 3.8 or newer, and your cloud's CLI
 > (`gcloud`, `aws`, or `az`): `deploy.sh` checks your login with it and
 > `manage.sh` runs through it. redStackPRO generates the code and installs none
 > of that for you; Ansible installs itself on the jumpbox. On Windows, Git for
@@ -180,7 +193,12 @@ one forest, two domain controllers and a member server, plus a jumpbox.
 >     aws sts get-caller-identity
 >
 > Attach the `AmazonEC2FullAccess` managed policy to the IAM user or role you
-> configure.
+> configure. Every shipped blueprint also turns on auto-stop, which on AWS creates
+> an IAM role and an EventBridge Scheduler schedule, so the identity also needs
+> `iam:CreateRole`, `iam:PutRolePolicy`, `iam:PassRole`, and
+> `scheduler:CreateSchedule`, plus the read and delete actions listed in the wiki
+> [Cloud Prerequisites](https://github.com/devZero-Security/redStackPRO/wiki/Cloud-Prerequisites#aws).
+> Or turn auto-stop off in Topology settings before you export.
 >
 > **GCP**
 >
@@ -223,7 +241,9 @@ one forest, two domain controllers and a member server, plus a jumpbox.
 
 To deploy it, work from the export folder: make an SSH key for the range hosts
 in `keys/` (the deploy also finds `~/.ssh/id_ed25519`), fill in
-`deploy.tfvars` (at the export root), and run `deploy.sh`:
+`deploy.tfvars` (at the export root: at least `operator_source_ranges`, the IP you
+connect from as a `/32`, plus `project` on GCP or `subscription_id` on Azure), and
+run `deploy.sh`:
 
     cd export
     ssh-keygen -t ed25519 -f keys/id_ed25519 -N ""
@@ -233,11 +253,13 @@ in `keys/` (the deploy also finds `~/.ssh/id_ed25519`), fill in
 time and aborts if `deploy.tfvars` is missing, so edit the root file, not the
 one under `terraform/`.
 
-On Windows, use PowerShell, where the key's empty passphrase is written `-N ''`,
-and run `.\deploy.ps1` instead: `bash deploy.sh` at a PowerShell prompt launches
-WSL, a different filesystem with different credentials.
+On Windows, use PowerShell and run `.\deploy.ps1` instead: `bash deploy.sh` at a
+PowerShell prompt launches WSL, a different filesystem with different credentials.
+Make the key without `-N` and press Enter twice when it asks for a passphrase: the
+deploy needs a key with no passphrase, and Windows PowerShell 5.1 drops an empty
+`-N ''`, so ssh-keygen stops without writing a key.
 
-    ssh-keygen -t ed25519 -f keys\id_ed25519 -N ''
+    ssh-keygen -t ed25519 -f keys\id_ed25519
     .\deploy.ps1
 
 See the wiki
@@ -263,16 +285,18 @@ printed. It ends on a `result:` line, `result: ok` or
 wrong, attach the newest one to a GitHub issue; the `FAILED` box prints its path
 and the link.
 
-**Check it worked.** The export ships `verify.py` next to `deploy.sh`. Run it
-against the deployed range to confirm the path end to end:
+**Check it worked.** The export ships `verify.py` next to `deploy.sh`. It needs
+PyYAML on your machine (`python -m pip install pyyaml`). Run it against the
+deployed range to confirm the path end to end:
 
-    python verify.py doors .     # redirector front doors, from outside
+    python verify.py doors .     # offense only: redirector front doors, from outside
     python verify.py stack .     # the range over SSH from the jumpbox
 
-Each exits 0 when every check passes. On an offense range, the generated
-`OFFENSE-BRIEFING.md` holds the C2 payload recipe (callback domain, URI prefix,
-and gating header per redirector), and `sudo rsp-check` on a redirector checks
-the same path from the box itself.
+Each exits 0 when every check passes, 1 when one fails, and 2 when it cannot run
+(for example `doors` on a defense range, which has no redirector). On an offense
+range, the generated `OFFENSE-BRIEFING.md` holds the C2 payload recipe (callback
+domain, URI prefix, and gating header per redirector), and `sudo rsp-check` on a
+redirector checks the same path from the box itself.
 
 **Manage and tear down.** The export also ships lifecycle scripts, `manage.sh`
 (and `manage.ps1` on Windows), for the running range. They take `status`,
@@ -283,6 +307,13 @@ a script. It writes its own `logs/teardown-<UTC timestamp>.log`, named in its
 closing box. Run either script with no command for a help screen written for the
 export's provider: what each command does there, what still bills after `stop`,
 and the CLI login it needs.
+
+Every shipped blueprint turns on auto-stop: the range stops itself 8 hours after
+the first apply, then daily at that time. Instances are stopped, not deleted, so
+`start` brings the range back; disks and reserved addresses still bill. Change it
+or turn it off in Topology settings (the Inspector tab with nothing selected) and
+export again. A topology you start from an empty canvas has no auto-stop until
+you set one.
 
     bash manage.sh status
     bash manage.sh start
@@ -365,6 +396,8 @@ target ranges on the same canvas.
 
 ## 📚 Docs
 
+- [Wiki](https://github.com/devZero-Security/redStackPRO/wiki)
+- [CHANGELOG.md](CHANGELOG.md)
 - [docs/architecture.md](docs/architecture.md)
 - [docs/schema.md](docs/schema.md)
 - [docs/validation.md](docs/validation.md)
@@ -389,8 +422,9 @@ target ranges on the same canvas.
     docker-compose.yml       local run, with an optional Postgres profile
     .dockerignore            build context trim
     README.md                this file
-    LICENSE                  MIT, with the GOAD templates under GPLv3
-    .github/                 CI workflows
+    CHANGELOG.md             release notes per version
+    LICENSE                  MIT (the GOAD files in frontend/public/goad/ carry their own GPLv3 LICENSE)
+    .github/                 the CI workflow and the issue templates
 
 ---
 

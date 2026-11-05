@@ -2,7 +2,8 @@
 #   docker compose up                      SQLite, http://127.0.0.1:8000
 #   docker compose --profile postgres up   Postgres (set REDSTACKPRO_DATABASE_URL to the db URL)
 #   REDSTACKPRO_PORT=8787 docker compose up  serve on a different host port (default 8000)
-# The app retries until Postgres is ready, so no hard depends_on is needed.
+# The app does not wait for Postgres: if it starts first it exits, and
+# restart: unless-stopped starts it again until the database is up.
 
 name: redstackpro
 

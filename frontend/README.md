@@ -10,9 +10,10 @@ so a new node kind is a file in `schema/registry/kinds` and not a change here.
     npm install
     npm run dev
 
-Expects the API on `http://127.0.0.1:8000`. Override with `REDSTACKPRO_API`.
+Serves the canvas on `http://localhost:5173` and expects the API on
+`http://127.0.0.1:8000`. Override with `REDSTACKPRO_API=<url> npm run dev`.
 
-    npm test        conversion tests, no browser needed
+    npm test        the plain node suites, then the vitest render suites under jsdom (no browser needed)
     npm run build   production bundle into dist/
 
 ## The export panel
@@ -22,9 +23,9 @@ the topology compiles to: the file tree, the generated HCL, the inventory. That 
 deliberate. redStackPRO does not run anything, so the code is the deliverable and
 hiding it behind a download button would misrepresent the product.
 
-The panel opens on `terraform/firewall.tf`, which is derived entirely from
-edges. A rule exists there because someone drew a line, and nothing else in the
-export shows that as directly.
+The panel opens on `deploy.tfvars`, the one file you edit before deploying.
+`terraform/firewall.tf` shows the edges most directly: a rule that admits
+traffic from outside the range exists there because someone drew a line.
 
 ## How it draws
 

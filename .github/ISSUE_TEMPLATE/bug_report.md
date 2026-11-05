@@ -11,8 +11,8 @@ What you did, what you expected, and what happened instead.
 
 ## Where
 
-- Canvas / compiler / a specific role or template:
-- redStackPRO version (the footer, or `logs/deploy-*.log` if it was a deploy):
+- Canvas / compiler / a specific role or blueprint:
+- redStackPRO version (beside the redStackPRO name in the canvas header, or `logs/deploy-*.log` if it was a deploy):
 
 ## Reproduce
 
