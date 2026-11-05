@@ -229,16 +229,21 @@ into place, the same handoff the deploy uses; running that raw command yourself
 from `terraform/` works too, once `terraform.tfvars` is there."""
 
 # What `teardown --force` deletes first, per provider. The GCP and AWS sweeps
-# match the redStackPRO label or tag, not this deployment's names.
+# match this deployment's own id, so another range in the project or region is
+# never touched. See deploy._SWEEP_STATE.
 FORCE_SWEEP = {
-    "gcp": """It first deletes every redStackPRO instance in the GCP project, then
-destroys the rest, so nothing is left billing. It matches the redStackPRO label,
-not this deployment, so it also deletes the instances of any other redStackPRO
-deployment in the same project.""",
-    "aws": """It first terminates every redStackPRO instance in the region, then
-destroys the rest, so nothing is left billing. It matches the redStackPRO tag, not
-this deployment, so it also terminates the instances of any other redStackPRO
-deployment in the same region.""",
+    "gcp": """It first deletes this deployment's instances, then destroys the rest,
+so nothing is left billing. It finds them by the instances in the Terraform state
+and by the `redstackpro_deploy` label every instance carries, a random id kept in
+that state, so it also finds an instance an interrupted apply created but never
+recorded. It never touches another deployment in the same project. With no
+Terraform state it deletes no instance.""",
+    "aws": """It first terminates this deployment's instances, then destroys the
+rest, so nothing is left billing. It finds them by the instances in the Terraform
+state and by the `redstackpro_deploy` tag every instance carries, a random id kept
+in that state, so it also finds an instance an interrupted apply created but never
+recorded. It never touches another deployment in the same region. With no
+Terraform state it terminates no instance.""",
     "azure": """It first deletes the deployment's resource group and everything in
 it, then destroys the rest, so nothing is left billing.""",
 }
@@ -437,11 +442,15 @@ are not set, or if the build's own auto-stop would fire before it finished.
 
 {deploy_output}
 
-Provisioning runs in a detached `screen` and keeps going if you disconnect:
+Provisioning runs in a detached `screen` and keeps going if you disconnect. The
+`DONE` box prints the line that watches it, with your key and the jumpbox address
+filled in, as one command that pastes into PowerShell or bash alike:
 
 ```bash
-ssh {jumpuser}@<jumpbox> 'tail -f ~/provision/run.log'
+ssh -i keys/id_ed25519 {jumpuser}@<jumpbox> "tail -f ~/provision/run.log"
 ```
+
+Ctrl-C stops the watching, not the build.
 
 {run_log}
 
@@ -619,11 +628,15 @@ controller shows. An attempt that fails and is retried is normal, not a fault.
 
 {deploy_output}
 
-Provisioning runs in a detached `screen` and keeps going if you disconnect:
+Provisioning runs in a detached `screen` and keeps going if you disconnect. The
+`DONE` box prints the line that watches it, with your key and the jumpbox address
+filled in, as one command that pastes into PowerShell or bash alike:
 
 ```bash
-ssh {jumpuser}@<jumpbox> 'tail -f ~/provision/run.log'
+ssh -i keys/id_ed25519 {jumpuser}@<jumpbox> "tail -f ~/provision/run.log"
 ```
+
+Ctrl-C stops the watching, not the build.
 
 {run_log}
 

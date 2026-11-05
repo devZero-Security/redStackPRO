@@ -66,6 +66,28 @@ _REGION_VAR = {"gcp": "region", "aws": "region", "azure": "location"}
 _ETA = {True: "45-75 min", False: "60-75 min"}
 
 
+# A command the user is told to type, written for the shell they typed it in.
+# Shared by deploy.sh and manage.sh, so every hint takes one form.
+_RSP_CMD = r'''# The command a hint tells the user to run, in the form their shell takes.
+# deploy.ps1 and manage.ps1 set REDSTACKPRO_FROM_PS1.
+#   rsp_cmd deploy|manage [NAME=VALUE] [ARG...]
+rsp_cmd(){
+  rsp_c_s="$1"; shift
+  rsp_c_v=""
+  case "${1:-}" in *=*) rsp_c_v="$1"; shift ;; esac
+  if [ "${REDSTACKPRO_FROM_PS1:-}" = "1" ]; then
+    rsp_c_out=".\\$rsp_c_s.ps1"
+    [ -z "$rsp_c_v" ] || rsp_c_out="\$env:${rsp_c_v%%=*} = '${rsp_c_v#*=}'; $rsp_c_out"
+  else
+    rsp_c_out="bash $rsp_c_s.sh"
+    [ -z "$rsp_c_v" ] || rsp_c_out="$rsp_c_v $rsp_c_out"
+  fi
+  [ "$#" -eq 0 ] || rsp_c_out="$rsp_c_out $*"
+  printf '%s\n' "$rsp_c_out"
+}
+'''
+
+
 # The output helpers every later block uses. `say` indents a line under the
 # current phase; `die` and `fail` stop the run and keep the reason for the
 # closing box. Built apart from the template so the bash keeps single braces.
@@ -109,7 +131,7 @@ rsp_path(){
     printf '%s\n' "$1"
   fi
 }
-'''
+''' + _RSP_CMD
 
 
 # The deployment log. Everything deploy.sh prints (terraform apply and the whole
@@ -171,15 +193,24 @@ rsp_drain(){
   done
 }
 
+# A command in the box sits alone on its own line, under a label ending "run:",
+# so a copied line is the whole command and nothing else. The remote command is
+# double quoted, which bash and PowerShell both pass to ssh as one argument.
 rsp_done(){
+  rsp_k="$(rsp_path "$KEY")"
+  case "$rsp_k" in *" "*) rsp_k="\"$rsp_k\"" ;; esac
   echo
   echo "$RSP_RULE"
   echo " DONE  Infrastructure is up. Provisioning is running."
   echo "$RSP_THIN"
   echo " Portal    https://$JUMP/guacamole"
-  echo " Logins    terraform -chdir=terraform output guacamole"
-  echo " Watch     ssh -i $(rsp_path "$KEY") $JUMPUSER@$JUMP"
-  echo "           tail -f ~/provision/run.log"
+  echo
+  echo " Logins, run:"
+  echo "   terraform -chdir=terraform output guacamole"
+  echo
+  echo " Watch provisioning, run (Ctrl-C stops watching, not the build):"
+  echo "   ssh -i $rsp_k $JUMPUSER@$JUMP \"tail -f ~/provision/run.log\""
+  echo
   echo " Finished  when run.log shows RUN EXITED ok=1 (@@ETA@@)"
   printf '%s' "$RSP_DNS_TODO" | while IFS= read -r rsp_l; do
     [ -z "$rsp_l" ] || echo " DNS       set the A record $rsp_l"
@@ -249,19 +280,17 @@ trap finish EXIT
 _TTL_PREFLIGHT = """# Refuse to start a build that would stop itself before it finishes.
 RSP_STOP_LEAD=$("$PY" -c '
 import datetime as dt
-TZ = "%(timezone)s"
+# The zone UTC offset in minutes at export time, for a Python with no tz
+# database (Windows without tzdata, or 3.8). A DST change before the deploy
+# moves it by an hour, which the 150 minute guard absorbs. None: unresolved.
+OFFSET = %(offset)s
 try:
     from zoneinfo import ZoneInfo
-    tz = ZoneInfo(TZ)
+    tz = ZoneInfo("%(zone)s")
 except Exception:
-    # A missing IANA tz database still lets an IANA name mean UTC closely enough to
-    # guard on; a non-IANA id (an Azure Windows zone like "GMT Standard Time")
-    # cannot, so the lead is left uncomputed and the "could not run" branch below
-    # handles it honestly rather than guessing the stop time in the wrong zone.
-    if "/" in TZ or TZ == "UTC":
-        tz = dt.timezone.utc
-    else:
+    if OFFSET is None:
         raise SystemExit(1)
+    tz = dt.timezone(dt.timedelta(minutes=OFFSET))
 now = dt.datetime.now(tz)
 stop = now.replace(hour=%(hour)d, minute=%(minute)d, second=0, microsecond=0)
 if stop <= now:
@@ -276,20 +305,44 @@ case "$RSP_STOP_LEAD" in
   ''|*[!0-9]*)
     die "Could not work out when this build stops itself -- the check did not run." \\
       "This build carries a daily stop at %(hour)02d:%(minute)02d %(timezone)s." \\
-      "Confirm that is more than a build away, then:" \\
-      "  Override: REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh" ;;
+      "Confirm that is more than a build away, then run:" \\
+      "  $(rsp_cmd deploy REDSTACKPRO_MIN_STOP_LEAD=0)" ;;
 esac
 if [ "$RSP_STOP_LEAD" -lt "${REDSTACKPRO_MIN_STOP_LEAD:-150}" ]; then
   die "This build stops itself at %(hour)02d:%(minute)02d %(timezone)s, which is $RSP_STOP_LEAD minutes away." \\
     "Provisioning takes up to 75 minutes, so the range would stop part-built." \\
     "" \\
-    "  Override: REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh" \\
+    "  To deploy anyway, run:" \\
+    "    $(rsp_cmd deploy REDSTACKPRO_MIN_STOP_LEAD=0)" \\
     "  Or set a later stop time:" \\
     "  In the canvas, click empty space, then Topology settings > Auto-stop, and export again." \\
     "  It is a daily clock time, so exporting again with the same time changes" \\
     "  nothing; a stop after N hours counts from the apply and never trips this check."
 fi
 """
+
+
+def _stop_zone(tz):
+    """(the IANA zone deploy.sh loads, its UTC offset in minutes now) for an
+    auto-stop timezone. The offset backs a deploy-time Python that has no tz
+    database, which is every Windows Python without tzdata; that fallback used to
+    read the zone as UTC. The offset is None when the zone does not resolve here
+    either, and the guard then says it could not run instead of guessing."""
+    if tz in ("UTC", "Etc/UTC"):
+        return "UTC", 0
+    zone = tz
+    if "/" not in tz:
+        # A Windows id, which an Azure topology may carry as is. Every IANA zone
+        # mapped to one id has the same offset, so the first stands for them all.
+        from .terraform.azure import _WINDOWS_TZ
+        zone = next((k for k, v in _WINDOWS_TZ.items() if v == tz and "/" in k), tz)
+    try:
+        import datetime as dt
+        from zoneinfo import ZoneInfo
+        offset = ZoneInfo(zone).utcoffset(dt.datetime.now(dt.timezone.utc))
+    except Exception:
+        return zone, None
+    return zone, int(offset.total_seconds() // 60)
 
 
 # The Windows front door. It exists because of one specific trap: typing
@@ -403,7 +456,8 @@ _TFVARS_PREFLIGHT = {
     "gcp": r'''if [ -f deploy.tfvars ]; then
   RSP_PROJECT="$(rsp_tfvar project)"
   if [ -z "$RSP_PROJECT" ]; then
-    die "project is empty in deploy.tfvars. Set it to your GCP project ID (gcloud config get-value project)."
+    die "project is empty in deploy.tfvars. Set it to your GCP project ID." \
+      "To see the current one, run:" "  gcloud config get-value project"
   fi
   RSP_REGION="$(rsp_tfvar region)"; RSP_ZONE="$(rsp_tfvar zone)"
   if [ -n "$RSP_REGION" ] && [ -n "$RSP_ZONE" ]; then
@@ -428,7 +482,8 @@ fi
   RSP_SUB="$(rsp_tfvar subscription_id)"
   # azurerm falls back to ARM_SUBSCRIPTION_ID when subscription_id is empty.
   if [ -z "$RSP_SUB" ] && [ -z "${ARM_SUBSCRIPTION_ID:-}" ]; then
-    die "subscription_id is empty in deploy.tfvars. Set it to: az account show --query id -o tsv"
+    die "subscription_id is empty in deploy.tfvars. Set it to your subscription id." \
+      "To see it, run:" "  az account show --query id -o tsv"
   fi
 fi
 ''',
@@ -490,15 +545,15 @@ def generate_deploy_script(topology, registry=None, provider=None):
         cloud_preflight = (
             "if ! gcloud auth application-default print-access-token "
             ">/dev/null 2>&1; then\n"
-            '  die "GCP credentials are not set. Run:  gcloud auth login  &&  '
-            'gcloud auth application-default login"\n'
+            '  die "GCP credentials are not set." "To sign in, run both:" \\\n'
+            '    "  gcloud auth login" "  gcloud auth application-default login"\n'
             "fi\n"
         )
     elif provider == "aws":
         cloud_preflight = (
             "if ! aws sts get-caller-identity >/dev/null 2>&1; then\n"
-            '  die "AWS credentials are not set or not working. Run:  aws configure  '
-            '(then check:  aws sts get-caller-identity)"\n'
+            '  die "AWS credentials are not set or not working." "To sign in, run:" \\\n'
+            '    "  aws configure" "Then check them, run:" "  aws sts get-caller-identity"\n'
             "fi\n"
             'note "an AWS range needs Elastic IP and vCPU quota headroom, and a Kali operator" \\\n'
             '  "needs a one-time Marketplace subscription; see DEPLOYMENT-GUIDE.md if apply" \\\n'
@@ -510,9 +565,9 @@ def generate_deploy_script(topology, registry=None, provider=None):
         # azurerm provider reads directly and which az account show does not see).
         cloud_preflight = (
             'if ! az account show >/dev/null 2>&1 && [ -z "${ARM_CLIENT_ID:-}" ]; then\n'
-            '  die "Azure credentials are not set. Run:  az login  (or set '
-            "ARM_CLIENT_ID/ARM_CLIENT_SECRET/ARM_TENANT_ID/ARM_SUBSCRIPTION_ID for a "
-            'service principal)"\n'
+            '  die "Azure credentials are not set." "To sign in, run:" "  az login" \\\n'
+            '    "Or, for a service principal, set ARM_CLIENT_ID, ARM_CLIENT_SECRET," \\\n'
+            '    "ARM_TENANT_ID and ARM_SUBSCRIPTION_ID."\n'
             "fi\n"
         )
 
@@ -523,10 +578,13 @@ def generate_deploy_script(topology, registry=None, provider=None):
     if stop and stop["at_minute"] is not None:
         # The clock in the message is the `at` the operator set, not the
         # combined value: it is the only half that can bind before the apply.
+        zone, offset = _stop_zone(stop["timezone"])
         cloud_preflight += _TTL_PREFLIGHT % dict(
             stop,
             hour=stop["at_minute"] // 60,
             minute=stop["at_minute"] % 60,
+            zone=zone,
+            offset="None" if offset is None else offset,
         )
     # aws.py emits the scheduler role for any auto_stop, after_hours included.
     if stop and provider == "aws":
@@ -815,7 +873,8 @@ else
     KEY="${RSP_KEYS# }"
   elif [ "$RSP_N" -gt 1 ]; then
     die "more than one private key in keys/:$RSP_KEYS" \
-      "say which:  REDSTACKPRO_SSH_KEY=keys/<name> bash deploy.sh"
+      "To say which, run:" \
+      "  $(rsp_cmd deploy 'REDSTACKPRO_SSH_KEY=keys/<name>')"
   else
     KEY="$HOME/.ssh/id_ed25519"
   fi
@@ -823,7 +882,8 @@ fi
 [ -f "$KEY" ] || die "no ssh private key found." \
   "  looked at: \$REDSTACKPRO_SSH_KEY, then keys/, then $HOME/.ssh/id_ed25519" \
   "" \
-  "  make one:  ssh-keygen -t ed25519 -f keys/id_ed25519 -N \"\"" \
+  "  To make one, run:" \
+  "    ssh-keygen -t ed25519 -f keys/id_ed25519 -N \"\"" \
   "  then put the contents of keys/id_ed25519.pub into" \
   "  deploy.tfvars as ssh_public_key, and re-run."
 
@@ -888,7 +948,8 @@ if grep -Eq 'operator_source_ranges[^#]*"0\.0\.0\.0/0"' deploy.tfvars 2>/dev/nul
       "" \
       "  Fix:      set operator_source_ranges to your own IP/CIDR in deploy.tfvars," \
       '            for example ["203.0.113.5/32"].' \
-      "  Override: REDSTACKPRO_ALLOW_OPEN_INGRESS=1 bash deploy.sh"
+      "  To deploy it open anyway, run:" \
+      "    $(rsp_cmd deploy REDSTACKPRO_ALLOW_OPEN_INGRESS=1)"
   fi
 fi
 @@TFVARS_PREFLIGHT@@# deploy.tfvars is the one config file you edit, here in the export root. Terraform
@@ -920,8 +981,9 @@ trap 'RSP_ERR="exit $? from: $BASH_COMMAND"' ERR
 phase "Terraform apply"
 @@INIT@@terraform -chdir=terraform apply -auto-approve -input=false || die "terraform apply failed (its error is above) -- nothing was provisioned." \
   "If it reports resources that already exist, an earlier run was interrupted and" \
-  "left them outside the state. Reconcile with: bash manage.sh teardown --force" \
-  "(then re-run deploy.sh)."
+  "left them outside the state. To clear them, run:" \
+  "  $(rsp_cmd manage teardown --force)" \
+  "then run the deploy again."
 RSP_RES="$(terraform -chdir=terraform state list 2>/dev/null | grep -Evc '(^|\.)data\.' || true)"
 case "$RSP_RES" in
   ''|*[!0-9]*|0) ok "applied in $(took)" ;;
@@ -1070,9 +1132,8 @@ say(){ echo "== [$(date +%H:%M:%S)] $* =="; }
 
 RSP_NAME=@@NAME@@
 RSP_LABEL=@@LABEL@@
-# manage.ps1 sets REDSTACKPRO_FROM_PS1, so usage lines name the command the
-# user actually types.
-if [ "${REDSTACKPRO_FROM_PS1:-}" = "1" ]; then RSP_RUN='.\manage.ps1'; else RSP_RUN="bash manage.sh"; fi
+@@RSP_CMD@@# Usage lines name the command the user actually types.
+RSP_RUN="$(rsp_cmd manage)"
 @@TFVAR_HELPER@@@@WHERE@@RSP_WHERE="$RSP_LABEL $RSP_REGION"; RSP_WHERE="${RSP_WHERE% }"
 
 rsp_help(){
@@ -1201,22 +1262,74 @@ if [ "$cmd" = "teardown" ] || [ "$cmd" = "_teardown_summary" ]; then
   # deploy.tfvars and terraform auto-loads terraform/terraform.tfvars, so copy
   # it into place first, or destroy runs with no vars at all.
   cp deploy.tfvars terraform/terraform.tfvars
+  # Before the sweep too, which reads the state.
+  terraform -chdir=terraform init -input=false -upgrade >/dev/null
   if [ "$RSP_FORCE" = 1 ]; then
 '''
 
+# What the GCP and AWS sweeps may delete: THIS deployment's instances and no
+# other's. Read from its state: the instances in redstackpro_instances, and
+# random_id.deploy, which every instance carries as its redstackpro_deploy
+# label or tag. That id finds an instance an interrupted apply created but never
+# recorded. random_id is created before any instance, so it is in the state
+# whenever an instance can exist. With no state there is nothing that proves an
+# instance is this range's, so nothing is deleted. Every value is checked
+# against [a-z0-9-] before it reaches a filter, where * would match any range.
+_SWEEP_STATE = r'''    RSP_SWEEP="$(terraform -chdir=terraform state pull 2>/dev/null | "$PY" -c '
+import json, re, sys
+try:
+    s = json.load(sys.stdin)
+except ValueError:
+    s = {}
+ok = lambda v: isinstance(v, str) and re.fullmatch("[a-z0-9-]+", v) is not None
+ids = [i.get("attributes", {}).get("hex") for r in s.get("resources", [])
+       if (r.get("mode"), r.get("type"), r.get("name")) == ("managed", "random_id", "deploy")
+       and "module" not in r for i in r.get("instances", [])]
+print(next((v for v in ids if ok(v)), ""))
+out = s.get("outputs", {}).get("redstackpro_instances", {}).get("value") or {}
+for h in out.values():
+    f = [h.get(k) for k in (@@KEYS@@)]
+    if all(ok(v) for v in f):
+        print(" ".join(f))
+' 2>/dev/null | tr -d '\r')"
+    RSP_DEPLOY="$(printf '%s\n' "$RSP_SWEEP" | head -1)"
+    RSP_KNOWN="$(printf '%s\n' "$RSP_SWEEP" | tail -n +2)"
+    if [ -z "$RSP_DEPLOY$RSP_KNOWN" ]; then
+      echo "  no terraform state for this range, so no instance can be shown to be its own;"
+      echo "  none deleted."
+    fi
+'''
+
 _MANAGE_SWEEP = {
-    "gcp": r'''    say "force teardown: sweeping redStackPRO instances in the cloud first"
+    "gcp": r'''    say "force teardown: deleting this range's instances in the cloud first"
     PROJ_ARG=""; [ -n "$RSP_PROJECT" ] && PROJ_ARG="--project $RSP_PROJECT"
-    gcloud compute instances list $PROJ_ARG --filter="labels.redstackpro_kind:*" --format="value(name,zone)" 2>/dev/null \
-      | tr -d '\r' | while IFS=$'\t' read -r sweep_name sweep_zone; do
-          [ -n "$sweep_name" ] || continue
-          echo "  deleting $sweep_name ($sweep_zone)"
-          gcloud compute instances delete "$sweep_name" --zone "$sweep_zone" $PROJ_ARG --quiet 2>/dev/null || true
-        done
+''' + _SWEEP_STATE.replace("@@KEYS@@", '"name", "zone"') + r'''    RSP_LABELED=""
+    if [ -n "$RSP_DEPLOY" ]; then
+      RSP_LABELED="$(gcloud compute instances list $PROJ_ARG --filter="labels.redstackpro_deploy=$RSP_DEPLOY" --format="value(name,zone.basename())" 2>/dev/null)"
+    fi
+    # Name and zone together: a name alone could match another range's instance
+    # in a different zone.
+    printf '%s\n%s\n' "$RSP_KNOWN" "$RSP_LABELED" | tr -d '\r' | tr '\t' ' ' | sort -u | while IFS=' ' read -r sweep_name sweep_zone; do
+      [ -n "$sweep_name" ] && [ -n "$sweep_zone" ] || continue
+      echo "  deleting $sweep_name ($sweep_zone)"
+      gcloud compute instances delete "$sweep_name" --zone "$sweep_zone" $PROJ_ARG --quiet 2>/dev/null || true
+    done
 ''',
-    "aws": r'''    say "force teardown: sweeping redStackPRO instances in the cloud first"
+    "aws": r'''    say "force teardown: terminating this range's instances in the cloud first"
     REG_ARG="--region $RSP_REGION"
-    SWEEP_IDS="$(aws ec2 describe-instances $REG_ARG --filters Name=tag:redstackpro,Values=true Name=instance-state-name,Values=pending,running,stopping,stopped --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null)"
+''' + _SWEEP_STATE.replace("@@KEYS@@", '"instance_id",') + r'''    RSP_LIVE="Name=instance-state-name,Values=pending,running,stopping,stopped"
+    SWEEP_IDS=""
+    if [ -n "$RSP_DEPLOY" ]; then
+      SWEEP_IDS="$(aws ec2 describe-instances $REG_ARG --filters "Name=tag:redstackpro_deploy,Values=$RSP_DEPLOY" "$RSP_LIVE" --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null)"
+    fi
+    if [ -n "$RSP_KNOWN" ]; then
+      # A filter, not --instance-ids: an id that is gone drops out instead of
+      # failing the whole call.
+      RSP_CSV="$(printf '%s\n' $RSP_KNOWN | tr '\n' ',')"
+      SWEEP_IDS="$SWEEP_IDS $(aws ec2 describe-instances $REG_ARG --filters "Name=instance-id,Values=${RSP_CSV%,}" "$RSP_LIVE" --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null)"
+    fi
+    SWEEP_IDS="$(printf '%s\n' $SWEEP_IDS | tr -d '\r' | sort -u | tr '\n' ' ')"
+    SWEEP_IDS="${SWEEP_IDS# }"; SWEEP_IDS="${SWEEP_IDS% }"
     if [ -n "$SWEEP_IDS" ]; then
       echo "  terminating: $SWEEP_IDS"
       aws ec2 terminate-instances $REG_ARG --instance-ids $SWEEP_IDS >/dev/null 2>&1 || true
@@ -1250,7 +1363,6 @@ _MANAGE_SWEEP_NONE = r'''    echo "note: a --force instance sweep is not wired f
 
 _MANAGE_TEARDOWN_TAIL = r'''  fi
   say "terraform destroy"
-  terraform -chdir=terraform init -input=false -upgrade >/dev/null
   terraform -chdir=terraform destroy -auto-approve
   rc=$?
   if [ "$rc" -ne 0 ]; then
@@ -1403,15 +1515,17 @@ _HELP_ADDRESS = {"azure": "public IP", "gcp": "static IP", "aws": "Elastic IP"}
 _HELP_FORCE = {
     "azure": "Delete the resource group directly first; use it when a plain "
              "teardown stops on a leftover resource.",
-    "gcp": "First delete every redStackPRO instance in the project, not only "
-           "this range's; use it when a plain teardown stops on a leftover instance.",
-    "aws": "First terminate every redStackPRO instance in the region, not only "
-           "this range's; use it when a plain teardown stops on a leftover instance.",
+    "gcp": "First delete this range's instances, also any an interrupted apply "
+           "left out of the state, and no other range's; use it when a plain "
+           "teardown stops on a leftover instance.",
+    "aws": "First terminate this range's instances, also any an interrupted apply "
+           "left out of the state, and no other range's; use it when a plain "
+           "teardown stops on a leftover instance.",
 }
 _FORCE_NOTE = {
     "azure": "deletes the resource group directly first",
-    "gcp": "first deletes every redStackPRO instance in the project, from any range",
-    "aws": "first terminates every redStackPRO instance in the region, from any range",
+    "gcp": "first deletes this range's instances, also any left out of its state",
+    "aws": "first terminates this range's instances, also any left out of its state",
 }
 _FORCE_NOTE_NONE = "no instance sweep for this provider; a plain destroy"
 _HELP_NEEDS = {
@@ -1559,6 +1673,7 @@ def generate_manage_script(topology, registry=None, provider=None, region=None):
     for token, value in (
             ("@@NAME@@", _shell_word(topology.get("name"))),
             ("@@LABEL@@", _shell_word(label)),
+            ("@@RSP_CMD@@", _RSP_CMD),
             ("@@TFVAR_HELPER@@", _TFVAR_HELPER),
             ("@@WHERE@@", where),
             ("@@COMMANDS@@", _help_commands(plan, provider, label)),

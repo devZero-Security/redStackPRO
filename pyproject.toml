@@ -10,6 +10,9 @@ dependencies = [
     "fastapi>=0.110",
     "sqlalchemy>=2.0",
     "pydantic>=2.6",
+    # The IANA zones for zoneinfo where the OS has none (Windows, slim images):
+    # the deploy.sh auto-stop guard embeds a zone's offset at export.
+    "tzdata>=2025.2",
 ]
 
 [project.scripts]

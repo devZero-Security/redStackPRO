@@ -131,6 +131,123 @@ def test_no_ttl_means_no_stop_preflight(registry):
     assert "RSP_STOP_LEAD" not in body
 
 
+# -- the stop lead is measured in the stop's own zone, tz database or not
+
+def _has_tz_database():
+    try:
+        from zoneinfo import ZoneInfo
+        ZoneInfo("America/New_York")
+        return True
+    except Exception:
+        return False
+
+
+needs_tz_database = pytest.mark.skipif(
+    not _has_tz_database(),
+    reason="no IANA tz database here; tzdata is a dependency (pip install -e .)")
+
+
+def _lead_topology(tz, offset_minutes):
+    """A stop five hours from now on the clock of a zone at that UTC offset."""
+    import datetime as dt
+    now = dt.datetime.now(dt.timezone(dt.timedelta(minutes=offset_minutes)))
+    at = now + dt.timedelta(hours=5)
+    doc = _stopping_topology()
+    doc["auto_stop"] = {"enabled": True, "at": at.strftime("%H:%M"), "timezone": tz}
+    return doc
+
+
+def _lead(body, zoneinfo):
+    """Run the guard's Python as deploy.sh does, optionally with zoneinfo gone, as
+    on a Python with no tz database to find."""
+    import subprocess
+    import sys
+    marker = "RSP_STOP_LEAD=$(\"$PY\" -c '"
+    code = body[body.index(marker) + len(marker):]
+    code = code[:code.index("\n')")]
+    assert "'" not in code, "the guard sits in single quotes in deploy.sh"
+    block = "" if zoneinfo else "sys.modules['zoneinfo'] = None; "
+    return subprocess.run(
+        [sys.executable, "-c", "import sys; %sexec(sys.argv[1])" % block, code],
+        capture_output=True, text=True, timeout=60)
+
+
+def _assert_lead_is_five_hours(done):
+    assert done.returncode == 0, done.stderr
+    # 300 minutes, less the seconds already gone in this minute. Read in UTC it
+    # would be off by the zone's offset.
+    assert 298 <= int(done.stdout) <= 300, done.stdout
+
+
+def test_without_a_tz_database_the_stop_lead_uses_the_offset_from_export(registry, monkeypatch):
+    """Found live on Windows: zoneinfo had no database, the guard read
+    America/New_York as UTC, and a build at 12:34 with an 18:00 stop was refused
+    as 25 minutes away. The export now carries the zone's offset for that case."""
+    import redstackpro.deploy as deploy
+    monkeypatch.setattr(deploy, "_stop_zone", lambda tz: ("Asia/Kolkata", 330))
+    body = generate_deploy_script(_lead_topology("Asia/Kolkata", 330), registry,
+                                  provider="gcp")
+    assert "OFFSET = 330" in body
+    _assert_lead_is_five_hours(_lead(body, zoneinfo=False))
+    _assert_lead_is_five_hours(_lead(body, zoneinfo=True))
+
+
+@needs_tz_database
+@pytest.mark.parametrize("tz,provider", [
+    ("America/New_York", "gcp"), ("Asia/Kolkata", "aws"),
+    ("Europe/London", "azure"), ("Eastern Standard Time", "azure")])
+def test_the_stop_lead_is_measured_in_the_stop_zone(registry, tz, provider):
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+    from redstackpro.deploy import _stop_zone
+    zone, offset = _stop_zone(tz)
+    assert zone == ("America/New_York" if tz == "Eastern Standard Time" else tz)
+    expect = ZoneInfo(zone).utcoffset(dt.datetime.now(dt.timezone.utc))
+    assert offset == expect.total_seconds() // 60
+    body = generate_deploy_script(_lead_topology(tz, offset), registry, provider=provider)
+    assert 'ZoneInfo("%s")' % zone in body
+    # The message still names the zone the way the topology does.
+    assert "%s, which is $RSP_STOP_LEAD minutes away" % tz in body
+    _assert_lead_is_five_hours(_lead(body, zoneinfo=True))
+    _assert_lead_is_five_hours(_lead(body, zoneinfo=False))
+
+
+def test_utc_needs_no_tz_database():
+    from redstackpro.deploy import _stop_zone
+    assert _stop_zone("UTC") == ("UTC", 0)
+    assert _stop_zone("Etc/UTC") == ("UTC", 0)
+
+
+@pytest.mark.parametrize("tz", ["Mars/Olympus", "Mars Standard Time"])
+def test_a_zone_the_export_cannot_resolve_says_the_check_did_not_run(registry, tz):
+    """No offset to fall back on, so the guard takes its could-not-run branch,
+    the same as a broken interpreter, rather than guessing the zone."""
+    body = generate_deploy_script(_lead_topology(tz, 0), registry, provider="gcp")
+    assert "OFFSET = None" in body
+    for zoneinfo in (True, False):
+        done = _lead(body, zoneinfo)
+        assert done.returncode == 1 and done.stdout == "", (zoneinfo, done.stdout)
+
+
+def test_the_guide_watches_provisioning_with_one_command(redstack):
+    """The same one-line form the DONE box prints: ssh and the remote tail
+    together, the remote half double quoted for PowerShell and bash."""
+    for doc, user in ((redstack, "redop"), (_goad_light(), "blueop")):
+        guide = _guide(doc)
+        assert ('\nssh -i keys/id_ed25519 %s@<jumpbox> "tail -f ~/provision/run.log"\n'
+                % user) in guide
+        assert "'tail -f" not in guide
+
+
+def test_tzdata_is_a_dependency():
+    """zoneinfo finds no zones on Windows or a slim image without it, and the
+    export embeds a zone's offset only when the compiler can resolve the zone."""
+    import tomllib
+    pyproject = tomllib.loads(
+        (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(encoding="utf-8"))
+    assert any(d.startswith("tzdata") for d in pyproject["project"]["dependencies"])
+
+
 def test_the_dns_action_shows_what_the_name_resolves_to_today(registry):
     """Every apply mints a new address while the canvas hands out a STATIC
     hostname, so a stale record is the default state rather than an accident.
@@ -292,8 +409,8 @@ def test_deployment_guide_documents_managing_the_range(redstack, registry):
 
 
 @pytest.mark.parametrize("provider,sweep", [
-    ("gcp", "It first deletes every redStackPRO instance in the GCP project"),
-    ("aws", "It first terminates every redStackPRO instance in the region"),
+    ("gcp", "It never touches another deployment in the same project."),
+    ("aws", "It never touches another deployment in the same region."),
     ("azure", "It first deletes the deployment's resource group and everything in"),
 ])
 def test_the_guide_says_teardown_asks_first_and_what_force_deletes(redstack, provider, sweep):
@@ -303,6 +420,7 @@ def test_the_guide_says_teardown_asks_first_and_what_force_deletes(redstack, pro
     assert "Run it with no command for a help\nscreen" in guide
     assert sweep in guide
     assert "deletes this deployment's instances in the\ncloud first" not in guide
+    assert "every redStackPRO instance" not in guide
     range_guide = _guide(_goad_light(), provider)
     assert "asks you to type the range name (or `yes`)" in range_guide
 

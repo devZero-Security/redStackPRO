@@ -239,6 +239,16 @@ def _main(plan):
         "# time on your machine, because redStackPRO never runs Terraform. See 0001.",
     ]
     lines += operator_source_ranges_check()
+    lines += [
+        "",
+        "# A per deployment random id, the redstackpro_deploy label on every",
+        "# instance, so manage.sh teardown --force deletes this deployment's",
+        "# instances and no other's in the project. Created before any instance,",
+        "# so an interrupted apply still has it in state.",
+        'resource "random_id" "deploy" {',
+        "  byte_length = 4",
+        "}",
+    ]
 
     is_range = plan.is_range()
     # Guacamole runs on the jumpbox in every mode (a defense range and an offense
@@ -330,6 +340,7 @@ def _main(plan):
             ("name", '"%s"' % plan.tag(node["id"])),
             ("node_id", '"%s"' % plan.tag(node["id"])),
             ("kind", '"%s"' % node["kind"]),
+            ("deploy_id", "random_id.deploy.hex"),
             ("project", "var.project"),
             ("zone", "var.zone"),
             ("subnetwork", "module.%s.self_link" % plan.ref(segment)),

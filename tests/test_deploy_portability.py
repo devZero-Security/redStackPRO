@@ -13,6 +13,7 @@ candidate, not merely find it. The executed test at the bottom is the one that
 matters here; the rest would pass against a script that never runs.
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -128,7 +129,7 @@ def test_open_ingress_override_downgrades_the_abort_to_a_warning(script):
     warn = "WARNING: operator_source_ranges is 0.0.0.0/0"
     assert warn in script
     # The message tells the user the one-line fix and the override.
-    assert "REDSTACKPRO_ALLOW_OPEN_INGRESS=1 bash deploy.sh" in script
+    assert '"    $(rsp_cmd deploy REDSTACKPRO_ALLOW_OPEN_INGRESS=1)"' in script
 
 
 def test_the_deploy_does_not_need_rsync(script):
@@ -403,6 +404,55 @@ def test_two_keys_in_the_folder_are_not_guessed_between(staged):
     done = _run(export, stubs)
     assert done.returncode == 1
     assert "more than one private key" in done.stdout, done.stdout
+    assert "\n        REDSTACKPRO_SSH_KEY=keys/<name> bash deploy.sh\n" in done.stdout
+    ps1 = _run(export, stubs, env_extra={"REDSTACKPRO_FROM_PS1": "1"})
+    assert ("\n        $env:REDSTACKPRO_SSH_KEY = 'keys/<name>'; .\\deploy.ps1\n"
+            in ps1.stdout), ps1.stdout
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the helpers")
+@pytest.mark.parametrize("args,bash,ps1", [
+    ("deploy", "bash deploy.sh", ".\\deploy.ps1"),
+    ("deploy REDSTACKPRO_MIN_STOP_LEAD=0", "REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh",
+     "$env:REDSTACKPRO_MIN_STOP_LEAD = '0'; .\\deploy.ps1"),
+    ("deploy REDSTACKPRO_SKIP_PREFLIGHT=1", "REDSTACKPRO_SKIP_PREFLIGHT=1 bash deploy.sh",
+     "$env:REDSTACKPRO_SKIP_PREFLIGHT = '1'; .\\deploy.ps1"),
+    ("manage teardown --force", "bash manage.sh teardown --force",
+     ".\\manage.ps1 teardown --force"),
+])
+def test_a_hint_is_written_for_the_shell_the_user_typed_it_in(tmp_path, args, bash, ps1):
+    """deploy.ps1 and manage.ps1 set REDSTACKPRO_FROM_PS1. A bash line pasted at a
+    PowerShell prompt fails, or runs WSL's bash."""
+    # A file, not bash -c: Git Bash halves the backslashes of a Windows argv.
+    script = tmp_path / "hint.sh"
+    script.write_text(output_helpers() + "rsp_cmd " + args + "\n", encoding="utf-8",
+                      newline="\n")
+    for env, expect in (({}, bash), ({"REDSTACKPRO_FROM_PS1": "1"}, ps1)):
+        environ = dict(os.environ)
+        environ.pop("REDSTACKPRO_FROM_PS1", None)
+        environ.update(env)
+        done = subprocess.run([_bash(), script.name], cwd=tmp_path,
+                              capture_output=True, text=True, env=environ)
+        assert (done.returncode, done.stdout) == (0, expect + "\n"), done.stderr
+
+
+@pytest.mark.parametrize("provider", ["gcp", "aws", "azure", "proxmox"])
+def test_every_command_hint_goes_through_rsp_cmd(provider):
+    """One helper writes every deploy or manage command a user is told to run,
+    so none is left in bash form from PowerShell."""
+    doc = example("redstack.json")
+    doc["auto_stop"] = {"enabled": True, "at": "02:00", "timezone": "UTC"}
+    for script in (generate_deploy_script(doc, Registry(), provider=provider),
+                   generate_manage_script(doc, Registry(), provider=provider)):
+        code = _code(script, local_only=True)
+        assert "bash deploy.sh" not in code and "bash manage.sh" not in code
+        assert ".ps1" not in code.replace('".\\\\$rsp_c_s.ps1"', "")
+    deploy = generate_deploy_script(doc, Registry(), provider=provider)
+    for hint in ("$(rsp_cmd deploy REDSTACKPRO_MIN_STOP_LEAD=0)",
+                 "$(rsp_cmd deploy REDSTACKPRO_ALLOW_OPEN_INGRESS=1)",
+                 "$(rsp_cmd deploy 'REDSTACKPRO_SSH_KEY=keys/<name>')",
+                 "$(rsp_cmd manage teardown --force)"):
+        assert hint in deploy, hint
 
 
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
@@ -711,7 +761,7 @@ def test_status_start_stop_never_run_before_the_teardown_check(manage_script):
     teardown_at = manage_script.index('"$cmd" = "teardown"')
     exit_at = manage_script.index("exit $rc", teardown_at)
     status_at = manage_script.index('"$cmd" = "status"', teardown_at)
-    instances_at = manage_script.index("redstackpro_instances", teardown_at)
+    instances_at = manage_script.index("output -json redstackpro_instances", teardown_at)
     assert teardown_at < exit_at < status_at < instances_at
 
 
@@ -753,9 +803,14 @@ def test_teardown_force_sweeps_orphan_instances_before_destroy():
         assert '"teardown --force") RSP_FORCE=1 ;;' in s, "teardown --force is recognized"
         assert ("clear them with:  %s teardown --force\\n' \"$RSP_RUN\"" in s), \
             "a failed destroy points at --force"
-    assert "labels.redstackpro_kind" in gcp and "gcloud compute instances delete" in gcp
-    assert "tag:redstackpro,Values=true" in aws and "aws ec2 terminate-instances" in aws
+    assert "labels.redstackpro_deploy=$RSP_DEPLOY" in gcp
+    assert "gcloud compute instances delete" in gcp
+    assert "Name=tag:redstackpro_deploy,Values=$RSP_DEPLOY" in aws
+    assert "aws ec2 terminate-instances" in aws
     assert "aws ec2" not in gcp
+    # Never the label or tag every redStackPRO range carries.
+    assert "labels.redstackpro_kind" not in gcp
+    assert "tag:redstackpro,Values=true" not in aws
 
 
 def test_aws_auto_stop_warns_about_iam_before_apply():
@@ -1006,13 +1061,14 @@ _HELP_ROWS = {
     "gcp": ["  status            Each instance's status and the portal",
             "  stop              Stop every instance. Compute billing",
             "                    stops; disks and the jumpbox static IP",
-            "  teardown --force  First delete every redStackPRO instance",
-            "                    in the project, not only this range's;"],
+            "  teardown --force  First delete this range's instances,",
+            "                    also any an interrupted apply left out",
+            "                    of the state, and no other range's; use"],
     "aws": ["  status            Each instance's state and the portal",
             "  stop              Stop every instance. Compute billing",
             "                    stops; EBS volumes, the jumpbox Elastic",
             "                    IP and the NAT gateway still bill.",
-            "  teardown --force  First terminate every redStackPRO"],
+            "  teardown --force  First terminate this range's instances,"],
 }
 _HELP_HEAD = {
     "azure": ["redStackPRO manage . smoketest-gl . Azure westus3",
@@ -1158,6 +1214,102 @@ def test_teardown_yes_skips_the_question_in_any_order(tmp_path, flags):
     assert swept == ("--force" in flags), ran
 
 
+# This range's state as `terraform state pull` prints it: its deploy id and two
+# instances in redstackpro_instances. A random_id.deploy inside a module is not
+# the root one and must not be read.
+def _state(hex_id, instances):
+    return json.dumps({
+        "version": 4,
+        "resources": [
+            {"mode": "managed", "type": "random_id", "name": "deploy",
+             "instances": [{"attributes": {"hex": hex_id}}]},
+            {"module": "module.other", "mode": "managed", "type": "random_id",
+             "name": "deploy", "instances": [{"attributes": {"hex": "ffff0000"}}]},
+        ],
+        "outputs": {"redstackpro_instances": {"value": instances}},
+    })
+
+
+_SWEEP_STATE = {
+    "gcp": {"a": {"name": "smk-jump", "zone": "us-central1-a"},
+            "b": {"name": "smk-dc01", "zone": "us-central1-b"}},
+    "aws": {"a": {"instance_id": "i-0aaa"}, "b": {"instance_id": "i-0gone"}},
+}
+# What each cloud CLI answers. The label or tag query finds the orphan an
+# interrupted apply left, plus a tracked instance; the instance-id query on AWS
+# drops the id that no longer exists. Lines end in \r\n, as on Windows.
+_SWEEP_CLI = {
+    "gcp": ('case "$*" in *"instances list"*) '
+            "printf 'smk-orphan\\tus-central1-a\\r\\nsmk-jump\\tus-central1-a\\r\\n' ;; esac"),
+    "aws": ('case "$*" in *"tag:redstackpro_deploy"*) printf \'i-0orphan\\ti-0aaa\\r\\n\' ;; '
+            "*\"instance-id,Values=\"*) printf 'i-0aaa\\r\\n' ;; esac"),
+}
+
+
+def _sweep_export(tmp_path, provider, state):
+    export, stubs, calls = _manage_export(tmp_path, provider)
+    (export / "state.json").write_text(state, encoding="utf-8", newline="\n")
+    log = 'echo "$(basename "$0") $*" >> "%s"' % _msys(calls)
+    _stub(stubs, "terraform", "\n".join([
+        log, 'case "$*" in', '  *"state pull"*) cat state.json ;;', "esac"]))
+    cli = {"gcp": "gcloud", "aws": "aws"}[provider]
+    _stub(stubs, cli, log + "\n" + _SWEEP_CLI[provider])
+    return export, stubs, calls
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+@pytest.mark.parametrize("provider,swept", [
+    ("gcp", ["gcloud compute instances list --project dz-rt-range "
+             "--filter=labels.redstackpro_deploy=abcd1234 "
+             "--format=value(name,zone.basename())",
+             "gcloud compute instances delete smk-dc01 --zone us-central1-b "
+             "--project dz-rt-range --quiet",
+             "gcloud compute instances delete smk-jump --zone us-central1-a "
+             "--project dz-rt-range --quiet",
+             "gcloud compute instances delete smk-orphan --zone us-central1-a "
+             "--project dz-rt-range --quiet"]),
+    ("aws", ["aws ec2 describe-instances --region eu-west-2 --filters "
+             "Name=tag:redstackpro_deploy,Values=abcd1234 "
+             "Name=instance-state-name,Values=pending,running,stopping,stopped "
+             "--query Reservations[].Instances[].InstanceId --output text",
+             "aws ec2 describe-instances --region eu-west-2 --filters "
+             "Name=instance-id,Values=i-0aaa,i-0gone "
+             "Name=instance-state-name,Values=pending,running,stopping,stopped "
+             "--query Reservations[].Instances[].InstanceId --output text",
+             "aws ec2 terminate-instances --region eu-west-2 --instance-ids i-0aaa i-0orphan",
+             "aws ec2 wait instance-terminated --region eu-west-2 --instance-ids "
+             "i-0aaa i-0orphan"]),
+])
+def test_teardown_force_deletes_only_this_ranges_instances(tmp_path, provider, swept):
+    """The sweep used to match the label or tag every redStackPRO range carries,
+    so a team with several ranges in one project or region lost all of them. It
+    now takes this range's instances from its state, plus whatever carries its
+    own deploy id, which finds the instances an interrupted apply never recorded."""
+    export, stubs, calls = _sweep_export(tmp_path, provider, _state("abcd1234", _SWEEP_STATE[provider]))
+    done = _manage(export, stubs, "teardown", "--force", "--yes")
+    assert done.returncode == 0, done.stdout + done.stderr
+    ran = _calls(calls)
+    cli = [c for c in ran if not c.startswith("terraform ")]
+    assert cli == swept, ran
+    assert ran[-1] == "terraform -chdir=terraform destroy -auto-approve"
+    assert ran.index("terraform -chdir=terraform state pull") < ran.index(cli[0])
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+@pytest.mark.parametrize("provider", ["gcp", "aws"])
+@pytest.mark.parametrize("state", ["", _state("*", {})], ids=["no-state", "wildcard-id"])
+def test_teardown_force_without_this_ranges_state_deletes_nothing(tmp_path, provider, state):
+    """No state, or a deploy id that is not one (a * would match every range),
+    proves nothing about which instance is this range's."""
+    export, stubs, calls = _sweep_export(tmp_path, provider, state)
+    done = _manage(export, stubs, "teardown", "--force", "--yes")
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "no terraform state for this range" in done.stdout
+    ran = _calls(calls)
+    assert [c for c in ran if not c.startswith("terraform ")] == [], ran
+    assert ran[-1] == "terraform -chdir=terraform destroy -auto-approve"
+
+
 @pytest.mark.skipif(not hasattr(os, "openpty") or _bash() is None,
                     reason="needs a POSIX pty to stand in for a terminal")
 @pytest.mark.parametrize("answer,deleted", [
@@ -1194,8 +1346,8 @@ def test_the_teardown_summary_manage_ps1_reads_is_the_same_text(tmp_path):
         "  Range           smoketest-gl",
         "  Provider        GCP us-central1",
         "  Project         dz-rt-range",
-        "  --force         first deletes every redStackPRO instance in",
-        "                  the project, from any range", "",
+        "  --force         first deletes this range's instances, also",
+        "                  any left out of its state", "",
         "prompt=Type the range name (smoketest-gl) or yes to delete it",
         "name=smoketest-gl"]
     assert _calls(calls) == []
@@ -1320,8 +1472,11 @@ def test_an_empty_gcp_project_stops_before_terraform(staged):
                     'ssh_public_key = ""\noperator_source_ranges = ["203.0.113.5/32"]\n')
     done = _run(export, stubs)
     assert done.returncode == 1
-    assert ("project is empty in deploy.tfvars. Set it to your GCP project ID "
-            "(gcloud config get-value project).") in done.stdout, done.stdout
+    assert ("      project is empty in deploy.tfvars. Set it to your GCP project ID.\n"
+            "      To see the current one, run:\n"
+            "        gcloud config get-value project\n") in done.stdout, done.stdout
+    assert (" Reason    project is empty in deploy.tfvars. Set it to your GCP project "
+            "ID.\n") in done.stdout
     assert "] Terraform apply" not in done.stdout
 
 
@@ -1349,8 +1504,10 @@ def test_an_empty_azure_subscription_stops_unless_the_environment_names_one(azur
                     'operator_source_ranges = ["203.0.113.5/32"]\n')
     done = _run(export, stubs)
     assert done.returncode == 1
-    assert ("subscription_id is empty in deploy.tfvars. Set it to: az account show "
-            "--query id -o tsv") in done.stdout, done.stdout
+    assert ("      To see it, run:\n"
+            "        az account show --query id -o tsv\n") in done.stdout, done.stdout
+    assert (" Reason    subscription_id is empty in deploy.tfvars. Set it to your "
+            "subscription id.\n") in done.stdout
 
     done = _run(export, stubs, env_extra={"ARM_SUBSCRIPTION_ID": "s"})
     assert "subscription_id is empty" not in done.stdout, done.stdout
@@ -1518,16 +1675,23 @@ def test_a_full_run_prints_every_phase_then_the_done_box(tmp_path):
     for block in re.split(r"^\[\d/8\] .*$", out, flags=re.M)[1:]:
         assert re.search(r"^      ok\b", block, re.M), block
     box = out[out.index(" DONE  "):].splitlines()
-    assert box[:7] == [
+    # Each command alone on its own line under a "run:" label, so a copied line
+    # is the whole command. The Watch command was split over two lines, and the
+    # second half got pasted into PowerShell after the first opened a shell.
+    assert box[:11] == [
         " DONE  Infrastructure is up. Provisioning is running.",
         "-" * 62,
         " Portal    https://%s/guacamole" % JUMP_IP,
-        " Logins    terraform -chdir=terraform output guacamole",
-        " Watch     ssh -i keys/id_ed25519 blueop@%s" % JUMP_IP,
-        "           tail -f ~/provision/run.log",
+        "",
+        " Logins, run:",
+        "   terraform -chdir=terraform output guacamole",
+        "",
+        " Watch provisioning, run (Ctrl-C stops watching, not the build):",
+        '   ssh -i keys/id_ed25519 blueop@%s "tail -f ~/provision/run.log"' % JUMP_IP,
+        "",
         " Finished  when run.log shows RUN EXITED ok=1 (45-75 min)"]
-    assert re.fullmatch(r" Log       logs/deploy-\d{8}-\d{6}Z\.log", box[7]), box[7]
-    assert box[8] == "=" * 62
+    assert re.fullmatch(r" Log       logs/deploy-\d{8}-\d{6}Z\.log", box[11]), box[11]
+    assert box[12] == "=" * 62
     # The triage header is the log's alone, and the old stage markers are gone.
     assert "redStackPRO deploy log" not in out
     assert "== [" not in out
@@ -1544,8 +1708,21 @@ def test_from_deploy_ps1_the_done_box_writes_windows_paths(tmp_path):
     export, stubs, _ = _range_export(tmp_path)
     done = _run(export, stubs, env_extra={"REDSTACKPRO_FROM_PS1": "1"})
     assert done.returncode == 0, done.stdout + done.stderr
-    assert " Watch     ssh -i keys\\id_ed25519 blueop@%s" % JUMP_IP in done.stdout
+    assert ('\n   ssh -i keys\\id_ed25519 blueop@%s "tail -f ~/provision/run.log"\n'
+            % JUMP_IP) in done.stdout
     assert re.search(r"^ Log       logs\\deploy-\d{8}-\d{6}Z\.log$", done.stdout, re.M)
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_a_key_path_with_a_space_is_quoted_in_the_watch_command(tmp_path):
+    export, stubs, _ = _range_export(tmp_path)
+    key = export / "my keys" / "id_ed25519"
+    key.parent.mkdir()
+    key.write_text("not a real key", encoding="utf-8")
+    done = _run(export, stubs, env_extra={"REDSTACKPRO_SSH_KEY": "my keys/id_ed25519"})
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert ('\n   ssh -i "my keys/id_ed25519" blueop@%s "tail -f ~/provision/run.log"\n'
+            % JUMP_IP) in done.stdout
 
 
 def test_deploy_ps1_tells_deploy_sh_it_came_from_powershell(tmp_path):
@@ -1602,7 +1779,10 @@ def test_a_local_check_failure_is_named_and_logged(staged):
     done = _run(export, stubs)  # no gcloud: the credential check stops it
     assert done.returncode == 1
     assert " FAILED  local checks" in done.stdout
-    assert " Reason    GCP credentials are not set." in done.stdout
+    assert " Reason    GCP credentials are not set.\n" in done.stdout
+    # Two commands, each alone on its own line, not joined with && on the reason.
+    assert ("      To sign in, run both:\n        gcloud auth login\n"
+            "        gcloud auth application-default login\n") in done.stdout
     assert _log(export).splitlines()[-1] == "result: FAILED (exit 1) in phase local checks"
 
 
@@ -1791,11 +1971,16 @@ def test_an_offense_run_log_has_no_jumpbox_pass_or_winrm_gate(tmp_path):
 
 @pytest.mark.parametrize("provider", ["gcp", "aws", "azure", "proxmox"])
 @pytest.mark.parametrize("name", ["redstack.json", "minimal.json"])
-def test_deploy_sh_and_its_runner_are_valid_bash(provider, name):
+def test_deploy_sh_and_its_runner_are_valid_bash(tmp_path, provider, name):
     bash = _bash()
     if bash is None:
         pytest.skip("no bash to syntax-check the emitted script")
     script = generate_deploy_script(example(name), Registry(), provider=provider)
-    for body in (script, _remote_block(script, "RUNNER")):
-        done = subprocess.run([bash, "-n", "-c", body], capture_output=True, text=True)
+    # Files, not bash -c: deploy.sh outgrew what a Windows command line carries,
+    # and Git Bash silently cut the -c argument short.
+    for i, body in enumerate((script, _remote_block(script, "RUNNER"))):
+        path = tmp_path / ("check%d.sh" % i)
+        path.write_text(body, encoding="utf-8", newline="\n")
+        done = subprocess.run([bash, "-n", path.name], cwd=tmp_path,
+                              capture_output=True, text=True)
         assert done.returncode == 0, done.stderr

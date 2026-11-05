@@ -32,6 +32,8 @@ resource "google_compute_instance" "this" {
   labels = {
     redstackpro_kind    = var.kind
     redstackpro_node_id = replace(var.node_id, "_", "-")
+    # Scopes the teardown --force sweep to this deployment.
+    redstackpro_deploy = var.deploy_id
   }
 
   # The auto stop schedule, when the canvas asked for one. GCP applies the

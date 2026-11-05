@@ -12,6 +12,11 @@ variable "kind" {
   type        = string
 }
 
+variable "deploy_id" {
+  description = "This deployment's random id, carried as the redstackpro_deploy label. manage.sh teardown --force deletes only instances carrying it."
+  type        = string
+}
+
 variable "project" {
   type = string
 }

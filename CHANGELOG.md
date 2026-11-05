@@ -353,6 +353,36 @@ versioning, and dates are UTC.
   ran, and nothing reported it.
 - The scheduled task bot's default task name is `schedule_bot`. It shared
   `connect_bot` with the logon bot, so a host with both kept only one.
+- The `deploy.sh` check that a build has time to finish before its auto-stop
+  measured to the stop time in UTC on Windows. Python there has no timezone
+  database unless `tzdata` is installed, and the check read any IANA zone as UTC,
+  so a deploy at 12:34 New York time with an 18:00 `America/New_York` stop was
+  refused as 25 minutes away. The export now carries the zone's UTC offset, taken
+  at export, and the check uses it when Python cannot load the zone. redStackPRO
+  depends on `tzdata`, so the compiler can always resolve the zone.
+- A deploy started with `deploy.ps1` printed its override and recovery commands in
+  bash form (`REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh`,
+  `bash manage.sh teardown --force`), which fail at a PowerShell prompt or run WSL's
+  bash. From `deploy.ps1` they are now written for PowerShell
+  (`$env:REDSTACKPRO_MIN_STOP_LEAD = '0'; .\deploy.ps1`,
+  `.\manage.ps1 teardown --force`), the Azure preflight's override included, and
+  each sits alone on its own line.
+- The `DONE` box split the command that watches provisioning over two lines, so a
+  user who copied the first line got an interactive ssh session and then ran
+  `tail -f` in PowerShell. It is now one line,
+  `ssh -i keys\id_ed25519 blueop@<jumpbox> "tail -f ~/provision/run.log"`, with the
+  key path in the form of the shell the deploy ran from. Every command the deploy
+  prints, in the `DONE` box and in the reasons it stops (the cloud sign-in, an empty
+  `project` or `subscription_id`, a missing key, an unregistered Azure provider),
+  sits alone on its own line under a label ending `run:`.
+- `manage.sh teardown --force` on GCP and AWS deleted every redStackPRO instance in
+  the project or region, so a team running several ranges there lost all of them.
+  Every GCP and AWS instance now carries a `redstackpro_deploy` label or tag, a
+  random id Terraform keeps in that deployment's state, and the sweep deletes only
+  the instances in this deployment's state and those carrying its id, which still
+  finds one an interrupted apply created but never recorded. With no state it
+  deletes no instance. The help screen, the teardown summary and the
+  DEPLOYMENT-GUIDE say so.
 
 ## [0.9.2] (2026-11-04)
 

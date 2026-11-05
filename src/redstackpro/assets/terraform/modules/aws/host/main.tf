@@ -94,6 +94,8 @@ resource "aws_instance" "this" {
     redstackpro         = "true"
     redstackpro_kind    = var.kind
     redstackpro_node_id = var.node_id
+    # Scopes the teardown --force sweep to this deployment.
+    redstackpro_deploy = var.deploy_id
   }
 }
 
