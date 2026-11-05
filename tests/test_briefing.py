@@ -276,3 +276,13 @@ def test_a_poisoning_bot_the_provider_drops_needs_no_console_signin():
     assert console_signin_user(overlay, "azure") is None
     assert console_signin_user(overlay, "esxi") == "north\\jon.snow"
 
+
+def test_the_client_image_providers_match_the_canvas_and_cap005():
+    from redstackpro.briefing import CLIENT_IMAGE_PROVIDERS
+    from redstackpro.export import RANGE_PROVIDERS
+    from redstackpro.validate import _NO_CLIENT_IMAGE
+    assert set(CLIENT_IMAGE_PROVIDERS) | set(_NO_CLIENT_IMAGE) == set(RANGE_PROVIDERS)
+    assert not set(CLIENT_IMAGE_PROVIDERS) & set(_NO_CLIENT_IMAGE)
+    js = (ROOT / "frontend/src/activity.js").read_text(encoding="utf-8")
+    m = re.search(r"export const CLIENT_IMAGE_PROVIDERS = (\[[^\]]*\]);", js)
+    assert m and json.loads(m.group(1)) == list(CLIENT_IMAGE_PROVIDERS)

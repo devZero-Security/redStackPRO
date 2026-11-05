@@ -6,8 +6,9 @@ import { VULN_LABEL, VULN_PARAMS } from "./vulns.js";
 import { formKeys, formSections } from "./vulnForm.js";
 import {
   ACTIVITIES, ACTIVITY_IDS, DEFAULT_BOT_MINUTES, DEFAULT_SCRIPT_PATH, DEFAULT_TASK, MAX_BOT_MINUTES,
-  SCHEDULE_ACTIONS, actionCommand, botMinutes, findingsByActivity, losesQuotes, onlyOn,
-  providerBlock, psQuote, psUnquote, readSchedule, scheduleWith, showsActivity, taskClash, toggled,
+  CLIENT_IMAGE_PROVIDERS, SCHEDULE_ACTIONS, actionCommand, botMinutes, consoleSigninUser,
+  findingsByActivity, losesQuotes, onlyOn, providerBlock, psQuote, psUnquote, readSchedule,
+  scheduleWith, showsActivity, taskClash, toggled,
 } from "./activity.js";
 
 const load = (path) => JSON.parse(readFileSync(path, "utf8"));
@@ -261,6 +262,50 @@ test("toggling adds once and removes", () => {
   assert.deepStrictEqual(toggled(undefined, "schedule", true), ["schedule"]);
   assert.deepStrictEqual(toggled(["schedule"], "schedule", true), ["schedule"]);
   assert.deepStrictEqual(toggled(["a", "schedule"], "schedule", false), ["a"]);
+});
+
+test("a Windows 10 or 11 host signs its bot user in where the provider boots a client", () => {
+  const wks = (over = {}) => ({
+    os: "windows_10",
+    vulns: ["stored_credential"],
+    vulns_vars: { stored_credential: { owner: "FREIGHT\dana.brooks" } },
+    ...over,
+  });
+  assert.deepStrictEqual(CLIENT_IMAGE_PROVIDERS, ["azure", "proxmox", "esxi"]);
+  for (const provider of CLIENT_IMAGE_PROVIDERS) {
+    assert.strictEqual(consoleSigninUser(wks(), provider), "FREIGHT\dana.brooks", provider);
+  }
+  assert.strictEqual(consoleSigninUser(wks({ os: "windows_11" }), "azure"), "FREIGHT\dana.brooks");
+  // GCP and AWS boot Server 2022, a server build is a server, and no provider is no answer.
+  for (const provider of ["gcp", "aws", undefined]) {
+    assert.strictEqual(consoleSigninUser(wks(), provider), null, provider);
+  }
+  assert.strictEqual(consoleSigninUser(wks({ os: "windows_server_2022" }), "azure"), null);
+  // The autologon vuln signs its own user in.
+  assert.strictEqual(consoleSigninUser(wks({ vulns: ["stored_credential", "autologon"] }), "azure"), null);
+  assert.strictEqual(consoleSigninUser(wks({ vulns: ["smbv1"] }), "azure"), null);
+});
+
+test("the console user is picked in the role's order", () => {
+  const user = (vulns, vulns_vars, provider = "proxmox") =>
+    consoleSigninUser({ os: "windows_10", vulns, vulns_vars }, provider);
+  const vv = {
+    bot_user: "north\arya.stark",
+    stored_credential: { owner: "north\robb.stark" },
+    schedule: { user: "north\sansa.stark" },
+    ntlm_relay_user: "north\eddard.stark",
+  };
+  assert.strictEqual(user(["stored_credential", "rdp_scheduler"], vv), "north\arya.stark");
+  assert.strictEqual(user(["schedule", "stored_credential"], vv), "north\robb.stark");
+  assert.strictEqual(user(["ntlm_relay", "schedule"], vv), "north\sansa.stark");
+  assert.strictEqual(user(["ntlm_relay", "responder"], vv), "north\arya.stark");
+  assert.strictEqual(user(["ntlm_relay"], vv), "north\eddard.stark");
+  assert.strictEqual(user(["ntlm_relay"], { bot_user: "north\jon.snow" }), "north\jon.snow");
+  // A SYSTEM task needs no sign-in, and a bot the provider drops is not planted.
+  assert.strictEqual(user(["schedule"], { schedule: { name: "x" } }), null);
+  assert.strictEqual(user(["responder"], vv, "azure"), null);
+  assert.strictEqual(user(["rdp_scheduler"], { bot_user: "  " }), null);
+  assert.strictEqual(user(["rdp_scheduler"], "not an object"), null);
 });
 
 console.log(`activity: ${passed} passed`);
