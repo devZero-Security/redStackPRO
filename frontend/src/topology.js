@@ -12,13 +12,14 @@
 import { HOST } from "./layout.js";
 
 // An empty container keeps a roomy drop target. One with contents and no stored
-// size hugs them: the 420x260 floor made a one host domain overlap the box
-// placed under it (NHA's ninja over academy).
+// size takes its contents' height: the 260 floor made a one host domain overlap
+// the box placed under it (NHA's ninja over academy). The width floor stays, so
+// the header (name, fqdn, user count) still reads.
 export const EMPTY_CONTAINER = { width: 420, height: 260 };
 
 export function containerSize(node, fit, filled) {
   const floor = fit || { width: 220, height: 140 };
-  const base = filled ? floor : EMPTY_CONTAINER;
+  const base = filled ? { width: EMPTY_CONTAINER.width, height: floor.height } : EMPTY_CONTAINER;
   return {
     width: Math.max(node.width || base.width, floor.width),
     height: Math.max(node.height || base.height, floor.height),

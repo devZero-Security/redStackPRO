@@ -52,9 +52,11 @@ test("an empty container keeps a roomy drop target", () => {
   assert.deepStrictEqual(containerSize({}, { width: 220, height: 140 }, false), EMPTY_CONTAINER);
 });
 
-test("a filled container with no stored size hugs its contents", () => {
+test("a filled container with no stored size takes its contents' height", () => {
   assert.deepStrictEqual(containerSize({}, { width: 300, height: 150 }, true),
-    { width: 300, height: 150 });
+    { width: 420, height: 150 });
+  assert.deepStrictEqual(containerSize({}, { width: 900, height: 150 }, true),
+    { width: 900, height: 150 });
 });
 
 test("a stored size wins when it is larger than the contents", () => {
