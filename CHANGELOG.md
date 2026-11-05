@@ -418,6 +418,27 @@ versioning, and dates are UTC.
   finds one an interrupted apply created but never recorded. With no state it
   deletes no instance. The help screen, the teardown summary and the
   DEPLOYMENT-GUIDE say so.
+- The Windows key command in the Export panel, the DEPLOYMENT-GUIDE, the README and
+  the wiki no longer passes `-N ''`. Windows PowerShell 5.1 drops an empty argument,
+  so ssh-keygen stopped and wrote no key. It is
+  `ssh-keygen -t ed25519 -f keys\id_ed25519`, with Enter pressed twice for no
+  passphrase, and the `deploy.sh` missing-key hint gives that form when run from
+  `deploy.ps1`.
+- On AWS, the README, the wiki and the `deploy.sh` note say that AmazonEC2FullAccess
+  does not cover auto-stop, which every shipped blueprint turns on, and list the IAM
+  and EventBridge Scheduler permissions it needs to create, read and delete its role
+  and schedule.
+- The DEPLOYMENT-GUIDE no longer tells you to install Ansible (it installs itself on
+  the jumpbox), and the briefings give the lab password command as
+  `terraform -chdir=terraform output -raw lab_password` and the jumpbox ssh line
+  with `-i keys/id_ed25519`, so both run from the export folder.
+- The offense briefing's Hosts table listed bare node ids and each redirector's
+  private address. It now uses the deployed names (`off-...`) and the redirector's
+  public address, the one its DNS A record points at.
+- `verify.py` without PyYAML stopped with a Python traceback and exit 1, the code for
+  a failed check. It now says to install PyYAML and exits 2, could not run.
+- Peering findings (PEER001 to PEER003) showed in the canvas as a bare code with no
+  family. They now read Peering, like every other family.
 
 ## [0.9.2] (2026-11-04)
 
