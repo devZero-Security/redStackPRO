@@ -70,3 +70,18 @@
 .rg-delegate-add { display: flex; gap: 6px; margin-top: 4px; }
 .rg-delegate-add input { flex: 1; min-width: 0; }
 .rg-delegate-add button { flex: none; padding: 4px 12px; }
+
+/* The vulnerability settings form: a fieldset per ticked vuln, a key per field.
+   The key keeps its case, unlike .rg-field-label, so it reads as it is written
+   in the JSON below. */
+.rg-vuln-form { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.rg-vuln-form > .rg-fieldset { margin: 4px 0 6px; }
+.rg-vuln-key { font-size: var(--fs-1); color: var(--text); }
+.rg-vuln-key code { font-family: ui-monospace, monospace; }
+.rg-vuln-key-field > .rg-widget-warn { margin-top: 0; }
+.rg-vuln-rows { max-height: 180px; margin: 2px 0 4px; }
+.rg-vuln-rows-add { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.rg-vuln-rows-add input, .rg-vuln-rows-add select, .rg-vuln-rows-add textarea { min-width: 0; }
+.rg-vuln-rows-add textarea { grid-column: 1 / -1; }
+.rg-vuln-rows-cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.rg-vuln-rows-add button { padding: 4px 10px; }

@@ -335,19 +335,21 @@ describe("vulns_vars is edited as JSON", () => {
 describe("vulns_vars help lists the keys of the ticked vulns", () => {
   const help = () => screen.getByRole("textbox", { name: "vulns_vars" }).closest(".rg-field");
 
-  test("a ticked parameterized vuln lists its keys, required or optional, and an example", () => {
+  // The keys used to be a help list under the JSON; they are now the form above
+  // it (vulnForm.test.jsx covers the inputs), and the JSON is its advanced view.
+  test("a ticked parameterized vuln lists its keys, required or optional, in the form", () => {
     render(<HostHarness overlay={{ vulns: ["smbv1", "constrained_delegation_kerberos", "ntlm_relay"] }} />);
-    const box = within(help());
+    const box = within(document.querySelector(".rg-vuln-form"));
     expect(box.getByText("Constrained delegation (Kerberos only)")).toBeTruthy();
     expect(box.getByText("delegate_to")).toBeTruthy();
-    expect(box.getByText('{"delegate_to":["CIFS/srv01.corp.local"]}')).toBeTruthy();
     expect(box.getByText("ntlm_relay_user")).toBeTruthy();
     expect(box.getByText("required (or bot_user)")).toBeTruthy();
     expect(box.getByText("ntlm_relay_target")).toBeTruthy();
     expect(box.getAllByText("optional")).toHaveLength(1);
     // smbv1 reads nothing, so it gets no entry.
     expect(box.queryByText("SMBv1 enabled")).toBeNull();
-    expect(box.queryByText(/a file share path or a delegation target/)).toBeNull();
+    const jsonField = screen.getByRole("textbox", { name: "Edit as JSON" }).closest(".rg-field");
+    expect(within(jsonField).queryByText(/a file share path or a delegation target/)).toBeNull();
   });
 
   test("with no parameterized vuln ticked it stays the plain one-line help", () => {

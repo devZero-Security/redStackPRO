@@ -3,8 +3,7 @@ import { FindingBadge } from "./FindingBadge.jsx";
 import { isContainer } from "./topology.js";
 import { PROFILES } from "./profiles.js";
 import {
-  ACCOUNT_TECHNIQUE_IDS, VULN_CATALOG, VULN_LABEL, VULN_PARAMS, VULN_PROVIDERS,
-  vulnParamsExample,
+  ACCOUNT_TECHNIQUE_IDS, VULN_CATALOG, VULN_PROVIDERS,
 } from "./vulns.js";
 import { HARDENING_CATALOG } from "./hardening.js";
 import {
@@ -22,8 +21,8 @@ import { TrustEditor } from "./TrustEditor.jsx";
 import { EdgeRole, FrontsPorts } from "./EdgeEditors.jsx";
 import { Connections } from "./Connections.jsx";
 import { TopologySettings } from "./TopologySettings.jsx";
-import { DelegateToPicker } from "./DelegateToPicker.jsx";
-import { hostDomain, spnChoices, withDelegationDefault } from "./spnChoices.js";
+import { VulnSettings } from "./VulnSettings.jsx";
+import { formKeys, keysOutsideForm, withVulnDefaults } from "./vulnForm.js";
 import { nodeName, roleTitle } from "./edgeRoles.js";
 
 // A group starts expanded only when one of its items is already selected, so
@@ -679,40 +678,47 @@ function ListField({ label, help, value, disabled, onChange, placeholder, classN
   );
 }
 
-// The help under vulns_vars: for each ticked vuln that reads parameters, its
-// keys and a one-line example to copy, in catalog order. With none ticked, the
-// field's plain description.
-function VulnVarsHelp({ vulns, description }) {
-  const ticked = new Set(vulns || []);
-  const ids = VULN_CATALOG.flatMap((g) => g.items.map((i) => i.id)).filter(
-    (id) => ticked.has(id) && VULN_PARAMS[id]
-  );
-  if (!ids.length) {
-    return description ? <span className="rg-field-help">{description}</span> : null;
-  }
+// The vulnerability settings: the form for the ticked vulns, then the same
+// object as JSON. With the form on screen the JSON is its advanced view:
+// retitled, saying which keys only it holds, and without the findings the form
+// already shows at their key.
+function VulnVarsField({ spec, node, document, required, readOnly, defs, ctx, findings, onChange }) {
+  const overlay = node.overlay || {};
+  const keys = formKeys(overlay.vulns);
+  const only = keysOutsideForm(overlay.vulns, overlay.vulns_vars);
+  const atKey = (f) =>
+    [...keys].some((k) => f.field === `vulns_vars.${k}` || f.field.startsWith(`vulns_vars.${k}.`));
+  const jsonSpec = keys.size
+    ? {
+        ...spec,
+        title: "Edit as JSON",
+        description: only.length
+          ? `The same settings as one JSON object. Only here: ${only.join(", ")}.`
+          : "The same settings as one JSON object, for a key the form does not show.",
+      }
+    : spec;
   return (
-    <div className="rg-field-help rg-vuln-params">
-      <span>Keys the ticked vulns read. Merge the examples into one JSON object.</span>
-      {ids.map((id) => (
-        <div key={id} className="rg-vuln-params-item">
-          <span className="rg-vuln-params-label">{VULN_LABEL[id]}</span>
-          <ul>
-            {VULN_PARAMS[id].map((p) => (
-              <li key={p.key}>
-                <code>{p.key}</code>
-                {p.required ? (
-                  <span className="rg-required">required{p.or ? ` (or ${p.or})` : ""}</span>
-                ) : (
-                  <span className="rg-optional">optional</span>
-                )}{" "}
-                {p.about}
-              </li>
-            ))}
-          </ul>
-          <code className="rg-vuln-params-example">{vulnParamsExample(id)}</code>
-        </div>
-      ))}
-    </div>
+    <>
+      <VulnSettings
+        title={fieldLabel("vulns_vars", spec)}
+        node={node}
+        document={document}
+        findings={findings}
+        disabled={readOnly}
+        onChange={onChange}
+      />
+      <Field
+        name="vulns_vars"
+        spec={jsonSpec}
+        required={required}
+        value={overlay.vulns_vars}
+        disabled={readOnly}
+        defs={defs}
+        ctx={ctx}
+        findings={keys.size ? findings.filter((f) => !atKey(f)) : findings}
+        onChange={onChange}
+      />
+    </>
   );
 }
 
@@ -1199,7 +1205,7 @@ export function Inspector({
                   onChange={(value) =>
                     onOverlayChange(
                       node.id,
-                      withDelegationDefault(document, node, { ...(node.overlay || {}), vulns: value })
+                      withVulnDefaults(document, node, { ...(node.overlay || {}), vulns: value })
                     )
                   }
                 />
@@ -1258,45 +1264,21 @@ export function Inspector({
                   readOnly={readOnly}
                   onChange={(overlay) => onOverlayChange(node.id, overlay)}
                 />
-              ) : name === "vulns_vars"
-                && ((node.overlay || {}).vulns || []).includes("constrained_delegation_kerberos") ? (
-                <React.Fragment key={`${name}-${node.id}`}>
-                  <DelegateToPicker
-                    label="Delegate to (constrained delegation, Kerberos only)"
-                    value={((node.overlay || {}).vulns_vars || {}).delegate_to}
-                    groups={spnChoices(document, hostDomain(document, node.id), { exclude: node.id })}
-                    help="Saved as delegate_to in the vulnerability settings below."
-                    disabled={readOnly}
-                    onChange={(spns) => {
-                      const vars = { ...((node.overlay || {}).vulns_vars || {}) };
-                      if (spns) vars.delegate_to = spns;
-                      else delete vars.delegate_to;
-                      onOverlayChange(node.id, {
-                        ...(node.overlay || {}),
-                        vulns_vars: Object.keys(vars).length ? vars : undefined,
-                      });
-                    }}
-                  />
-                  <Field
-                    name={name}
-                    spec={spec}
-                    required={required.includes(name)}
-                    value={(node.overlay || {})[name]}
-                    help={
-                      <VulnVarsHelp
-                        vulns={(node.overlay || {}).vulns}
-                        description={spec.description}
-                      />
-                    }
-                    disabled={readOnly}
-                    defs={schema?.$defs}
-                    ctx={fieldCtx}
-                    findings={onField}
-                    onChange={(value) =>
-                      onOverlayChange(node.id, { ...(node.overlay || {}), [name]: value })
-                    }
-                  />
-                </React.Fragment>
+              ) : name === "vulns_vars" ? (
+                <VulnVarsField
+                  key={`${name}-${node.id}`}
+                  spec={spec}
+                  node={node}
+                  document={document}
+                  required={required.includes(name)}
+                  readOnly={readOnly}
+                  defs={schema?.$defs}
+                  ctx={fieldCtx}
+                  findings={onField}
+                  onChange={(vars) =>
+                    onOverlayChange(node.id, { ...(node.overlay || {}), vulns_vars: vars })
+                  }
+                />
               ) : (
                 <Field
                   // Keyed by node too, so a JSON field's local text does not
@@ -1308,14 +1290,6 @@ export function Inspector({
                   }
                   required={required.includes(name)}
                   value={(node.overlay || {})[name]}
-                  help={
-                    name === "vulns_vars" ? (
-                      <VulnVarsHelp
-                        vulns={(node.overlay || {}).vulns}
-                        description={spec.description}
-                      />
-                    ) : undefined
-                  }
                   disabled={readOnly}
                   defs={schema?.$defs}
                   ctx={fieldCtx}
