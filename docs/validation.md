@@ -295,6 +295,10 @@ Requirements come from the node kind registry, not from the document.
 - `CAP005` info, provider-specific. A range host with `os: windows_10` or
   `windows_11` on GCP or AWS. Neither publishes a Windows client image, so the
   host boots Windows Server 2022. Azure has the client images.
+- `CAP006` info, provider-specific. A range host with `os: windows_10` on a
+  provider that boots a real client build (Azure, Proxmox, ESXi). Microsoft
+  ended Windows 10 support on 2025-10-14. The choice stays for labs that need
+  it; a new workstation defaults to `windows_11`.
 - `CAP001` and `CAP002` name the overlay field whose value raised the
   requirement (for example `exposure` on a segment), in the remedy and in
   `field`.

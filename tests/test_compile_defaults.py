@@ -66,6 +66,43 @@ def test_an_ad_host_with_no_os_is_windows_in_both_halves(provider):
     assert image in main
 
 
+@pytest.mark.parametrize("provider", PROVIDERS)
+def test_a_wks_with_no_os_is_windows_11_in_both_halves(provider):
+    """A workstation defaults to Windows 11; GCP and AWS boot Server 2022 for it."""
+    doc = load(PUBLIC / "goad/minilab.json")
+    _node(doc, "ws")["overlay"].pop("os")
+    files = compile_topology(doc, Registry(), provider=provider)
+    hv = _yaml(files, "ansible/host_vars/def-ws.yml")
+    assert hv["redstackpro_wks_os"] == "windows_11"
+    assert hv["ansible_connection"] == "psrp"
+    image = {"gcp": "windows-cloud/windows-2022",
+             "aws": "Windows_Server-2022-English-Full-Base",
+             "azure": '"win11-23h2-pro"'}[provider]
+    assert image in files["terraform/main.tf"]
+
+
+@pytest.mark.parametrize("name, host", [
+    ("goad/goad-wazuh.json", "ws01"), ("goad/minilab.json", "ws"),
+    ("goad/sccm.json", "client"), ("harbor.json", "fr-wks01")])
+def test_shipped_workstations_are_windows_11(name, host):
+    """Windows 10 left support on 2025-10-14; the shipped labs moved off it."""
+    assert _node(load(PUBLIC / name), host)["overlay"]["os"] == "windows_11"
+
+
+def test_azure_terraform_falls_back_to_the_build_ansible_defaults_to():
+    """image_for without apply_compile_defaults agrees with it per kind."""
+    from redstackpro.terraform import azure
+    from redstackpro.terraform.plan import DEFAULT_WINDOWS_OS, TerraformPlan
+    plan = TerraformPlan(goad_light(), Registry())
+    assert DEFAULT_WINDOWS_OS == {"dc": "windows_server_2022",
+                                  "srv": "windows_server_2022", "wks": "windows_11"}
+    for kind, build in DEFAULT_WINDOWS_OS.items():
+        node = {"id": "%s01" % kind, "kind": kind, "overlay": {}}
+        assert azure.image_for(plan, node) == azure.WINDOWS_IMAGES[build], kind
+    assert azure.WINDOWS_IMAGES["windows_11"][:3] == (
+        "MicrosoftWindowsDesktop", "windows-11", "win11-23h2-pro")
+
+
 def test_a_dc_with_no_hostname_takes_its_node_id():
     doc = goad_light()
     _node(doc, "winterfell")["overlay"].pop("hostname")

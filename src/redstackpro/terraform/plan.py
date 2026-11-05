@@ -24,6 +24,11 @@ AD_HOST_KINDS = ("dc", "srv", "wks")
 HOST_KINDS = ("redirector", "teamserver", "collector", "jumpbox", "operator",
               "dc", "srv", "wks", "siem")
 
+# The Windows build an AD host gets when its os is unset. GCP and AWS have no
+# client image, so a wks boots Server 2022 there (CAP005).
+DEFAULT_WINDOWS_OS = {"dc": "windows_server_2022", "srv": "windows_server_2022",
+                      "wks": "windows_11"}
+
 
 class GenerationError(Exception):
     pass

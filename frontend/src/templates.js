@@ -110,7 +110,7 @@ export const TEMPLATES = {
       name: "MINILAB",
       group: "GOAD",
       blurb:
-        "A minimal lab: one DC and one Windows 10 workstation, which boots " +
+        "A minimal lab: one DC and one Windows 11 workstation, which boots " +
         "Windows Server 2022 on GCP and AWS.",
       teaches:
         "The smallest thing that still behaves like a domain. Stored " +

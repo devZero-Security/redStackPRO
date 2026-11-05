@@ -74,7 +74,7 @@ Cloud resource names carry the prefix, Windows and AD names do not.
 |------|---------|---------|------|
 | def-jumpbox | - | 192.168.56.2 | foothold, Guacamole, ssh |
 | def-mecm | MECM | 192.168.56.3 | site server, MECM primary site |
-| def-client | CLIENT | 192.168.56.4 | Windows 10 client |
+| def-client | CLIENT | 192.168.56.4 | Windows 11 client |
 | def-dc | DC | 192.168.56.5 | domain controller |
 | def-mssql | MSSQL | 192.168.56.6 | remote site database |
 

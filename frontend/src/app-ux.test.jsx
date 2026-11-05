@@ -104,10 +104,11 @@ beforeEach(() => openUrl(""));
 
 
 describe("palette seeds", () => {
-  test("a dropped dc, srv or wks arrives as Windows Server 2022", () => {
-    for (const kind of ["dc", "srv", "wks"]) {
+  test("a dropped dc or srv arrives as Windows Server 2022, a wks as Windows 11", () => {
+    const want = { dc: "windows_server_2022", srv: "windows_server_2022", wks: "windows_11" };
+    for (const [kind, os] of Object.entries(want)) {
       const doc = addNode(emptyDocument("defense"), { kind }, { x: 0, y: 0 });
-      expect(doc.nodes[0].overlay.os, kind).toBe("windows_server_2022");
+      expect(doc.nodes[0].overlay.os, kind).toBe(os);
     }
   });
 

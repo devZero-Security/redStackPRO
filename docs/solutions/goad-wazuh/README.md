@@ -66,7 +66,7 @@ SIEM and a hardened workstation, on `192.168.56.0/24`.
 | kingslanding | KINGSLANDING | sevenkingdoms.local (root) | 192.168.56.10 | DC, `ldap_signing_off`, the full sevenkingdoms ACL chain (12 edges), Wazuh agent |
 | winterfell | WINTERFELL | north.sevenkingdoms.local | 192.168.56.11 | DC, `unconstrained_delegation`, `llmnr_poisoning`, `ldap_signing_off`, Wazuh agent |
 | castelblack | CASTELBLACK | north.sevenkingdoms.local | 192.168.56.22 | member, MSSQL + IIS, `iis_webshell`, `mssql_impersonation`, `gpp_password`, Wazuh agent |
-| ws01 | WS01 | sevenkingdoms.local | 192.168.56.30 | Windows 10 workstation, **hardened** (ASR, RunAsPPL, constrained PowerShell, Defender tamper protection), no planted vulns |
+| ws01 | WS01 | sevenkingdoms.local | 192.168.56.30 | Windows 11 workstation, **hardened** (ASR, RunAsPPL, constrained PowerShell, Defender tamper protection), no planted vulns |
 | wazuh | - | - | 192.168.56.5 | the SIEM (Ubuntu) |
 | jumpbox | - | - | 192.168.56.4 | foothold, Guacamole, SSH, range CA |
 

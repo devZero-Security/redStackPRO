@@ -68,7 +68,7 @@ inside `172.20.0.0/16`. The internal addresses are pinned in the template.
 | hq-dc01 | HQ-DC01 | harbor.corp (root) | 172.20.10.10 | root DC, `ldap_signing_off`, holds the enterprise admins |
 | fr-dc01 | FR-DC01 | freight.harbor.corp | 172.20.10.11 | child DC, `llmnr_poisoning`, `nbtns_poisoning` |
 | fr-app01 | FR-APP01 | freight.harbor.corp | 172.20.10.20 | member, MSSQL + IIS, `unconstrained_delegation`, `openshares`, no EDR |
-| fr-wks01 | FR-WKS01 | freight.harbor.corp | 172.20.10.30 | Windows 10 workstation, `stored_credential`, patient zero's host |
+| fr-wks01 | FR-WKS01 | freight.harbor.corp | 172.20.10.30 | Windows 11 workstation, `stored_credential`, patient zero's host |
 | jumpbox | - | - | 172.20.10.4 | foothold, Guacamole, SSH, range CA |
 
 Cast:

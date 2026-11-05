@@ -13,7 +13,7 @@ a page instead of a pointer.
 - `kingslanding` - DC, Wazuh agent, `forcechangepassword`, `genericwrite`, `writedacl`, `ldap_signing_off`
 - `winterfell` - DC, Wazuh agent, `kerberoasting`, `asreproasting`, `unconstrained_delegation`, `llmnr_poisoning`, `ldap_signing_off`
 - `castelblack` - member (MSSQL + IIS), Wazuh agent, `iis_webshell`, `mssql_impersonation`, `gpp_password`, `password_in_description`, `weak_password`
-- `ws01` - Windows 10 workstation (Server 2022 on GCP and AWS), no planted vulns, no hardening; edr reads defender but real-time protection is off unless `defender_enabled` is set
+- `ws01` - Windows 11 workstation (Server 2022 on GCP and AWS), no planted vulns, no hardening; edr reads defender but real-time protection is off unless `defender_enabled` is set
 - `wazuh` - the SIEM (Ubuntu)
 - `jumpbox`
 

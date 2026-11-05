@@ -16,7 +16,7 @@ import json
 import re
 
 from .plan import (  # noqa: F401  GenerationError re-exported
-    GenerationError, align, operator_hosts_hcl,
+    DEFAULT_WINDOWS_OS, GenerationError, align, operator_hosts_hcl,
     operator_source_ranges_check, time_provider)
 
 # Marketplace image (publisher, offer, sku, version) per build. These must be the
@@ -150,7 +150,8 @@ def image_for(plan, node):
     # drift from it. Mirrors aws.image_for(plan, node).
     overlay = node.get("overlay", {})
     if plan.is_windows(node):
-        return WINDOWS_IMAGES.get(overlay.get("os"), _DEFAULT_WINDOWS)
+        os_ = overlay.get("os") or DEFAULT_WINDOWS_OS.get(node["kind"])
+        return WINDOWS_IMAGES.get(os_, _DEFAULT_WINDOWS)
     return LINUX_IMAGES.get(overlay.get("os", "debian"), LINUX_IMAGES["debian"])
 
 

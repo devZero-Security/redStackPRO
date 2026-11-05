@@ -1,7 +1,7 @@
 # minilab solution - redStackPRO edition
 
 `minilab` is the smallest GOAD-family lab that is **not** a subset of goad: a
-single domain, one DC and one Windows 10 workstation, built around two techniques
+single domain, one DC and one Windows 11 workstation, built around two techniques
 the GOAD series never exercises, CredSSP credential delegation and scheduled-task
 abuse. It is covered technique-by-technique in
 [the coverage page](../labs/minilab.md); this page walks the intended chain end to
@@ -60,7 +60,7 @@ One domain, `mini.lab` (MINILAB), on `192.168.56.0/24`.
 | host | AD name | role in the chain |
 |------|---------|-------------------|
 | dc | DC | domain controller, `stored_credential`, `enable_credssp_client`, runs the `connect_bot` scheduled task |
-| ws | WS | Windows 10 workstation, `enable_credssp_server` (the CredSSP receiver) |
+| ws | WS | Windows 11 workstation, `enable_credssp_server` (the CredSSP receiver) |
 | jumpbox | - | foothold, Guacamole, SSH, WireGuard, range CA |
 
 Cast (lab passwords are fixtures; read the briefing for this deploy's real ones):

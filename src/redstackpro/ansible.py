@@ -18,7 +18,7 @@ import yaml
 from . import decoyart, decoyassets
 from .naming import platform_account
 from .registry import Registry
-from .terraform.plan import AD_HOST_KINDS, HOST_KINDS
+from .terraform.plan import AD_HOST_KINDS, DEFAULT_WINDOWS_OS, HOST_KINDS
 from .validate import Context, is_valid
 
 PLACEHOLDER = "<<tf:%s:%s>>"
@@ -205,10 +205,6 @@ def _randomize_gating(topology):
                 gating["header_value"] = value
 
 
-# The Windows build an AD host gets when its os is unset. Matches the image every
-# Terraform backend falls back to, so both halves build the same machine.
-DEFAULT_WINDOWS_OS = "windows_server_2022"
-
 # ACL right names the canvas offers (BloodHound's edge names) mapped to the names
 # apply_acls.ps1 knows. Applied at compile so documents saved with the label work.
 ACL_RIGHT_ALIASES = {
@@ -267,7 +263,8 @@ def apply_compile_defaults(topology):
     needs, so an unset field compiles to a working host instead of failing in
     Ansible. In place and idempotent; callers pass a copy.
 
-    - dc/srv/wks with no os: windows_server_2022, the image Terraform picks.
+    - dc/srv with no os: windows_server_2022; wks with no os: windows_11. The
+      image Terraform picks (plan.DEFAULT_WINDOWS_OS).
     - dc/srv/wks with no hostname: the node id, the name the hosts files and
       the FQDN already use.
     - a domain with no netbios: its first fqdn label, uppercased, 15 max.
@@ -283,7 +280,7 @@ def apply_compile_defaults(topology):
         if kind in AD_HOST_KINDS:
             ov = node.setdefault("overlay", {})
             if not ov.get("os"):
-                ov["os"] = DEFAULT_WINDOWS_OS
+                ov["os"] = DEFAULT_WINDOWS_OS[kind]
             if not ov.get("hostname"):
                 ov["hostname"] = node["id"]
         elif kind == "domain":

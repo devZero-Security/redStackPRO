@@ -4,8 +4,8 @@
 // each rule is testable without rendering. Inspector.jsx Field consumes these.
 //
 // Defaults here mirror the compiler, not the schema alone: a dc with no os
-// builds Windows Server 2022, a dc with no hostname is named after its id, and
-// a domain with no netbios takes its first fqdn label uppercased.
+// builds Windows Server 2022 (a wks Windows 11), a dc with no hostname is named
+// after its id, and a domain with no netbios takes its first fqdn label uppercased.
 
 import { PROFILES } from "./profiles.js";
 
@@ -97,8 +97,8 @@ const OPTION_LABELS = {
   windows_server_2019: "Windows Server 2019",
   windows_server_2022: "Windows Server 2022",
   windows_server_2025: "Windows Server 2025",
-  windows_10: "Windows 10 (Server 2022 on GCP/AWS)",
-  windows_11: "Windows 11 (Server 2022 on GCP/AWS)",
+  windows_10: "Windows 10 (past end of support)",
+  windows_11: "Windows 11",
   linux: "Linux (Debian 13)",
   debian_13: "Debian 13",
   debian_12: "Debian 12",
@@ -168,6 +168,13 @@ const ROLE_HELP = {
   mecm: "Installs an MECM site.",
 };
 
+const OS_HELP = {
+  windows_10:
+    "Microsoft ended Windows 10 support on 2025-10-14. Kept for labs that need it. " +
+    "GCP and AWS boot Windows Server 2022 for it.",
+  windows_11: "GCP and AWS have no Windows client image, so it boots Windows Server 2022 there.",
+};
+
 // ----------------------------------------------------------------- defaults
 
 const leaf = (path) => path.split(".").pop();
@@ -182,6 +189,8 @@ function knownDefault(path, ctx = {}) {
   const ov = ctx.overlay || {};
   switch (path) {
     case "os":
+      // plan.DEFAULT_WINDOWS_OS
+      if (ctx.kind === "wks") return "windows_11";
       if (AD_KINDS.has(ctx.kind)) return "windows_server_2022";
       if (LINUX_ONLY_KINDS.has(ctx.kind)) return "debian_13";
       if (ctx.kind === "siem") return "debian_13";
@@ -350,6 +359,7 @@ export function fieldRule(path, spec, ctx, value) {
   if (path === "os" && LINUX_ONLY_KINDS.has(ctx.kind) && out.enum) {
     out = { ...out, enum: out.enum.filter((v) => !String(v).startsWith("windows")) };
   }
+  if (path === "os" && out.enum) out = { ...out, "x-ui-option-help": OS_HELP };
 
   if (path === "role" && RANGE_HOST_KINDS.has(ctx.kind) && out.enum) {
     const enumFor = ctx.kind === "dc" ? out.enum.filter((v) => v === "generic" || v === "adcs") : out.enum;

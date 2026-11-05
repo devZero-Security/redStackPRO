@@ -81,6 +81,32 @@ the deploy continues. `REDSTACKPRO_SKIP_PREFLIGHT=1` skips it, and
 """,
 }
 
+# Only when a host boots a client image. redStackPRO never sets license_type.
+AZURE_CLIENT_LICENSING = """
+## Azure: Windows client licensing
+
+Hosts on Windows 10 or 11 boot Microsoft's client images, which Microsoft licenses
+on Azure only for customers with a qualifying license, for example Windows
+Enterprise E3 or E5 per user, a Microsoft 365 plan that includes it, or a Visual
+Studio subscription for dev and test. redStackPRO does not set `license_type` on
+these VMs, so license eligibility is yours to confirm; see
+https://learn.microsoft.com/azure/virtual-machines/windows/windows-desktop-multitenant-hosting-deployment
+"""
+
+CLIENT_BUILDS = ("windows_10", "windows_11")
+
+
+def provider_notes(document, provider):
+    """The guide's provider section, plus the licensing note on an Azure export
+    with a Windows client host. Reads os after apply_compile_defaults."""
+    notes = PROVIDER_NOTES.get(provider, "")
+    if provider == "azure" and any(
+            (n.get("overlay") or {}).get("os") in CLIENT_BUILDS
+            for n in (document or {}).get("nodes", [])):
+        notes += AZURE_CLIENT_LICENSING
+    return notes
+
+
 # How to authenticate, per provider. Kept beside the tfvars list because they are
 # the same kind of fact: the one thing an export cannot do for you.
 CLOUD_AUTH = {
@@ -812,7 +838,7 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
         run_log=run_log(is_range),
         quotas=QUOTA_NOTES.get(provider, ""),
         preconditions="" if is_range else ACCOUNT_PRECONDITIONS.get(provider, ""),
-        provider_notes=PROVIDER_NOTES.get(provider, ""),
+        provider_notes=provider_notes(document, provider),
         confirm=CONFIRM_TFVARS.get(
             provider, "- Confirm the connection values in `deploy.tfvars` are the "
                       "ones for your environment."),
