@@ -550,7 +550,7 @@ describe("domain users", () => {
     await open(user, "sql_svc");
     expect(screen.queryByRole("textbox", { name: "description" })).toBeNull();
     expect(screen.queryByRole("textbox", { name: "SPNs" })).toBeNull();
-    expect(screen.queryByRole("textbox", { name: "delegate to" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Other SPN" })).toBeNull();
 
     await user.click(screen.getByRole("checkbox", { name: "Password in description" }));
     await user.type(screen.getByRole("textbox", { name: "description" }), "SQL service");
@@ -562,8 +562,10 @@ describe("domain users", () => {
     expect(spns.placeholder).toBe("HTTP/braavos.essos.local");
     await user.type(spns, "HTTP/braavos.essos.local, MSSQLSvc/braavos.essos.local:1433");
 
+    // Ticking it picks CIFS on the domain's DC, shown ticked in the picker.
     await user.click(screen.getByRole("checkbox", { name: "Constrained delegation" }));
-    await user.type(screen.getByRole("textbox", { name: "delegate to" }), "CIFS/meereen.essos.local");
+    expect(screen.getByRole("checkbox", { name: "CIFS on meereen" }).checked).toBe(true);
+    expect(screen.getByRole("textbox", { name: "Other SPN" })).toBeTruthy();
 
     expect(last(seen).nodes[0].overlay.users[0]).toMatchObject({
       flaws: ["password_in_description", "kerberoastable", "constrained_delegation"],

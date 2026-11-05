@@ -22,6 +22,8 @@ import { TrustEditor } from "./TrustEditor.jsx";
 import { EdgeRole, FrontsPorts } from "./EdgeEditors.jsx";
 import { Connections } from "./Connections.jsx";
 import { TopologySettings } from "./TopologySettings.jsx";
+import { DelegateToPicker } from "./DelegateToPicker.jsx";
+import { hostDomain, spnChoices, withDelegationDefault } from "./spnChoices.js";
 import { nodeName, roleTitle } from "./edgeRoles.js";
 
 // A group starts expanded only when one of its items is already selected, so
@@ -1195,7 +1197,10 @@ export function Inspector({
                   hostId={node.id}
                   onOverlayChange={onOverlayChange}
                   onChange={(value) =>
-                    onOverlayChange(node.id, { ...(node.overlay || {}), vulns: value })
+                    onOverlayChange(
+                      node.id,
+                      withDelegationDefault(document, node, { ...(node.overlay || {}), vulns: value })
+                    )
                   }
                 />
               ) : name === "hardening" ? (
@@ -1253,6 +1258,45 @@ export function Inspector({
                   readOnly={readOnly}
                   onChange={(overlay) => onOverlayChange(node.id, overlay)}
                 />
+              ) : name === "vulns_vars"
+                && ((node.overlay || {}).vulns || []).includes("constrained_delegation_kerberos") ? (
+                <React.Fragment key={`${name}-${node.id}`}>
+                  <DelegateToPicker
+                    label="Delegate to (constrained delegation, Kerberos only)"
+                    value={((node.overlay || {}).vulns_vars || {}).delegate_to}
+                    groups={spnChoices(document, hostDomain(document, node.id), { exclude: node.id })}
+                    help="Saved as delegate_to in the vulnerability settings below."
+                    disabled={readOnly}
+                    onChange={(spns) => {
+                      const vars = { ...((node.overlay || {}).vulns_vars || {}) };
+                      if (spns) vars.delegate_to = spns;
+                      else delete vars.delegate_to;
+                      onOverlayChange(node.id, {
+                        ...(node.overlay || {}),
+                        vulns_vars: Object.keys(vars).length ? vars : undefined,
+                      });
+                    }}
+                  />
+                  <Field
+                    name={name}
+                    spec={spec}
+                    required={required.includes(name)}
+                    value={(node.overlay || {})[name]}
+                    help={
+                      <VulnVarsHelp
+                        vulns={(node.overlay || {}).vulns}
+                        description={spec.description}
+                      />
+                    }
+                    disabled={readOnly}
+                    defs={schema?.$defs}
+                    ctx={fieldCtx}
+                    findings={onField}
+                    onChange={(value) =>
+                      onOverlayChange(node.id, { ...(node.overlay || {}), [name]: value })
+                    }
+                  />
+                </React.Fragment>
               ) : (
                 <Field
                   // Keyed by node too, so a JSON field's local text does not

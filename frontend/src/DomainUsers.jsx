@@ -5,6 +5,8 @@ import {
   removeUser, setUsers, updateUser,
 } from "./rangeUsers.js";
 import { allGroups, groupKnown, joinedHosts } from "./domainDirectory.js";
+import { DelegateToPicker } from "./DelegateToPicker.jsx";
+import { defaultDelegateTo, spnChoices } from "./spnChoices.js";
 
 const PRIVILEGES = ["user", "local_admin", "domain_admin", "enterprise_admin"];
 
@@ -178,17 +180,22 @@ export function DomainUsers({ node, document, rangeHostCount, flawOptions = [], 
   // Offered flaws: the shown set, limited to what the schema enum carries.
   const offered = SHOWN_FLAWS.filter((f) => !flawOptions.length || flawOptions.includes(f.id));
   const member = joinedHosts(document, node.id).find((h) => h.kind !== "dc");
-  const delegateExample = `CIFS/${member ? member.name : "srv01"}.${fqdn}`;
+  const spnGroups = spnChoices(document, node.id);
 
   const patch = (i, p) => onChange(updateUser(node, i, p));
 
   const toggleFlaw = (i, flaw) => {
     const cur = users[i].flaws || [];
     const ids = [flaw.id, ...(flaw.also || [])];
-    const next = hasFlaw(users[i], flaw.id)
-      ? cur.filter((f) => !ids.includes(f))
-      : [...cur, flaw.id];
-    patch(i, { flaws: next.length ? next : undefined });
+    const adding = !hasFlaw(users[i], flaw.id);
+    const next = adding ? [...cur, flaw.id] : cur.filter((f) => !ids.includes(f));
+    const p = { flaws: next.length ? next : undefined };
+    // Ticking delegation points it at the DC's CIFS so it does something at once.
+    if (adding && flaw.id === "constrained_delegation" && !users[i].delegate_to?.length) {
+      const spns = defaultDelegateTo(document, node.id);
+      if (spns.length) p.delegate_to = spns;
+    }
+    patch(i, p);
   };
   const removeFlaw = (i, id) => {
     const next = (users[i].flaws || []).filter((f) => f !== id);
@@ -370,11 +377,10 @@ export function DomainUsers({ node, document, rangeHostCount, flawOptions = [], 
                       />
                     ) : null}
                     {hasFlaw(u, "constrained_delegation") || u.delegate_to?.length ? (
-                      <ListField
-                        label="delegate to"
+                      <DelegateToPicker
                         value={u.delegate_to}
-                        placeholder={delegateExample}
-                        help="SPNs this account may delegate to, comma separated. Empty turns on protocol transition with no targets."
+                        groups={spnGroups}
+                        help="Nothing picked turns on protocol transition with no targets."
                         disabled={readOnly}
                         onChange={(v) => patch(i, { delegate_to: v })}
                       />

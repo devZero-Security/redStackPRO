@@ -64,3 +64,9 @@
 }
 .rg-settings-section h3 { margin: 0 0 4px; }
 .rg-settings-section .rg-hint { margin-top: 0; }
+
+.rg-delegate-host { margin: 4px 0 2px; }
+.rg-delegate-hostname { display: block; font-size: var(--fs-1); color: var(--muted); }
+.rg-delegate-add { display: flex; gap: 6px; margin-top: 4px; }
+.rg-delegate-add input { flex: 1; min-width: 0; }
+.rg-delegate-add button { flex: none; padding: 4px 12px; }
