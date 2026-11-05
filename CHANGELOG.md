@@ -126,6 +126,11 @@ versioning, and dates are UTC.
   traceback.
 - `manage.sh status`, `start`, and `stop` check that the cloud CLI (`gcloud`, `aws`,
   or `az`) is installed first, and exit nonzero when the call fails on any instance.
+- The Export panel and the export's DEPLOYMENT-GUIDE say to extract the download to
+  its own folder and run every step from there (the key command writes to `keys/`
+  relative to it), and list the cloud CLI as a requirement. With Deploy from set to
+  Windows, they give the `winget` command that installs it for Windows; on macOS and
+  Linux, a link to its install steps.
 - `deploy.sh` prints the AWS IAM note for any auto-stop, `after_hours` included, not
   only a fixed `at`.
 - The `auto_stop.after_hours` schema description is corrected: the stop time counts
