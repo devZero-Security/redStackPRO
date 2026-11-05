@@ -240,6 +240,23 @@ versioning, and dates are UTC.
   the README note that Microsoft licenses Windows client VMs on Azure only for
   customers with a qualifying license, and that redStackPRO does not set
   `license_type`, so license eligibility is the user's to confirm.
+- `manage.sh` and `manage.ps1` with no command, `help`, `-h` or `--help` print a help
+  screen for the export: the range name, provider, region and resource group, GCP
+  project or AWS profile (read from `deploy.tfvars`), each command and what it does on
+  that provider (what still bills after `stop`, what `teardown --force` deletes
+  first), the auto-stop schedule, and the CLI and login it needs. Usage and examples
+  are written as `.\manage.ps1` when run from PowerShell and `bash manage.sh`
+  otherwise. An unknown command or option prints the screen and exits 1. On Proxmox
+  and ESXi it says only `teardown` is available.
+- `teardown` shows what it is about to delete and asks for the range name (or `yes`)
+  first, and any other answer deletes nothing. `--yes` skips the question, in either
+  order with `--force`. `manage.ps1` asks with Read-Host. `manage.sh` asks only on a
+  terminal; without one and without `--yes`, it stops and deletes nothing, so a
+  script cannot hang on the question.
+- `manage.sh status` prints one table for the range (one `az vm list` or
+  `gcloud compute instances list` call) instead of a table per VM. AWS `status`,
+  `start` and `stop` pass the region from `deploy.tfvars`, so a different AWS CLI
+  default region no longer misses the instances.
 
 ### Fixed
 

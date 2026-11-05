@@ -243,8 +243,10 @@ the same path from the box itself.
 
 **Manage and tear down.** The export also ships lifecycle scripts, `manage.sh`
 (and `manage.ps1` on Windows), for the running range. They take `status`,
-`start`, `stop`, and `teardown`: `stop` pauses billing without destroying the
-range, and `teardown` destroys it.
+`start`, `stop`, and `teardown`: `stop` pauses compute billing without destroying
+the range, and `teardown` destroys it. `teardown` asks you to type the range name
+(or `yes`) first; `--yes` skips the question, for a script. Run either script with
+no command for its help, written for the export's provider.
 
     ./manage.sh status
     ./manage.sh start

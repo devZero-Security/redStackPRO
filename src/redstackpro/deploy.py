@@ -17,7 +17,7 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
 from .naming import platform_account
-from .terraform.plan import TerraformPlan
+from .terraform.plan import GenerationError, TerraformPlan
 from .validate import Context
 
 
@@ -1049,17 +1049,18 @@ _MANAGE_HEAD = r'''#!/usr/bin/env bash
 #
 # Manage a deployed range or stack: check status, start it, stop it, or tear
 # it down. Run it from the export root (the directory holding this script,
-# terraform/ and deploy.tfvars).
+# terraform/ and deploy.tfvars). With no command it prints its help.
 #
 #   bash manage.sh status
 #   bash manage.sh start
 #   bash manage.sh stop
-#   bash manage.sh teardown [--force]
+#   bash manage.sh teardown [--force] [--yes]
 #
 # status, start and stop act on exactly this range's own instances, never the
-# whole cloud account or project. teardown runs terraform destroy; add --force to
-# first delete redStackPRO instances the cloud still has (e.g. from an interrupted
-# apply) so orphaned instances cannot block the destroy.
+# whole cloud account or project. teardown runs terraform destroy once the
+# range name is typed back; --yes skips that question. --force first clears
+# what an interrupted apply left in the cloud; the help says what it deletes
+# on this provider.
 #
 # On Windows run it from Git Bash, or use manage.ps1 beside this file.
 set -uo pipefail
@@ -1067,18 +1068,103 @@ set -uo pipefail
 cd "$(dirname "$0")"
 say(){ echo "== [$(date +%H:%M:%S)] $* =="; }
 
+RSP_NAME=@@NAME@@
+RSP_LABEL=@@LABEL@@
+# manage.ps1 sets REDSTACKPRO_FROM_PS1, so usage lines name the command the
+# user actually types.
+if [ "${REDSTACKPRO_FROM_PS1:-}" = "1" ]; then RSP_RUN='.\manage.ps1'; else RSP_RUN="bash manage.sh"; fi
+@@TFVAR_HELPER@@@@WHERE@@RSP_WHERE="$RSP_LABEL $RSP_REGION"; RSP_WHERE="${RSP_WHERE% }"
+
+rsp_help(){
+  rsp_t="redStackPRO manage"
+  [ -z "$RSP_NAME" ] || rsp_t="$rsp_t . $RSP_NAME"
+  [ -z "$RSP_WHERE" ] || rsp_t="$rsp_t . $RSP_WHERE"
+  printf '%s\n' "$rsp_t"
+  [ -z "$RSP_GROUP_LABEL" ] || printf '%s  %s\n' "$RSP_GROUP_LABEL" "$RSP_GROUP"
+  echo
+  printf 'Usage   %s <command>\n\n' "$RSP_RUN"
+  cat <<'RSP_HELP'
+@@COMMANDS@@
+Examples
+RSP_HELP
+  for rsp_c in @@EXAMPLES@@; do printf '  %s %s\n' "$RSP_RUN" "$rsp_c"; done
+  echo
+@@FOOTER@@}
+
+# What teardown is about to delete. manage.ps1 shows the same lines, through
+# _teardown_summary, before its own Read-Host.
+rsp_summary(){
+  echo "This deletes the whole range. It cannot be undone."
+  echo
+  printf '  %-16s%s\n' "Range" "${RSP_NAME:-unnamed}" "Provider" "$RSP_WHERE"
+  [ -z "$RSP_GROUP_LABEL" ] || printf '  %-16s%s\n' "$RSP_GROUP_LABEL" "$RSP_GROUP"
+  if [ "$RSP_FORCE" = 1 ]; then
+@@FORCE_NOTE@@  fi
+  echo
+}
+rsp_prompt(){
+  if [ -n "$RSP_NAME" ]; then
+    printf 'Type the range name (%s) or yes to delete it' "$RSP_NAME"
+  else
+    printf 'Type yes to delete it'
+  fi
+}
+rsp_norm(){ printf '%s' "$1" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]'; }
+rsp_confirmed(){
+  rsp_a="$(rsp_norm "$1")"
+  [ "$rsp_a" = "yes" ] && return 0
+  [ -n "$RSP_NAME" ] && [ "$rsp_a" = "$(rsp_norm "$RSP_NAME")" ]
+}
+
 cmd="${1:-}"
 case "$cmd" in
-  status|start|stop|teardown) ;;
-  *)
-    echo "usage: bash manage.sh status|start|stop|teardown [--force]"
-    exit 1
-    ;;
+  ""|help|-h|--help) rsp_help; exit 0 ;;
+  status|start|stop|teardown|_teardown_summary) shift ;;
+  *) echo "unknown command: $cmd"; echo; rsp_help; exit 1 ;;
 esac
+RSP_FORCE=0
+RSP_YES=0
+RSP_SHOW="$cmd"; [ "$cmd" != "_teardown_summary" ] || RSP_SHOW="teardown"
+for rsp_o in "$@"; do
+  case "$RSP_SHOW $rsp_o" in
+    "teardown --force") RSP_FORCE=1 ;;
+    "teardown --yes") RSP_YES=1 ;;
+    *) echo "unknown option for $RSP_SHOW: $rsp_o"; echo; rsp_help; exit 1 ;;
+  esac
+done
 
 command -v terraform >/dev/null 2>&1 || { echo "terraform not found on PATH -- install it first"; exit 1; }
 
 '''
+
+# Where the help header and the teardown summary say this range lives, read
+# from deploy.tfvars at run time (the value teardown acts on) with the compiled
+# default behind it. Every block sets RSP_REGION, RSP_GROUP_LABEL and RSP_GROUP.
+_MANAGE_WHERE = {
+    "azure": r'''RSP_REGION="$(rsp_tfvar location)"; RSP_REGION="${RSP_REGION:-@@REGION@@}"
+RSP_GROUP_LABEL="Resource group"
+RSP_GROUP="$(rsp_tfvar resource_group)"; RSP_GROUP="${RSP_GROUP:-@@DEFAULT_RG@@}"
+''',
+    "gcp": r'''RSP_REGION="$(rsp_tfvar region)"; RSP_REGION="${RSP_REGION:-@@REGION@@}"
+RSP_PROJECT="$(rsp_tfvar project)"
+RSP_GROUP_LABEL="Project"
+RSP_GROUP="${RSP_PROJECT:-not set in deploy.tfvars}"
+''',
+    # The account is only known by asking AWS; the profile is what picks it.
+    "aws": r'''RSP_REGION="$(rsp_tfvar region)"; RSP_REGION="${RSP_REGION:-@@REGION@@}"
+RSP_GROUP_LABEL="Profile"
+if [ -n "${AWS_ACCESS_KEY_ID:-}" ]; then RSP_GROUP="none, keys from AWS_ACCESS_KEY_ID"; else RSP_GROUP="${AWS_PROFILE:-default}"; fi
+''',
+    "proxmox": r'''RSP_REGION=""
+RSP_GROUP_LABEL="Endpoint"
+RSP_GROUP="$(rsp_tfvar proxmox_endpoint)"; RSP_GROUP="${RSP_GROUP:-not set in deploy.tfvars}"
+''',
+    "esxi": r'''RSP_REGION=""
+RSP_GROUP_LABEL="Server"
+RSP_GROUP="$(rsp_tfvar vsphere_server)"; RSP_GROUP="${RSP_GROUP:-not set in deploy.tfvars}"
+''',
+}
+_MANAGE_WHERE_NONE = 'RSP_REGION=""\nRSP_GROUP_LABEL=""\nRSP_GROUP=""\n'
 
 # teardown has two halves so a per-provider instance sweep can be injected between
 # them for `--force`. The sweep deletes instances created by an interrupted apply
@@ -1086,19 +1172,41 @@ command -v terraform >/dev/null 2>&1 || { echo "terraform not found on PATH -- i
 # still hold a subnet/policy terraform does own, they make the plain destroy fail
 # with resourceInUseByAnotherResource. Deleting them first unblocks it.
 _MANAGE_TEARDOWN_HEAD = r'''
-if [ "$cmd" = "teardown" ]; then
+if [ "$cmd" = "teardown" ] || [ "$cmd" = "_teardown_summary" ]; then
+  [ -f deploy.tfvars ] || { echo "deploy.tfvars not found next to this script."; exit 1; }
+  # manage.ps1 asks with Read-Host, because Git Bash started from PowerShell may
+  # see no terminal, then runs teardown --yes. This prints what it shows.
+  if [ "$cmd" = "_teardown_summary" ]; then
+    rsp_summary
+    printf 'prompt=%s\n' "$(rsp_prompt)"
+    printf 'name=%s\n' "$RSP_NAME"
+    exit 0
+  fi
+  if [ "$RSP_YES" != 1 ]; then
+    rsp_summary
+    # Ask only on a terminal, so a script without --yes stops instead of hanging.
+    if [ ! -t 0 ]; then
+      if [ "$RSP_FORCE" = 1 ]; then rsp_f=" --force"; else rsp_f=""; fi
+      echo "teardown asks before it deletes anything, and there is no terminal to ask on."
+      printf 'To delete it without the question:  %s teardown%s --yes\n' "$RSP_RUN" "$rsp_f"
+      echo "Nothing was deleted."
+      exit 1
+    fi
+    printf '%s: ' "$(rsp_prompt)"
+    RSP_ANSWER=""
+    read -r RSP_ANSWER || true
+    rsp_confirmed "$RSP_ANSWER" || { echo "Not confirmed. Nothing was deleted."; exit 1; }
+  fi
   # Same handoff as deploy.sh: the editable config lives at the export root as
   # deploy.tfvars and terraform auto-loads terraform/terraform.tfvars, so copy
   # it into place first, or destroy runs with no vars at all.
-  [ -f deploy.tfvars ] || { echo "deploy.tfvars not found next to this script."; exit 1; }
   cp deploy.tfvars terraform/terraform.tfvars
-  if [ "${2:-}" = "--force" ]; then
+  if [ "$RSP_FORCE" = 1 ]; then
 '''
 
 _MANAGE_SWEEP = {
     "gcp": r'''    say "force teardown: sweeping redStackPRO instances in the cloud first"
-    PROJECT="$(grep -E '^[[:space:]]*project[[:space:]]*=' deploy.tfvars 2>/dev/null | head -1 | sed -E 's/[^=]*=[[:space:]]*"?([^"]*)"?.*/\1/')"
-    PROJ_ARG=""; [ -n "$PROJECT" ] && PROJ_ARG="--project $PROJECT"
+    PROJ_ARG=""; [ -n "$RSP_PROJECT" ] && PROJ_ARG="--project $RSP_PROJECT"
     gcloud compute instances list $PROJ_ARG --filter="labels.redstackpro_kind:*" --format="value(name,zone)" 2>/dev/null \
       | tr -d '\r' | while IFS=$'\t' read -r sweep_name sweep_zone; do
           [ -n "$sweep_name" ] || continue
@@ -1107,8 +1215,7 @@ _MANAGE_SWEEP = {
         done
 ''',
     "aws": r'''    say "force teardown: sweeping redStackPRO instances in the cloud first"
-    REGION="$(grep -E '^[[:space:]]*region[[:space:]]*=' deploy.tfvars 2>/dev/null | head -1 | sed -E 's/[^=]*=[[:space:]]*"?([^"]*)"?.*/\1/')"
-    REG_ARG=""; [ -n "$REGION" ] && REG_ARG="--region $REGION"
+    REG_ARG="--region $RSP_REGION"
     SWEEP_IDS="$(aws ec2 describe-instances $REG_ARG --filters Name=tag:redstackpro,Values=true Name=instance-state-name,Values=pending,running,stopping,stopped --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null)"
     if [ -n "$SWEEP_IDS" ]; then
       echo "  terminating: $SWEEP_IDS"
@@ -1124,8 +1231,7 @@ _MANAGE_SWEEP = {
     # group delete removes the group and everything in it server side, in dependency
     # order. The plain `teardown` (no --force) still uses terraform destroy, which is
     # enough after a clean apply.
-    RG="$(grep -E '^[[:space:]]*resource_group[[:space:]]*=' deploy.tfvars 2>/dev/null | head -1 | sed -E 's/[^=]*=[[:space:]]*"?([^"]*)"?.*/\1/')"
-    RG="${RG:-@@DEFAULT_RG@@}"
+    RG="$RSP_GROUP"
     if command -v az >/dev/null 2>&1; then
       echo "  deleting resource group $RG and every resource in it"
       az group delete -n "$RG" --yes 2>/dev/null || echo "  az group delete did not finish; terraform destroy will try next"
@@ -1150,7 +1256,7 @@ _MANAGE_TEARDOWN_TAIL = r'''  fi
   if [ "$rc" -ne 0 ]; then
     echo "teardown did not finish cleanly."
     echo "If it said an instance still holds a subnet or policy, an interrupted apply left"
-    echo "instances outside the state; clear them with:  bash manage.sh teardown --force"
+    printf 'instances outside the state; clear them with:  %s teardown --force\n' "$RSP_RUN"
   fi
   exit $rc
 fi
@@ -1170,6 +1276,8 @@ fi
 # Every `read` loop strips \r: Python and gcloud on Windows end lines with \r\n,
 # and Git Bash's read keeps the \r (its $() drops it), so the last field of each
 # line reached the CLI with a \r on it and every call failed.
+# status prints ONE table for the range: a call per VM printed a header block
+# per VM.
 _MANAGE_PROVIDER_BLOCK = {
     "aws": r'''command -v aws >/dev/null 2>&1 || { echo "aws (the AWS CLI) not found on PATH -- install it and run: aws configure"; exit 1; }
 INSTANCES="$(terraform -chdir=terraform output -json redstackpro_instances 2>/dev/null)"
@@ -1179,18 +1287,20 @@ if [ -z "$INSTANCES" ] || [ "$INSTANCES" = "null" ]; then
 fi
 IDS="$(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys; print(' '.join(v['instance_id'] for v in json.load(sys.stdin).values()))")"
 [ -n "$IDS" ] || { echo "no instances found in this range."; exit 1; }
+# The deploy's own region, so a CLI default elsewhere cannot miss the instances.
+REG_ARG="--region $RSP_REGION"
 
 case "$cmd" in
   status)
-    aws ec2 describe-instances --instance-ids $IDS \
+    aws ec2 describe-instances $REG_ARG --instance-ids $IDS \
       --query 'Reservations[].Instances[].{name:Tags[?Key==`Name`]|[0].Value,state:State.Name,ip:PublicIpAddress}' \
       --output table
     ;;
   start)
-    aws ec2 start-instances --instance-ids $IDS
+    aws ec2 start-instances $REG_ARG --instance-ids $IDS
     ;;
   stop)
-    aws ec2 stop-instances --instance-ids $IDS
+    aws ec2 stop-instances $REG_ARG --instance-ids $IDS
     ;;
 esac
 ''',
@@ -1202,21 +1312,18 @@ if [ -z "$INSTANCES" ] || [ "$INSTANCES" = "null" ]; then
 fi
 # Target the deploy's own project, read from deploy.tfvars, so gcloud does not
 # silently act on the caller's default project when it differs. Empty falls back.
-PROJECT="$(grep -E '^[[:space:]]*project[[:space:]]*=' deploy.tfvars 2>/dev/null | head -1 | sed -E 's/[^=]*=[[:space:]]*"?([^"]*)"?.*/\1/')"
 PROJ_ARG=""
-[ -n "$PROJECT" ] && PROJ_ARG="--project $PROJECT"
+[ -n "$RSP_PROJECT" ] && PROJ_ARG="--project $RSP_PROJECT"
 if [ "$cmd" = "status" ]; then
-  RSP_ANY=0; RSP_FAIL=0
-  while IFS=' ' read -r name zone; do
-    [ -n "$name" ] || continue
-    RSP_ANY=1
-    gcloud compute instances describe "$name" --zone "$zone" $PROJ_ARG \
-      --format='table(name,status,networkInterfaces[0].accessConfigs[0].natIP)' || RSP_FAIL=1
-  done < <(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
-for v in json.load(sys.stdin).values():
-    print(v['name'], v['zone'])" | tr -d '\r')
-  [ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
-  [ "$RSP_FAIL" -eq 0 ] || { echo "$cmd failed on at least one instance (see above)."; exit 1; }
+  # One list call, limited to this range's zones and instance names.
+  RSP_LIST="$(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
+v = list(json.load(sys.stdin).values())
+print(','.join(sorted({i['zone'] for i in v})), ' '.join(sorted(i['name'] for i in v)))" | tr -d '\r')"
+  RSP_ZONES="${RSP_LIST%% *}"; RSP_NAMES="${RSP_LIST#* }"
+  [ -n "$RSP_NAMES" ] || { echo "no instances found in this range."; exit 1; }
+  gcloud compute instances list $PROJ_ARG --zones "$RSP_ZONES" --filter="name=($RSP_NAMES)" --sort-by=name \
+    --format='table(name,zone.basename(),status,networkInterfaces[0].accessConfigs[0].natIP:label=EXTERNAL_IP)' \
+    || { echo "status failed (see above)."; exit 1; }
 else
   # start/stop: one gcloud call per zone acts on all that zone's instances at
   # once, instead of a blocking call per instance (a multi-VM range was slow
@@ -1245,17 +1352,31 @@ fi
 # Target this range's own VMs by name + resource group (from the output). stop
 # uses deallocate, which halts billing; a plain `az vm stop` would keep charging.
 RSP_ANY=0; RSP_FAIL=0
-while IFS=' ' read -r vm rg; do
-  [ -n "$vm" ] || continue
-  RSP_ANY=1
-  case "$cmd" in
-    status) az vm show -g "$rg" -n "$vm" -d --query "{name:name,state:powerState,ip:publicIps}" -o table || RSP_FAIL=1 ;;
-    start)  az vm start -g "$rg" -n "$vm" || RSP_FAIL=1 ;;
-    stop)   az vm deallocate -g "$rg" -n "$vm" || RSP_FAIL=1 ;;
-  esac
-done < <(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
+if [ "$cmd" = "status" ]; then
+  # One az vm list per resource group (a range has one), filtered to its VMs.
+  while IFS=' ' read -r rg query; do
+    [ -n "$rg" ] || continue
+    RSP_ANY=1
+    az vm list -g "$rg" -d --query "$query" -o table || RSP_FAIL=1
+  done < <(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
+g = {}
+for v in json.load(sys.stdin).values():
+    g.setdefault(v['resource_group'], []).append(v['name'])
+for rg, names in sorted(g.items()):
+    q = ','.join(repr(n) for n in sorted(names))
+    print(rg, 'sort_by([?contains([%s], name)], &name)[].{Name:name, State:powerState, PublicIP:publicIps}' % q)" | tr -d '\r')
+else
+  while IFS=' ' read -r vm rg; do
+    [ -n "$vm" ] || continue
+    RSP_ANY=1
+    case "$cmd" in
+      start) az vm start -g "$rg" -n "$vm" || RSP_FAIL=1 ;;
+      stop)  az vm deallocate -g "$rg" -n "$vm" || RSP_FAIL=1 ;;
+    esac
+  done < <(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
 for v in json.load(sys.stdin).values():
     print(v['name'], v['resource_group'])" | tr -d '\r')
+fi
 [ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
 [ "$RSP_FAIL" -eq 0 ] || { echo "$cmd failed on at least one instance (see above)."; exit 1; }
 ''',
@@ -1264,43 +1385,207 @@ for v in json.load(sys.stdin).values():
 # Any other provider still tears down (a plain terraform destroy needs no
 # per-instance targeting) but is told plainly that live control is not wired
 # up for it yet, rather than failing in some less legible way further down.
-_MANAGE_NO_LIVE_CONTROL = r'''echo "status/start/stop is not implemented yet for this provider."
+_MANAGE_NO_LIVE_CONTROL = r'''echo "status, start and stop are not available for ${RSP_LABEL:-this provider}; only teardown is."
 echo "Use terraform -chdir=terraform state list, or your provider's own console."
 exit 1
 '''
 
 
-def generate_manage_script(topology, registry=None, provider=None):
+# The help screen's per-provider wording. Each stop line says what that
+# provider's stop command above does to billing, and is checked against it in
+# test_deploy_portability.
+_HELP_NOUN = {"azure": "VM", "gcp": "instance", "aws": "instance"}
+_HELP_STATE = {"azure": "power state", "gcp": "status", "aws": "state"}
+_HELP_STOP_VERB = {"azure": "Deallocate every VM.", "gcp": "Stop every instance.",
+                   "aws": "Stop every instance."}
+_HELP_DISKS = {"azure": "disks", "gcp": "disks", "aws": "EBS volumes"}
+_HELP_ADDRESS = {"azure": "public IP", "gcp": "static IP", "aws": "Elastic IP"}
+_HELP_FORCE = {
+    "azure": "Delete the resource group directly first; use it when a plain "
+             "teardown stops on a leftover resource.",
+    "gcp": "First delete every redStackPRO instance in the project, not only "
+           "this range's; use it when a plain teardown stops on a leftover instance.",
+    "aws": "First terminate every redStackPRO instance in the region, not only "
+           "this range's; use it when a plain teardown stops on a leftover instance.",
+}
+_FORCE_NOTE = {
+    "azure": "deletes the resource group directly first",
+    "gcp": "first deletes every redStackPRO instance in the project, from any range",
+    "aws": "first terminates every redStackPRO instance in the region, from any range",
+}
+_FORCE_NOTE_NONE = "no instance sweep for this provider; a plain destroy"
+_HELP_NEEDS = {
+    "azure": "the Azure CLI, signed in (az login)",
+    "gcp": "the Google Cloud CLI, signed in (gcloud auth login)",
+    "aws": "the AWS CLI, signed in (aws configure)",
+}
+_HELP_CONSOLE = {"proxmox": "the Proxmox web UI", "esxi": "the vSphere client"}
+HELP_WIDTH = 40
+
+
+def _held_addresses(plan, provider):
+    """The hosts whose public address bills while stopped: a static or Elastic
+    IP is kept, an ephemeral one is released. Mirrors the reserve_ip and
+    elastic_ip rules in gcp.py and aws.py, and Azure's static public IPs."""
+    hosts = plan.hosts()
+    if provider == "azure":
+        return [h for h in hosts if plan.takes_public_address(h)]
+    kinds = ("jumpbox", "redirector")
+    if provider == "gcp":
+        return [h for h in hosts if h["kind"] in kinds and plan.takes_public_address(h)]
+    return [h for h in hosts if h["kind"] in kinds]
+
+
+def _has_nat_gateway(plan, provider):
+    """An AWS or Azure NAT gateway bills by the hour with every VM stopped.
+    GCP's Cloud NAT bills per VM using it, so it is left out there."""
+    if provider == "aws":
+        return any(plan.needs_nat(n["id"]) for n in plan.networks())
+    if provider == "azure":
+        from .terraform.azure import _network_needs_nat
+        return any(_network_needs_nat(plan, n["id"]) for n in plan.networks())
+    return False
+
+
+def _stop_help(plan, provider):
+    held = [_HELP_DISKS[provider]]
+    addresses = _held_addresses(plan, provider)
+    if len(addresses) == 1 and addresses[0]["kind"] == "jumpbox":
+        held.append("the jumpbox %s" % _HELP_ADDRESS[provider])
+    elif addresses:
+        held.append("%ss" % _HELP_ADDRESS[provider])
+    if _has_nat_gateway(plan, provider):
+        held.append("the NAT gateway")
+    held = held[0] if len(held) == 1 else ", ".join(held[:-1]) + " and " + held[-1]
+    return ("%s Compute billing stops; %s still bill. Nothing is deleted."
+            % (_HELP_STOP_VERB[provider], held))
+
+
+def _wrap(text, width=HELP_WIDTH):
+    import textwrap
+    return textwrap.wrap(text, width, break_on_hyphens=False, break_long_words=False)
+
+
+def _help_commands(plan, provider, label):
+    teardown = ("Delete the whole range (terraform destroy). Cannot be undone. "
+                "Asks first; --yes skips the question.")
+    if provider in _MANAGE_PROVIDER_BLOCK:
+        noun = _HELP_NOUN[provider]
+        rows = [
+            ("status", "Each %s's %s and the portal address." % (noun, _HELP_STATE[provider])),
+            ("stop", _stop_help(plan, provider)),
+            ("start", "Start every %s again. Provisioning is not re-run." % noun),
+            ("teardown", teardown),
+            ("teardown --force", _HELP_FORCE[provider]),
+        ]
+        note = []
+    else:
+        rows = [("teardown", teardown)]
+        console = _HELP_CONSOLE.get(provider, "your provider's own console")
+        note = [""] + ["  " + line for line in _wrap(
+            "status, start and stop are not available for %s; only teardown is. "
+            "Use %s to power the VMs on and off." % (label or "this provider", console),
+            56)]
+    lines = []
+    for cmd, text in rows:
+        for i, line in enumerate(_wrap(text)):
+            lines.append("  %-16s  %s" % (cmd if i == 0 else "", line))
+    return "\n".join(lines + note) + "\n"
+
+
+def _auto_stop_help(plan, provider, label):
+    if provider not in _MANAGE_PROVIDER_BLOCK:
+        return "not available for %s" % (label or "this provider")
+    stop = plan.auto_stop
+    if not stop:
+        return "off"
+    tz = stop["timezone"]
+    if provider == "azure":
+        # The Windows id the shutdown schedule is written with.
+        from .terraform.azure import _windows_tz
+        try:
+            tz = _windows_tz(tz)
+        except GenerationError:
+            pass
+    hours, at = stop["after_hours"], stop["at_minute"]
+    clock = None if at is None else "%02d:%02d %s" % (at // 60, at % 60, tz)
+    if hours and clock:
+        return ("every day at %s, or %d hours after the first apply if that comes "
+                "first, then daily at that time" % (clock, hours))
+    if hours:
+        return "%d hours after the first apply, then daily at that time" % hours
+    return "every day at %s" % clock
+
+
+def _help_footer(plan, provider, label):
+    rows = [("Auto-stop", _auto_stop_help(plan, provider, label)),
+            ("Needs", _HELP_NEEDS.get(provider, "terraform"))]
+    out = []
+    for name, text in rows:
+        for i, line in enumerate(_wrap(text, 56)):
+            out.append("  printf '%%-9s  %%s\\n' %s %s\n"
+                       % (_shell_word(name if i == 0 else ""), _shell_word(line)))
+    return "".join(out)
+
+
+def _force_note(provider):
+    out = []
+    for i, line in enumerate(_wrap(_FORCE_NOTE.get(provider, _FORCE_NOTE_NONE), 44)):
+        out.append("    printf '  %%-16s%%s\\n' %s %s\n"
+                   % (_shell_word("--force" if i == 0 else ""), _shell_word(line)))
+    return "".join(out)
+
+
+def generate_manage_script(topology, registry=None, provider=None, region=None):
     """Return manage.sh contents, or None when the topology has no jumpbox (there
     is nothing to have deployed in the first place). Mirrors generate_deploy_script:
     same gate, same reason.
 
     status/start/stop are wired for aws, gcp and azure, each through its own
-    CLI; teardown is provider agnostic and works everywhere."""
+    CLI; teardown is provider agnostic and works everywhere. With no command it
+    prints a help screen written for this provider and topology."""
     ctx = Context(topology, registry)
     if not _jumpbox_name(ctx):
         return None
-    provider_block = _MANAGE_PROVIDER_BLOCK.get(provider, _MANAGE_NO_LIVE_CONTROL)
-    sweep = _MANAGE_SWEEP.get(provider, _MANAGE_SWEEP_NONE)
+    plan = TerraformPlan(topology, registry, provider=provider, region=region)
+    label = _PROVIDER_LABEL.get(provider, provider or "")
+    where = _MANAGE_WHERE.get(provider, _MANAGE_WHERE_NONE).replace(
+        "@@REGION@@", plan.region or "")
     if provider == "azure":
         from .terraform.azure import default_resource_group
-        sweep = sweep.replace("@@DEFAULT_RG@@", default_resource_group(
-            TerraformPlan(topology, registry, provider="azure")))
+        where = where.replace("@@DEFAULT_RG@@", default_resource_group(plan))
+    live = provider in _MANAGE_PROVIDER_BLOCK
+    head = _MANAGE_HEAD
+    for token, value in (
+            ("@@NAME@@", _shell_word(topology.get("name"))),
+            ("@@LABEL@@", _shell_word(label)),
+            ("@@TFVAR_HELPER@@", _TFVAR_HELPER),
+            ("@@WHERE@@", where),
+            ("@@COMMANDS@@", _help_commands(plan, provider, label)),
+            ("@@EXAMPLES@@", "status stop" if live else "teardown"),
+            ("@@FOOTER@@", _help_footer(plan, provider, label)),
+            ("@@FORCE_NOTE@@", _force_note(provider))):
+        head = head.replace(token, value)
+    provider_block = _MANAGE_PROVIDER_BLOCK.get(provider, _MANAGE_NO_LIVE_CONTROL)
+    sweep = _MANAGE_SWEEP.get(provider, _MANAGE_SWEEP_NONE)
     teardown = _MANAGE_TEARDOWN_HEAD + sweep + _MANAGE_TEARDOWN_TAIL
-    return (_MANAGE_HEAD + _FIND_PYTHON + teardown + _MANAGE_STATUS_PORTAL
-            + provider_block)
+    script = (head + _FIND_PYTHON + teardown + _MANAGE_STATUS_PORTAL
+              + provider_block)
+    assert "@@" not in script, "an unfilled token in the manage template"
+    return script
 
 
 # The Windows front door for manage.sh, the same trap and the same fix as
 # DEPLOY_PS1: `bash manage.sh` at a PowerShell prompt runs WSL's bash, not Git
 # Bash, so this finds Git Bash and calls it properly, forwarding every argument
-# through.
+# through. It also asks the teardown question itself, with Read-Host.
 MANAGE_PS1 = r"""# redStackPRO range control, for Windows PowerShell.
 #
+#   .\manage.ps1                 (help)
 #   .\manage.ps1 status
 #   .\manage.ps1 start
 #   .\manage.ps1 stop
-#   .\manage.ps1 teardown [--force]
+#   .\manage.ps1 teardown [--force] [--yes]
 #
 # This is a wrapper. The command itself is manage.sh beside it, the same script
 # macOS and Linux run -- there is one range control script, not two. See
@@ -1325,8 +1610,40 @@ if (-not $bash) {
 # Every argument goes through, not just the first (teardown --force needs its
 # flag), each single-quoted for bash so a space or a quote cannot split it.
 function ConvertTo-BashWord([string]$s) { "'" + ($s -replace "'", "'\''") + "'" }
-$fwd = ($args | ForEach-Object { ConvertTo-BashWord $_ }) -join ' '
 $here = ConvertTo-BashWord ((Split-Path -Parent $MyInvocation.MyCommand.Path) -replace '\\', '/')
-& $bash -lc "cd $here && bash manage.sh $fwd"
+$words = @($args)
+
+# teardown asks first, here: Git Bash started from PowerShell may see no
+# terminal to read an answer from. manage.sh prints what it will delete.
+if ($words.Count -gt 0 -and $words[0] -ceq 'teardown' -and $words -cnotcontains '--yes') {
+  $ask = (@('_teardown_summary') + @($words | Select-Object -Skip 1) | ForEach-Object { ConvertTo-BashWord $_ }) -join ' '
+  $info = @(& $bash -lc "cd $here && REDSTACKPRO_FROM_PS1=1 bash manage.sh $ask")
+  $code = $LASTEXITCODE
+  $name = ''
+  $prompt = 'Type yes to delete it'
+  foreach ($line in $info) {
+    if ($line.StartsWith('name=')) { $name = $line.Substring(5) }
+    elseif ($line.StartsWith('prompt=')) { $prompt = $line.Substring(7) }
+    else { Write-Host $line }
+  }
+  if ($code -ne 0) { exit $code }
+  try { $answer = Read-Host $prompt } catch { $answer = $null }
+  if ($null -eq $answer) {
+    Write-Host "No answer could be read. To delete it without the question:  .\manage.ps1 teardown --yes"
+    Write-Host "Nothing was deleted."
+    exit 1
+  }
+  $answer = "$answer".Trim()
+  if (-not ($answer -eq 'yes' -or ($name -ne '' -and $answer -eq $name))) {
+    Write-Host "Not confirmed. Nothing was deleted."
+    exit 1
+  }
+  $words += '--yes'
+}
+
+# REDSTACKPRO_FROM_PS1 has manage.sh print .\manage.ps1 in its usage lines. Set
+# for that one process, so it does not stay in the session.
+$fwd = ($words | ForEach-Object { ConvertTo-BashWord $_ }) -join ' '
+& $bash -lc "cd $here && REDSTACKPRO_FROM_PS1=1 bash manage.sh $fwd"
 exit $LASTEXITCODE
 """

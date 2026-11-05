@@ -219,6 +219,31 @@ To change the time or turn it off: In the canvas, click empty space, then Topolo
 """ % (noun, when)
 
 
+# What teardown does before it deletes, shared by both guides.
+TEARDOWN_ASKS = """`teardown` first shows the range name, the provider, and where it
+lives, and asks you to type the range name (or `yes`); any other answer deletes
+nothing. Add `--yes` to skip the question, for example in a script: without a
+terminal to ask on and without `--yes`, it stops and deletes nothing. It then runs
+`terraform -chdir=terraform destroy -auto-approve` after copying `deploy.tfvars`
+into place, the same handoff the deploy uses; running that raw command yourself
+from `terraform/` works too, once `terraform.tfvars` is there."""
+
+# What `teardown --force` deletes first, per provider. The GCP and AWS sweeps
+# match the redStackPRO label or tag, not this deployment's names.
+FORCE_SWEEP = {
+    "gcp": """It first deletes every redStackPRO instance in the GCP project, then
+destroys the rest, so nothing is left billing. It matches the redStackPRO label,
+not this deployment, so it also deletes the instances of any other redStackPRO
+deployment in the same project.""",
+    "aws": """It first terminates every redStackPRO instance in the region, then
+destroys the rest, so nothing is left billing. It matches the redStackPRO tag, not
+this deployment, so it also terminates the instances of any other redStackPRO
+deployment in the same region.""",
+    "azure": """It first deletes the deployment's resource group and everything in
+it, then destroys the rest, so nothing is left billing.""",
+}
+
+
 # The account limits a deploy runs into, per provider. Proxmox and ESXi have none
 # the export can name: the hardware is the operator's own.
 QUOTA_NOTES = {
@@ -478,7 +503,8 @@ you, and a re-run that finds the listener already signed does not repeat it.
 
 Once it is up, `manage.ps1` (or `manage.sh` from Git Bash, macOS, or Linux) checks
 on it and tears it down. Same wrapper pattern as the deploy: `.\\manage.ps1` on
-Windows, `bash manage.sh` everywhere else.
+Windows, `bash manage.sh` everywhere else. Run it with no command for a help
+screen that says what each command does on this provider.
 
 ```powershell
 .\\manage.ps1 status
@@ -494,12 +520,11 @@ bash manage.sh stop
 bash manage.sh teardown
 ```
 
-`status` prints the Guacamole portal URL and the state of every host. `start`
-and `stop` act on exactly this deployment's own instances, never the whole
-cloud account or project. `teardown` runs
-`terraform -chdir=terraform destroy -auto-approve` after copying `deploy.tfvars`
-into place, the same handoff the deploy uses; running that raw command
-yourself from `terraform/` works too, once `terraform.tfvars` is there.
+`status` prints the Guacamole portal URL and one table with the state of every
+host. `start` and `stop` act on exactly this deployment's own instances, never
+the whole cloud account or project.
+
+{teardown_asks}
 
 To pause overnight and keep the cost down, use `manage.sh stop` and then
 `manage.sh start` the next day: this halts the instances without destroying
@@ -510,9 +535,10 @@ finished with it.
 or a closed terminal), the cloud can hold instances Terraform created but did not
 record in its state. A plain `teardown` cannot see those, and may fail trying to
 destroy a network they still sit in. Run `manage.sh teardown --force` (or
-`.\\manage.ps1 teardown --force`): it deletes this deployment's instances in the
-cloud first, then destroys the rest, so nothing is left billing. Once a teardown
-finishes cleanly, re-running `deploy.sh` starts fresh.
+`.\\manage.ps1 teardown --force`).
+{force_sweep}
+It asks first, the same as a plain teardown. Once a teardown finishes cleanly,
+re-running `deploy.sh` starts fresh.
 
 ## What redStackPRO did not do
 
@@ -644,7 +670,8 @@ Working from the jumpbox itself avoids the proxy and the agent entirely.
 
 Once it is up, `manage.ps1` (or `manage.sh` from Git Bash, macOS, or Linux) checks
 on it and tears it down. Same wrapper pattern as the deploy: `.\\manage.ps1` on
-Windows, `bash manage.sh` everywhere else.
+Windows, `bash manage.sh` everywhere else. Run it with no command for a help
+screen that says what each command does on this provider.
 
 ```powershell
 .\\manage.ps1 status
@@ -660,12 +687,11 @@ bash manage.sh stop
 bash manage.sh teardown
 ```
 
-`status` prints the Guacamole portal URL and the state of every host. `start`
-and `stop` act on exactly this range's own instances, never the whole cloud
-account or project. `teardown` runs
-`terraform -chdir=terraform destroy -auto-approve` after copying `deploy.tfvars`
-into place, the same handoff the deploy uses; running that raw command yourself
-from `terraform/` works too, once `terraform.tfvars` is there.
+`status` prints the Guacamole portal URL and one table with the state of every
+host. `start` and `stop` act on exactly this range's own instances, never the
+whole cloud account or project.
+
+{teardown_asks}
 
 To pause the range overnight and keep the cost down, use `manage.sh stop` and
 then `manage.sh start` the next day: this halts the instances without destroying
@@ -811,7 +837,8 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
         # Managing what deploy.sh stood up: status, start, stop, teardown.
         # Ships alongside deploy.sh/.ps1 under the same condition, a jumpbox to
         # act through, and never without it. See deploy.py generate_manage_script.
-        manage_script = generate_manage_script(document, registry, provider=provider)
+        manage_script = generate_manage_script(document, registry, provider=provider,
+                                               region=region)
         if manage_script:
             files["manage.sh"] = manage_script
             from .deploy import MANAGE_PS1
@@ -829,6 +856,10 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
                       "a credential."),
         make_a_key=MAKE_A_KEY,
         run_the_deploy=RUN_THE_DEPLOY,
+        teardown_asks=TEARDOWN_ASKS,
+        force_sweep=FORCE_SWEEP.get(
+            provider, "On this provider it runs a plain destroy, with no instance "
+                      "sweep."),
         deploy_output=deploy_output(provider),
         run_log=run_log(is_range),
         quotas=QUOTA_NOTES.get(provider, ""),
