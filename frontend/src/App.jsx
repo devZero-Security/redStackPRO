@@ -32,6 +32,7 @@ import { applyExtension, removeExtension } from "./extensions.js";
 import { nodeTypes } from "./nodes.jsx";
 import { edgeTypes } from "./FloatingEdge.jsx";
 import { HelperLines } from "./HelperLines.jsx";
+import { PanelResizer, usePanelWidths } from "./PanelResizer.jsx";
 import { CanvasErrorBoundary } from "./ErrorBoundary.jsx";
 import { alignment, bounds } from "./align.js";
 import { insertWaypoint, moveWaypoint, removeWaypoint } from "./waypoints.js";
@@ -154,6 +155,9 @@ function Editor() {
   const providerRef = useRef(provider);
   providerRef.current = provider;
   const [selection, setSelection] = useState(null);
+  const {
+    widths: panelWidths, setWidth: setPanelWidth, reset: resetPanelWidth,
+  } = usePanelWidths();
   const [findings, setFindings] = useState([]);
   const [status, setStatus] = useState("");
   // The export panel is the point of the product, so it is a peer of the
@@ -1650,7 +1654,13 @@ function Editor() {
         </button>
       </header>
 
-      <div className="rg-body">
+      <div
+        className="rg-body"
+        style={{
+          "--palette-w": `${panelWidths.palette}px`,
+          "--right-w": `${panelWidths.right}px`,
+        }}
+      >
         <button
           className="rg-drawer-toggle is-left"
           type="button"
@@ -1701,6 +1711,15 @@ function Editor() {
           />
         )}
         </div>
+
+        <PanelResizer
+          side="left"
+          panel="palette"
+          width={panelWidths.palette}
+          label="Resize the palette"
+          onResize={setPanelWidth}
+          onReset={resetPanelWidth}
+        />
 
         <div
           className="rg-canvas"
@@ -1831,7 +1850,16 @@ function Editor() {
           ) : null}
         </div>
 
-        <div className={`rg-right ${panel === "export" ? "is-wide" : ""} ${drawer === "right" ? "is-open" : ""}`}>
+        <PanelResizer
+          side="right"
+          panel="right"
+          width={panelWidths.right}
+          label="Resize the side panel"
+          onResize={setPanelWidth}
+          onReset={resetPanelWidth}
+        />
+
+        <div className={`rg-right ${drawer === "right" ? "is-open" : ""}`}>
           <div className="rg-tabs">
             <button
               className={panel === "inspector" ? "is-active" : ""}

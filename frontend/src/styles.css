@@ -274,6 +274,33 @@ button:disabled { opacity: 0.5; cursor: default; }
   color: var(--muted); margin: 14px 0 6px; }
 
 .rg-canvas { flex: 1; min-width: 0; position: relative; background: var(--bg); }
+.rg-drawer-left > .rg-panel { width: var(--palette-w, 250px); flex: 0 0 auto; }
+
+/* Drag handle on a side panel's inner edge. Zero net width: it overlaps the
+   panel border so the canvas does not shift. */
+.rg-resizer {
+  flex: 0 0 8px;
+  margin: 0 -4px;
+  position: relative;
+  z-index: 10;
+  cursor: col-resize;
+  touch-action: none;
+}
+.rg-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background 0.12s;
+}
+.rg-resizer:hover::after,
+.rg-resizer:focus-visible::after,
+.rg-resizer.is-dragging::after { background: var(--accent, #4dabf7); }
+.rg-resizer:focus-visible { outline: none; }
+body:has(.rg-resizer.is-dragging) { cursor: col-resize; user-select: none; }
 
 /* palette */
 
@@ -1203,8 +1230,7 @@ button:disabled { opacity: 0.5; cursor: default; }
    The generated code sits beside the topology, because the working directory is
    the deliverable and the canvas is a view onto what produces it. */
 
-.rg-right { display: flex; flex-direction: column; width: 320px; flex: 0 0 auto; }
-.rg-right.is-wide { width: 620px; }
+.rg-right { display: flex; flex-direction: column; width: var(--right-w, 480px); flex: 0 0 auto; }
 
 .rg-tabs {
   display: flex;
@@ -1652,6 +1678,7 @@ button:disabled { opacity: 0.5; cursor: default; }
    out of flow (absolute). Backdrop sits between canvas and the open drawer. */
 @media (max-width: 1100px) {
   .rg-body { position: relative; }
+  .rg-resizer { display: none; }
 
   .rg-drawer-left,
   .rg-right {
@@ -1677,10 +1704,9 @@ button:disabled { opacity: 0.5; cursor: default; }
 
   .rg-right {
     right: 0;
-    width: min(360px, 90vw);
+    width: min(480px, 95vw);
     transform: translateX(100%);
   }
-  .rg-right.is-wide { width: min(560px, 95vw); }
   .rg-right.is-open { transform: translateX(0); }
 
   /* Full-area dim behind the open drawer. */
