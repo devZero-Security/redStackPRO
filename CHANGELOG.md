@@ -159,9 +159,9 @@ versioning, and dates are UTC.
   "hardening off" on the canvas, and goad-wazuh's ws01 no longer claims hardening.
 - The palette no longer offers Firewall and Appliance, which were never built.
   Topologies that already have them still open.
-- Domain controllers, servers and workstations dropped from the palette start as
-  Windows Server 2022, a jumpbox starts with the Guacamole portal, and the File
-  Server preset plants an open SMB share.
+- Domain controllers and servers dropped from the palette start as Windows Server
+  2022 and workstations as Windows 11, a jumpbox starts with the Guacamole portal,
+  and the File Server preset plants an open SMB share.
 - The certificate source `provided` and the Splunk collector sink and SIEM product
   are removed. None of them could deploy: there was no way to supply the
   certificate or the Splunk download.
@@ -224,6 +224,21 @@ versioning, and dates are UTC.
   still lists the files), the Azure preflight table on a pass (now one summary line;
   `python azure_preflight.py .` prints the table), tar's "time stamp in the future"
   warnings, and "No screen session found." on a first deploy.
+- A new workstation (`wks`) defaults to Windows 11: the canvas seeds `windows_11`,
+  and a workstation with no `os` compiles to it (a `dc` or `srv` stays Windows Server
+  2022). GCP and AWS still boot Windows Server 2022 for it (`CAP005`). On Azure that
+  is the `windows-11` Marketplace image.
+- Windows 10 is marked past end of support (Microsoft ended it on 2025-10-14). The
+  Inspector lists it as "Windows 10 (past end of support)" with the date under the
+  picker, and a host set to `windows_10` on Azure, Proxmox or ESXi gets an info note
+  (`CAP006`) that never blocks an export. The stored values are unchanged.
+- The shipped blueprints' Windows 10 workstations are Windows 11: `ws01` in
+  `goad-wazuh`, `ws` in `minilab`, `client` in `sccm` and `fr-wks01` in `harbor`, and
+  the ws01 extension's workstation. Their solution pages say so.
+- On Azure, the DEPLOYMENT-GUIDE (when the topology has a Windows 10 or 11 host) and
+  the README note that Microsoft licenses Windows client VMs on Azure only for
+  customers with a qualifying license, and that redStackPRO does not set
+  `license_type`, so license eligibility is the user's to confirm.
 
 ### Fixed
 
@@ -275,7 +290,8 @@ versioning, and dates are UTC.
   used to show `[object Object]` and save typed text as a string, and lists under it
   the keys each ticked vuln reads, required or optional, with an example.
 - A domain controller, server or workstation with no OS set was built as Windows
-  but provisioned as Linux. It now builds and provisions as Windows Server 2022.
+  but provisioned as Linux. It now builds and provisions as Windows: Server 2022,
+  or Windows 11 for a workstation.
 - A host with no hostname uses its node id, and a domain with no NetBIOS name uses
   its first DNS label, uppercased. A domain controller with no hostname used to fail
   at the rename step.
