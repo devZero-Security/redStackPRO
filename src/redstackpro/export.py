@@ -176,11 +176,6 @@ def _needs(provider):
             "`terraform`, a Python 3.8+ and the %s (step 3)" % cli[0])
 
 
-def _folder_name(name):
-    """The example folder name, the same slug the canvas names the download with."""
-    return re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-") or "redstackpro"
-
-
 # The last step-2 bullet: what else in deploy.tfvars to check, per provider.
 CONFIRM_TFVARS = {
     "gcp": """- `project`: your GCP project ID, not its name or number
@@ -263,8 +258,8 @@ barred from a size in a region, which apply reports as `SkuNotAvailable`.
 # and the deploy fails minutes later with `Permission denied (publickey)` from
 # the jumpbox. `-N ''` is the form that yields no passphrase there. Found by
 # following the bash version of this line at a PowerShell prompt.
-MAKE_A_KEY = """Extract the download to its own folder, for example `C:\\ranges\\{folder}` on
-Windows or `~/ranges/{folder}` on macOS and Linux, and open PowerShell or a
+MAKE_A_KEY = """Extract the download to its own folder, for example `C:\\redstackpro\\my-range` on
+Windows or `~/redstackpro/my-range` on macOS and Linux, and open PowerShell or a
 terminal in it. On Windows the path must not contain an apostrophe: `deploy.ps1`
 cannot run from one. Every command in this guide runs from that folder, the one
 this guide is in: `keys/` below is relative to it, and `manage.sh` runs from it
@@ -832,7 +827,7 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
         cloud_auth=install_cli(provider) + CLOUD_AUTH.get(
             provider, "However your provider expects. redStackPRO never holds "
                       "a credential."),
-        make_a_key=MAKE_A_KEY.format(folder=_folder_name(document.get("name"))),
+        make_a_key=MAKE_A_KEY,
         run_the_deploy=RUN_THE_DEPLOY,
         deploy_output=deploy_output(provider),
         run_log=run_log(is_range),

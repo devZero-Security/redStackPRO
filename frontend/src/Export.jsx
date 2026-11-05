@@ -212,7 +212,7 @@ export function ExportPanel({ document, provider }) {
   const setup = providerSetup(provider);
   const cloud = labelFor(provider);
   const target = PLATFORMS[platform];
-  const folder = extractFolder(platform, document.name);
+  const folder = extractFolder(platform);
   const cli = setup.cli;
   // The panel says Windows, so the CLI install has to be the Windows one.
   const install = !cli ? null : platform === "windows" ? (

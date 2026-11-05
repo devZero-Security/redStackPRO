@@ -303,12 +303,13 @@ describe("export panel", () => {
     test("Windows: step 1 extracts to a folder and runs everything from it", async () => {
       const { items, commands } = await steps("azure", "windows");
       const first = items[0].textContent;
-      expect(first).toMatch(/Extract the zip to its own folder, for example C:\\ranges\\goad-light\./);
+      expect(first).toMatch(/Extract the zip to its own folder, for example C:\\redstackpro\\my-range\./);
+      expect(first).not.toMatch(/goad-light/);
       expect(first).toMatch(/must not contain an apostrophe/);
       expect(first).toMatch(/Open PowerShell in that folder; every step below runs from there:/);
       expect(first).toMatch(/The key lands in the export's keys folder\. Keep the folder/);
       expect(commands(items[0])).toEqual([
-        "cd C:\\ranges\\goad-light",
+        "cd C:\\redstackpro\\my-range",
         "ssh-keygen -t ed25519 -f keys\\id_ed25519 -N ''",
       ]);
     });
@@ -335,9 +336,9 @@ describe("export panel", () => {
     test("macOS / Linux + azure: the docs link, no winget", async () => {
       const { items, commands, note } = await steps("azure", "unix");
       expect(items[0].textContent).toMatch(
-        /for example ~\/ranges\/goad-light\. Open a terminal in that folder; every step below runs from there:/);
+        /for example ~\/redstackpro\/my-range\. Open a terminal in that folder; every step below runs from there:/);
       expect(items[0].textContent).not.toMatch(/apostrophe/);
-      expect(commands(items[0])[0]).toBe("cd ~/ranges/goad-light");
+      expect(commands(items[0])[0]).toBe("cd ~/redstackpro/my-range");
       const login = items[2];
       expect(login.textContent).toMatch(/^Install the Azure CLI \(install steps\), then log in to Azure:/);
       expect(login.querySelector("a").getAttribute("href")).toBe(

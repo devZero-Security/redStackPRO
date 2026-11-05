@@ -355,7 +355,8 @@ def test_the_guide_runs_everything_from_the_export_folder(provider):
     """keys/ in the keygen line is relative, so a key made from the home folder
     lands where the deploy never looks. Found using the export panel for real."""
     step = _section(_guide(_goad_light(), provider), 1)
-    assert "`C:\\ranges\\goad-light` on\nWindows or `~/ranges/goad-light`" in step
+    assert "`C:\\redstackpro\\my-range` on\nWindows or `~/redstackpro/my-range`" in step
+    assert "goad-light" not in step, "the example folder is generic, not the topology name"
     assert "must not contain an apostrophe" in step
     assert "Every command in this guide runs from that folder" in step
     assert step.index("runs from that folder") < step.index("ssh-keygen")

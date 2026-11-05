@@ -25,7 +25,7 @@ export const PLATFORMS = {
     run: ".\\deploy.ps1",
     shell: "PowerShell",
     // keys\ in the keygen line is relative, so every step runs from here.
-    folder: "C:\\ranges\\",
+    folder: "C:\\redstackpro\\my-range",
     // deploy.ps1 hands its own folder to Git Bash inside single quotes.
     pathNote: "The path must not contain an apostrophe: deploy.ps1 cannot run from one.",
     needs: ["terraform", "Git for Windows (for ssh, tar and Git Bash)", "Python 3.8 or newer"],
@@ -44,7 +44,7 @@ export const PLATFORMS = {
     file: "macos-linux",
     run: "bash deploy.sh",
     shell: "a terminal",
-    folder: "~/ranges/",
+    folder: "~/redstackpro/my-range",
     needs: ["terraform", "ssh", "tar", "Python 3.8 or newer"],
     note: "",
     keygen: 'ssh-keygen -t ed25519 -f keys/id_ed25519 -N ""',
@@ -67,9 +67,9 @@ export function requirements(platform, provider) {
   return `Needs ${listed(needs)}.`;
 }
 
-// An example folder to extract into, named like the download.
-export function extractFolder(platform, name) {
-  return (PLATFORMS[platform] || PLATFORMS.unix).folder + slug(name);
+// An example folder to extract into. Generic on purpose, not the topology's name.
+export function extractFolder(platform) {
+  return (PLATFORMS[platform] || PLATFORMS.unix).folder;
 }
 
 // What to set in deploy.tfvars and how to log in, per provider. Field names

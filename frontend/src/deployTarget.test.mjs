@@ -78,9 +78,10 @@ for (const [key, p] of Object.entries(PLATFORMS)) {
 
 // keys\ in the keygen line is relative, so the example folder is where every
 // step runs. Named like the download, so it is shell safe.
-assert.equal(extractFolder("windows", "GOAD Light"), "C:\\ranges\\goad-light");
-assert.equal(extractFolder("unix", "GOAD Light"), "~/ranges/goad-light");
-assert.doesNotMatch(extractFolder("windows", "Mike's range"), /'/);
+// Generic on purpose: the example never carries the topology's name.
+assert.equal(extractFolder("windows"), "C:\\redstackpro\\my-range");
+assert.equal(extractFolder("unix"), "~/redstackpro/my-range");
+assert.doesNotMatch(extractFolder("windows"), /'/);
 
 // The cloud CLI is a requirement, and on Windows it is the Windows build.
 assert.equal(
