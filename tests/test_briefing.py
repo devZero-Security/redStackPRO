@@ -229,3 +229,60 @@ def test_the_briefing_shows_the_logon_bot_interval_set():
     text = range_briefing(doc, provider="gcp")
     logon = next(l for l in text.splitlines() if "logon bot (connect_bot)" in l)
     assert logon.endswith("| 10 min |"), logon
+
+
+_SIGNIN_ROW = ("| fr-wks01 | console sign-in | FREIGHT\\dana.brooks | signed in at the "
+               "console at boot, so its scheduled tasks run | at boot |")
+
+
+def _harbor(edit=None):
+    doc = json.loads((ROOT / "frontend/public/harbor.json").read_text(encoding="utf-8"))
+    wks = next(n for n in doc["nodes"] if n["id"] == "fr-wks01")
+    if edit:
+        edit(wks["overlay"])
+    return doc
+
+
+def test_a_windows_10_workstation_lists_its_console_signin_where_it_boots_a_client():
+    """Windows 10 and 11 run a user's scheduled tasks only after a console
+    sign-in, so the role signs the stored credential's owner in at boot."""
+    for provider in ("azure", "proxmox", "esxi"):
+        md = range_briefing(_harbor(), provider=provider)
+        assert _SIGNIN_ROW in md[md.index("## User activity"):], provider
+    md = range_briefing(_harbor(lambda ov: ov.update(os="windows_11")), provider="azure")
+    assert _SIGNIN_ROW in md
+
+
+def test_no_console_signin_where_the_workstation_boots_a_server():
+    # GCP and AWS boot Server 2022 for windows_10 (CAP005).
+    for provider in ("gcp", "aws"):
+        md = range_briefing(_harbor(), provider=provider)
+        assert "saved credential" in md and "console sign-in" not in md, provider
+    md = range_briefing(_harbor(lambda ov: ov.update(os="windows_server_2022")), provider="azure")
+    assert "saved credential" in md and "console sign-in" not in md
+
+
+def test_no_console_signin_without_a_user_task_or_with_the_autologon_vuln():
+    md = range_briefing(_harbor(lambda ov: ov.update(vulns=["smbv1"])), provider="azure")
+    assert "console sign-in" not in md
+    md = range_briefing(_harbor(lambda ov: ov["vulns"].append("autologon")), provider="azure")
+    assert "saved credential" in md and "console sign-in" not in md
+
+
+def test_a_poisoning_bot_the_provider_drops_needs_no_console_signin():
+    from redstackpro.briefing import console_signin_user
+    overlay = {"os": "windows_10", "vulns": ["responder"],
+               "vulns_vars": {"bot_user": "north\\jon.snow"}}
+    assert console_signin_user(overlay, "azure") is None
+    assert console_signin_user(overlay, "esxi") == "north\\jon.snow"
+
+
+def test_the_client_image_providers_match_the_canvas_and_cap005():
+    from redstackpro.briefing import CLIENT_IMAGE_PROVIDERS
+    from redstackpro.export import RANGE_PROVIDERS
+    from redstackpro.validate import _NO_CLIENT_IMAGE
+    assert set(CLIENT_IMAGE_PROVIDERS) | set(_NO_CLIENT_IMAGE) == set(RANGE_PROVIDERS)
+    assert not set(CLIENT_IMAGE_PROVIDERS) & set(_NO_CLIENT_IMAGE)
+    js = (ROOT / "frontend/src/activity.js").read_text(encoding="utf-8")
+    m = re.search(r"export const CLIENT_IMAGE_PROVIDERS = (\[[^\]]*\]);", js)
+    assert m and json.loads(m.group(1)) == list(CLIENT_IMAGE_PROVIDERS)

@@ -236,6 +236,15 @@ versioning, and dates are UTC.
   could not read, so no credential was ever saved and the role still reported a
   change. The owner is now granted read on the script, the task fails if the
   credential was not saved, and the script, which holds the password, is deleted.
+- Windows 10 and 11 workstations on Azure, Proxmox and ESXi ran none of their user
+  activity bots (the logon bot, the scheduled task, the poisoning bots), and the stored
+  credential was never saved. A client edition of Windows starts a user's scheduled
+  task only after someone has signed in at the console since boot, and on a VM nobody
+  does. The host's bot user is now signed in at the console at every boot, with the
+  password kept as an LSA secret rather than in the Winlogon registry key, and the host
+  reboots once when that is first set. The DEFENSE-BRIEFING and the canvas list the
+  sign-in for that host. Server editions, and GCP and AWS workstations, which boot
+  Windows Server 2022, are unchanged.
 - SMBv1 (`smbv1`) is on after the deploy. Enabling the feature needs a reboot before
   the server offers the dialect, and the role never rebooted. It now reboots when the
   server still reports SMBv1 off.

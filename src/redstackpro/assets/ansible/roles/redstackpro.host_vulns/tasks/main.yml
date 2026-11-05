@@ -22,6 +22,12 @@
   ansible.builtin.include_tasks: endpoint_telemetry.yml
   when: redstackpro_endpoint_telemetry | default(false)
 
+# Windows 10 and 11 hold a user's scheduled tasks until someone signs in at the
+# console, so a client signs its bot user in (and reboots when that is new)
+# before the bots and the stored credential plant below. See console_signin.yml.
+- name: Sign the bot user in at the console on a Windows client
+  ansible.builtin.include_tasks: console_signin.yml
+
 - name: Plant host-level attack paths declared on this host
   ansible.builtin.include_tasks: "{{ item }}.yml"
   loop: "{{ redstackpro_host_vulns | intersect(redstackpro_host_vulns_implemented) }}"

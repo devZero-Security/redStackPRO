@@ -6,8 +6,8 @@ import { hostDomain } from "./spnChoices.js";
 import { isNotice } from "./fieldRules.js";
 import {
   ACTIVITIES, DEFAULT_BOT_MINUTES, DEFAULT_COMMAND, DEFAULT_SCRIPT_PATH, DEFAULT_TASK,
-  MAX_BOT_MINUTES, SCHEDULE_ACTIONS, botMinutes, findingsByActivity, losesQuotes, onlyOn,
-  providerBlock, readSchedule, scheduleWith, taskClash, toggled,
+  MAX_BOT_MINUTES, SCHEDULE_ACTIONS, botMinutes, consoleSigninUser, findingsByActivity, losesQuotes,
+  onlyOn, providerBlock, readSchedule, scheduleWith, taskClash, toggled,
 } from "./activity.js";
 
 const Sentence = ({ children }) => <div className="rg-activity-sentence">{children}</div>;
@@ -254,6 +254,7 @@ export function UserActivity({ node, document, provider, findings, disabled, onC
   const botUser = typeof v("bot_user") === "string" ? v("bot_user") : "";
   const botMins = v("bot_interval_minutes");
   const botShown = botMins == null || botMins === "" ? DEFAULT_BOT_MINUTES : Number(botMins);
+  const signin = malformed ? null : consoleSigninUser(overlay, provider);
 
   const sentences = {
     rdp_scheduler: (
@@ -392,6 +393,12 @@ export function UserActivity({ node, document, provider, findings, disabled, onC
           {sentences[a.id]}
         </ActivityRow>
       ))}
+      {signin ? (
+        <Help>
+          On Windows 10 and 11, {signin} is signed in at the console at boot, because Windows runs a
+          user's scheduled tasks only after someone signs in.
+        </Help>
+      ) : null}
     </div>
   );
 }

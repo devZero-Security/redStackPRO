@@ -10,6 +10,7 @@ import { computeAccessibleName } from "dom-accessibility-api";
 import SCHEMA from "../../src/redstackpro/schema/topology/0.7.0.json";
 import LIGHT from "../public/goad/goad-light.json";
 import MINILAB from "../public/goad/minilab.json";
+import HARBOR from "../public/harbor.json";
 import { Inspector } from "./Inspector.jsx";
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
@@ -220,6 +221,34 @@ describe("the poisoning bots and the provider", () => {
     fireEvent.change(field("combobox", "Relay bot user"), { target: { value: "" } });
     expect(last(seen).vulns_vars.ntlm_relay_user).toBeUndefined();
     expect(within(field("combobox", "Relay bot user")).getByText("same as the bot user, north\\robb.stark")).toBeTruthy();
+  });
+});
+
+describe("the console sign-in", () => {
+  const SIGNIN = /^On Windows 10 and 11, FREIGHT\\dana\.brooks is signed in at the console at boot, because Windows runs a user's scheduled tasks only after someone signs in\.$/;
+  const wks = (props) => <Panel blueprint={HARBOR} id="fr-wks01" {...props} />;
+
+  test("a Windows 10 workstation on Azure says its bot user is signed in at boot", () => {
+    render(wks({ provider: "azure" }));
+    expect(section().getByText(SIGNIN)).toBeTruthy();
+  });
+
+  test("not where the workstation boots a server, or before a provider is picked", () => {
+    for (const provider of ["gcp", "aws", undefined]) {
+      const { unmount } = render(wks({ provider }));
+      expect(section().queryByText(/signed in at the console/)).toBeNull();
+      unmount();
+    }
+    const server = (doc) => { overlayOf(doc, "fr-wks01").os = "windows_server_2022"; };
+    render(wks({ provider: "azure", edit: server }));
+    expect(section().queryByText(/signed in at the console/)).toBeNull();
+  });
+
+  test("it goes when the last user task is unticked", () => {
+    render(wks({ provider: "proxmox" }));
+    expect(section().getByText(SIGNIN)).toBeTruthy();
+    fireEvent.click(box("Saved credential"));
+    expect(section().queryByText(/signed in at the console/)).toBeNull();
   });
 });
 

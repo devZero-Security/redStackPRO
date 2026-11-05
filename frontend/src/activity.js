@@ -63,6 +63,38 @@ export function onlyOn(id) {
   return allowed ? `${allowed.map(labelFor).join(" and ")} only` : null;
 }
 
+// ------------------------------------------------------- console sign-in
+
+// The providers that boot a Windows 10 or 11 build as a client edition; GCP and
+// AWS boot Server 2022 for it (CAP005). Same list as briefing.py.
+export const CLIENT_IMAGE_PROVIDERS = ["azure", "proxmox", "esxi"];
+const CLIENT_BUILDS = ["windows_10", "windows_11"];
+
+const named = (value) => (typeof value === "string" && value.trim() ? value.trim() : null);
+
+// The user console_signin.yml signs in at the console at boot, or null: Windows
+// 10 and 11 run a user's scheduled tasks only after a console sign-in. Picked in
+// the role's order; a host with the autologon vuln signs in that vuln's user.
+export function consoleSigninUser(overlay, provider) {
+  const ov = overlay || {};
+  if (!CLIENT_IMAGE_PROVIDERS.includes(provider) || !CLIENT_BUILDS.includes(ov.os)) return null;
+  const vulns = (Array.isArray(ov.vulns) ? ov.vulns : []).filter((v) => !providerBlock(v, provider));
+  if (vulns.includes("autologon")) return null;
+  const vv = isPlainObject(ov.vulns_vars) ? ov.vulns_vars : {};
+  const sub = (key) => (isPlainObject(vv[key]) ? vv[key] : {});
+  const order = [
+    ["rdp_scheduler", vv.bot_user],
+    ["stored_credential", sub("stored_credential").owner],
+    ["schedule", sub("schedule").user],
+    ["responder", vv.bot_user],
+    ["ntlm_relay", vv.ntlm_relay_user || vv.bot_user],
+  ];
+  for (const [id, user] of order) {
+    if (vulns.includes(id) && named(user)) return named(user);
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------- quoting
 
 // PowerShell ends a single-quoted string at any of these, and reads one

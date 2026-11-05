@@ -449,3 +449,161 @@ def test_the_schedule_bot_does_not_reuse_the_logon_bot_task_name():
     # Both defaulted to connect_bot, so a host with both kept only one.
     text = (ROLES / "redstackpro.host_vulns/tasks/schedule.yml").read_text(encoding="utf-8")
     assert "default('schedule_bot')" in text and "default('connect_bot')" not in text
+
+
+# -- console sign-in on a Windows client
+
+CONSOLE_SIGNIN = ROLES / "redstackpro.host_vulns/tasks/console_signin.yml"
+
+
+def _console_tasks():
+    """console_signin.yml's tasks, the block flattened, by name."""
+    out = {}
+    for t in yaml.safe_load(CONSOLE_SIGNIN.read_text(encoding="utf-8")):
+        out[t["name"]] = t
+        for inner in t.get("block", []):
+            out[inner["name"]] = inner
+    return out
+
+
+def _console_user(vulns, vulns_vars):
+    """The user the role picks, rendered as Ansible does: the task vars first,
+    then the fact that reads them."""
+    pytest.importorskip("jinja2")
+    from jinja2.nativetypes import NativeEnvironment
+    task = _console_tasks()["Pick the user whose scheduled tasks need a console sign-in"]
+    env = NativeEnvironment()
+    env.filters["intersect"] = lambda a, b: [x for x in a if x in b]
+    defaults = yaml.safe_load((ROLES / "redstackpro.host_vulns/defaults/main.yml")
+                              .read_text(encoding="utf-8"))
+    ctx = {"redstackpro_host_vulns": vulns, "redstackpro_host_vulns_vars": vulns_vars,
+           "redstackpro_host_vulns_implemented": defaults["redstackpro_host_vulns_implemented"]}
+    for key, expr in task["vars"].items():
+        ctx[key] = env.from_string(expr).render(ctx)
+    return env.from_string(task["ansible.builtin.set_fact"]["rsp_console_user"]).render(ctx)
+
+
+def test_console_signin_runs_before_the_vulns_that_need_it():
+    """The stored credential plant runs its task at once and fails when the
+    credential was not saved, so on a client the sign-in has to be in place
+    before the dispatch loop plants it."""
+    main = yaml.safe_load((ROLES / "redstackpro.host_vulns/tasks/main.yml")
+                          .read_text(encoding="utf-8"))
+    names = [t["name"] for t in main]
+    signin = names.index("Sign the bot user in at the console on a Windows client")
+    assert main[signin]["ansible.builtin.include_tasks"] == "console_signin.yml"
+    assert "when" not in main[signin]
+    assert signin < names.index("Plant host-level attack paths declared on this host")
+
+
+def test_console_signin_reads_the_running_edition():
+    """GCP and AWS boot Server 2022 for windows_10 and Proxmox/ESXi boot the
+    operator's image, so the role asks the OS rather than trusting the build."""
+    tasks = _console_tasks()
+    read = tasks["Read whether this host runs a client edition of Windows"]
+    assert "Win32_OperatingSystem).ProductType" in read["ansible.windows.win_powershell"]["script"]
+    assert read["changed_when"] is False
+    fact = tasks["Note whether this host is a Windows client"]["ansible.builtin.set_fact"]
+    assert "== 1" in fact["rsp_windows_client"]
+    configure = tasks["Sign the bot user in at the console at every boot"]
+    assert "rsp_windows_client | bool" in configure["when"]
+    block = next(t for t in yaml.safe_load(CONSOLE_SIGNIN.read_text(encoding="utf-8"))
+                 if "block" in t)
+    assert block["when"] == "rsp_console_user | length > 0"
+
+
+def test_console_signin_keeps_the_password_in_an_lsa_secret():
+    """A cleartext Winlogon DefaultPassword is readable by any user, which is the
+    autologon vuln. The sign-in keeps it as the LSA secret instead."""
+    configure = _console_tasks()["Sign the bot user in at the console at every boot"]
+    ps = configure["ansible.windows.win_powershell"]
+    script = ps["script"]
+    assert "LsaStorePrivateData" in script and "LsaRetrievePrivateData" in script
+    assert '[RspLsa]::Store("DefaultPassword", $Pass)' in script
+    assert ('AutoAdminLogon = "1"; DefaultUserName = $User; '
+            'DefaultDomainName = $Domain') in script
+    # The cleartext value is removed, never written.
+    assert 'foreach ($name in "DefaultPassword", "AutoLogonCount")' in script
+    assert "Remove-ItemProperty -Path $key -Name $name" in script
+    assert "-Name DefaultPassword" not in script
+    assert "win_regedit" not in CONSOLE_SIGNIN.read_text(encoding="utf-8")
+    # The same password lookup the bots use.
+    assert ps["parameters"]["Pass"] == (
+        "{{ (redstackpro_user_passwords | default({})).get(rsp_console_user, "
+        "redstackpro_lab_password) }}")
+
+
+def test_console_signin_leaves_the_autologon_vuln_alone():
+    """A host that ticks autologon signs in that vuln's user, and its cleartext
+    value is the point of the vuln, so the sign-in does not configure or remove
+    anything there. The vuln runs first instead, so a reboot puts it in effect."""
+    tasks = _console_tasks()
+    configure = tasks["Sign the bot user in at the console at every boot"]
+    assert "'autologon' not in redstackpro_host_vulns" in configure["when"]
+    first = tasks["Let the autologon vuln sign its user in first"]
+    assert first["ansible.builtin.include_tasks"] == "autologon.yml"
+    assert "'autologon' in redstackpro_host_vulns" in first["when"]
+    assert "rsp_windows_client | bool" in first["when"]
+    autologon = yaml.safe_load((ROLES / "redstackpro.host_vulns/tasks/autologon.yml")
+                               .read_text(encoding="utf-8"))
+    assert autologon[0]["register"] == "rsp_autologon"
+
+
+def test_console_signin_reboots_only_when_it_changed_something():
+    tasks = _console_tasks()
+    configure = tasks["Sign the bot user in at the console at every boot"]
+    assert configure["register"] == "rsp_console_signin"
+    script = configure["ansible.windows.win_powershell"]["script"]
+    assert "$Ansible.Changed = $changed" in script
+    assert "$changed = $true" in script and "$changed = $false" in script
+    names = list(tasks)
+    reboot = tasks["Reboot so the console sign-in takes effect"]
+    assert "ansible.windows.win_reboot" in reboot
+    assert reboot["when"] == (
+        "(rsp_console_signin is changed) or ((rsp_autologon | default({})) is changed)")
+    wait = tasks["Wait for the console sign-in"]
+    assert wait["when"] == reboot["when"]
+    assert "Win32_ComputerSystem).UserName" in wait["ansible.windows.win_powershell"]["script"]
+    assert wait["until"] == "rsp_console_session is succeeded"
+    assert (names.index("Sign the bot user in at the console at every boot")
+            < names.index("Reboot so the console sign-in takes effect")
+            < names.index("Wait for the console sign-in"))
+
+
+@pytest.mark.parametrize("vulns,vulns_vars,user", [
+    ([], {}, ""),
+    (["smbv1"], {"bot_user": "north\\arya.stark"}, ""),
+    (["rdp_scheduler"], {"bot_user": "NORTH\\arya.stark"}, "NORTH\\arya.stark"),
+    (["rdp_scheduler", "stored_credential"],
+     {"bot_user": "north\\arya.stark", "stored_credential": {"owner": "north\\robb.stark"}},
+     "north\\arya.stark"),
+    (["rdp_scheduler", "stored_credential"],
+     {"stored_credential": {"owner": "north\\robb.stark"}}, "north\\robb.stark"),
+    (["schedule"], {"schedule": {"user": "north\\sansa.stark"}}, "north\\sansa.stark"),
+    # A SYSTEM task needs no sign-in.
+    (["schedule"], {"schedule": {"name": "x"}}, ""),
+    (["responder"], {"bot_user": "north\\jon.snow"}, "north\\jon.snow"),
+    (["ntlm_relay"], {"ntlm_relay_user": "north\\eddard.stark", "bot_user": "north\\jon.snow"},
+     "north\\eddard.stark"),
+    (["ntlm_relay"], {"bot_user": "north\\jon.snow"}, "north\\jon.snow"),
+    (["stored_credential"], {"stored_credential": {"owner": " north\\robb.stark "}},
+     "north\\robb.stark"),
+    (["rdp_scheduler"], {"bot_user": None}, ""),
+])
+def test_console_signin_picks_the_user_the_briefing_names(vulns, vulns_vars, user):
+    from redstackpro.briefing import console_signin_user
+    assert _console_user(vulns, vulns_vars) == user
+    overlay = {"os": "windows_10", "vulns": vulns, "vulns_vars": vulns_vars}
+    # Proxmox plants the poisoning bots, so every case applies there.
+    assert (console_signin_user(overlay, "proxmox") or "") == user
+
+
+def test_a_windows_10_workstation_on_azure_briefs_its_console_signin():
+    doc = load(PUBLIC / "harbor.json")
+    files = compile_topology(doc, Registry(), provider="azure")
+    hv = _yaml(files, "ansible/host_vars/def-fr-wks01.yml")
+    assert hv["redstackpro_wks_vulns"] == ["stored_credential"]
+    assert _console_user(hv["redstackpro_wks_vulns"],
+                         hv["redstackpro_wks_vulns_vars"]) == "FREIGHT\\dana.brooks"
+    assert ("| fr-wks01 | console sign-in | FREIGHT\\dana.brooks | signed in at the console "
+            "at boot, so its scheduled tasks run | at boot |") in files["DEFENSE-BRIEFING.md"]

@@ -14,3 +14,5 @@
     - { name: "DefaultPassword", data: "{{ (redstackpro_user_passwords | default({})).get(redstackpro_host_autologon_user | default('administrator'), redstackpro_lab_password) }}" }
   loop_control:
     label: "{{ item.name }}"
+  # console_signin.yml reboots a client when this changed.
+  register: rsp_autologon

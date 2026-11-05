@@ -55,6 +55,39 @@ def logon_bot_minutes(vulns_vars):
     return min(int(raw), 44640)
 
 
+# The providers that boot a Windows 10 or 11 build as a client edition. GCP and
+# AWS boot Server 2022 for it (validate.py CAP005).
+CLIENT_IMAGE_PROVIDERS = ("azure", "proxmox", "esxi")
+_CLIENT_BUILDS = ("windows_10", "windows_11")
+
+
+def console_signin_user(overlay, provider):
+    """The user host_vulns/tasks/console_signin.yml signs in at the console at
+    boot, or None. Windows 10 and 11 run a user's scheduled tasks only after a
+    console sign-in, so a client build on a provider that boots one, with a bot
+    or the stored credential running as a user, gets it. The role picks the
+    same user in the same order; a host with the autologon vuln signs in that
+    vuln's user instead."""
+    ov = overlay or {}
+    if provider not in CLIENT_IMAGE_PROVIDERS or ov.get("os") not in _CLIENT_BUILDS:
+        return None
+    vulns = [v for v in (ov.get("vulns") or [])
+             if provider in VULN_PROVIDERS.get(v, (provider,))]
+    if "autologon" in vulns:
+        return None
+    vv = ov.get("vulns_vars") if isinstance(ov.get("vulns_vars"), dict) else {}
+    sub = lambda key: vv.get(key) if isinstance(vv.get(key), dict) else {}
+    bot = vv.get("bot_user")
+    for vuln, user in (("rdp_scheduler", bot),
+                       ("stored_credential", sub("stored_credential").get("owner")),
+                       ("schedule", sub("schedule").get("user")),
+                       ("responder", bot),
+                       ("ntlm_relay", vv.get("ntlm_relay_user") or bot)):
+        if vuln in vulns and isinstance(user, str) and user.strip():
+            return user.strip()
+    return None
+
+
 def _briefing_password(user):
     """The credential the dc role actually seeds for a user, stated the same way
     the role decides it (dc/tasks/main.yml + attack_paths.yml), so the briefing
@@ -434,6 +467,11 @@ def range_briefing(document, registry=None, provider=None):
                                  sc.get("username") or "-",
                                  sc.get("target") or "TERMSRV/castelblack"),
                              "set once", "stored_credential"))
+        signin = console_signin_user(ov, provider)
+        if signin:
+            activity.append((name, "console sign-in", signin,
+                             "signed in at the console at boot, so its scheduled "
+                             "tasks run", "at boot", None))
     if activity:
         lines += ["", "## User activity", "",
                   "Bots that run as domain users on a timer, so their credentials and "
