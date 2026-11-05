@@ -1,0 +1,193 @@
+---
+# Windows 10 and 11 hold a user's scheduled tasks until someone has signed in at
+# the console since boot, so on a client the host's bot user is signed in at every
+# boot. The password is the LSA secret DefaultPassword, as Sysinternals Autologon
+# stores it, not the Winlogon value any user can read (the autologon vuln).
+
+# The users and order of the bots' own task files; only planted vulns count.
+- name: Pick the user whose scheduled tasks need a console sign-in
+  vars:
+    _v: "{{ redstackpro_host_vulns | intersect(redstackpro_host_vulns_implemented) }}"
+    _vv: "{{ redstackpro_host_vulns_vars | default({}, true) }}"
+    _bot: "{{ _vv.bot_user | default('', true) }}"
+  ansible.builtin.set_fact:
+    rsp_console_user: >-
+      {{ ([_bot if 'rdp_scheduler' in _v else '',
+           (_vv.stored_credential | default({}, true)).owner | default('', true) if 'stored_credential' in _v else '',
+           (_vv.schedule | default({}, true)).user | default('', true) if 'schedule' in _v else '',
+           _bot if 'responder' in _v else '',
+           _vv.ntlm_relay_user | default(_bot, true) if 'ntlm_relay' in _v else '']
+          | map('string') | map('trim') | select | list | first) | default('') }}
+
+- name: Sign the bot user in at the console on a Windows client
+  when: rsp_console_user | length > 0
+  block:
+    # Read off the running OS, not the canvas build: GCP and AWS boot Server 2022
+    # for windows_10, and on Proxmox and ESXi the image is the operator's.
+    - name: Read whether this host runs a client edition of Windows
+      ansible.windows.win_powershell:
+        script: (Get-CimInstance Win32_OperatingSystem).ProductType
+      register: rsp_product_type
+      changed_when: false
+
+    # ProductType 1 is a client edition (2 a domain controller, 3 a server).
+    - name: Note whether this host is a Windows client
+      ansible.builtin.set_fact:
+        rsp_windows_client: "{{ (rsp_product_type.output | first | int) == 1 }}"
+
+    # Run here as well as in the dispatch loop so its sign-in is in place before
+    # the tasks need it; the second run changes nothing.
+    - name: Let the autologon vuln sign its user in first
+      ansible.builtin.include_tasks: autologon.yml
+      when:
+        - rsp_windows_client | bool
+        - "'autologon' in redstackpro_host_vulns"
+
+    - name: Sign the bot user in at the console at every boot
+      ansible.windows.win_powershell:
+        parameters:
+          Account: "{{ rsp_console_user }}"
+          Pass: "{{ (redstackpro_user_passwords | default({})).get(rsp_console_user, redstackpro_lab_password) }}"
+        script: |
+          param($Account, $Pass)
+          $ErrorActionPreference = "Stop"
+          if ($Account -match '^([^\\]+)\\(.+)$') { $Domain = $Matches[1]; $User = $Matches[2] }
+          else { $Domain = ""; $User = $Account }
+          if (-not ("RspLsa" -as [type])) {
+            Add-Type -TypeDefinition @'
+          using System;
+          using System.ComponentModel;
+          using System.Runtime.InteropServices;
+
+          public static class RspLsa
+          {
+              [StructLayout(LayoutKind.Sequential)]
+              struct LSA_UNICODE_STRING { public ushort Length; public ushort MaximumLength; public IntPtr Buffer; }
+
+              [StructLayout(LayoutKind.Sequential)]
+              struct LSA_OBJECT_ATTRIBUTES
+              {
+                  public int Length; public IntPtr RootDirectory; public IntPtr ObjectName;
+                  public uint Attributes; public IntPtr SecurityDescriptor; public IntPtr SecurityQualityOfService;
+              }
+
+              [DllImport("advapi32.dll")]
+              static extern uint LsaOpenPolicy(IntPtr system, ref LSA_OBJECT_ATTRIBUTES attrs, uint access, out IntPtr policy);
+              [DllImport("advapi32.dll")]
+              static extern uint LsaStorePrivateData(IntPtr policy, ref LSA_UNICODE_STRING key, ref LSA_UNICODE_STRING data);
+              [DllImport("advapi32.dll")]
+              static extern uint LsaRetrievePrivateData(IntPtr policy, ref LSA_UNICODE_STRING key, out IntPtr data);
+              [DllImport("advapi32.dll")]
+              static extern uint LsaFreeMemory(IntPtr buffer);
+              [DllImport("advapi32.dll")]
+              static extern uint LsaClose(IntPtr handle);
+              [DllImport("advapi32.dll")]
+              static extern int LsaNtStatusToWinError(uint status);
+
+              const uint POLICY_GET_PRIVATE_INFORMATION = 0x4;
+              const uint POLICY_CREATE_SECRET = 0x20;
+              const uint STATUS_OBJECT_NAME_NOT_FOUND = 0xC0000034;
+
+              static LSA_UNICODE_STRING Str(string s)
+              {
+                  LSA_UNICODE_STRING u = new LSA_UNICODE_STRING();
+                  u.Length = (ushort)(s.Length * 2);
+                  u.MaximumLength = (ushort)(s.Length * 2 + 2);
+                  u.Buffer = Marshal.StringToHGlobalUni(s);
+                  return u;
+              }
+
+              static void Check(uint status)
+              {
+                  if (status != 0) throw new Win32Exception(LsaNtStatusToWinError(status));
+              }
+
+              static IntPtr Open(uint access)
+              {
+                  LSA_OBJECT_ATTRIBUTES attrs = new LSA_OBJECT_ATTRIBUTES();
+                  IntPtr policy;
+                  Check(LsaOpenPolicy(IntPtr.Zero, ref attrs, access, out policy));
+                  return policy;
+              }
+
+              public static string Retrieve(string key)
+              {
+                  IntPtr policy = Open(POLICY_GET_PRIVATE_INFORMATION);
+                  LSA_UNICODE_STRING name = Str(key);
+                  try
+                  {
+                      IntPtr data;
+                      uint status = LsaRetrievePrivateData(policy, ref name, out data);
+                      if (status == STATUS_OBJECT_NAME_NOT_FOUND) return null;
+                      Check(status);
+                      if (data == IntPtr.Zero) return null;
+                      try
+                      {
+                          LSA_UNICODE_STRING s = (LSA_UNICODE_STRING)Marshal.PtrToStructure(data, typeof(LSA_UNICODE_STRING));
+                          return Marshal.PtrToStringUni(s.Buffer, s.Length / 2);
+                      }
+                      finally { LsaFreeMemory(data); }
+                  }
+                  finally { Marshal.FreeHGlobal(name.Buffer); LsaClose(policy); }
+              }
+
+              public static void Store(string key, string value)
+              {
+                  IntPtr policy = Open(POLICY_CREATE_SECRET);
+                  LSA_UNICODE_STRING name = Str(key);
+                  LSA_UNICODE_STRING data = Str(value);
+                  try { Check(LsaStorePrivateData(policy, ref name, ref data)); }
+                  finally { Marshal.FreeHGlobal(name.Buffer); Marshal.FreeHGlobal(data.Buffer); LsaClose(policy); }
+              }
+          }
+          '@
+          }
+          $key = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+          $now = Get-ItemProperty -Path $key
+          $changed = $false
+          $want = [Ordered]@{ AutoAdminLogon = "1"; DefaultUserName = $User; DefaultDomainName = $Domain }
+          foreach ($name in $want.Keys) {
+            if ([string]$now.$name -ne $want[$name]) {
+              Set-ItemProperty -Path $key -Name $name -Value $want[$name] -Type String
+              $changed = $true
+            }
+          }
+          # Winlogon prefers a cleartext DefaultPassword over the secret, and
+          # AutoLogonCount turns the sign-in off after that many boots.
+          foreach ($name in "DefaultPassword", "AutoLogonCount") {
+            if ($null -ne $now.$name) {
+              Remove-ItemProperty -Path $key -Name $name
+              $changed = $true
+            }
+          }
+          if ([RspLsa]::Retrieve("DefaultPassword") -cne $Pass) {
+            [RspLsa]::Store("DefaultPassword", $Pass)
+            $changed = $true
+          }
+          $Ansible.Changed = $changed
+      register: rsp_console_signin
+      when:
+        - rsp_windows_client | bool
+        - "'autologon' not in redstackpro_host_vulns"
+
+    - name: Reboot so the console sign-in takes effect
+      ansible.windows.win_reboot:
+        reboot_timeout: 900
+      when: (rsp_console_signin is changed) or ((rsp_autologon | default({})) is changed)
+
+    # The tasks that follow, the stored credential plant first, need the session.
+    - name: Wait for the console sign-in
+      ansible.windows.win_powershell:
+        parameters:
+          Account: "{{ rsp_console_user }}"
+        script: |
+          param($Account)
+          if (-not (Get-CimInstance Win32_ComputerSystem).UserName) {
+            throw "nobody is signed in at the console, so the scheduled tasks as $Account do not run"
+          }
+      register: rsp_console_session
+      until: rsp_console_session is succeeded
+      retries: 60
+      delay: 10
+      changed_when: false
+      when: (rsp_console_signin is changed) or ((rsp_autologon | default({})) is changed)
