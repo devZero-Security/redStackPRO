@@ -654,11 +654,13 @@ def assess(manifest, settings, skus, compute, network, providers, state):
                 fails.append([
                     "%s is %s. This export needs it for %s, and terraform does not "
                     "register it, so apply would fail partway." % (ns, state_, required[ns]),
-                    "Run:  %s" % register, raw])
+                    "To register it, run:", "  %s" % register, raw])
             else:
+                # The command on a line of its own, so it copies whole.
                 warns.append("%s is %s. terraform registers it at apply when your "
                              "identity may register providers; if apply stops on a "
-                             "registration error, run:  %s" % (ns, state_, register))
+                             "registration error, run:\n           %s"
+                             % (ns, state_, register))
     return lines, fails, fix, warns, summary
 
 

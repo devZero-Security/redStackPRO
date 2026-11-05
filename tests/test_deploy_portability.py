@@ -1369,8 +1369,11 @@ def test_an_empty_gcp_project_stops_before_terraform(staged):
                     'ssh_public_key = ""\noperator_source_ranges = ["203.0.113.5/32"]\n')
     done = _run(export, stubs)
     assert done.returncode == 1
-    assert ("project is empty in deploy.tfvars. Set it to your GCP project ID "
-            "(gcloud config get-value project).") in done.stdout, done.stdout
+    assert ("      project is empty in deploy.tfvars. Set it to your GCP project ID.\n"
+            "      To see the current one, run:\n"
+            "        gcloud config get-value project\n") in done.stdout, done.stdout
+    assert (" Reason    project is empty in deploy.tfvars. Set it to your GCP project "
+            "ID.\n") in done.stdout
     assert "] Terraform apply" not in done.stdout
 
 
@@ -1398,8 +1401,10 @@ def test_an_empty_azure_subscription_stops_unless_the_environment_names_one(azur
                     'operator_source_ranges = ["203.0.113.5/32"]\n')
     done = _run(export, stubs)
     assert done.returncode == 1
-    assert ("subscription_id is empty in deploy.tfvars. Set it to: az account show "
-            "--query id -o tsv") in done.stdout, done.stdout
+    assert ("      To see it, run:\n"
+            "        az account show --query id -o tsv\n") in done.stdout, done.stdout
+    assert (" Reason    subscription_id is empty in deploy.tfvars. Set it to your "
+            "subscription id.\n") in done.stdout
 
     done = _run(export, stubs, env_extra={"ARM_SUBSCRIPTION_ID": "s"})
     assert "subscription_id is empty" not in done.stdout, done.stdout
@@ -1567,16 +1572,23 @@ def test_a_full_run_prints_every_phase_then_the_done_box(tmp_path):
     for block in re.split(r"^\[\d/8\] .*$", out, flags=re.M)[1:]:
         assert re.search(r"^      ok\b", block, re.M), block
     box = out[out.index(" DONE  "):].splitlines()
-    assert box[:7] == [
+    # Each command alone on its own line under a "run:" label, so a copied line
+    # is the whole command. The Watch command was split over two lines, and the
+    # second half got pasted into PowerShell after the first opened a shell.
+    assert box[:11] == [
         " DONE  Infrastructure is up. Provisioning is running.",
         "-" * 62,
         " Portal    https://%s/guacamole" % JUMP_IP,
-        " Logins    terraform -chdir=terraform output guacamole",
-        " Watch     ssh -i keys/id_ed25519 blueop@%s" % JUMP_IP,
-        "           tail -f ~/provision/run.log",
+        "",
+        " Logins, run:",
+        "   terraform -chdir=terraform output guacamole",
+        "",
+        " Watch provisioning, run (Ctrl-C stops watching, not the build):",
+        '   ssh -i keys/id_ed25519 blueop@%s "tail -f ~/provision/run.log"' % JUMP_IP,
+        "",
         " Finished  when run.log shows RUN EXITED ok=1 (45-75 min)"]
-    assert re.fullmatch(r" Log       logs/deploy-\d{8}-\d{6}Z\.log", box[7]), box[7]
-    assert box[8] == "=" * 62
+    assert re.fullmatch(r" Log       logs/deploy-\d{8}-\d{6}Z\.log", box[11]), box[11]
+    assert box[12] == "=" * 62
     # The triage header is the log's alone, and the old stage markers are gone.
     assert "redStackPRO deploy log" not in out
     assert "== [" not in out
@@ -1593,8 +1605,21 @@ def test_from_deploy_ps1_the_done_box_writes_windows_paths(tmp_path):
     export, stubs, _ = _range_export(tmp_path)
     done = _run(export, stubs, env_extra={"REDSTACKPRO_FROM_PS1": "1"})
     assert done.returncode == 0, done.stdout + done.stderr
-    assert " Watch     ssh -i keys\\id_ed25519 blueop@%s" % JUMP_IP in done.stdout
+    assert ('\n   ssh -i keys\\id_ed25519 blueop@%s "tail -f ~/provision/run.log"\n'
+            % JUMP_IP) in done.stdout
     assert re.search(r"^ Log       logs\\deploy-\d{8}-\d{6}Z\.log$", done.stdout, re.M)
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_a_key_path_with_a_space_is_quoted_in_the_watch_command(tmp_path):
+    export, stubs, _ = _range_export(tmp_path)
+    key = export / "my keys" / "id_ed25519"
+    key.parent.mkdir()
+    key.write_text("not a real key", encoding="utf-8")
+    done = _run(export, stubs, env_extra={"REDSTACKPRO_SSH_KEY": "my keys/id_ed25519"})
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert ('\n   ssh -i "my keys/id_ed25519" blueop@%s "tail -f ~/provision/run.log"\n'
+            % JUMP_IP) in done.stdout
 
 
 def test_deploy_ps1_tells_deploy_sh_it_came_from_powershell(tmp_path):
@@ -1651,7 +1676,10 @@ def test_a_local_check_failure_is_named_and_logged(staged):
     done = _run(export, stubs)  # no gcloud: the credential check stops it
     assert done.returncode == 1
     assert " FAILED  local checks" in done.stdout
-    assert " Reason    GCP credentials are not set." in done.stdout
+    assert " Reason    GCP credentials are not set.\n" in done.stdout
+    # Two commands, each alone on its own line, not joined with && on the reason.
+    assert ("      To sign in, run both:\n        gcloud auth login\n"
+            "        gcloud auth application-default login\n") in done.stdout
     assert _log(export).splitlines()[-1] == "result: FAILED (exit 1) in phase local checks"
 
 

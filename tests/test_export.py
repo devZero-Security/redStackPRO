@@ -229,6 +229,16 @@ def test_a_zone_the_export_cannot_resolve_says_the_check_did_not_run(registry, t
         assert done.returncode == 1 and done.stdout == "", (zoneinfo, done.stdout)
 
 
+def test_the_guide_watches_provisioning_with_one_command(redstack):
+    """The same one-line form the DONE box prints: ssh and the remote tail
+    together, the remote half double quoted for PowerShell and bash."""
+    for doc, user in ((redstack, "redop"), (_goad_light(), "blueop")):
+        guide = _guide(doc)
+        assert ('\nssh -i keys/id_ed25519 %s@<jumpbox> "tail -f ~/provision/run.log"\n'
+                % user) in guide
+        assert "'tail -f" not in guide
+
+
 def test_tzdata_is_a_dependency():
     """zoneinfo finds no zones on Windows or a slim image without it, and the
     export embeds a zone's offset only when the compiler can resolve the zone."""

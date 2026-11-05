@@ -437,11 +437,15 @@ are not set, or if the build's own auto-stop would fire before it finished.
 
 {deploy_output}
 
-Provisioning runs in a detached `screen` and keeps going if you disconnect:
+Provisioning runs in a detached `screen` and keeps going if you disconnect. The
+`DONE` box prints the line that watches it, with your key and the jumpbox address
+filled in, as one command that pastes into PowerShell or bash alike:
 
 ```bash
-ssh {jumpuser}@<jumpbox> 'tail -f ~/provision/run.log'
+ssh -i keys/id_ed25519 {jumpuser}@<jumpbox> "tail -f ~/provision/run.log"
 ```
+
+Ctrl-C stops the watching, not the build.
 
 {run_log}
 
@@ -619,11 +623,15 @@ controller shows. An attempt that fails and is retried is normal, not a fault.
 
 {deploy_output}
 
-Provisioning runs in a detached `screen` and keeps going if you disconnect:
+Provisioning runs in a detached `screen` and keeps going if you disconnect. The
+`DONE` box prints the line that watches it, with your key and the jumpbox address
+filled in, as one command that pastes into PowerShell or bash alike:
 
 ```bash
-ssh {jumpuser}@<jumpbox> 'tail -f ~/provision/run.log'
+ssh -i keys/id_ed25519 {jumpuser}@<jumpbox> "tail -f ~/provision/run.log"
 ```
+
+Ctrl-C stops the watching, not the build.
 
 {run_log}
 

@@ -193,15 +193,24 @@ rsp_drain(){
   done
 }
 
+# A command in the box sits alone on its own line, under a label ending "run:",
+# so a copied line is the whole command and nothing else. The remote command is
+# double quoted, which bash and PowerShell both pass to ssh as one argument.
 rsp_done(){
+  rsp_k="$(rsp_path "$KEY")"
+  case "$rsp_k" in *" "*) rsp_k="\"$rsp_k\"" ;; esac
   echo
   echo "$RSP_RULE"
   echo " DONE  Infrastructure is up. Provisioning is running."
   echo "$RSP_THIN"
   echo " Portal    https://$JUMP/guacamole"
-  echo " Logins    terraform -chdir=terraform output guacamole"
-  echo " Watch     ssh -i $(rsp_path "$KEY") $JUMPUSER@$JUMP"
-  echo "           tail -f ~/provision/run.log"
+  echo
+  echo " Logins, run:"
+  echo "   terraform -chdir=terraform output guacamole"
+  echo
+  echo " Watch provisioning, run (Ctrl-C stops watching, not the build):"
+  echo "   ssh -i $rsp_k $JUMPUSER@$JUMP \"tail -f ~/provision/run.log\""
+  echo
   echo " Finished  when run.log shows RUN EXITED ok=1 (@@ETA@@)"
   printf '%s' "$RSP_DNS_TODO" | while IFS= read -r rsp_l; do
     [ -z "$rsp_l" ] || echo " DNS       set the A record $rsp_l"
@@ -447,7 +456,8 @@ _TFVARS_PREFLIGHT = {
     "gcp": r'''if [ -f deploy.tfvars ]; then
   RSP_PROJECT="$(rsp_tfvar project)"
   if [ -z "$RSP_PROJECT" ]; then
-    die "project is empty in deploy.tfvars. Set it to your GCP project ID (gcloud config get-value project)."
+    die "project is empty in deploy.tfvars. Set it to your GCP project ID." \
+      "To see the current one, run:" "  gcloud config get-value project"
   fi
   RSP_REGION="$(rsp_tfvar region)"; RSP_ZONE="$(rsp_tfvar zone)"
   if [ -n "$RSP_REGION" ] && [ -n "$RSP_ZONE" ]; then
@@ -472,7 +482,8 @@ fi
   RSP_SUB="$(rsp_tfvar subscription_id)"
   # azurerm falls back to ARM_SUBSCRIPTION_ID when subscription_id is empty.
   if [ -z "$RSP_SUB" ] && [ -z "${ARM_SUBSCRIPTION_ID:-}" ]; then
-    die "subscription_id is empty in deploy.tfvars. Set it to: az account show --query id -o tsv"
+    die "subscription_id is empty in deploy.tfvars. Set it to your subscription id." \
+      "To see it, run:" "  az account show --query id -o tsv"
   fi
 fi
 ''',
@@ -534,15 +545,15 @@ def generate_deploy_script(topology, registry=None, provider=None):
         cloud_preflight = (
             "if ! gcloud auth application-default print-access-token "
             ">/dev/null 2>&1; then\n"
-            '  die "GCP credentials are not set. Run:  gcloud auth login  &&  '
-            'gcloud auth application-default login"\n'
+            '  die "GCP credentials are not set." "To sign in, run both:" \\\n'
+            '    "  gcloud auth login" "  gcloud auth application-default login"\n'
             "fi\n"
         )
     elif provider == "aws":
         cloud_preflight = (
             "if ! aws sts get-caller-identity >/dev/null 2>&1; then\n"
-            '  die "AWS credentials are not set or not working. Run:  aws configure  '
-            '(then check:  aws sts get-caller-identity)"\n'
+            '  die "AWS credentials are not set or not working." "To sign in, run:" \\\n'
+            '    "  aws configure" "Then check them, run:" "  aws sts get-caller-identity"\n'
             "fi\n"
             'note "an AWS range needs Elastic IP and vCPU quota headroom, and a Kali operator" \\\n'
             '  "needs a one-time Marketplace subscription; see DEPLOYMENT-GUIDE.md if apply" \\\n'
@@ -554,9 +565,9 @@ def generate_deploy_script(topology, registry=None, provider=None):
         # azurerm provider reads directly and which az account show does not see).
         cloud_preflight = (
             'if ! az account show >/dev/null 2>&1 && [ -z "${ARM_CLIENT_ID:-}" ]; then\n'
-            '  die "Azure credentials are not set. Run:  az login  (or set '
-            "ARM_CLIENT_ID/ARM_CLIENT_SECRET/ARM_TENANT_ID/ARM_SUBSCRIPTION_ID for a "
-            'service principal)"\n'
+            '  die "Azure credentials are not set." "To sign in, run:" "  az login" \\\n'
+            '    "Or, for a service principal, set ARM_CLIENT_ID, ARM_CLIENT_SECRET," \\\n'
+            '    "ARM_TENANT_ID and ARM_SUBSCRIPTION_ID."\n'
             "fi\n"
         )
 
@@ -871,7 +882,8 @@ fi
 [ -f "$KEY" ] || die "no ssh private key found." \
   "  looked at: \$REDSTACKPRO_SSH_KEY, then keys/, then $HOME/.ssh/id_ed25519" \
   "" \
-  "  make one:  ssh-keygen -t ed25519 -f keys/id_ed25519 -N \"\"" \
+  "  To make one, run:" \
+  "    ssh-keygen -t ed25519 -f keys/id_ed25519 -N \"\"" \
   "  then put the contents of keys/id_ed25519.pub into" \
   "  deploy.tfvars as ssh_public_key, and re-run."
 

@@ -367,6 +367,14 @@ versioning, and dates are UTC.
   (`$env:REDSTACKPRO_MIN_STOP_LEAD = '0'; .\deploy.ps1`,
   `.\manage.ps1 teardown --force`), the Azure preflight's override included, and
   each sits alone on its own line.
+- The `DONE` box split the command that watches provisioning over two lines, so a
+  user who copied the first line got an interactive ssh session and then ran
+  `tail -f` in PowerShell. It is now one line,
+  `ssh -i keys\id_ed25519 blueop@<jumpbox> "tail -f ~/provision/run.log"`, with the
+  key path in the form of the shell the deploy ran from. Every command the deploy
+  prints, in the `DONE` box and in the reasons it stops (the cloud sign-in, an empty
+  `project` or `subscription_id`, a missing key, an unregistered Azure provider),
+  sits alone on its own line under a label ending `run:`.
 
 ## [0.9.2] (2026-11-04)
 
