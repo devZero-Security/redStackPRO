@@ -155,7 +155,7 @@ def test_an_untyped_trust_under_its_parent_builds_a_child(reverse):
     assert trust["type"] == "parent_child"
     assert trust["direction"] == "bidirectional"
     assert trust["transitive"] is True
-    assert "parent_child" in files["DEFENSE-BRIEFING.md"]
+    assert "(parent and child, transitive)" in files["DEFENSE-BRIEFING.md"]
 
 
 def test_an_untyped_trust_between_unrelated_domains_is_a_forest_trust():

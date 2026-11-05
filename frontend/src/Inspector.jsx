@@ -1183,7 +1183,7 @@ export function Inspector({
         <p className="rg-hint">
           This jumpbox can front a team. Set Access mode to WireGuard or
           OpenVPN and add operators below: each gets a portal login
-          and a personal VPN credential generated on the jumpbox at deploy.
+          and a personal VPN credential generated on the jumpbox during provisioning.
         </p>
       ) : null}
 

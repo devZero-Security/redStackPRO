@@ -48,6 +48,27 @@ def test_offense_briefing_gives_the_c2_payload_recipe():
         assert token in contents
 
 
+def test_offense_briefing_names_hosts_as_deployed_and_its_own_credentials():
+    """The Hosts table listed bare ids and the redirector's private address, while
+    the instances are named off-... and the redirector's DNS A record needs its
+    public address. The credentials paragraph described a defense range."""
+    doc = json.loads(
+        (ROOT / "frontend/public/redstack.json").read_text(encoding="utf-8"))
+    set_redirector_hostname(doc, "c2.acmecorp.net")
+    files = compile_topology(doc, Registry(), provider="gcp")
+    md = files["OFFENSE-BRIEFING.md"]
+    hosts = md.split("## Hosts")[1].split("\n## ")[0]
+    assert "| off-jump-bx01 | Jumpbox" in hosts, hosts
+    row = next(l for l in hosts.splitlines() if l.startswith("| off-apache-rd01 "))
+    assert row.startswith("| off-apache-rd01 (c2.acmecorp.net) | redirector"), row
+    assert "<<tf:off-apache-rd01:public_address>>" in row, row
+    creds = md.split("## Credentials")[1].split("\n## ")[0]
+    assert "Administrator" not in creds and "lab user" not in creds, creds
+    assert "Windows operator box" in creds, creds
+    assert "`terraform -chdir=terraform output -raw lab_password`" in creds
+    assert "`ssh -i keys/id_ed25519 redop@" in md
+
+
 def test_briefing_covers_boxes_accounts_users_trusts_and_siem():
     md = range_briefing(_goad())
     # The sections a hand-off needs.
@@ -62,7 +83,7 @@ def test_briefing_covers_boxes_accounts_users_trusts_and_siem():
     assert "Assumed-breach foothold" in md and "hodor" in md
     # Access + credentials.
     assert "/guacamole" in md
-    assert "terraform output -raw lab_password" in md
+    assert "terraform -chdir=terraform output -raw lab_password" in md
     # Addresses are tokens tf_inventory fills after apply.
     assert "<<tf:def-jumpbox:public_address>>" in md
     assert "<<tf:def-kingslanding:private_address>>" in md
@@ -71,7 +92,7 @@ def test_briefing_covers_boxes_accounts_users_trusts_and_siem():
     assert "Domain Controller" in md
     assert "sevenkingdoms.local" in md
     assert "tywin.lannister" in md
-    assert "parent_child" in md or "forest" in md
+    assert "parent and child" in md or "forest" in md
     assert "ACL chains" in md
 
 
@@ -193,7 +214,7 @@ def test_vulns_the_provider_drops_are_marked_not_listed_as_planted():
     md = _goad_light_briefing("gcp")
     line = next(l for l in md.splitlines() if l.startswith("- **winterfell** host vulns"))
     for vuln in ("llmnr_poisoning", "nbtns_poisoning", "responder", "ntlm_relay"):
-        assert "%s (not on gcp)" % vuln in line, line
+        assert "%s (not on GCP)" % vuln in line, line
     assert "autologon," in line and "autologon (not" not in line
 
     md = _goad_light_briefing("proxmox")
@@ -214,7 +235,7 @@ def test_the_briefing_lists_who_each_bot_runs_as():
     logon = next(l for l in section.splitlines() if "logon bot (connect_bot)" in l)
     assert logon.endswith("| 3 min |"), logon
     # Broadcast poisoning bots cannot plant on a cloud provider, and say so.
-    assert r"| winterfell | share-browsing bot (responder_bot) | north\robb.stark | not planted on azure |" in section
+    assert r"| winterfell | share-browsing bot (responder_bot) | north\robb.stark | not planted on Azure |" in section
     assert "saved credential" in section
 
 
