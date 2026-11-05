@@ -41,8 +41,6 @@
         "x": 16,
         "y": 48
       },
-      "width": 260,
-      "height": 150,
       "overlay": {
         "fqdn": "sevenkingdoms.local",
         "netbios": "SEVENKINGDOMS",

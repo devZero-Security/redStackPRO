@@ -41,8 +41,6 @@
         "x": 16,
         "y": 48
       },
-      "width": 520,
-      "height": 150,
       "overlay": {
         "fqdn": "sevenkingdoms.local",
         "netbios": "SEVENKINGDOMS",
@@ -254,8 +252,6 @@
         "x": 16,
         "y": 214
       },
-      "width": 520,
-      "height": 150,
       "overlay": {
         "fqdn": "north.sevenkingdoms.local",
         "netbios": "NORTH",
