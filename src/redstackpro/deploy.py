@@ -81,6 +81,73 @@ rsp_title(){
 rsp_row(){ printf ' %-15s %s\n' "$1" "$2"; }
 '''
 
+# terraform, condensed for the terminal: the plan line, one line per finished
+# resource named from its id, an error block in full and a warning's title.
+# Every line terraform printed still reaches a log. "mark" hands each one to
+# deploy.sh's splitter (byte 1: log only, byte 2: terminal only); "file"
+# appends it to the file named. LC_ALL=C makes a box-drawing byte a byte.
+_TF_FILTER = r'''RSP_TF='BEGIN {
+  re = sprintf("%c", 27) "\\[[0-9;?]*[A-Za-z]"
+  mode = ENVIRON["RSP_TF_MODE"]; logf = ENVIRON["RSP_TF_LOG"]
+  split(ENVIRON["RSP_TF_C"], c, "|"); G = c[1]; R = c[2]; Y = c[3]; O = c[4]
+  raw = sprintf("%c", 1); term = sprintf("%c", 2)
+}
+function keep(s) {
+  if (mode == "mark") { print raw s; fflush() }
+  else if (logf != "") { print s >> logf; fflush(logf) }
+}
+function show(s) { if (mode == "mark") printf "%s", term; print "      " s; fflush() }
+function block(   i) {
+  if (berr) for (i = 1; i <= nb; i++) show(R blk[i] O)
+  else if (bwarn != "") show(Y "warning" O "  " bwarn)
+  nb = 0; berr = 0; bwarn = ""
+}
+function label(a,   id, n, p, i, kind, name, m, q) {
+  id = ids[a]
+  sub(/\[[^]]*\]$/, "", a)
+  n = split(a, p, ".")
+  kind = p[n - 1]; name = p[n]; m = ""
+  for (i = 1; i < n - 1; i++) if (p[i] == "module") m = p[i + 1]
+  sub(/^(azurerm|azapi|google|aws|random|tls|local|null|time)_/, "", kind)
+  gsub(/_/, " ", kind)
+  if (id ~ /\/providers\//) {
+    q = id; sub(/.*\/providers\/[^\/]+\//, "", q)
+    n = split(q, p, "/")
+    name = (n >= 4) ? p[n - 2] "/" p[n] : p[n]
+  } else if (id ~ /\//) { name = id; sub(/.*\//, "", name) }
+  else if (m != "") name = m
+  return name " (" kind ")"
+}
+{
+  s = $0; gsub(re, "", s); sub(/\r$/, "", s)
+  keep(s)
+  if (s ~ /^[^\001-\177]/) {
+    blk[++nb] = s
+    if (s ~ /Error: /) berr = 1
+    if (bwarn == "" && match(s, /Warning: /)) bwarn = substr(s, RSTART + 9)
+    if (s ~ /^\342\225\265/) block()
+    next
+  }
+  if (nb) block()
+  if (match(s, /\[id=[^]]*\]/)) {
+    id = substr(s, RSTART + 4, RLENGTH - 5)
+    if (index(s, ": ")) ids[substr(s, 1, index(s, ": ") - 1)] = id
+  }
+  if (match(s, /: (Creation|Modifications|Destruction) complete after [0-9hms]+/)) {
+    a = substr(s, 1, RSTART - 1)
+    t = substr(s, RSTART, RLENGTH); sub(/.* after /, "", t)
+    sign = (s ~ /: Creation/) ? G "+" O : (s ~ /: Destruction/) ? R "-" O : Y "~" O
+    show(sprintf("%s %6s  %s", sign, t, label(a)))
+    next
+  }
+  if (s ~ /^Plan: [0-9]+ to add/) { sub(/^Plan: /, "", s); sub(/\.$/, "", s); show("plan  " s); next }
+  if (s ~ /^No changes\./) { show("no changes"); next }
+  if (s ~ /^Error: /) show(R s O)
+}
+END { if (nb) block() }'
+rsp_tf(){ RSP_TF_MODE="$1" RSP_TF_LOG="${2:-}" RSP_TF_C="$C_GRN|$C_RED|$C_YEL|$C_OFF" LC_ALL=C awk "$RSP_TF"; }
+'''
+
 # Phase titles, in order. Azure alone has a provider preflight, so N is 8 there
 # and 7 elsewhere. The Wait title carries the address, known only at run time.
 PREFLIGHT_PHASE = "Preflight: VM sizes, quota, providers"
@@ -136,7 +203,7 @@ rsp_cmd(){
 # current phase; `die` and `fail` stop the run and keep the reason for the
 # closing box. Built apart from the template so the bash keeps single braces.
 _OUTPUT = r'''# Output helpers. Plain ASCII; colour, when on, reaches the terminal only.
-@@COLOR@@RSP_PH=0
+@@COLOR@@@@TF@@RSP_PH=0
 RSP_PHASE="local checks"
 RSP_REASON=""
 RSP_ERR=""
@@ -201,9 +268,14 @@ LOG="logs/deploy-$(date -u +%Y%m%d-%H%M%SZ).log"
 exec 3>&1 4>&2
 # A tee that leaves colour out of the log: every line goes to the terminal as is
 # and to the log without escape codes, ours and terraform's alike (its plan colours
-# filled a log once). The log is what a user attaches to an issue.
-RSP_SPLIT='BEGIN { re = sprintf("%c", 27) "\\[[0-9;?]*[A-Za-z]"; out = ENVIRON["RSP_SPLIT_TO"] }
-{ print; fflush(); s = $0; gsub(re, "", s); print s >> out; fflush(out) }'
+# filled a log once). The log is what a user attaches to an issue. rsp_tf marks
+# terraform's raw lines for the log only and its short view for the terminal only.
+RSP_SPLIT='BEGIN { re = sprintf("%c", 27) "\\[[0-9;?]*[A-Za-z]"; out = ENVIRON["RSP_SPLIT_TO"]
+  raw = sprintf("%c", 1); term = sprintf("%c", 2) }
+{ c = substr($0, 1, 1)
+  if (c == raw) { print substr($0, 2) >> out; fflush(out); next }
+  if (c == term) { print substr($0, 2); fflush(); next }
+  print; fflush(); s = $0; gsub(re, "", s); print s >> out; fflush(out) }'
 rsp_split(){ RSP_SPLIT_TO="$1" awk "$RSP_SPLIT"; }
 # The splitter writes down its own pid so finish can wait for it to drain before
 # the closing lines and the scrub: bash 3.2 gives no handle on a process substitution.
@@ -585,7 +657,7 @@ def color_helpers():
 
 def output_helpers():
     """The bash output helpers deploy.sh opens with (phase, ok, say, die, fail)."""
-    return _rules(_OUTPUT.replace("@@COLOR@@", color_helpers()))
+    return _rules(_OUTPUT.replace("@@COLOR@@", color_helpers()).replace("@@TF@@", _TF_FILTER))
 
 
 def _shell_word(text):
@@ -1048,7 +1120,7 @@ set -e
 trap 'RSP_ERR="exit $? from: $BASH_COMMAND"' ERR
 @@AZURE_PREFLIGHT@@
 phase "Terraform apply"
-@@INIT@@terraform -chdir=terraform apply -auto-approve -input=false || die "terraform apply failed (its error is above) -- nothing was provisioned." \
+@@INIT@@terraform -chdir=terraform apply -auto-approve -input=false 2>&1 | rsp_tf mark || die "terraform apply failed (its error is above) -- nothing was provisioned." \
   "If it reports resources that already exist, an earlier run was interrupted and" \
   "left them outside the state. To clear them, run:" \
   "  $(rsp_cmd manage teardown --force)" \
@@ -1197,7 +1269,7 @@ _MANAGE_HEAD = r'''#!/usr/bin/env bash
 set -uo pipefail
 
 cd "$(dirname "$0")"
-@@COLOR@@RSP_DOTS="@@DOTS@@"
+@@COLOR@@@@TF@@RSP_DOTS="@@DOTS@@"
 # A step, the same shape as a deploy phase: "Title ..... HH:MM".
 say(){
   rsp_n=$((@@DOTW@@ - ${#1})); [ "$rsp_n" -ge 3 ] || rsp_n=3
@@ -1441,21 +1513,44 @@ _MANAGE_SWEEP_NONE = r'''    echo "note: a --force instance sweep is not wired f
 '''
 
 _MANAGE_TEARDOWN_TAIL = r'''  fi
+  # Everything terraform prints goes to this file; the terminal gets rsp_tf's view.
+  mkdir -p logs
+  RSP_TLOG="logs/teardown-$(date -u +%Y%m%d-%H%M%SZ).log"
+  {
+    echo "redStackPRO teardown log"
+    echo "range:     ${RSP_NAME:-unnamed}"
+    echo "provider:  $RSP_WHERE"
+    echo "started:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "----------------------------------------------------------------------"
+  } > "$RSP_TLOG"
+  RSP_TL="$RSP_TLOG"
+  [ "${REDSTACKPRO_FROM_PS1:-}" != 1 ] || RSP_TL="$(printf '%s' "$RSP_TLOG" | tr '/' '\\')"
   say "terraform destroy"
-  terraform -chdir=terraform destroy -auto-approve
-  rc=$?
-  echo
+  RSP_T0=$(date +%s)
+  terraform -chdir=terraform destroy -auto-approve 2>&1 | rsp_tf file "$RSP_TLOG"
+  rc=${PIPESTATUS[0]}
+  rsp_s=$(( $(date +%s) - RSP_T0 ))
+  if [ "$rsp_s" -ge 60 ]; then rsp_took="$((rsp_s / 60))m$(printf '%02d' $((rsp_s % 60)))s"; else rsp_took="${rsp_s}s"; fi
   if [ "$rc" -eq 0 ]; then
+    echo "result: ok" >> "$RSP_TLOG"
+    rsp_n="$(sed -n 's/.*Destroy complete! Resources: \([0-9][0-9]*\) destroyed.*/\1/p' "$RSP_TLOG" | tail -1)"
+    printf '      %sok%s  %s destroyed in %s\n' "$C_GRN" "$C_OFF" "${rsp_n:-0}" "$rsp_took"
+    echo
     rsp_rule "$C_GRN"
     echo " $C_GRN${C_BLD}DONE$C_OFF  ${C_BLD}The range is deleted.$C_OFF"
+    rsp_thin
+    echo " Log       $RSP_TL"
     rsp_rule "$C_GRN"
   else
+    echo "result: FAILED (exit $rc)" >> "$RSP_TLOG"
+    echo
     rsp_rule
     echo " $C_RED${C_BLD}FAILED$C_OFF  ${C_BLD}teardown did not finish cleanly.$C_OFF"
     rsp_thin
     echo " If it said an instance still holds a subnet or policy, an interrupted"
     echo " apply left instances outside the state. To clear them, run:"
     echo "   $C_CYN$RSP_RUN teardown --force$C_OFF"
+    echo " Log       $RSP_TL"
     rsp_rule
   fi
   exit $rc
@@ -1802,6 +1897,7 @@ def generate_manage_script(topology, registry=None, provider=None, region=None):
     head = _MANAGE_HEAD
     for token, value in (
             ("@@COLOR@@", color_helpers()),
+            ("@@TF@@", _TF_FILTER),
             ("@@DOTS@@", "." * 60),
             ("@@DOTW@@", str(PHASE_WIDTH - 7)),
             ("@@NAME@@", _shell_word(topology.get("name"))),

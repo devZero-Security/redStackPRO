@@ -308,7 +308,7 @@ def _run(script_dir, stub_dir, env_extra=None):
     env.update(env_extra or {})
     command = 'export PATH="%s:/usr/bin:/bin"; exec bash deploy.sh' % _msys(stub_dir)
     return subprocess.run([bash, "-c", command], cwd=script_dir, env=env, stdin=subprocess.DEVNULL,
-                          capture_output=True, text=True, timeout=120)
+                          capture_output=True, text=True, encoding="utf-8", timeout=120)
 
 
 def _msys(path):
@@ -1048,7 +1048,7 @@ def _manage(export, stubs, *args, ps1=False, path_extra=":/usr/bin:/bin", stdin=
     command = 'export PATH="%s%s"; exec bash manage.sh %s' % (_msys(stubs), path_extra, words)
     return subprocess.run([_bash(), "-c", command], cwd=export, env=env,
                           stdin=stdin if stdin is not None else subprocess.DEVNULL,
-                          capture_output=True, text=True, timeout=120)
+                          capture_output=True, text=True, encoding="utf-8", timeout=120)
 
 
 def _calls(calls):
@@ -1225,6 +1225,49 @@ def test_teardown_yes_skips_the_question_in_any_order(tmp_path, flags):
     assert ran[-1] == "terraform -chdir=terraform destroy -auto-approve", ran
     swept = "az group delete -n smk-lab-rg --yes" in ran
     assert swept == ("--force" in flags), ran
+
+
+_TF_DESTROY_OUT = "\n".join([
+    "module.smk_net01.azurerm_nat_gateway.this[0]: Refreshing state... "
+    "[id=/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/natGateways/smk-net01-nat]",
+    "Plan: 0 to add, 0 to change, 2 to destroy.",
+    "module.smk_net01.azurerm_nat_gateway.this[0]: Destroying... "
+    "[id=/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/natGateways/smk-net01-nat]",
+    "module.smk_net01.azurerm_nat_gateway.this[0]: Still destroying... [10s elapsed]",
+    "module.smk_net01.azurerm_nat_gateway.this[0]: Destruction complete after 12s",
+    "random_password.lab: Destroying... [id=none]",
+    "random_password.lab: Destruction complete after 0s",
+    "Destroy complete! Resources: 2 destroyed.",
+])
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_teardown_is_condensed_on_screen_and_whole_in_its_own_log(tmp_path):
+    export, stubs, calls = _manage_export(tmp_path, "azure")
+    out = stubs / "destroy.out"
+    out.write_text(_TF_DESTROY_OUT + "\n", encoding="utf-8", newline="\n")
+    tf = stubs / "terraform"
+    tf.write_text(tf.read_text(encoding="utf-8").replace(
+        'case "$*" in', 'case "$*" in\n  *destroy*) cat "%s" ;;' % _msys(out)),
+        encoding="utf-8", newline="\n")
+    done = _manage(export, stubs, "teardown", "--yes", ps1=True)
+    assert done.returncode == 0, done.stdout + done.stderr
+    lines = done.stdout.splitlines()
+    at = [i for i, line in enumerate(lines) if line.startswith("terraform destroy ")][0]
+    assert lines[at + 1:at + 4] == [
+        "      plan  0 to add, 0 to change, 2 to destroy",
+        "      -    12s  smk-net01-nat (nat gateway)",
+        "      -     0s  lab (password)"]
+    assert re.fullmatch(r"      ok  2 destroyed in \d+s", lines[at + 4]), lines[at + 4]
+    assert lines[at + 5:at + 9] == ["", "=" * 62, " DONE  The range is deleted.", "-" * 62]
+    assert re.fullmatch(r" Log       logs\\teardown-\d{8}-\d{6}Z\.log", lines[at + 9]), lines[at + 9]
+    assert "Refreshing state" not in done.stdout
+    logs = list((export / "logs").glob("teardown-*.log"))
+    assert len(logs) == 1, logs
+    log = logs[0].read_text(encoding="utf-8")
+    assert log.startswith("redStackPRO teardown log\nrange:     smoketest-gl\n")
+    assert _TF_DESTROY_OUT in log
+    assert log.splitlines()[-1] == "result: ok"
 
 
 # This range's state as `terraform state pull` prints it: its deploy id and two
@@ -1731,25 +1774,94 @@ def test_from_deploy_ps1_the_done_box_writes_windows_paths(tmp_path):
     assert re.search(r"^ Log       logs\\deploy-\d{8}-\d{6}Z\.log$", done.stdout, re.M)
 
 
+# terraform apply as it prints on Azure: colour codes, refresh lines, the plan,
+# progress, a warning box and the completion lines with ids.
+_TF_APPLY_OUT = "\n".join([
+    "random_password.lab: Refreshing state... [id=none]",
+    "\x1b[0m\x1b[1mmodule.smk_jumpbox.azurerm_public_ip.this\x1b[0m will be created",
+    "  \x1b[32m+\x1b[0m resource \"azurerm_public_ip\" \"this\" {",
+    "\x1b[1mPlan:\x1b[0m 2 to add, 0 to change, 0 to destroy.",
+    "module.smk_jumpbox.azurerm_public_ip.this: Creating...",
+    "module.smk_jumpbox.azurerm_public_ip.this: Creation complete after 2s "
+    "[id=/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/publicIPAddresses/smk-jumpbox]",
+    "module.smk_wks01.azurerm_virtual_machine_extension.winrm[0]: Still creating... [10s elapsed]",
+    "module.smk_wks01.azurerm_virtual_machine_extension.winrm[0]: Creation complete after 1m55s "
+    "[id=/subscriptions/s/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/smk-wks01"
+    "/extensions/redstackpro-winrm]",
+    "╷", "│ Warning: Argument is deprecated", "│ ", "│ use another", "╵",
+    "Apply complete! Resources: 2 added, 0 changed, 0 destroyed.",
+    "lab_password = Lab-Pass-123",
+])
+
+
+def _apply_prints(stubs, text):
+    """Have the terraform stub print text on apply, as terraform would."""
+    out = stubs / "terraform-apply.out"
+    out.write_text(text + "\n", encoding="utf-8", newline="\n")
+    tf = stubs / "terraform"
+    tf.write_text(tf.read_text(encoding="utf-8").replace(
+        '*apply*) echo "lab_password = Lab-Pass-123"; echo "Apply complete!" ;;',
+        '*apply*) cat "%s" ;;' % _msys(out)), encoding="utf-8", newline="\n")
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_terraform_apply_is_condensed_on_screen_and_whole_in_the_log(tmp_path):
+    """The apply printed the whole plan, about 1000 lines for a 5-VM range."""
+    export, stubs, _ = _range_export(tmp_path)
+    _apply_prints(stubs, _TF_APPLY_OUT)
+    done = _run(export, stubs)
+    assert done.returncode == 0, done.stdout + done.stderr
+    out = done.stdout
+    apply = out[out.index("[2/8] Terraform apply"):out.index("[3/8]")].splitlines()[1:]
+    shown = [line for line in apply if line]
+    assert shown[:-1] == [
+        "      plan  2 to add, 0 to change, 0 to destroy",
+        "      +     2s  smk-jumpbox (public ip)",
+        "      +  1m55s  smk-wks01/redstackpro-winrm (virtual machine extension)",
+        "      warning  Argument is deprecated"], apply
+    assert re.fullmatch(r"      ok  3 resources in \d+s", shown[-1]), shown
+    log = _log(export)
+    for line in _TF_APPLY_OUT.splitlines():
+        if "Lab-Pass" not in line:
+            assert re.sub("\x1b\\[[0-9;]*m", "", line) in log, line
+    assert "Lab-Pass-123" not in log
+    assert "\x01" not in out + log and "\x02" not in out + log
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_a_failed_apply_shows_the_error_block_whole(tmp_path):
+    export, stubs, _ = _range_export(tmp_path)
+    _apply_prints(stubs, "\n".join([
+        "Plan: 1 to add, 0 to change, 0 to destroy.",
+        "╷", "│ Error: creating Windows Virtual Machine: QuotaExceeded",
+        "│ ", "│   with module.smk_dc01.azurerm_windows_virtual_machine.this,", "╵"]))
+    tf = stubs / "terraform"
+    tf.write_text(tf.read_text(encoding="utf-8").replace(
+        "\nexit 0", '\ncase "$*" in *apply*) exit 1 ;; esac\nexit 0'),
+        encoding="utf-8", newline="\n")
+    done = _run(export, stubs)
+    assert done.returncode == 1, done.stdout
+    assert ("      │ Error: creating Windows Virtual Machine: QuotaExceeded\n"
+            "      │ \n"
+            "      │   with module.smk_dc01.azurerm_windows_virtual_machine.this,\n") in done.stdout
+    assert " FAILED  [2/8] Terraform apply" in done.stdout
+
+
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
 def test_colour_reaches_the_terminal_and_never_the_log(tmp_path):
     """The log is the file a user attaches to an issue. terraform's own plan
     colours once filled 1028 lines of it with escape codes."""
     export, stubs, _ = _range_export(tmp_path)
-    tf = stubs / "terraform"
-    tf.write_text(tf.read_text(encoding="utf-8").replace(
-        'echo "Apply complete!"',
-        "printf '\\033[32m+\\033[0m create\\n'; echo \"Apply complete!\""),
-        encoding="utf-8", newline="\n")
+    _apply_prints(stubs, _TF_APPLY_OUT)
     done = _run(export, stubs, env_extra={"REDSTACKPRO_COLOR": "1"})
     assert done.returncode == 0, done.stdout + done.stderr
     out = done.stdout
-    assert "\x1b[32m+\x1b[0m create" in out
+    assert "\x1b[32m+\x1b[0m     2s  smk-jumpbox (public ip)" in out
     assert "\x1b[32mok\x1b[0m" in out
     assert "\x1b[32m\x1b[1mDONE\x1b[0m" in out
     log = _log(export)
     assert "\x1b" not in log
-    assert "\n+ create\n" in log
+    assert "Creation complete after 2s [id=/subscriptions/s/" in log
     assert " DONE  Infrastructure is up. Provisioning is running." in log
     assert log.splitlines()[-1] == "result: ok"
     # The wordmark is the terminal's alone.

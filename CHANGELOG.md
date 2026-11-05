@@ -3,7 +3,7 @@
 All notable changes to redStackPRO are recorded here. The project uses semantic
 versioning, and dates are UTC.
 
-## [0.10.0] (2026-11-04)
+## [0.10.0] (2026-11-05)
 
 ### Added
 
@@ -269,6 +269,13 @@ versioning, and dates are UTC.
   It is on when the output is a terminal, or when `deploy.ps1` or `manage.ps1` see a
   console that renders it. `NO_COLOR` turns it off, and output to a file or a pipe
   gets none. The deploy log stays plain text.
+- terraform's output is condensed on screen for `deploy.sh` apply and `manage.sh
+  teardown`: the plan line, one line per finished resource with its time and its
+  name and kind (`+  1m55s  smk-wks01/redstackpro-winrm (virtual machine extension)`),
+  an error block in full and a warning's title. A 47-resource Azure apply prints 48
+  lines instead of about 1300. Everything terraform printed is still in the deploy
+  log, and teardown writes its own `logs/teardown-<UTC>.log`, named in its closing
+  box.
 
 ### Fixed
 
