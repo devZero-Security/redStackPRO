@@ -66,6 +66,28 @@ _REGION_VAR = {"gcp": "region", "aws": "region", "azure": "location"}
 _ETA = {True: "45-75 min", False: "60-75 min"}
 
 
+# A command the user is told to type, written for the shell they typed it in.
+# Shared by deploy.sh and manage.sh, so every hint takes one form.
+_RSP_CMD = r'''# The command a hint tells the user to run, in the form their shell takes.
+# deploy.ps1 and manage.ps1 set REDSTACKPRO_FROM_PS1.
+#   rsp_cmd deploy|manage [NAME=VALUE] [ARG...]
+rsp_cmd(){
+  rsp_c_s="$1"; shift
+  rsp_c_v=""
+  case "${1:-}" in *=*) rsp_c_v="$1"; shift ;; esac
+  if [ "${REDSTACKPRO_FROM_PS1:-}" = "1" ]; then
+    rsp_c_out=".\\$rsp_c_s.ps1"
+    [ -z "$rsp_c_v" ] || rsp_c_out="\$env:${rsp_c_v%%=*} = '${rsp_c_v#*=}'; $rsp_c_out"
+  else
+    rsp_c_out="bash $rsp_c_s.sh"
+    [ -z "$rsp_c_v" ] || rsp_c_out="$rsp_c_v $rsp_c_out"
+  fi
+  [ "$#" -eq 0 ] || rsp_c_out="$rsp_c_out $*"
+  printf '%s\n' "$rsp_c_out"
+}
+'''
+
+
 # The output helpers every later block uses. `say` indents a line under the
 # current phase; `die` and `fail` stop the run and keep the reason for the
 # closing box. Built apart from the template so the bash keeps single braces.
@@ -109,7 +131,7 @@ rsp_path(){
     printf '%s\n' "$1"
   fi
 }
-'''
+''' + _RSP_CMD
 
 
 # The deployment log. Everything deploy.sh prints (terraform apply and the whole
@@ -274,14 +296,15 @@ case "$RSP_STOP_LEAD" in
   ''|*[!0-9]*)
     die "Could not work out when this build stops itself -- the check did not run." \\
       "This build carries a daily stop at %(hour)02d:%(minute)02d %(timezone)s." \\
-      "Confirm that is more than a build away, then:" \\
-      "  Override: REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh" ;;
+      "Confirm that is more than a build away, then run:" \\
+      "  $(rsp_cmd deploy REDSTACKPRO_MIN_STOP_LEAD=0)" ;;
 esac
 if [ "$RSP_STOP_LEAD" -lt "${REDSTACKPRO_MIN_STOP_LEAD:-150}" ]; then
   die "This build stops itself at %(hour)02d:%(minute)02d %(timezone)s, which is $RSP_STOP_LEAD minutes away." \\
     "Provisioning takes up to 75 minutes, so the range would stop part-built." \\
     "" \\
-    "  Override: REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh" \\
+    "  To deploy anyway, run:" \\
+    "    $(rsp_cmd deploy REDSTACKPRO_MIN_STOP_LEAD=0)" \\
     "  Or set a later stop time:" \\
     "  In the canvas, click empty space, then Topology settings > Auto-stop, and export again." \\
     "  It is a daily clock time, so exporting again with the same time changes" \\
@@ -839,7 +862,8 @@ else
     KEY="${RSP_KEYS# }"
   elif [ "$RSP_N" -gt 1 ]; then
     die "more than one private key in keys/:$RSP_KEYS" \
-      "say which:  REDSTACKPRO_SSH_KEY=keys/<name> bash deploy.sh"
+      "To say which, run:" \
+      "  $(rsp_cmd deploy 'REDSTACKPRO_SSH_KEY=keys/<name>')"
   else
     KEY="$HOME/.ssh/id_ed25519"
   fi
@@ -912,7 +936,8 @@ if grep -Eq 'operator_source_ranges[^#]*"0\.0\.0\.0/0"' deploy.tfvars 2>/dev/nul
       "" \
       "  Fix:      set operator_source_ranges to your own IP/CIDR in deploy.tfvars," \
       '            for example ["203.0.113.5/32"].' \
-      "  Override: REDSTACKPRO_ALLOW_OPEN_INGRESS=1 bash deploy.sh"
+      "  To deploy it open anyway, run:" \
+      "    $(rsp_cmd deploy REDSTACKPRO_ALLOW_OPEN_INGRESS=1)"
   fi
 fi
 @@TFVARS_PREFLIGHT@@# deploy.tfvars is the one config file you edit, here in the export root. Terraform
@@ -944,8 +969,9 @@ trap 'RSP_ERR="exit $? from: $BASH_COMMAND"' ERR
 phase "Terraform apply"
 @@INIT@@terraform -chdir=terraform apply -auto-approve -input=false || die "terraform apply failed (its error is above) -- nothing was provisioned." \
   "If it reports resources that already exist, an earlier run was interrupted and" \
-  "left them outside the state. Reconcile with: bash manage.sh teardown --force" \
-  "(then re-run deploy.sh)."
+  "left them outside the state. To clear them, run:" \
+  "  $(rsp_cmd manage teardown --force)" \
+  "then run the deploy again."
 RSP_RES="$(terraform -chdir=terraform state list 2>/dev/null | grep -Evc '(^|\.)data\.' || true)"
 case "$RSP_RES" in
   ''|*[!0-9]*|0) ok "applied in $(took)" ;;
@@ -1094,9 +1120,8 @@ say(){ echo "== [$(date +%H:%M:%S)] $* =="; }
 
 RSP_NAME=@@NAME@@
 RSP_LABEL=@@LABEL@@
-# manage.ps1 sets REDSTACKPRO_FROM_PS1, so usage lines name the command the
-# user actually types.
-if [ "${REDSTACKPRO_FROM_PS1:-}" = "1" ]; then RSP_RUN='.\manage.ps1'; else RSP_RUN="bash manage.sh"; fi
+@@RSP_CMD@@# Usage lines name the command the user actually types.
+RSP_RUN="$(rsp_cmd manage)"
 @@TFVAR_HELPER@@@@WHERE@@RSP_WHERE="$RSP_LABEL $RSP_REGION"; RSP_WHERE="${RSP_WHERE% }"
 
 rsp_help(){
@@ -1583,6 +1608,7 @@ def generate_manage_script(topology, registry=None, provider=None, region=None):
     for token, value in (
             ("@@NAME@@", _shell_word(topology.get("name"))),
             ("@@LABEL@@", _shell_word(label)),
+            ("@@RSP_CMD@@", _RSP_CMD),
             ("@@TFVAR_HELPER@@", _TFVAR_HELPER),
             ("@@WHERE@@", where),
             ("@@COMMANDS@@", _help_commands(plan, provider, label)),

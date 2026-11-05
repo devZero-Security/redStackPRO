@@ -161,6 +161,18 @@ def test_a_restricted_size_fails_and_names_sizes_that_fit(export):
     assert rc == 0, text
 
 
+@pytest.mark.parametrize("from_ps1,command", [
+    ({}, "    REDSTACKPRO_SKIP_PREFLIGHT=1 bash deploy.sh"),
+    ({"REDSTACKPRO_FROM_PS1": "1"}, "    $env:REDSTACKPRO_SKIP_PREFLIGHT = '1'; .\\deploy.ps1"),
+])
+def test_a_failure_names_the_override_for_the_shell_the_deploy_came_from(export, from_ps1, command):
+    set_sizes(export, {"jumpbox": "Standard_Typo2_v9"})
+    rc, text = run(export, FakeArm(), env=from_ps1)
+    assert rc == 1
+    lines = text.splitlines()
+    assert lines[-2:] == ["  To deploy anyway, run:", command]
+
+
 def test_a_size_not_offered_in_the_location_fails(export):
     set_sizes(export, {"jumpbox": "Standard_Typo2_v9"})
     rc, text = run(export, FakeArm())

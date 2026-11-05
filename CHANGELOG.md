@@ -360,6 +360,13 @@ versioning, and dates are UTC.
   refused as 25 minutes away. The export now carries the zone's UTC offset, taken
   at export, and the check uses it when Python cannot load the zone. redStackPRO
   depends on `tzdata`, so the compiler can always resolve the zone.
+- A deploy started with `deploy.ps1` printed its override and recovery commands in
+  bash form (`REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh`,
+  `bash manage.sh teardown --force`), which fail at a PowerShell prompt or run WSL's
+  bash. From `deploy.ps1` they are now written for PowerShell
+  (`$env:REDSTACKPRO_MIN_STOP_LEAD = '0'; .\deploy.ps1`,
+  `.\manage.ps1 teardown --force`), the Azure preflight's override included, and
+  each sits alone on its own line.
 
 ## [0.9.2] (2026-11-04)
 

@@ -779,7 +779,12 @@ def main(argv=None, env=None, http=_http, run=subprocess.run, out=print):
             out("  %s" % line)
     out("")
     out("azure preflight failed, so apply was not started and nothing was created.")
-    out("  Override: %s=1 bash deploy.sh" % SKIP_ENV)
+    out("  To deploy anyway, run:")
+    # deploy.ps1 sets REDSTACKPRO_FROM_PS1 for deploy.sh, which runs this.
+    if env.get("REDSTACKPRO_FROM_PS1") == "1":
+        out("    $env:%s = '1'; .\\deploy.ps1" % SKIP_ENV)
+    else:
+        out("    %s=1 bash deploy.sh" % SKIP_ENV)
     return 1
 
 

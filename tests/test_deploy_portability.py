@@ -128,7 +128,7 @@ def test_open_ingress_override_downgrades_the_abort_to_a_warning(script):
     warn = "WARNING: operator_source_ranges is 0.0.0.0/0"
     assert warn in script
     # The message tells the user the one-line fix and the override.
-    assert "REDSTACKPRO_ALLOW_OPEN_INGRESS=1 bash deploy.sh" in script
+    assert '"    $(rsp_cmd deploy REDSTACKPRO_ALLOW_OPEN_INGRESS=1)"' in script
 
 
 def test_the_deploy_does_not_need_rsync(script):
@@ -403,6 +403,55 @@ def test_two_keys_in_the_folder_are_not_guessed_between(staged):
     done = _run(export, stubs)
     assert done.returncode == 1
     assert "more than one private key" in done.stdout, done.stdout
+    assert "\n        REDSTACKPRO_SSH_KEY=keys/<name> bash deploy.sh\n" in done.stdout
+    ps1 = _run(export, stubs, env_extra={"REDSTACKPRO_FROM_PS1": "1"})
+    assert ("\n        $env:REDSTACKPRO_SSH_KEY = 'keys/<name>'; .\\deploy.ps1\n"
+            in ps1.stdout), ps1.stdout
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the helpers")
+@pytest.mark.parametrize("args,bash,ps1", [
+    ("deploy", "bash deploy.sh", ".\\deploy.ps1"),
+    ("deploy REDSTACKPRO_MIN_STOP_LEAD=0", "REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh",
+     "$env:REDSTACKPRO_MIN_STOP_LEAD = '0'; .\\deploy.ps1"),
+    ("deploy REDSTACKPRO_SKIP_PREFLIGHT=1", "REDSTACKPRO_SKIP_PREFLIGHT=1 bash deploy.sh",
+     "$env:REDSTACKPRO_SKIP_PREFLIGHT = '1'; .\\deploy.ps1"),
+    ("manage teardown --force", "bash manage.sh teardown --force",
+     ".\\manage.ps1 teardown --force"),
+])
+def test_a_hint_is_written_for_the_shell_the_user_typed_it_in(tmp_path, args, bash, ps1):
+    """deploy.ps1 and manage.ps1 set REDSTACKPRO_FROM_PS1. A bash line pasted at a
+    PowerShell prompt fails, or runs WSL's bash."""
+    # A file, not bash -c: Git Bash halves the backslashes of a Windows argv.
+    script = tmp_path / "hint.sh"
+    script.write_text(output_helpers() + "rsp_cmd " + args + "\n", encoding="utf-8",
+                      newline="\n")
+    for env, expect in (({}, bash), ({"REDSTACKPRO_FROM_PS1": "1"}, ps1)):
+        environ = dict(os.environ)
+        environ.pop("REDSTACKPRO_FROM_PS1", None)
+        environ.update(env)
+        done = subprocess.run([_bash(), script.name], cwd=tmp_path,
+                              capture_output=True, text=True, env=environ)
+        assert (done.returncode, done.stdout) == (0, expect + "\n"), done.stderr
+
+
+@pytest.mark.parametrize("provider", ["gcp", "aws", "azure", "proxmox"])
+def test_every_command_hint_goes_through_rsp_cmd(provider):
+    """One helper writes every deploy or manage command a user is told to run,
+    so none is left in bash form from PowerShell."""
+    doc = example("redstack.json")
+    doc["auto_stop"] = {"enabled": True, "at": "02:00", "timezone": "UTC"}
+    for script in (generate_deploy_script(doc, Registry(), provider=provider),
+                   generate_manage_script(doc, Registry(), provider=provider)):
+        code = _code(script, local_only=True)
+        assert "bash deploy.sh" not in code and "bash manage.sh" not in code
+        assert ".ps1" not in code.replace('".\\\\$rsp_c_s.ps1"', "")
+    deploy = generate_deploy_script(doc, Registry(), provider=provider)
+    for hint in ("$(rsp_cmd deploy REDSTACKPRO_MIN_STOP_LEAD=0)",
+                 "$(rsp_cmd deploy REDSTACKPRO_ALLOW_OPEN_INGRESS=1)",
+                 "$(rsp_cmd deploy 'REDSTACKPRO_SSH_KEY=keys/<name>')",
+                 "$(rsp_cmd manage teardown --force)"):
+        assert hint in deploy, hint
 
 
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
@@ -1791,11 +1840,16 @@ def test_an_offense_run_log_has_no_jumpbox_pass_or_winrm_gate(tmp_path):
 
 @pytest.mark.parametrize("provider", ["gcp", "aws", "azure", "proxmox"])
 @pytest.mark.parametrize("name", ["redstack.json", "minimal.json"])
-def test_deploy_sh_and_its_runner_are_valid_bash(provider, name):
+def test_deploy_sh_and_its_runner_are_valid_bash(tmp_path, provider, name):
     bash = _bash()
     if bash is None:
         pytest.skip("no bash to syntax-check the emitted script")
     script = generate_deploy_script(example(name), Registry(), provider=provider)
-    for body in (script, _remote_block(script, "RUNNER")):
-        done = subprocess.run([bash, "-n", "-c", body], capture_output=True, text=True)
+    # Files, not bash -c: deploy.sh outgrew what a Windows command line carries,
+    # and Git Bash silently cut the -c argument short.
+    for i, body in enumerate((script, _remote_block(script, "RUNNER"))):
+        path = tmp_path / ("check%d.sh" % i)
+        path.write_text(body, encoding="utf-8", newline="\n")
+        done = subprocess.run([bash, "-n", path.name], cwd=tmp_path,
+                              capture_output=True, text=True)
         assert done.returncode == 0, done.stderr
