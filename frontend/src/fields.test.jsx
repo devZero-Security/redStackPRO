@@ -435,7 +435,7 @@ describe.each(MODES)("with the %s schema", (mode, schema) => {
     test("a required enum offers no empty option", () => {
       render(<Panel mode="offense" node={{ id: "myth-ts01", kind: "teamserver", overlay: { c2: "mythic" } }} />);
       expect(optionTexts(selectNamed("teamserver.c2"))).toEqual([
-        "Mythic", "Sliver", "AdaptixC2", "None (plain Debian host)",
+        "Mythic", "Sliver", "Adaptix", "None (plain Debian host)",
       ]);
     });
 

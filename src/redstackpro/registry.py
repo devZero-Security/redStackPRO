@@ -50,10 +50,10 @@ class Registry:
                 "icon": display.get("icon"),
                 "color": display.get("color"),
             })
-        # Topology leads, because a network and a subnet are what everything else
+        # Network leads, because a network and a subnet are what everything else
         # nests in; the rest follow a declared order, then anything unlisted.
-        order = ["topology", "domains", "hosts", "redirector", "teamservers",
-                 "management", "operator", "operational", "access", "network"]
+        order = ["network", "domains", "hosts", "redirectors", "teamservers",
+                 "management", "operators", "operational", "access"]
         rank = lambda g: (order.index(g) if g in order else len(order), g)
         return {g: sorted(v, key=lambda e: e["label"])
                 for g, v in sorted(groups.items(), key=lambda kv: rank(kv[0]))}

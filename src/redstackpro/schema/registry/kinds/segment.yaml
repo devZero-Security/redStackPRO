@@ -7,7 +7,7 @@ display:
   label: Subnet
   blurb: Subnet inside one network
   icon: tabler/outline/box
-  group: topology
+  group: network
   color: "#868e96"
 
 modes:

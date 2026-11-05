@@ -20,7 +20,7 @@ export const TEMPLATES = {
       file: "minimalc2-gui",
       name: "MinimalC2-GUI",
       blurb:
-        "A Mythic teamserver driven from a browser on a GUI-mode Kali operator reached over a Guac RDP tile, behind one redirector: the smallest UI-driven C2 stack.",
+        "A Mythic teamserver driven from a browser on a GUI-mode Kali operator reached over a Guacamole RDP tile, behind one redirector: the smallest UI-driven C2 stack.",
     },
     {
       file: "rollover",
@@ -32,7 +32,7 @@ export const TEMPLATES = {
       file: "split-horizon",
       name: "Split horizon C2",
       blurb:
-        "Two front doors that do not share a fate: Apache fronting Sliver for long haul, Nginx fronting Mythic for interactive, each redirector on its own peered network.",
+        "Two front doors that do not share a fate: Apache fronting Sliver for long haul, Nginx fronting Mythic and Adaptix for interactive work, each redirector on its own peered network.",
     },
   ],
   defense: [
@@ -158,7 +158,7 @@ export const UNGROUPED_LABEL = "redStackPRO";
 
 export const GROUP_NOTES = {
   GOAD:
-    "The Game of Active Directory labs as redStackPRO topologies. " +
+    "The Game of Active Directory labs as redStackPRO blueprints. " +
     "A nod to the GOAD project.",
 };
 

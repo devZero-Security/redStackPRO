@@ -22,6 +22,7 @@ import { TopologyPicker } from "./TopologyPicker.jsx";
 import { ProviderPicker } from "./ProviderPicker.jsx";
 import { providersFor, resolveProvider, selectableProviders } from "./providers.js";
 import { targetFor } from "./deployTarget.js";
+import { aKind } from "./edgeRoles.js";
 import { Library } from "./Library.jsx";
 import { ConflictDialog } from "./Conflict.jsx";
 import { ConfirmDialog } from "./ConfirmDialog.jsx";
@@ -586,8 +587,8 @@ function Editor() {
     async (id) => {
       const isOpen = id === topology?.id;
       const message = isOpen
-        ? "Delete the topology you have open? It and every revision are removed for good. This cannot be undone."
-        : "Delete this topology? It and every revision are removed for good. This cannot be undone.";
+        ? "Delete the topology you have open? It and every revision are removed for good. This cannot be undone. A range you deployed from it keeps running: tear it down from its export folder with manage.sh teardown."
+        : "Delete this topology? It and every revision are removed for good. This cannot be undone. A range you deployed from it keeps running: tear it down from its export folder with manage.sh teardown.";
       if (
         !(await confirm({
           title: "Delete this topology?",
@@ -604,7 +605,7 @@ function Editor() {
         pushUrl(null);
       }
       refreshTopologies();
-      setStatus("Deleted. Nothing was deployed.");
+      setStatus("Deleted. A range you deployed from it is not affected.");
     },
     [topology, pushUrl, refreshTopologies, resetToEmpty, confirm]
   );
@@ -1167,7 +1168,7 @@ function Editor() {
       const r = role || inferRole(kinds[source], kinds[target]);
       if (!r) {
         setStatus(
-          `No role connects a ${kinds[source]} to a ${kinds[target]}. Pick one.`
+          `No line connects ${aKind(kinds[source])} to ${aKind(kinds[target])}. Pick one.`
         );
         return current;
       }
@@ -1195,7 +1196,7 @@ function Editor() {
         const role = inferRole(kinds[source], kinds[target]);
         if (!role) {
           setStatus(
-            `No role connects a ${kinds[source]} to a ${kinds[target]}. Attachment is nesting, not a line.`
+            `No line connects ${aKind(kinds[source])} to ${aKind(kinds[target])}. Attachment is nesting, not a line.`
           );
           return current;
         }
@@ -1447,7 +1448,7 @@ function Editor() {
       if (!(await confirmDiscard())) return;
       const response = await fetch(url);
       if (!response.ok) {
-        setStatus("Nothing bundled there. Paste a document instead.");
+        setStatus("That blueprint could not be loaded. Reload the page and try again.");
         return;
       }
       const loaded = layoutIfNeeded(await response.json());
@@ -1605,9 +1606,9 @@ function Editor() {
         />
         <span className="rg-spacer" />
         <span className={`rg-count ${counts.error ? "is-error" : "is-ok"}`}>
-          {counts.error} errors
+          {counts.error} {counts.error === 1 ? "error" : "errors"}
         </span>
-        <span className="rg-count is-warning">{counts.warning} warnings</span>
+        <span className="rg-count is-warning">{counts.warning} {counts.warning === 1 ? "warning" : "warnings"}</span>
         <span
           className="rg-count is-info"
           title="Notices. They never block a compile."
@@ -1693,7 +1694,7 @@ function Editor() {
             </section>
             <p className="rg-muted">
               Locked so the baseline stays intact while you explore it.
-              Unlock to customise, or add an extension.
+              Unlock to customize, or add an extension.
             </p>
             <button className="rg-primary rg-unlock" onClick={() => setTemplateView(false)}>
               Unlock to edit

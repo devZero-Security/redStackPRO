@@ -2,6 +2,7 @@ import React from "react";
 import "./widgets.css";
 import { AZURE_TIMEZONES } from "./azureTimezones.js";
 import { FindingBadge } from "./FindingBadge.jsx";
+import { labelFor } from "./providers.js";
 
 // The region the export uses when the topology names none, per deploy target.
 // Mirrors DEFAULT_REGION in src/redstackpro/terraform/plan.py.
@@ -72,8 +73,8 @@ function AutoStop({ stop, deployTarget, disabled, onChange, findings }) {
     <div className="rg-settings-section">
       <h3>Auto-stop</h3>
       <p className="rg-hint">
-        The range stops itself at this time each day (or N hours after the first
-        apply). Start it again with manage.sh start.
+        The range stops itself at this time each day, or N hours after the first
+        apply. Start it again with manage.sh start (manage.ps1 start on Windows).
       </p>
       <Findings findings={findings} />
       <label className="rg-field">
@@ -241,7 +242,7 @@ export function TopologySettings({ document, deployTarget, readOnly, onChange, f
         />
         <span className="rg-field-help">
           {regionDefault
-            ? `Cloud region the export deploys to. Empty uses ${regionDefault} on ${deployTarget}.`
+            ? `Cloud region the export deploys to. Empty uses ${regionDefault} on ${labelFor(deployTarget)}.`
             : "Cloud region the export deploys to. Ignored by on-prem targets."}
         </span>
       </label>

@@ -67,9 +67,20 @@ export function rolesFor(sourceKind, targetKind) {
   );
 }
 
-// The rendered name, prefix plus id, the same as the Inspector heading.
+// The rendered name, the same as the card and the Inspector heading: prefix plus
+// id on offense, the bare id on defense, which keeps the canonical GOAD names.
 export function nodeName(document, id) {
-  return document?.prefix ? `${document.prefix}-${id}` : id;
+  return document?.prefix && document?.mode !== "defense" ? `${document.prefix}-${id}` : id;
+}
+
+// The word the canvas uses for a kind, with its article: "a subnet", "an operator box".
+const KIND_WORDS = {
+  segment: "subnet", srv: "server", wks: "workstation", dc: "domain controller",
+  operator: "operator box", siem: "SIEM", fw: "firewall",
+};
+export function aKind(kind) {
+  const word = KIND_WORDS[kind] || kind;
+  return `${/^[aeiou]/i.test(word) ? "an" : "a"} ${word}`;
 }
 
 const fqdnOf = (document, id) =>

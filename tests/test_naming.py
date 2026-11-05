@@ -203,7 +203,7 @@ def test_every_kind_has_display_metadata(registry):
 def test_palette_groups_by_declaart_group(registry):
     palette = registry.palette("offense")
     assert set(palette) == {
-        "topology", "redirector", "teamservers", "management", "operator"}
+        "network", "redirectors", "teamservers", "management", "operators"}
     kinds = {e["kind"] for group in palette.values() for e in group}
     ops_kinds = {k for k, s in registry.kinds.items()
                  if "offense" in s.get("modes", ["offense"])}

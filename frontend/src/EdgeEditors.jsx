@@ -1,6 +1,6 @@
 import React from "react";
 import "./widgets.css";
-import { ROLE_TEXT, roleTitle, rolesFor } from "./edgeRoles.js";
+import { ROLE_TEXT, aKind, roleTitle, rolesFor } from "./edgeRoles.js";
 
 const FRONTS_DEFAULTS = { protocol: "https", listen_port: 443, upstream_port: 443 };
 const FRONTS_FIELDS = { protocol: undefined, listen_port: undefined, upstream_port: undefined, uri_prefix: undefined };
@@ -57,14 +57,14 @@ export function EdgeRole({ edge, document, readOnly, onEdgeChange }) {
         {options.map((r) => (
           <option key={r} value={r}>
             {roleTitle(r)}
-            {valid.includes(r) ? "" : ` (not valid from a ${sourceKind} to a ${targetKind})`}
+            {valid.includes(r) ? "" : ` (not valid from ${aKind(sourceKind)} to ${aKind(targetKind)})`}
           </option>
         ))}
       </select>
       <span className="rg-field-help">
         {valid.includes(edge.role)
           ? about
-          : `A ${sourceKind} to a ${targetKind} cannot carry this role. Pick one it can.`}
+          : `${aKind(sourceKind).replace(/^a/, "A")} to ${aKind(targetKind)} cannot carry this role. Pick one it can.`}
       </span>
     </label>
   );

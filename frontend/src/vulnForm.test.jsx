@@ -219,7 +219,7 @@ describe("defaults on tick", () => {
     const seen = [];
     render(<Panel blueprint={LIGHT} id="castelblack" seen={seen} />);
     fireEvent.click(screen.getByRole("button", { name: "Credentials" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Stored credential (CredMan)" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Saved credential (Credential Manager)" }));
     expect(last(seen).stored_credential).toEqual({ target: "TERMSRV/castelblack" });
     expect(screen.getByRole("combobox", { name: "Saved credential owner" }).value).toBe("");
   });

@@ -130,7 +130,7 @@ export function Library({
           {loading ? (
             <p className="rg-muted rg-loading">Loading.</p>
           ) : topologies.length === 0 ? (
-            <p className="rg-muted">Nothing saved yet. Use Load blueprint in the toolbar to start from a shipped topology, or build one and Save it.</p>
+            <p className="rg-muted">Nothing saved yet. Use Load blueprint in the toolbar to start from a shipped blueprint, or build one and Save it.</p>
           ) : (
             <ul className="rg-library-list">
               {topologies.map((topology) => (

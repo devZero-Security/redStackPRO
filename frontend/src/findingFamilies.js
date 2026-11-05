@@ -97,12 +97,16 @@ export const FAMILIES = {
     label: "Auto-stop",
     blurb: "Whether the range's stop time can be scheduled as written.",
   },
+  PEER: {
+    label: "Peering",
+    blurb: "Whether two peered networks can be joined: two different networks, joined once, with address ranges that do not overlap.",
+  },
 };
 
-// Codes are three letters then three digits. Anything else is a code from a
-// newer validator than this build of the canvas, and the honest thing to show
-// is the code itself rather than a guess or a blank.
-const CODE = /^([A-Z]{3})(\d{3})$/;
+// Codes are three or four letters then three digits (PEER is the four letter
+// family). Anything else is a code from a newer validator than this build of the
+// canvas, and the honest thing to show is the code itself rather than a guess.
+const CODE = /^([A-Z]{3,4})(\d{3})$/;
 
 export function familyFor(code) {
   const match = CODE.exec(String(code || ""));

@@ -349,7 +349,7 @@ describe("vulns_vars help lists the keys of the ticked vulns", () => {
     expect(box.getByText("sysvol_secret.name")).toBeTruthy();
     expect(box.getAllByText("optional")).toHaveLength(2);
     // A User activity vuln keeps its box, pointing there, and shows no key twice.
-    const relay = within(box.getByText("NTLM relay posture").closest("fieldset"));
+    const relay = within(box.getByText("Relay bot (NTLM relay)").closest("fieldset"));
     expect(relay.getByText("Set under User activity above.")).toBeTruthy();
     expect(box.queryByText("ntlm_relay_user")).toBeNull();
     // smbv1 reads nothing, so it gets no entry.

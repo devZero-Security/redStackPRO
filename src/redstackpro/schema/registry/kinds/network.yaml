@@ -7,7 +7,7 @@ display:
   label: Network
   blurb: Routing domain
   icon: tabler/outline/network
-  group: topology
+  group: network
   color: "#868e96"
 
 modes:

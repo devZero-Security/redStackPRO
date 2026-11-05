@@ -12,6 +12,7 @@ import {
   segmentMidpoints,
 } from "./waypoints.js";
 import { obstaclesFor, routeEdge } from "./route.js";
+import { roleTitle } from "./edgeRoles.js";
 
 // A line carries no on-canvas label at all: its colour is its role, read off the
 // legend, and clicking it opens the inspector with the role and, for a URI line,
@@ -34,24 +35,18 @@ function HitPath({ path, onSelect, title }) {
 
 // A short hover label so a line reads without clicking into the inspector or
 // cross-referencing the legend. Still no persistent on-canvas label.
-const ROLE_TITLE = {
-  logs_to: "logs to the collector",
-  peers: "network peering",
-  manages: "management path",
-  joins: "joined to domain",
-  attached: "attached",
-  fronts: "redirector fronts teamserver",
-};
+// The same words as the legend and the Inspector (edgeRoles.js roleTitle), and
+// the trust labels of TrustEditor.jsx.
+const TRUST_WORDS = { parent_child: "Parent and child", tree_root: "Tree root", external: "External", forest: "Forest" };
 function edgeTitle(edge) {
   if (!edge) return undefined;
   if (edge.role === "trusts") {
-    const kind = (edge.trust_type || "trust").replace(/_/g, " ");
-    return `${kind} trust`;
+    return edge.trust_type ? `${roleTitle("trusts")} (${TRUST_WORDS[edge.trust_type] || edge.trust_type})` : roleTitle("trusts");
   }
   if (edge.role === "fronts") {
-    return edge.uri_prefix ? `fronts on ${edge.uri_prefix}` : ROLE_TITLE.fronts;
+    return edge.uri_prefix ? `${roleTitle("fronts")} on ${edge.uri_prefix}` : roleTitle("fronts");
   }
-  return ROLE_TITLE[edge.role] || edge.role;
+  return roleTitle(edge.role);
 }
 
 // A drawn edge whose endpoints are computed from where the two nodes actually

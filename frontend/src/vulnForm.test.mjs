@@ -235,7 +235,7 @@ test("a key two ticked vulns read shows once, under the first in the catalog", (
   assert.deepStrictEqual(sections.map((s) => s.vuln), ["responder", "rdp_scheduler"]);
   assert.deepStrictEqual(sections[0].params.map((p) => p.key), ["bot_user", "responder_target"]);
   assert.deepStrictEqual(sections[1].params.map((p) => p.key), ["bot_interval_minutes"]);
-  assert.deepStrictEqual(sections[1].shared, [{ key: "bot_user", under: "Responder-friendly posture" }]);
+  assert.deepStrictEqual(sections[1].shared, [{ key: "bot_user", under: "Share-browsing bot (Responder)" }]);
 });
 
 test("keys the form does not show are named, so the JSON view can say so", () => {

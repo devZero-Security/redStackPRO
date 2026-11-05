@@ -20,7 +20,7 @@ export const ACTIVITIES = [
   {
     id: "schedule",
     title: "Scheduled task",
-    idle: "A domain user, or SYSTEM, does something on this host every few minutes: stays logged on, runs a file, browses a share, fetches a web page, or runs your own PowerShell.",
+    idle: "A domain user, or SYSTEM, does something on this host every minute by default: stays logged on, runs a file, browses a share, fetches a web page, or runs your own PowerShell.",
     keys: ["schedule"],
   },
   {

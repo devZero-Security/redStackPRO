@@ -25,7 +25,7 @@ export function TemplatePicker({ mode, onPick, onDismiss }) {
         <h2>{isRange ? "Load a Defense blueprint" : "Load an Offense blueprint"}</h2>
         <p className="rg-muted">
           {isRange
-            ? "Pick a range to start from and customise it for yourself."
+            ? "Pick a range to start from and customize it for yourself."
             : "Editable starting points. Load one and make it yours."}
         </p>
         {groups.map(({ group, templates }) => (

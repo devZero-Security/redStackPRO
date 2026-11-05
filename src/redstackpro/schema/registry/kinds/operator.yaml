@@ -8,7 +8,7 @@ display:
   label: Operator box
   blurb: Operator workstation
   icon: tabler/outline/device-desktop
-  group: operator
+  group: operators
   color: "#1c7ed6"
 
 modes:

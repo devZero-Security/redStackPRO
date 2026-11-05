@@ -26,6 +26,7 @@ import { UserActivity } from "./UserActivity.jsx";
 import { showsActivity } from "./activity.js";
 import { formKeys, keysOutsideForm, withVulnDefaults } from "./vulnForm.js";
 import { nodeName, roleTitle } from "./edgeRoles.js";
+import { labelFor } from "./providers.js";
 
 // A group starts expanded only when one of its items is already selected, so
 // an applied category stays in view and an empty one stays out of the way.
@@ -197,7 +198,7 @@ function VulnPicker({
                     const unsupported =
                       restricted && provider && !restricted.includes(provider);
                     const title = unsupported
-                      ? `${item.blurb || ""}\n\nNo payoff on ${provider}: only planted on ${restricted.join("/")}. Still declarable for a template that also targets those.`
+                      ? `${item.blurb || ""}\n\nNot planted on ${labelFor(provider)}: only on ${restricted.map(labelFor).join(" and ")}. You can still tick it for a topology that will also target those.`
                       : item.blurb || "";
                     const isSelected = set.includes(item.id);
                     return (
@@ -215,7 +216,7 @@ function VulnPicker({
                         {item.label}
                         {unsupported ? (
                           <span className="rg-vuln-provider-note">
-                            {" "}({restricted.join("/")} only)
+                            {" "}({restricted.map(labelFor).join(" and ")} only)
                           </span>
                         ) : null}
                       </label>
@@ -523,7 +524,7 @@ function Manages({ node, document, onSelectNode }) {
         onClick={() => onSelectNode?.(id)}
       >
         <span className="rg-manages-row-dot" />
-        {document.prefix}-{id}
+        {nodeName(document, id)}
       </button>
     ));
 
@@ -1081,7 +1082,7 @@ export function Inspector({
           <>
             <Field
               name="uri_prefix"
-              spec={{ type: "string", description: "Path the redirector routes to this teamserver. Randomise draws from the redirector's cover profile." }}
+              spec={{ type: "string", title: "URI prefix", description: "Path the redirector routes to this teamserver. Randomize URI draws one from the redirector's cover profile." }}
               value={edge.uri_prefix}
               disabled={readOnly}
               onChange={(v) => onEdgeChange(edge.id, { uri_prefix: v })}
@@ -1106,7 +1107,7 @@ export function Inspector({
         ) : null}
         {readOnly ? null : (
           <button className="rg-danger" onClick={() => onDelete(selection)}>
-            Delete edge
+            Delete line
           </button>
         )}
       </aside>
@@ -1130,11 +1131,11 @@ export function Inspector({
   return (
     <aside className="rg-panel rg-inspector">
       <h2>
-        {document.prefix}-{node.id}
+        {nodeName(document, node.id)}
       </h2>
       <p className="rg-kv">
         <span>kind</span>
-        <span>{kindLabels[node.kind] || node.kind}</span>
+        <span>{node.kind === "teamserver" ? "Teamserver" : kindLabels[node.kind] || node.kind}</span>
       </p>
       <label className={idErrors.some((f) => !isNotice(f)) ? "rg-field is-invalid" : "rg-field"}>
         <span className="rg-field-label">ID</span>
@@ -1149,9 +1150,9 @@ export function Inspector({
           </span>
         ))}
         <span className="rg-field-help">
-          Lowercase kebab: a purpose slug, the kind tag, and a two digit
-          ordinal, e.g. main-net01. Left as is, it tracks what the node
-          holds; rename it and it stays put.
+          {document.mode === "defense"
+            ? "Lowercase letters, digits and hyphens. On a defense range the id is the host's name, e.g. kingslanding, and is not renamed for you."
+            : "Lowercase kebab: a purpose slug, the kind tag, and a two digit ordinal, e.g. main-net01. Left as is, it tracks what the node holds; rename it and it stays put."}
         </span>
       </label>
 

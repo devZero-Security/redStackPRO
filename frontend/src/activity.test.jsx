@@ -68,7 +68,7 @@ describe("the section", () => {
     }
     expect(box("Scheduled task").checked).toBe(false);
     expect(row("Logon bot").getByText("logs on to this host every")).toBeTruthy();
-    expect(row("Scheduled task").getByText(/does something on this host every few minutes/)).toBeTruthy();
+    expect(row("Scheduled task").getByText(/does something on this host every minute by default/)).toBeTruthy();
     expect(screen.queryByRole("combobox", { name: "Scheduled task action" })).toBeNull();
   });
 
@@ -78,7 +78,7 @@ describe("the section", () => {
     fireEvent.click(box("Scheduled task"));
     expect(last(seen).vulns).toContain("schedule");
     fireEvent.click(screen.getByRole("button", { name: /Double-hop & bots/ }));
-    expect(box("Scheduled login bot").checked).toBe(true);
+    expect(box("Scheduled task (user or SYSTEM)").checked).toBe(true);
     expect(action().value).toBe("logon");
   });
 
@@ -86,7 +86,7 @@ describe("the section", () => {
     const seen = [];
     render(winterfell({ seen }));
     // The group starts open: winterfell already has one of its vulns ticked.
-    fireEvent.click(box("RDP scheduled logon"));
+    fireEvent.click(box("Logon bot (RDP scheduled logon)"));
     expect(last(seen).vulns).not.toContain("rdp_scheduler");
     expect(box("Logon bot").checked).toBe(false);
     expect(screen.queryByRole("combobox", { name: "Logon bot user" })).toBeNull();
@@ -98,7 +98,7 @@ describe("the section", () => {
   test("the settings form points to User activity instead of showing the keys again", () => {
     render(minilab());
     const form = within(document.querySelector(".rg-vuln-form"));
-    for (const legend of ["Scheduled login bot", "Stored credential (CredMan)"]) {
+    for (const legend of ["Scheduled task (user or SYSTEM)", "Saved credential (Credential Manager)"]) {
       expect(within(form.getByText(legend).closest("fieldset")).getByText("Set under User activity above.")).toBeTruthy();
     }
     expect(screen.queryByRole("textbox", { name: "What it does" })).toBeNull();

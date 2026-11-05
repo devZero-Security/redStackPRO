@@ -71,7 +71,7 @@ export const EXTENSIONS = [
   {
     key: "elk",
     title: "ELK stack",
-    blurb: "An ELK server and a logbeat agent on every Windows host.",
+    blurb: "An ELK server and a Winlogbeat agent on every Windows host.",
     requiresDomain: false,
     compatibility: ["*"],
     agent: "elastic",

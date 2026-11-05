@@ -35,7 +35,7 @@ export const HARDENING_CATALOG = [
       {
         id: "credential_guard",
         label: "Credential Guard",
-        blurb: "Isolates derived credentials in virtualisation-based security, so a pass-the-hash needs more than local admin.",
+        blurb: "Isolates derived credentials in virtualization-based security, so a pass-the-hash needs more than local admin.",
       },
     ],
   },

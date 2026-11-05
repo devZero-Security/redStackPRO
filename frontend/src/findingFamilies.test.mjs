@@ -12,7 +12,7 @@ import { FAMILIES, familyFor, familyTooltip } from "./findingFamilies.js";
     "utf8"
   );
   const emitted = new Set(
-    [...source.matchAll(/"([A-Z]{3})\d{3}"/g)].map((m) => m[1])
+    [...source.matchAll(/"([A-Z]{3,4})\d{3}"/g)].map((m) => m[1])
   );
   assert.ok(emitted.size > 0, "found no finding codes in validate.py");
   for (const prefix of emitted) {

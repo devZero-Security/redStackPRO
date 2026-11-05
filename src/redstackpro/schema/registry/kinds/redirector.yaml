@@ -8,7 +8,7 @@ display:
   label: Redirector
   blurb: Fronts a teamserver
   icon: tabler/outline/route
-  group: redirector
+  group: redirectors
   color: "#f59f00"
 
 modes:

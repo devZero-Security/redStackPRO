@@ -105,11 +105,11 @@ export function HostNode({ data, selected }) {
   // not wrap its badges onto a second row the card has no height for; the rest
   // collapse into a +N chip that lists them on hover.
   const badges = [];
-  if (edr) badges.push({ key: "edr", cls: "is-edr", title: `EDR: ${edr}`, text: edr });
-  if (vulnCount) badges.push({ key: "vuln", cls: "is-vuln", title: `${vulnCount} planted vulnerabilities`, text: `${vulnCount} vuln${vulnCount === 1 ? "" : "s"}` });
+  if (edr) badges.push({ key: "edr", cls: "is-edr", title: `EDR label: ${edr}. Shown in the briefing only; Defender runs only when Defender on is ticked.`, text: edr });
+  if (vulnCount) badges.push({ key: "vuln", cls: "is-vuln", title: `${vulnCount} planted ${vulnCount === 1 ? "vulnerability" : "vulnerabilities"}`, text: `${vulnCount} vuln${vulnCount === 1 ? "" : "s"}` });
   // No role applies hardening yet, so the badge must not read as a defended host.
   if (hardeningCount) badges.push({ key: "hardened", cls: "is-more", title: `${hardeningCount} hardening controls recorded. This release does not apply them, so the host is not hardened.`, text: "hardening off" });
-  if (reachable) badges.push({ key: "public", cls: "is-public", title: "Holds a public address on an internet segment", text: "public" });
+  if (reachable) badges.push({ key: "public", cls: "is-public", title: "Holds a public address on a subnet with Internet exposure", text: "public" });
   if (domain) badges.push({ key: "domain", cls: "is-domain", title: `Joined to ${domain}`, text: domain });
   const shownBadges = badges.slice(0, MAX_BADGES);
   const hiddenBadges = badges.slice(MAX_BADGES);
@@ -237,8 +237,8 @@ function overlaySummary(node) {
     case "domain":
       return [
         o.fqdn,
-        o.users?.length ? `${o.users.length} users` : null,
-        o.acls?.length ? `${o.acls.length} rights` : null,
+        o.users?.length ? `${o.users.length} user${o.users.length === 1 ? "" : "s"}` : null,
+        o.acls?.length ? `${o.acls.length} right${o.acls.length === 1 ? "" : "s"}` : null,
       ]
         .filter(Boolean)
         .join("  ·  ");

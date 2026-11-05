@@ -8,6 +8,7 @@
 // after its id, and a domain with no netbios takes its first fqdn label uppercased.
 
 import { PROFILES } from "./profiles.js";
+import { aKind } from "./edgeRoles.js";
 
 const AD_KINDS = new Set(["dc", "srv", "wks"]);
 // Plain Linux boxes on a range subnet. Nothing is installed on them yet.
@@ -60,7 +61,7 @@ const DECOY_LABELS = Object.fromEntries(PROFILES.map((p) => [p.key, p.label]));
 // Per-field option labels, for values whose meaning depends on the field
 // ("none" is a C2 choice in one place and a cover page in another).
 const FIELD_OPTION_LABELS = {
-  c2: { mythic: "Mythic", sliver: "Sliver", adaptix: "AdaptixC2", none: "None (plain Debian host)" },
+  c2: { mythic: "Mythic", sliver: "Sliver", adaptix: "Adaptix", none: "None (plain Debian host)" },
   decoy: { ...DECOY_LABELS, none: "No cover page" },
   edr: {
     none: "None",
@@ -113,7 +114,7 @@ const OPTION_LABELS = {
   external: "External",
   forest: "Forest",
   apache: "Apache",
-  nginx: "nginx",
+  nginx: "Nginx",
   opensearch: "OpenSearch",
   elasticsearch: "Elasticsearch",
   splunk: "Splunk",
@@ -304,7 +305,7 @@ function lockedPublicAddress(ctx, value) {
   if (value !== undefined && value !== forced) return null;
   return forced
     ? { value: true, reason: `A ${ctx.kind} always takes a public address.` }
-    : { value: false, reason: `A ${ctx.kind} never takes a public address. Reach it through the jumpbox.` };
+    : { value: false, reason: `${aKind(ctx.kind).replace(/^a/, "A")} never takes a public address. Reach it through the jumpbox.` };
 }
 
 // The services values something installs on this host. Mirrors

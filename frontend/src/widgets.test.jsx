@@ -635,7 +635,7 @@ describe("topology settings", () => {
     expect(screen.getByRole("heading", { name: "Auto-stop" })).toBeTruthy();
     expect(
       screen.getByText(
-        "The range stops itself at this time each day (or N hours after the first apply). Start it again with manage.sh start."
+        "The range stops itself at this time each day, or N hours after the first apply. Start it again with manage.sh start (manage.ps1 start on Windows)."
       )
     ).toBeTruthy();
   });

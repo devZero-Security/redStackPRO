@@ -201,8 +201,8 @@ describe("findings by severity", () => {
       render(<App />);
 
       expect(await screen.findByText("1 info")).toBeTruthy();
-      expect(screen.getByText("1 warnings")).toBeTruthy();
-      expect(screen.getByText("1 errors")).toBeTruthy();
+      expect(screen.getByText("1 warning")).toBeTruthy();
+      expect(screen.getByText("1 error")).toBeTruthy();
 
       const footer = window.document.querySelector(".rg-findings");
       const buttons = [...footer.querySelectorAll("button.rg-finding")];
