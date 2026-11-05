@@ -50,7 +50,7 @@
     - { port: 1514, what: "agent enrolment, where endpoints register" }
     - { port: 443, what: "the dashboard an operator opens" }
   loop_control:
-    label: "{{ item.port }} -- {{ item.what }}"
+    label: "{{ item.port }} ({{ item.what }})"
 
 # The all-in-one installer generates a random dashboard admin password and then
 # cleans up the file that held it, so it is effectively lost. Set it to the

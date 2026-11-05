@@ -134,5 +134,5 @@
       ansible.builtin.debug:
         msg: >-
           {{ rsp_launch.output | default(['(no output)']) | join(' ') }}.
-          The callback is asynchronous -- look for the session on the
+          The callback is asynchronous: look for the session on the
           teamserver, not here.

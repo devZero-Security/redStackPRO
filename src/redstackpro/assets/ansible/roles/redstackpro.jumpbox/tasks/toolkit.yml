@@ -224,7 +224,7 @@
       Kerberos: `/etc/krb5.conf` is NOT pre-pointed at the range realm. Set
       `KRB5CCNAME` and write a realm stanza before the Kerberos-only paths work.
       And krbrelayx wants port 80 for its HTTP server, which nginx (the portal)
-      holds on this host -- free it, or run krbrelayx from a host without the
+      holds on this host. Free it, or run krbrelayx from a host without the
       portal, before an AD CS kerberos relay (part 14) can land.
 
       ## Why nxc (NetExec) is not here

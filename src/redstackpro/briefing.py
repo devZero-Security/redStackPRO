@@ -218,7 +218,7 @@ def range_briefing(document, registry=None, provider=None):
                 "- **Patient zero** is the assumed-breach foothold under Access "
                 "below: a low-priv domain member you already hold. Open its RDP "
                 "tile in the portal to work as that user, drop your beacon onto "
-                "the mapped `redstackpro` drive, and run it there -- the beacon "
+                "the mapped `redstackpro` drive, and run it there. The beacon "
                 "then lives in patient zero's context, which is where the "
                 "engagement starts.")
 

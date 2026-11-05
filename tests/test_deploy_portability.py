@@ -2022,6 +2022,33 @@ def _runner(document, provider="azure"):
     return _remote_block(script, "RUNNER") + "\n"
 
 
+_QUOTED = re.compile(r'"(?:[^"\\]|\\.)*"|\'[^\']*\'')
+
+
+@pytest.mark.parametrize("provider", ["gcp", "aws", "azure", "proxmox"])
+def test_script_messages_use_no_double_hyphen_as_a_dash(provider):
+    """' -- ' read as a dash in 22 messages; the house rule is plain punctuation.
+    A double hyphen inside a quoted string on a code line is a message."""
+    # The offense example does not validate on Proxmox (no peering there).
+    docs = [load(GOAD_LIGHT)] + ([] if provider == "proxmox" else [example("redstack.json")])
+    for doc in docs:
+        files = compile_topology(doc, Registry(), provider=provider)
+        for name in ("deploy.sh", "manage.sh", "deploy.ps1", "manage.ps1"):
+            for n, line in enumerate((files.get(name) or "").splitlines(), 1):
+                if line.lstrip().startswith("#"):
+                    continue
+                for text in _QUOTED.findall(line):
+                    assert " -- " not in text, "%s:%d %s" % (name, n, line.strip())
+
+
+def test_role_task_names_and_labels_use_no_double_hyphen_as_a_dash():
+    roles = Path(__file__).resolve().parents[1] / "src/redstackpro/assets/ansible/roles"
+    for path in roles.rglob("*.yml"):
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if re.match(r"\s*(- )?(name|label|msg):", line):
+                assert " -- " not in line, "%s:%d %s" % (path.relative_to(roles), n, line.strip())
+
+
 def test_run_log_keeps_the_strings_its_watchers_grep_for():
     """verify.py, the export guide, the lab docs and live watchers all read these."""
     for doc in (load(GOAD_LIGHT), example("redstack.json")):

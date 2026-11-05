@@ -92,7 +92,7 @@
     msg: >-
       opensearch-dashboards is running but nothing is bound to
       {{ redstackpro_dashboards_port }}. Check
-      /var/log/opensearch-dashboards/opensearch-dashboards.log -- it exits when
+      /var/log/opensearch-dashboards/opensearch-dashboards.log: it exits when
       it cannot reach the sink, and the unit still reports active.
 
 # The saved objects. Posted through the API rather than dropped into a data

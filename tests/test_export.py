@@ -262,7 +262,7 @@ def test_the_dns_action_shows_what_the_name_resolves_to_today(registry):
           "overlay": {"services": ["ssh", "guacamole"]}}
     body = generate_deploy_script(_topology("offense", [jb, rd]), registry, provider="gcp")
     assert "socket.gethostbyname" in body, "the live value must be looked up"
-    assert "STALE, from an earlier deploy" in body
+    assert "a stale record from an earlier deploy" in body
     # And it must stay quiet when there is genuinely nothing to do, or the notice
     # becomes noise the operator learns to scroll past.
     assert "nothing to do" in body

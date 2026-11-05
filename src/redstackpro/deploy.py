@@ -426,7 +426,7 @@ print(int((stop - now).total_seconds() // 60))
 # resource because its token had expired. Say so and stop instead.
 case "$RSP_STOP_LEAD" in
   ''|*[!0-9]*)
-    die "Could not work out when this build stops itself -- the check did not run." \\
+    die "Could not work out when this build stops itself. The check did not run." \\
       "This build carries a daily stop at %(hour)02d:%(minute)02d %(timezone)s." \\
       "Confirm that is more than a build away, then run:" \\
       "  $(rsp_cmd deploy REDSTACKPRO_MIN_STOP_LEAD=0)" ;;
@@ -542,14 +542,14 @@ done
 
 _FIND_PYTHON = _PYTHON_PROBE + r'''[ -n "$PY" ] || {
   echo "no working Python 3.8 or newer found (tried: python3, python, py)."
-  echo "One of them may be on PATH but not runnable -- on Windows the Microsoft"
+  echo "One of them may be on PATH but not runnable: on Windows the Microsoft"
   echo "Store stub does exactly that. Install Python and re-run."
   exit 1
 }
 '''
 
 _FIND_PYTHON_DEPLOY = _PYTHON_PROBE + r'''[ -n "$PY" ] || die "no working Python 3.8 or newer found (tried: python3, python, py)." \
-  "One of them may be on PATH but not runnable -- on Windows the Microsoft" \
+  "One of them may be on PATH but not runnable: on Windows the Microsoft" \
   "Store stub does exactly that. Install Python and re-run."
 '''
 
@@ -625,7 +625,7 @@ fi
 
 
 _INIT = ('terraform -chdir=terraform init -input=false -upgrade >/dev/null '
-         '|| die "terraform init failed -- check the provider download and your network"\n')
+         '|| die "terraform init failed. Check the provider download and your network."\n')
 
 # Azure subscriptions differ in which VM sizes they may allocate and how many
 # vCPUs and public IPs they get, and a no otherwise arrives mid-apply. After
@@ -756,7 +756,7 @@ def generate_deploy_script(topology, registry=None, provider=None):
     if dns_targets:
         pairs = " ".join('"%s|%s"' % (name, host) for name, host in dns_targets)
         dns_actions = (
-            'RSP_ADDRS="$(terraform -chdir=terraform output -json redstackpro_addresses)" || { say "could not read addresses for the DNS reminder -- set the redirector A record by hand once the box is up"; RSP_ADDRS=""; }\n'
+            'RSP_ADDRS="$(terraform -chdir=terraform output -json redstackpro_addresses)" || { say "could not read addresses for the DNS reminder. Set the redirector A record by hand once the box is up."; RSP_ADDRS=""; }\n'
             "for pair in " + pairs + "; do\n"
             '  rsp_host="${pair##*|}"\n'
             "  rsp_ip=\"$(printf '%s' \"$RSP_ADDRS\" | \"$PY\" -c "
@@ -774,12 +774,12 @@ def generate_deploy_script(topology, registry=None, provider=None):
             # "does not resolve" branch below. Keep the substitution exit 0, empty on failure.
             '  rsp_cur="$("$PY" -c "import socket;print(socket.gethostbyname(\'$rsp_host\'))" 2>/dev/null | tr -d \'\\r\' || true)"\n'
             '  if [ "$rsp_cur" = "$rsp_ip" ]; then\n'
-            '    say "DNS   $rsp_host already resolves to $rsp_ip -- nothing to do"\n'
+            '    say "DNS   $rsp_host already resolves to $rsp_ip, nothing to do"\n'
             "  else\n"
             '    say "DNS   at your DNS registrar, set this A record NOW:" \\\n'
             '      "         $rsp_host   ->   $rsp_ip"\n'
             '    if [ -n "$rsp_cur" ]; then\n'
-            '      say "      it currently points at $rsp_cur -- STALE, from an earlier deploy"\n'
+            '      say "      it currently points at $rsp_cur, a stale record from an earlier deploy"\n'
             "    else\n"
             '      say "      it does not resolve at all right now"\n'
             "    fi\n"
@@ -988,7 +988,7 @@ rsp_row Log "$(rsp_path "$LOG")"
 rsp_rule
 
 for t in terraform ssh tar; do
-  command -v "$t" >/dev/null || die "$t not found on PATH -- install it first"
+  command -v "$t" >/dev/null || die "$t not found on PATH. Install it first."
 done
 
 @@FIND_PYTHON@@
@@ -1108,7 +1108,7 @@ cp deploy.tfvars terraform/terraform.tfvars
 # key fails fast instead of prompting.
 rm -f terraform/zz-derived.auto.tfvars
 if grep -Eq '^[[:space:]]*ssh_public_key[[:space:]]*=[[:space:]]*""[[:space:]]*$' deploy.tfvars; then
-  RSP_PUBKEY="$(ssh-keygen -y -f "$SSHKEY" </dev/null 2>/dev/null)" || die "ssh_public_key is empty and deriving it from $KEY failed -- paste keys/<name>.pub into deploy.tfvars"
+  RSP_PUBKEY="$(ssh-keygen -y -f "$SSHKEY" </dev/null 2>/dev/null)" || die "ssh_public_key is empty and deriving it from $KEY failed. Paste keys/<name>.pub into deploy.tfvars."
   printf 'ssh_public_key = "%s"\n' "$RSP_PUBKEY" > terraform/zz-derived.auto.tfvars
   note "ssh_public_key was empty in deploy.tfvars; derived it from $KEY"
 fi
@@ -1120,7 +1120,7 @@ set -e
 trap 'RSP_ERR="exit $? from: $BASH_COMMAND"' ERR
 @@AZURE_PREFLIGHT@@
 phase "Terraform apply"
-@@INIT@@terraform -chdir=terraform apply -auto-approve -input=false 2>&1 | rsp_tf mark || die "terraform apply failed (its error is above) -- nothing was provisioned." \
+@@INIT@@terraform -chdir=terraform apply -auto-approve -input=false 2>&1 | rsp_tf mark || die "terraform apply failed (its error is above). Nothing was provisioned." \
   "If it reports resources that already exist, an earlier run was interrupted and" \
   "left them outside the state. To clear them, run:" \
   "  $(rsp_cmd manage teardown --force)" \
@@ -1137,10 +1137,10 @@ phase "Fill the inventory from Terraform"
 # used to read it back, so nothing an ops stack provisioned could reach the one
 # credential the operator is actually given. A teamserver that wants to put that
 # password in its own config had no way to learn it.
-REDSTACKPRO_LAB_PASSWORD="$(terraform -chdir=terraform output -raw lab_password)" || die "could not read lab_password from terraform output -- did apply finish?"
+REDSTACKPRO_LAB_PASSWORD="$(terraform -chdir=terraform output -raw lab_password)" || die "could not read lab_password from terraform output. Did apply finish?"
 # An empty value here would provision the Windows hosts and the portal with a
 # blank credential, so stop rather than carry it forward.
-[ -n "$REDSTACKPRO_LAB_PASSWORD" ] || die "lab_password came back empty -- apply looks incomplete; re-run before provisioning"
+[ -n "$REDSTACKPRO_LAB_PASSWORD" ] || die "lab_password came back empty, so apply looks incomplete. Run the deploy again."
 export REDSTACKPRO_LAB_PASSWORD
 # --quiet prints one count line; run python tf_inventory.py by hand for the
 # per-file list.
@@ -1151,18 +1151,18 @@ RSP_OUT="$("$PY" tf_inventory.py --quiet 2>&1 | tr -d '\r')" || { printf '%s\n' 
 # to grep -q so the result is decided by whether any file still holds a token, not
 # by grep's exit code over a path that may not exist.
 if grep -rl "<<tf:" ansible *-BRIEFING.md 2>/dev/null | grep -q .; then
-  die "unfilled address placeholders remain -- aborting"
+  die "unfilled address placeholders remain, so the deploy stopped"
 fi
 JUMP=$(terraform -chdir=terraform output -json redstackpro_addresses \
   | "$PY" -c "import json,sys;print(json.load(sys.stdin)['$JUMPBOX']['public_address'])") || die "could not read the jumpbox address from terraform output"
-[ -n "$JUMP" ] || die "the jumpbox address is empty -- apply may not have created it"
+[ -n "$JUMP" ] || die "the jumpbox address is empty. Apply may not have created it."
 @@DNS_ACTIONS@@ok "$(printf '%s\n' "$RSP_OUT" | tail -1)"
 
 phase "Wait for the jumpbox $JUMP"
 ssh-keygen -f "$HOME/.ssh/known_hosts" -R "$JUMP" >/dev/null 2>&1 || true
 ok_ssh=0
 for i in $(seq 1 30); do $SSH "$JUMPUSER@$JUMP" true 2>/dev/null && { ok_ssh=1; break; }; sleep 10; done
-[ "$ok_ssh" = 1 ] || die "jumpbox $JUMP never accepted ssh after ~5 min -- check it booted and 22 is open to your operator_source_ranges"
+[ "$ok_ssh" = 1 ] || die "jumpbox $JUMP never accepted ssh after about 5 min. Check that it booted and that port 22 is open to your operator_source_ranges."
 ok "ssh is up after $(took)"
 
 phase "Install prerequisites on the jumpbox"
@@ -1206,7 +1206,7 @@ $SSH "$JUMPUSER@$JUMP" 'chmod 600 ~/.ssh/deploy-key' || fail "setting the connec
 # was stamped in another timezone and would warn once per file.
 tar czf - ansible ansible.cfg \
   | $SSH "$JUMPUSER@$JUMP" 'rm -rf ~/provision/ansible ~/provision/ansible.cfg; mkdir -p ~/provision; tar xzmf - -C ~/provision' || fail "copying the Ansible tree to the jumpbox failed"
-$SSH "$JUMPUSER@$JUMP" 'export PATH="$HOME/.local/bin:$PATH"; for i in 1 2 3 4 5; do ansible-galaxy collection install -r ~/provision/ansible/requirements.yml > ~/provision/galaxy.log 2>&1 && exit 0; echo "galaxy install attempt $i failed; retry in 20s" | tee -a ~/provision/galaxy.log; sleep 20; done; exit 1' || die "ansible-galaxy failed on the jumpbox after 5 tries -- see ~/provision/galaxy.log on $JUMP"
+$SSH "$JUMPUSER@$JUMP" 'export PATH="$HOME/.local/bin:$PATH"; for i in 1 2 3 4 5; do ansible-galaxy collection install -r ~/provision/ansible/requirements.yml > ~/provision/galaxy.log 2>&1 && exit 0; echo "galaxy install attempt $i failed; retry in 20s" | tee -a ~/provision/galaxy.log; sleep 20; done; exit 1' || die "ansible-galaxy failed on the jumpbox after 5 tries. See ~/provision/galaxy.log on $JUMP."
 
 # The jumpbox provisions itself over a LOCAL connection: a cloud VM cannot ssh to
 # its own public address, so its own play must not go over the network.
@@ -1344,7 +1344,7 @@ for rsp_o in "$@"; do
   esac
 done
 
-command -v terraform >/dev/null 2>&1 || { echo "terraform not found on PATH -- install it first"; exit 1; }
+command -v terraform >/dev/null 2>&1 || { echo "terraform not found on PATH. Install it first."; exit 1; }
 
 '''
 
@@ -1592,10 +1592,10 @@ fi
 # status prints ONE table for the range: a call per VM printed a header block
 # per VM.
 _MANAGE_PROVIDER_BLOCK = {
-    "aws": r'''command -v aws >/dev/null 2>&1 || { echo "aws (the AWS CLI) not found on PATH -- install it and run: aws configure"; exit 1; }
+    "aws": r'''command -v aws >/dev/null 2>&1 || { echo "aws (the AWS CLI) not found on PATH. Install it, then run: aws configure"; exit 1; }
 INSTANCES="$(terraform -chdir=terraform output -json redstackpro_instances 2>/dev/null)"
 if [ -z "$INSTANCES" ] || [ "$INSTANCES" = "null" ]; then
-  echo "no redstackpro_instances output found -- has terraform applied yet?"
+  echo "no redstackpro_instances output found. Has terraform applied yet?"
   exit 1
 fi
 IDS="$(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys; print(' '.join(v['instance_id'] for v in json.load(sys.stdin).values()))")"
@@ -1617,10 +1617,10 @@ case "$cmd" in
     ;;
 esac
 ''',
-    "gcp": r'''command -v gcloud >/dev/null 2>&1 || { echo "gcloud not found on PATH -- install the Google Cloud CLI and run: gcloud auth login"; exit 1; }
+    "gcp": r'''command -v gcloud >/dev/null 2>&1 || { echo "gcloud not found on PATH. Install the Google Cloud CLI, then run: gcloud auth login"; exit 1; }
 INSTANCES="$(terraform -chdir=terraform output -json redstackpro_instances 2>/dev/null)"
 if [ -z "$INSTANCES" ] || [ "$INSTANCES" = "null" ]; then
-  echo "no redstackpro_instances output found -- has terraform applied yet?"
+  echo "no redstackpro_instances output found. Has terraform applied yet?"
   exit 1
 fi
 # Target the deploy's own project, read from deploy.tfvars, so gcloud does not
@@ -1656,10 +1656,10 @@ for zone, names in z.items():
   [ "$RSP_FAIL" -eq 0 ] || { printf '%s%s failed on at least one instance (see above).%s\n' "$C_RED" "$cmd" "$C_OFF"; exit 1; }
 fi
 ''',
-    "azure": r'''command -v az >/dev/null 2>&1 || { echo "az (the Azure CLI) not found on PATH -- install it and run: az login (or az login --service-principal)"; exit 1; }
+    "azure": r'''command -v az >/dev/null 2>&1 || { echo "az (the Azure CLI) not found on PATH. Install it, then run: az login (or az login --service-principal)"; exit 1; }
 INSTANCES="$(terraform -chdir=terraform output -json redstackpro_instances 2>/dev/null)"
 if [ -z "$INSTANCES" ] || [ "$INSTANCES" = "null" ]; then
-  echo "no redstackpro_instances output found -- has terraform applied yet?"
+  echo "no redstackpro_instances output found. Has terraform applied yet?"
   exit 1
 fi
 # Target this range's own VMs by name + resource group (from the output). stop

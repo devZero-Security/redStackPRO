@@ -234,13 +234,13 @@
     - redstackpro_redirector_tls.cert_source == 'letsencrypt'
     - redstackpro_redirector_hostname | length > 0
 
-- name: ACTION REQUIRED -- create the redirector DNS record now
+- name: "ACTION REQUIRED: create the redirector DNS record now"
   ansible.builtin.debug:
     msg: >-
       ACTION REQUIRED at your DNS registrar: create an A record
       '{{ redstackpro_redirector_hostname }}' -> {{ redstackpro_redirector_pubip.stdout }}
       now. Certificate issuance below waits until it resolves, then continues on
-      its own -- no need to re-run.
+      its own, with no need to re-run.
   when:
     - redstackpro_redirector_tls.cert_source == 'letsencrypt'
     - redstackpro_redirector_hostname | length > 0
@@ -366,7 +366,7 @@
     - redstackpro_redirector_tls.cert_source == 'letsencrypt'
     - redstackpro_redirector_hostname | length > 0
 
-- name: ACTION STILL REQUIRED -- the certificate was not issued
+- name: "ACTION STILL REQUIRED: the certificate was not issued"
   ansible.builtin.debug:
     msg: >-
       {{ redstackpro_redirector_hostname }} did not resolve to

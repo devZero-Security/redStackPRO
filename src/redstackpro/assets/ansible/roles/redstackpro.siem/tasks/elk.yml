@@ -84,4 +84,4 @@
     - { port: 9200, what: "elasticsearch, where the events land" }
     - { port: 5601, what: "kibana, what a person opens" }
   loop_control:
-    label: "{{ item.port }} -- {{ item.what }}"
+    label: "{{ item.port }} ({{ item.what }})"
