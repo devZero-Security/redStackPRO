@@ -199,6 +199,18 @@ versioning, and dates are UTC.
 
 ### Fixed
 
+- `manage.ps1 status`, `start` and `stop` work from Windows on Azure and GCP. Python
+  and gcloud on Windows end lines with `\r\n`, and Git Bash kept the `\r` on each VM's
+  resource group or zone, so every call failed (Azure answered Bad Request). The GCP
+  `teardown --force` sweep had the same fault and failed silently.
+- The stored credential (`stored_credential`) is planted. The plant script was written
+  by the admin account into `C:\Windows\Temp`, which the vault owner's scheduled task
+  could not read, so no credential was ever saved and the role still reported a
+  change. The owner is now granted read on the script, the task fails if the
+  credential was not saved, and the script, which holds the password, is deleted.
+- SMBv1 (`smbv1`) is on after the deploy. Enabling the feature needs a reboot before
+  the server offers the dialect, and the role never rebooted. It now reboots when the
+  server still reports SMBv1 off.
 - `manage.ps1` forwards every argument to `manage.sh`, so
   `.\manage.ps1 teardown --force` works on Windows.
 - `verify.py stack` reaches a defense range's jumpbox at its public address rather
