@@ -10,6 +10,20 @@
 // real topology and drawing them all would bury the relationships that matter.
 
 import { HOST } from "./layout.js";
+
+// An empty container keeps a roomy drop target. One with contents and no stored
+// size hugs them: the 420x260 floor made a one host domain overlap the box
+// placed under it (NHA's ninja over academy).
+export const EMPTY_CONTAINER = { width: 420, height: 260 };
+
+export function containerSize(node, fit, filled) {
+  const floor = fit || { width: 220, height: 140 };
+  const base = filled ? floor : EMPTY_CONTAINER;
+  return {
+    width: Math.max(node.width || base.width, floor.width),
+    height: Math.max(node.height || base.height, floor.height),
+  };
+}
 import { proposeId, edgeId, retitle } from "./idscheme.js";
 import { allocNetworkCidr, allocSegmentCidr, cidrWithin } from "./cidr.js";
 import { defaultTrustPatch, roleTitle } from "./edgeRoles.js";
@@ -253,6 +267,7 @@ export function toFlow(document, palette) {
   // collector was. See issue: resize subnets and networks as needed.
   const FIT_MARGIN = 16;
   const fitFor = {};
+  const hasChildren = new Set(Object.values(parentOf).filter(Boolean));
   // Deepest containers first: a subnet is sized to hold its hosts before the
   // network that holds it is sized, so the network can grow to the subnet's
   // real rendered size rather than its stored width. Without this a wide subnet
@@ -267,12 +282,11 @@ export function toFlow(document, palette) {
     let h = 0;
     for (const child of ordered) {
       if (parentOf[child.id] !== node.id) continue;
-      const baseW = child.width || (isContainer(child.kind) ? 360 : HOST.width);
-      const baseH = child.height || (isContainer(child.kind) ? 200 : hostHeight(child));
-      // A child container renders at least as large as its own fit, so measure
-      // that effective size, not the stored width the parent would undershoot.
-      const cw = Math.max(baseW, fitFor[child.id]?.width || 0);
-      const ch = Math.max(baseH, fitFor[child.id]?.height || 0);
+      // A child container is measured at the size it renders, not its stored
+      // width, which the parent would undershoot.
+      const { width: cw, height: ch } = isContainer(child.kind)
+        ? containerSize(child, fitFor[child.id], hasChildren.has(child.id))
+        : { width: child.width || HOST.width, height: child.height || hostHeight(child) };
       w = Math.max(w, (child.position?.x || 0) + cw);
       h = Math.max(h, (child.position?.y || 0) + ch);
     }
@@ -296,14 +310,12 @@ export function toFlow(document, palette) {
       dragHandle: isContainer(node.kind) ? ".rg-container-head" : undefined,
       zIndex: Z[node.kind] ?? 3,
       style: isContainer(node.kind)
-        ? {
-            width: Math.max(node.width || 420, fit.width),
-            height: Math.max(node.height || 260, fit.height),
-          }
+        ? containerSize(node, fit, hasChildren.has(node.id))
         : { width: HOST.width, height: hostHeight(node) },
       data: {
         node,
         fit,
+        filled: hasChildren.has(node.id),
         display: kinds[node.kind] || { label: node.kind, color: "#868e96" },
         // Range templates keep their canonical GOAD names, so the prefix is not
         // composed onto them; ops names are prefix plus id. See 0047.

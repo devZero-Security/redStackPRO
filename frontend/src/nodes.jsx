@@ -1,6 +1,7 @@
 import React, { useRef } from "react";
 import { Handle, NodeToolbar, Position, useReactFlow } from "@xyflow/react";
 import { Icon } from "./icons.jsx";
+import { containerSize } from "./topology.js";
 
 // The resize frame around a selected container: eight zones on its border, each
 // with a window-style resize cursor, that expand or shrink the box on drag. This
@@ -23,12 +24,11 @@ const ZONES = [
   { key: "br", edges: { bottom: true, right: true } },
 ];
 
-function ResizeFrame({ node, fit, onResize }) {
+function ResizeFrame({ node, fit, filled, onResize }) {
   const { screenToFlowPosition } = useReactFlow();
   const minW = fit?.width || 220;
   const minH = fit?.height || 140;
-  const curW = Math.max(node.width || 420, minW);
-  const curH = Math.max(node.height || 260, minH);
+  const { width: curW, height: curH } = containerSize(node, fit, filled);
 
   const begin = (edges) => (event) => {
     // Ours, not React Flow's: stop the event so no node move or pane pan starts.
@@ -164,12 +164,12 @@ export function HostNode({ data, selected }) {
 // A network or a segment. Hosts are dropped inside it, and that nesting is the
 // attachment edge.
 export function ContainerNode({ data, selected }) {
-  const { display, name, node, findings, onRequestDelete, onResizeNode, fit, solo } = data;
+  const { display, name, node, findings, onRequestDelete, onResizeNode, fit, filled, solo } = data;
   const worst = findings?.[0]?.severity;
   return (
     <>
       {selected && onResizeNode ? (
-        <ResizeFrame node={node} fit={fit} onResize={onResizeNode} />
+        <ResizeFrame node={node} fit={fit} filled={filled} onResize={onResizeNode} />
       ) : null}
       <NodeActions selected={selected} node={node} onDelete={onRequestDelete} />
       {/* A network takes the peers edge and a domain takes the trusts edge, so
