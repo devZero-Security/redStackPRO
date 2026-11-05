@@ -83,7 +83,21 @@ versioning, and dates are UTC.
   - Delegate to, on a user with constrained delegation and on a computer with
     constrained delegation (Kerberos only), is picked from the services the
     domain's Windows hosts run (CIFS, HTTP, HOST, LDAP on a DC, MSSQL where SQL
-    Server runs), or typed by hand. Ticking the delegation fills in CIFS on the domain controller.
+    Server runs), or typed by hand. Ticking the delegation fills in CIFS on the
+    domain controller.
+  - A range host's vulnerability settings are a form. Each ticked vulnerability
+    lists the settings it reads, with a picker where a setting names a user, group,
+    host, OU or SPN in the topology, written in the format its Ansible role expects:
+    `DOMAIN\user` from any domain in the range, or the bare name where the role
+    looks it up in its own domain. MSSQL linked servers are picked from the SQL hosts
+    in any domain, and ticking the vuln fills in the other SQL hosts. Ticking Stored
+    credential sets its target to `TERMSRV/` and the host's name. EXECUTE AS grants,
+    linked server logins and planted files are edited as rows. The JSON editor stays
+    below as Edit as JSON, in step with the form, for keys the form does not show.
+  - The SPNs of a Kerberoastable user offer the domain's SQL Server and IIS service
+    SPNs.
+- `RNG011` names the missing `vulns_vars` key as its field, so the finding shows
+  next to that input.
 - A domain takes a `groups` list for groups that only an access right names. The
   GOAD blueprints list theirs, so the domain controller creates them up front.
 
