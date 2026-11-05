@@ -381,6 +381,58 @@ def range_briefing(document, registry=None, provider=None):
             return "%s (not on %s)" % (vuln, provider or "this provider")
         return vuln
 
+    # -- User activity: the bots, so an operator knows whose credentials sit on
+    # which host, and when. Defaults mirror the host_vulns task files.
+    def _not_here(vuln):
+        allowed = VULN_PROVIDERS.get(vuln)
+        return bool(allowed and provider not in allowed)
+
+    activity = []
+    for h in hosts:
+        ov = h.get("overlay", {}) or {}
+        vulns = ov.get("vulns") or []
+        vv = ov.get("vulns_vars") if isinstance(ov.get("vulns_vars"), dict) else {}
+        name = ov.get("hostname", h["id"])
+        if "rdp_scheduler" in vulns and vv.get("bot_user"):
+            activity.append((name, "logon bot (connect_bot)", vv["bot_user"],
+                             "logs on and maps \\\\localhost\\C$, so the credentials "
+                             "stay in memory", "1 min", "rdp_scheduler"))
+        if "schedule" in vulns:
+            s = vv.get("schedule") if isinstance(vv.get("schedule"), dict) else {}
+            cmd = s.get("command") or "Start-Sleep -Seconds 5"
+            activity.append((name, "scheduled task (%s)" % (s.get("name") or "schedule_bot"),
+                             s.get("user") or "SYSTEM", "runs `%s`" % cmd,
+                             "%s min" % (s.get("interval_minutes") or 1), "schedule"))
+        if "responder" in vulns and vv.get("bot_user"):
+            activity.append((name, "share-browsing bot (responder_bot)", vv["bot_user"],
+                             "opens %s, a name that does not resolve"
+                             % (vv.get("responder_target") or "\\\\Bravos\\private"),
+                             "2 min", "responder"))
+        relay_user = vv.get("ntlm_relay_user") or vv.get("bot_user")
+        if "ntlm_relay" in vulns and relay_user:
+            activity.append((name, "relay bot (ntlm_bot)", relay_user,
+                             "authenticates to %s"
+                             % (vv.get("ntlm_relay_target") or "\\\\Meren\\Private"),
+                             "5 min", "ntlm_relay"))
+        sc = vv.get("stored_credential") if isinstance(vv.get("stored_credential"), dict) else {}
+        if "stored_credential" in vulns and sc.get("owner"):
+            activity.append((name, "saved credential", sc["owner"],
+                             "vault holds %s for %s" % (
+                                 sc.get("username") or "-",
+                                 sc.get("target") or "TERMSRV/castelblack"),
+                             "set once", "stored_credential"))
+    if activity:
+        lines += ["", "## User activity", "",
+                  "Bots that run as domain users on a timer, so their credentials and "
+                  "authentication are there to capture.", "",
+                  "| Host | Activity | Runs as | What it does | Every |",
+                  "|---|---|---|---|---|"]
+        for host, what, who, does, every, vuln in activity:
+            if _not_here(vuln):
+                does = "not planted on %s" % (provider or "this provider")
+            lines.append("| %s | %s | %s | %s | %s |" % (
+                _cell(host), _cell(what), _cell(who), _cell(does), _cell(every)))
+
     host_vulns = [(h, [_vuln_label(v) for v in
                        (h.get("overlay", {}).get("vulns") or [])])
                   for h in hosts]

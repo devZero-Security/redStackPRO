@@ -200,3 +200,17 @@ def test_vulns_the_provider_drops_are_marked_not_listed_as_planted():
     line = next(l for l in md.splitlines() if l.startswith("- **winterfell** host vulns"))
     assert "(not on" not in line
     assert "llmnr_poisoning" in line
+
+
+def test_the_briefing_lists_who_each_bot_runs_as():
+    import json
+    from pathlib import Path
+    from redstackpro.briefing import range_briefing
+    root = Path(__file__).resolve().parent.parent
+    doc = json.loads((root / "frontend/public/goad/goad-light.json").read_text(encoding="utf-8"))
+    text = range_briefing(doc, provider="azure")
+    section = text[text.index("## User activity"):]
+    assert "| winterfell | logon bot (connect_bot) | north\robb.stark |" in section
+    # Broadcast poisoning bots cannot plant on a cloud provider, and say so.
+    assert "| winterfell | share-browsing bot (responder_bot) | north\robb.stark | not planted on azure |" in section
+    assert "saved credential" in section
