@@ -353,6 +353,13 @@ versioning, and dates are UTC.
   ran, and nothing reported it.
 - The scheduled task bot's default task name is `schedule_bot`. It shared
   `connect_bot` with the logon bot, so a host with both kept only one.
+- The `deploy.sh` check that a build has time to finish before its auto-stop
+  measured to the stop time in UTC on Windows. Python there has no timezone
+  database unless `tzdata` is installed, and the check read any IANA zone as UTC,
+  so a deploy at 12:34 New York time with an 18:00 `America/New_York` stop was
+  refused as 25 minutes away. The export now carries the zone's UTC offset, taken
+  at export, and the check uses it when Python cannot load the zone. redStackPRO
+  depends on `tzdata`, so the compiler can always resolve the zone.
 
 ## [0.9.2] (2026-11-04)
 

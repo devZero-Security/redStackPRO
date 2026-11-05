@@ -249,19 +249,17 @@ trap finish EXIT
 _TTL_PREFLIGHT = """# Refuse to start a build that would stop itself before it finishes.
 RSP_STOP_LEAD=$("$PY" -c '
 import datetime as dt
-TZ = "%(timezone)s"
+# The zone UTC offset in minutes at export time, for a Python with no tz
+# database (Windows without tzdata, or 3.8). A DST change before the deploy
+# moves it by an hour, which the 150 minute guard absorbs. None: unresolved.
+OFFSET = %(offset)s
 try:
     from zoneinfo import ZoneInfo
-    tz = ZoneInfo(TZ)
+    tz = ZoneInfo("%(zone)s")
 except Exception:
-    # A missing IANA tz database still lets an IANA name mean UTC closely enough to
-    # guard on; a non-IANA id (an Azure Windows zone like "GMT Standard Time")
-    # cannot, so the lead is left uncomputed and the "could not run" branch below
-    # handles it honestly rather than guessing the stop time in the wrong zone.
-    if "/" in TZ or TZ == "UTC":
-        tz = dt.timezone.utc
-    else:
+    if OFFSET is None:
         raise SystemExit(1)
+    tz = dt.timezone(dt.timedelta(minutes=OFFSET))
 now = dt.datetime.now(tz)
 stop = now.replace(hour=%(hour)d, minute=%(minute)d, second=0, microsecond=0)
 if stop <= now:
@@ -290,6 +288,29 @@ if [ "$RSP_STOP_LEAD" -lt "${REDSTACKPRO_MIN_STOP_LEAD:-150}" ]; then
     "  nothing; a stop after N hours counts from the apply and never trips this check."
 fi
 """
+
+
+def _stop_zone(tz):
+    """(the IANA zone deploy.sh loads, its UTC offset in minutes now) for an
+    auto-stop timezone. The offset backs a deploy-time Python that has no tz
+    database, which is every Windows Python without tzdata; that fallback used to
+    read the zone as UTC. The offset is None when the zone does not resolve here
+    either, and the guard then says it could not run instead of guessing."""
+    if tz in ("UTC", "Etc/UTC"):
+        return "UTC", 0
+    zone = tz
+    if "/" not in tz:
+        # A Windows id, which an Azure topology may carry as is. Every IANA zone
+        # mapped to one id has the same offset, so the first stands for them all.
+        from .terraform.azure import _WINDOWS_TZ
+        zone = next((k for k, v in _WINDOWS_TZ.items() if v == tz and "/" in k), tz)
+    try:
+        import datetime as dt
+        from zoneinfo import ZoneInfo
+        offset = ZoneInfo(zone).utcoffset(dt.datetime.now(dt.timezone.utc))
+    except Exception:
+        return zone, None
+    return zone, int(offset.total_seconds() // 60)
 
 
 # The Windows front door. It exists because of one specific trap: typing
@@ -523,10 +544,13 @@ def generate_deploy_script(topology, registry=None, provider=None):
     if stop and stop["at_minute"] is not None:
         # The clock in the message is the `at` the operator set, not the
         # combined value: it is the only half that can bind before the apply.
+        zone, offset = _stop_zone(stop["timezone"])
         cloud_preflight += _TTL_PREFLIGHT % dict(
             stop,
             hour=stop["at_minute"] // 60,
             minute=stop["at_minute"] % 60,
+            zone=zone,
+            offset="None" if offset is None else offset,
         )
     # aws.py emits the scheduler role for any auto_stop, after_hours included.
     if stop and provider == "aws":
