@@ -96,6 +96,21 @@ test("every parameterized vuln is a catalog id with described keys", () => {
   }
 });
 
+test("every setting has a plain label, one per key and unique across keys", () => {
+  const byLabel = new Map();
+  const byKey = new Map();
+  for (const [id, params] of Object.entries(VULN_PARAMS)) {
+    for (const p of params) {
+      assert.ok(p.label && p.label !== p.key, `${id} ${p.key} has no plain label`);
+      if (byKey.has(p.key)) assert.equal(p.label, byKey.get(p.key), `${p.key} is labelled two ways`);
+      byKey.set(p.key, p.label);
+      const other = byLabel.get(p.label.toLowerCase());
+      assert.ok(!other || other === p.key, `${p.key} and ${other} share the label ${p.label}`);
+      byLabel.set(p.label.toLowerCase(), p.key);
+    }
+  }
+});
+
 test("the example is one line of JSON carrying every required key", () => {
   for (const [id, params] of Object.entries(VULN_PARAMS)) {
     const line = vulnParamsExample(id);

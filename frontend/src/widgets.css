@@ -72,12 +72,13 @@
 .rg-delegate-add button { flex: none; padding: 4px 12px; }
 
 /* The vulnerability settings form: a fieldset per ticked vuln, a key per field.
-   The key keeps its case, unlike .rg-field-label, so it reads as it is written
-   in the JSON below. */
+   Each field reads by its plain label, with the raw key small beside it; the
+   key keeps its case so it reads as it is written in the JSON below. */
 .rg-vuln-form { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .rg-vuln-form > .rg-fieldset { margin: 4px 0 6px; }
 .rg-vuln-key { font-size: var(--fs-1); color: var(--text); }
 .rg-vuln-key code { font-family: ui-monospace, monospace; }
+.rg-vuln-key-raw { margin-left: 6px; font-size: 10px; color: var(--muted); }
 .rg-vuln-key-field > .rg-widget-warn { margin-top: 0; }
 .rg-vuln-rows { max-height: 180px; margin: 2px 0 4px; }
 .rg-vuln-rows-add { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }

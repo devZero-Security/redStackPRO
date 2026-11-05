@@ -269,6 +269,8 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
       : null;
   const joined = !!hostDomain(document, hostId);
   const set = (v) => onSet(param.key, v);
+  // The plain label names the input; the key shows beside it for JSON users.
+  const name = param.label || param.key;
   const placeholder =
     "example" in param && typeof param.example !== "object" ? String(param.example) : undefined;
   const kind = rowKind(param);
@@ -301,7 +303,7 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
         onChange={set}
         checkLabel={(o) => `Link to ${o.value}`}
         emptyText="No SQL host in this range yet. Give a host the mssql service, or type an FQDN below."
-        otherLabel={`${param.key}, other host`}
+        otherLabel={`${name}, other host`}
         otherPlaceholder="Other SQL host, e.g. sql02.corp.local"
         addLabel="Add SQL host"
         customTitle="Typed by hand, not a SQL host in this range"
@@ -311,7 +313,7 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
   } else if (kind) {
     control = (
       <RowsInput
-        name={param.key}
+        name={name}
         kind={kind}
         rows={value || []}
         columns={rowColumns(kind, document, hostId, vars)}
@@ -322,7 +324,7 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
   } else if (param.pick === "termsrv") {
     control = (
       <HostServiceInput
-        name={param.key}
+        name={name}
         value={value}
         groups={choicesFor("termsrv", document, hostId)}
         disabled={disabled}
@@ -334,7 +336,7 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
     const users = param.pick === "domain_user" || param.pick === "bare_user";
     control = (
       <PickInput
-        name={param.key}
+        name={name}
         value={value}
         groups={choicesFor(param.pick, document, hostId)}
         required={param.required}
@@ -356,7 +358,7 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
     control = (
       <input
         type="number"
-        aria-label={param.key}
+        aria-label={name}
         value={value ?? ""}
         min={1}
         step={1}
@@ -368,7 +370,7 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
   } else if (param.input === "lines") {
     control = (
       <LinesInput
-        name={param.key}
+        name={name}
         value={value}
         placeholder={Array.isArray(param.example) ? param.example.join("\n") : undefined}
         disabled={disabled}
@@ -378,7 +380,7 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
   } else if (param.input === "multiline") {
     control = (
       <textarea
-        aria-label={param.key}
+        aria-label={name}
         value={value ?? ""}
         rows={Math.min(10, Math.max(3, String(value ?? "").split("\n").length))}
         spellCheck={false}
@@ -389,7 +391,7 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
   } else {
     control = (
       <input
-        aria-label={param.key}
+        aria-label={name}
         value={value ?? ""}
         placeholder={fallback || placeholder}
         disabled={disabled}
@@ -401,7 +403,12 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
   return (
     <div className={errors.length ? "rg-field rg-vuln-key-field is-invalid" : "rg-field rg-vuln-key-field"}>
       <span className="rg-vuln-key">
-        <code>{param.key}</code>
+        <span className="rg-vuln-key-label">{name}</span>
+        {name !== param.key ? (
+          <code className="rg-vuln-key-raw" title="The key in vulns_vars, as Edit as JSON writes it">
+            {param.key}
+          </code>
+        ) : null}
         {param.required ? (
           <span className="rg-required">required{param.or ? ` (or ${param.or})` : ""}</span>
         ) : (
