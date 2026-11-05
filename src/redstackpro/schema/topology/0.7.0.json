@@ -1209,7 +1209,7 @@
             "ubuntu_2004"
           ],
           "x-redstackpro-source": "user",
-          "description": "Image this host boots. Empty builds Windows Server 2022 for a dc or srv, Windows 11 for a wks, and Debian for fw and appliance. GCP and AWS have no Windows client image, so windows_10 and windows_11 boot Windows Server 2022 there. Windows 10 is past end of support. linux is a generic Debian 13 box."
+          "description": "Image this host boots. Empty builds Windows Server 2022 for a dc or srv and Windows 11 for a wks (fw and appliance are drawn but not built in this release). GCP and AWS have no Windows client image, so windows_10 and windows_11 boot Windows Server 2022 there. Windows 10 is past end of support. linux is a generic Debian 13 box."
         },
         "hostname": {
           "title": "Host name",

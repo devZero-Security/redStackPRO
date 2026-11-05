@@ -125,16 +125,22 @@ own machine, exactly as in the from-source flow below.
 
 Python 3.11 or newer, and Node 24 for the canvas.
 
-    git clone https://github.com/devZero-Security/redStackPRO.git && cd redStackPRO
+    git clone https://github.com/devZero-Security/redStackPRO.git
+    cd redStackPRO
     python -m venv .venv
     . .venv/bin/activate            # bash (Linux, macOS)
     .venv\Scripts\Activate.ps1      # PowerShell (Windows)
     pip install -e ".[dev]"
 
-**The canvas** is two processes, the API and the web app:
+**The canvas** is two processes, the API and the web app. Start the API:
 
-    redstackpro serve                            # the API, http://127.0.0.1:8000
-    cd frontend && npm install && npm run dev    # the canvas, http://localhost:5173
+    redstackpro serve                    # the API, http://127.0.0.1:8000
+
+It keeps that terminal busy. In a second terminal, from the repo root:
+
+    cd frontend
+    npm install
+    npm run dev                          # the canvas, http://localhost:5173
 
 `redstackpro serve --port 8787` moves the API to a different port. Point the
 canvas dev server at it by starting it with the variable set:
@@ -286,11 +292,18 @@ wrong, attach the newest one to a GitHub issue; the `FAILED` box prints its path
 and the link.
 
 **Check it worked.** The export ships `verify.py` next to `deploy.sh`. It needs
-PyYAML on your machine (`python -m pip install pyyaml`). Run it against the
-deployed range to confirm the path end to end:
+PyYAML on your machine: `python -m pip install pyyaml` on Windows,
+`python3 -m pip install pyyaml` on macOS and Linux (on Debian and Ubuntu,
+`sudo apt install python3-yaml` or a venv if pip refuses). Run it against the
+deployed range to confirm the path end to end. Windows:
 
     python verify.py doors .     # offense only: redirector front doors, from outside
     python verify.py stack .     # the range over SSH from the jumpbox
+
+macOS or Linux:
+
+    python3 verify.py doors .    # offense only: redirector front doors, from outside
+    python3 verify.py stack .    # the range over SSH from the jumpbox
 
 Each exits 0 when every check passes, 1 when one fails, and 2 when it cannot run
 (for example `doors` on a defense range, which has no redirector). On an offense
@@ -308,19 +321,19 @@ closing box. Run either script with no command for a help screen written for the
 export's provider: what each command does there, what still bills after `stop`,
 and the CLI login it needs.
 
-Every shipped blueprint turns on auto-stop: the range stops itself 8 hours after
-the first apply, then daily at that time. Instances are stopped, not deleted, so
-`start` brings the range back; disks and reserved addresses still bill. Change it
-or turn it off in Topology settings (the Inspector tab with nothing selected) and
-export again. A topology you start from an empty canvas has no auto-stop until
-you set one.
-
     bash manage.sh status
     bash manage.sh start
     bash manage.sh stop
     bash manage.sh teardown
 
 On Windows, the same commands are `.\manage.ps1 status` and so on.
+
+Every shipped blueprint turns on auto-stop: the range stops itself 8 hours after
+the first apply, then daily at that time. Instances are stopped, not deleted, so
+`start` brings the range back; disks and reserved addresses still bill. Change it
+or turn it off in Topology settings (the Inspector tab with nothing selected; on
+a shipped defense blueprint, click **Unlock to edit** first) and export again. A
+topology you start from an empty canvas has no auto-stop until you set one.
 
 ---
 

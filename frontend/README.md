@@ -11,7 +11,8 @@ so a new node kind is a file in `schema/registry/kinds` and not a change here.
     npm run dev
 
 Serves the canvas on `http://localhost:5173` and expects the API on
-`http://127.0.0.1:8000`. Override with `REDSTACKPRO_API=<url> npm run dev`.
+`http://127.0.0.1:8000`. Override with `REDSTACKPRO_API=<url> npm run dev` in bash,
+or `$env:REDSTACKPRO_API = '<url>'; npm run dev` in PowerShell.
 
     npm test        the plain node suites, then the vitest render suites under jsdom (no browser needed)
     npm run build   production bundle into dist/

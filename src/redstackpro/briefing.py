@@ -325,8 +325,9 @@ def range_briefing(document, registry=None, provider=None):
                 lines += [
                     "This stack fronts the team over a **%s** VPN. Each operator "
                     "has a personal portal account and a personal VPN credential, "
-                    "generated on the jumpbox during provisioning; the keys never leave the "
-                    "box, so fetch each file and hand it to that operator." % vpn_mode,
+                    "generated on the jumpbox during provisioning; the keys never enter the "
+                    "export, so fetch each operator's file from the jumpbox and hand it to "
+                    "that operator." % vpn_mode,
                     "",
                     "- **VPN endpoint:** `%s:%s/%s`" % (addr, port, proto),
                     "- **Fetch a credential:** `scp -i keys/id_ed25519 %s@%s:%s/<handle>.%s .`" % (

@@ -74,11 +74,11 @@ The range host kinds `dc`, `srv`, `wks`, and `fw` share one overlay,
 - `os`, the image: `windows_server_2019`, `windows_server_2022`, `windows_10`,
   `windows_11`, `linux`, or a named distribution (`debian_13`, `debian_12`,
   `ubuntu_2204`, `ubuntu_2004`). Empty builds Windows Server 2022 for a `dc` or
-  `srv`, Windows 11 for a `wks`, and Debian for `fw` and `appliance`. GCP and AWS
-  have no Windows client image, so
-  `windows_10` and `windows_11` boot Server 2022 there (`CAP005`). Windows 10 is
-  past end of support (Microsoft ended it on 2025-10-14); it stays a choice for
-  labs that need it (`CAP006`).
+  `srv` and Windows 11 for a `wks` (`fw` and `appliance` are drawn but not built
+  in this release). GCP and AWS have no Windows client image, so `windows_10` and
+  `windows_11` boot Server 2022 there (`CAP005`). Windows 10 is past end of
+  support (Microsoft ended it on 2025-10-14); it stays a choice for labs that need
+  it (`CAP006`).
 - `hostname`, the Windows computer name, 15 characters max (`kingslanding`).
   Keep it equal to the id.
 - `role`, a host's primary function. `sql`, `adcs` and `mecm` install something;

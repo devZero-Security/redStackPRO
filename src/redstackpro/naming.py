@@ -27,7 +27,7 @@ def platform_account(mode):
     admin + SSH identity + Guacamole login. One name per canvas, chosen by mode:
     ``blueop`` for a defensive range (mode == "defense"), ``redop`` for an
     offensive ops platform (every other mode). This collapses the former
-    rtadmin (infra admin) / operator (Guac login) / mortiz (persona) split into
+    rtadmin (infra admin) / operator (Guac login) / persona-account split into
     one identity that reads sensibly on both canvases. Windows range hosts keep
     Administrator; this is the Linux/connection account. See ADR 0056 / P1.7."""
     return "blueop" if mode == "defense" else "redop"
