@@ -248,6 +248,7 @@ def test_rng011_constrained_delegation_kerberos_says_what_happens_and_the_fix():
     assert f.message == ("constrained_delegation_kerberos on wks01 has no "
                          "vulns_vars.delegate_to, so no delegation is planted.")
     assert f.remedy == 'Set vulns_vars to {"delegate_to": ["CIFS/<host>.<domain>"]}.'
+    assert f.field == "vulns_vars.delegate_to"
     # An empty list plants nothing either.
     topology = _range_with(("wks01", "wks", {
         "vulns": ["constrained_delegation_kerberos"], "vulns_vars": {"delegate_to": []}}))
@@ -272,6 +273,8 @@ def test_rng011_names_only_the_missing_stored_credential_key():
     (f,) = _found(topology, "RNG011")
     assert "stored_credential.username" in f.message
     assert "stored_credential.owner" not in f.message
+    # The canvas shows it at that key's input.
+    assert f.field == "vulns_vars.stored_credential.username"
 
 
 def test_rng011_esc_parameters_count_from_any_host_in_the_domain():
