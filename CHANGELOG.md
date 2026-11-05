@@ -24,9 +24,13 @@ versioning, and dates are UTC.
   for egress from private hosts, and Network Security Group rules. Ingress fails
   closed as on GCP and AWS: the deploy stops until `operator_source_ranges` is set.
   The Kali operator starts from a Debian 13 image that the operator role converts to
-  Kali, so no Marketplace plan acceptance is needed.
-- Azure VM sizes per role. The defaults are the AMD v5 family: `Standard_D2as_v5`,
-  `Standard_D4as_v5` for the SIEM, and `Standard_B2as_v2` for workstations.
+  Kali, so no Marketplace plan acceptance is needed. As on GCP and AWS, the broadcast
+  and multicast poisoning techniques (`llmnr_poisoning`, `nbtns_poisoning`,
+  `responder`, `ntlm_relay`, `ldap_signing_off`) are not planted on Azure, whose
+  network drops L2 broadcast and multicast; they stay limited to Proxmox and ESXi.
+- Azure VM sizes per role. The defaults are AMD sizes: `Standard_D2as_v5`,
+  `Standard_D4as_v5` for the SIEM, and the burstable `Standard_B2as_v2` for
+  workstations.
   `deploy.tfvars` ships a commented `vm_sizes` map listing the topology's roles, and a
   partial map overrides only the roles it names.
 - An Azure preflight. Before apply, `deploy.sh` runs `azure_preflight.py`, which ships
@@ -40,7 +44,9 @@ versioning, and dates are UTC.
 - Azure lifecycle. `manage.sh status`, `start`, and `stop` run through the Azure CLI;
   `stop` deallocates the VMs, which halts compute billing, and the jumpbox keeps its
   public IP. `manage.sh teardown --force` deletes the whole resource group with
-  `az group delete`. Those four need `az` installed and logged in. `deploy.sh` works with either `az login` or a
+  `az group delete`. `status`, `start` and `stop` need `az` installed and logged
+  in; without it, `teardown --force` runs `terraform destroy` alone and says so.
+  `deploy.sh` works with either `az login` or a
   service principal in `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_TENANT_ID`, and
   `ARM_SUBSCRIPTION_ID`.
 - Azure auto-stop, as a per-VM DevTestLab shutdown schedule (it needs
@@ -109,8 +115,13 @@ versioning, and dates are UTC.
   the reason.
 - The DEFENSE-BRIEFING has a User activity table: each bot, who it runs as, what it
   does and how often, with the bots the provider cannot plant marked.
-- `RNG011` names the missing `vulns_vars` key as its field, so the finding shows
-  next to that input.
+- A ticked host vuln that would plant nothing raises a validator finding: one
+  declared where no role plants it (`RNG010`, e.g. `constrained_delegation` on a
+  host instead of a user), one missing a required `vulns_vars` key (`RNG011`, e.g.
+  `constrained_delegation_kerberos` with no `delegate_to`), and a `vulns_vars` that
+  is not a JSON object (`RNG012`). They are warnings, except `RNG011` for a KeePass
+  vault with no master password, which is an error. `RNG011` names the missing key
+  as its field, so the finding shows next to that input.
 - A domain takes a `groups` list for groups that only an access right names. The
   GOAD blueprints list theirs, so the domain controller creates them up front.
 
@@ -122,10 +133,6 @@ versioning, and dates are UTC.
   up runs at the default, one over 31 days (Task Scheduler's limit) runs at 31 days,
   and the canvas says so under the sentence. The DEFENSE-BRIEFING's User activity
   table shows the interval.
-- As on GCP and AWS, the broadcast and multicast poisoning techniques
-  (`llmnr_poisoning`, `nbtns_poisoning`, `responder`, `ntlm_relay`,
-  `ldap_signing_off`) are not planted on Azure, whose network drops L2 broadcast and
-  multicast. They stay limited to Proxmox and ESXi.
 - `--provider` on `redstackpro compile`, `redstackpro validate`, and
   `python -m redstackpro.tools.registry` is checked against the registry, case
   insensitive, and an unknown name lists the valid providers instead of ending in a
@@ -134,17 +141,17 @@ versioning, and dates are UTC.
   or `az`) is installed first, and exit nonzero when the call fails on any instance.
 - The Export panel and the export's DEPLOYMENT-GUIDE say to extract the download to
   its own folder and run every step from there (the key command writes to `keys/`
-  relative to it), and list the cloud CLI as a requirement. With Deploy from set to
-  Windows, they give the `winget` command that installs it for Windows; on macOS and
-  Linux, a link to its install steps.
+  relative to it), and list the cloud CLI as a requirement. The Export panel gives
+  the `winget` command that installs it when Deploy from is Windows, and a link to
+  its install steps for macOS and Linux; the guide gives both.
 - `deploy.sh` prints the AWS IAM note for any auto-stop, `after_hours` included, not
   only a fixed `at`.
-- The `auto_stop.after_hours` schema description is corrected: the stop time counts
-  from the first apply and is kept in Terraform state, so a re-apply does not move it.
-  Only recreating the range, or replacing `time_offset.auto_stop`, does.
+- The `auto_stop.after_hours` schema description no longer says a re-apply moves the
+  stop time. The stop counts from the first apply, then repeats daily at that time.
+  Terraform keeps it in state (`time_offset.auto_stop`), so only recreating the
+  range, or replacing that resource, moves it.
 - The README and wiki say the AWS Kali Marketplace subscription is once per account,
   not per region.
-- Security reports go to GitHub issues, and `SECURITY.md` is removed.
 - The Inspector labels fields and options in words (Public address, Windows Server
   2019, Let's Encrypt) while the stored values stay the same. An empty select names
   what it compiles to, such as "default (Windows Server 2022)". `public_address`
@@ -157,14 +164,9 @@ versioning, and dates are UTC.
 - The hardening picker is read only and says the controls are recorded but not
   deployed, since no role applies them yet. A host with recorded hardening shows
   "hardening off" on the canvas, and goad-wazuh's ws01 no longer claims hardening.
-- The palette no longer offers Firewall and Appliance, which were never built.
-  Topologies that already have them still open.
 - Domain controllers and servers dropped from the palette start as Windows Server
   2022 and workstations as Windows 11, a jumpbox starts with the Guacamole portal,
   and the File Server preset plants an open SMB share.
-- The certificate source `provided` and the Splunk collector sink and SIEM product
-  are removed. None of them could deploy: there was no way to supply the
-  certificate or the Splunk download.
 - A KeePass vault with no master password is an error, since it fails the host's
   provisioning.
 - The Export panel lists the `deploy.tfvars` fields to set for the selected
@@ -187,8 +189,6 @@ versioning, and dates are UTC.
   placeholder, and an emptied name or prefix goes back to its previous value. The
   line role picker and Connections offer only the lines two nodes can carry, with
   plain labels and full host names.
-- Stop after (`auto_stop.after_hours`) is scheduled in UTC, so the range stops the
-  given number of hours after apply whatever timezone the topology names.
 - The deploy target is saved with the topology (`provider`) and comes back on
   reload, and the Download button names it.
 - GOAD extensions follow the blueprint a topology started from (`blueprint`), so
@@ -207,8 +207,8 @@ versioning, and dates are UTC.
   `[7/7]`, or eight on Azure with the preflight first) that each end on an `ok` line
   with a short result, and ends on a `DONE` box (portal, logins command, the ssh line
   to watch provisioning, the expected time, the log path) or a `FAILED` box naming
-  the phase, the reason and the exit code. Terraform's output is unchanged, and so
-  are the exit codes. Run from `deploy.ps1`, the box writes Windows paths
+  the phase, the reason and the exit code. The exit codes are unchanged. Run from
+  `deploy.ps1`, the box writes Windows paths
   (`keys\id_ed25519`).
 - The deploy log ends on `result: ok` or `result: FAILED (exit N) in phase ...`, so a
   log attached to an issue records how the run ended. The version and system header
@@ -227,7 +227,7 @@ versioning, and dates are UTC.
 - A new workstation (`wks`) defaults to Windows 11: the canvas seeds `windows_11`,
   and a workstation with no `os` compiles to it (a `dc` or `srv` stays Windows Server
   2022). GCP and AWS still boot Windows Server 2022 for it (`CAP005`). On Azure that
-  is the `windows-11` Marketplace image, release `win11-26h2-pro` (the 23H2 SKU the
+  is the `windows-11` Marketplace image, SKU `win11-26h2-pro` (the 23H2 SKU the
   earlier mapping named is no longer offered).
 - Windows 10 is marked past end of support (Microsoft ended it on 2025-10-14). The
   Inspector lists it as "Windows 10 (past end of support)" with the date under the
@@ -241,9 +241,10 @@ versioning, and dates are UTC.
   customers with a qualifying license, and that redStackPRO does not set
   `license_type`, so license eligibility is the user's to confirm.
 - `manage.sh` and `manage.ps1` with no command, `help`, `-h` or `--help` print a help
-  screen for the export: the range name, provider, region and resource group, GCP
-  project or AWS profile (read from `deploy.tfvars`), each command and what it does on
-  that provider (what still bills after `stop`, what `teardown --force` deletes
+  screen for the export: the range name, provider, region, and the resource group or
+  GCP project (read from `deploy.tfvars`) or the AWS profile (from `AWS_PROFILE`),
+  each command and what it does on that provider (what still bills after `stop`,
+  what `teardown --force` deletes
   first), the auto-stop schedule, and the CLI and login it needs. Usage and examples
   are written as `.\manage.ps1` when run from PowerShell and `bash manage.sh`
   otherwise. An unknown command or option prints the screen and exits 1. On Proxmox
@@ -259,11 +260,13 @@ versioning, and dates are UTC.
   default region no longer misses the instances.
 - `deploy.sh` and `manage.sh` share one look. Both open on a redStackPRO wordmark
   (`deploy.sh` and the `manage.sh` help) and a title box with the range name,
-  provider, region and resource group, project or profile. The help lists COMMANDS
-  and EXAMPLES in sections, wraps descriptions to the box width and never splits a
+  provider and region; the `manage.sh` box adds the resource group, project or
+  profile, and the `deploy.sh` box the log path. The help lists COMMANDS and
+  EXAMPLES in sections, wraps descriptions to the box width and never splits a
   command in parentheses. `status`, `start`, `stop` and `teardown` open on the same
-  box (`status` shows the portal address in it), `teardown` steps print like deploy
-  phases, and teardown ends on a `DONE` or `FAILED` box.
+  box (`status` shows the portal address in it; `manage.sh teardown --yes` skips it
+  with the question), `teardown` steps print like deploy phases without the
+  numbers, and teardown ends on a `DONE` or `FAILED` box.
 - Colour on the terminal: red rules and wordmark, bold phase lines, green `ok` and
   `DONE`, red `FAILED` and failure reasons, yellow notes and warnings, cyan commands.
   It is on when the output is a terminal, or when `deploy.ps1` or `manage.ps1` see a
@@ -277,12 +280,23 @@ versioning, and dates are UTC.
   log, and teardown writes its own `logs/teardown-<UTC>.log`, named in its closing
   box.
 
+### Removed
+
+- `SECURITY.md`. Security reports go to GitHub issues.
+- Firewall and Appliance from the palette, which were never built. Topologies that
+  already have them still open, and the briefing lists them as not built.
+- The certificate source `provided`, and the Splunk collector sink and SIEM product,
+  as choices: the schema refuses them (`SCH001`). None of them could deploy: there
+  was no way to supply the certificate or the Splunk download. The schema version
+  stays 0.7.0, so a saved topology that still uses one now fails `SCH001`: set the
+  certificate source to `letsencrypt` or `self_signed`, the sink to `opensearch` or
+  `elasticsearch`, and the SIEM product to `wazuh` or `elk`.
+
 ### Fixed
 
 - The deploy log held terraform's colour escape codes (over a thousand lines of
   them in a plan of about 50 resources). `deploy.sh` now writes the log through a
   filter that removes escape codes, so the file attached to an issue reads as text.
-
 - `manage.ps1 status`, `start` and `stop` work from Windows on Azure and GCP. Python
   and gcloud on Windows end lines with `\r\n`, and Git Bash kept the `\r` on each VM's
   resource group or zone, so every call failed (Azure answered Bad Request). The GCP
@@ -330,15 +344,12 @@ versioning, and dates are UTC.
   shutting down".
 - An export's static module read refuses a provider name that is not a bare name, so
   it can never read outside the bundled module tree.
-- The `deploy.sh` refusal for a stop time too close to the build names `auto_stop.at`,
-  the only setting it applies to, instead of saying to recompile.
-- A ticked host vuln that would plant nothing now raises a validator warning:
-  one declared where no role plants it (`RNG010`, e.g. `constrained_delegation` on a
-  host instead of a user), one missing a required `vulns_vars` key (`RNG011`, e.g.
-  `constrained_delegation_kerberos` with no `delegate_to`), and a `vulns_vars` that is
-  not a JSON object (`RNG012`). The Inspector edits `vulns_vars` as JSON, where it
-  used to show `[object Object]` and save typed text as a string, and lists under it
-  the keys each ticked vuln reads, required or optional, with an example.
+- The `deploy.sh` refusal for a stop time too close to the build points at the daily
+  stop time (Topology settings > Auto-stop in the canvas), the only setting it
+  applies to, instead of saying to recompile.
+- The Inspector edits `vulns_vars` as a settings form, with Edit as JSON below it
+  (see Added), where it used to show `[object Object]` and save typed text as a
+  string.
 - A domain controller, server or workstation with no OS set was built as Windows
   but provisioned as Linux. It now builds and provisions as Windows: Server 2022,
   or Windows 11 for a workstation.
@@ -363,13 +374,14 @@ versioning, and dates are UTC.
 - Loading a shipped blueprint no longer renames its hosts (redStack's `ops-sub01`
   became `mgmt-sub02`) or marks it unsaved.
 - Stop after with a timezone other than UTC fired at the UTC clock time read in that
-  timezone, hours off the requested stop.
+  timezone, hours off the requested stop. It is now scheduled in UTC, so the range
+  stops the given number of hours after apply whatever timezone the topology names.
 - A comma typed into a list field was deleted, so a second entry could only be
   pasted.
 - A box on the canvas with contents but no stored size was drawn at least 420 by
   260, so in dracarys, minilab, nha and sccm a domain covered the jumpbox or the
-  domain below it. Such a box now fits its contents; an empty one keeps the larger
-  size as a drop target.
+  domain below it. Such a box now takes the height of its contents and keeps the
+  420 width so its header reads; an empty one keeps 420 by 260 as a drop target.
 - The bots that run as a domain user (the logon bot, the scheduled task, the
   share-browsing bot and the relay bot) grant that user Log on as a batch job before
   creating their task. An ordinary domain user lacks that right, so the task never
@@ -397,7 +409,7 @@ versioning, and dates are UTC.
   key path in the form of the shell the deploy ran from. Every command the deploy
   prints, in the `DONE` box and in the reasons it stops (the cloud sign-in, an empty
   `project` or `subscription_id`, a missing key, an unregistered Azure provider),
-  sits alone on its own line under a label ending `run:`.
+  sits alone on its own line under a label that says to run it.
 - `manage.sh teardown --force` on GCP and AWS deleted every redStackPRO instance in
   the project or region, so a team running several ranges there lost all of them.
   Every GCP and AWS instance now carries a `redstackpro_deploy` label or tag, a
