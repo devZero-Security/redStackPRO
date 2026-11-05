@@ -17,7 +17,8 @@ from pathlib import Path
 
 from .ansible import (generate as generate_ansible, _randomize_gating,
                       apply_compile_defaults)
-from .deploy import generate_deploy_script, generate_manage_script, phase_titles
+from .deploy import (_PROVIDER_LABEL, generate_deploy_script, generate_manage_script,
+                     phase_titles)
 from .naming import platform_account
 from .registry import Registry
 from .terraform import GenerationError
@@ -43,9 +44,6 @@ The Kali image is a Marketplace listing, so the account needs a one time
 subscription to it before an operator box with `os: kali` will launch. Without
 it `terraform apply` stops with `OptInRequired`. redStackPRO generates code and
 touches no account, so this is yours to do once.
-
-Every subnet lands in one availability zone. It defaults to the first in the
-region, and `availability_zone` in terraform.tfvars overrides it.
 """,
 }
 
@@ -181,8 +179,9 @@ CONFIRM_TFVARS = {
     "gcp": """- `project`: your GCP project ID, not its name or number
   (`gcloud config get-value project`). Confirm `region` and `zone` are where you
   mean to deploy; the zone has to be inside the region.""",
-    "aws": """- Confirm `region` is the one you mean to deploy into. Credentials come from your
-  AWS CLI profile, not this file.""",
+    "aws": """- Confirm `region` is the one you mean to deploy into. Every subnet lands in one
+  availability zone, the region's first unless you set `availability_zone` (inside
+  that region). Credentials come from your AWS CLI profile, not this file.""",
     "azure": """- `subscription_id`: `az account show --query id -o tsv`. Confirm `location` is
   where you mean to deploy. `resource_group` is created by this deploy and deleted
   by teardown, so it must not already exist; keep one per range.""",
@@ -210,11 +209,13 @@ def auto_stop_section(document, registry=None, noun="range"):
     return """## Auto-stop
 
 This %s stops itself %s.
-Start it again with `manage.sh start`. The instances are stopped, not destroyed,
-so it comes back as it was; disks and reserved addresses still bill while it is
-stopped.
+Start it again with `bash manage.sh start` (`.\\manage.ps1 start` on Windows). The
+instances are stopped, not destroyed, so it comes back as it was; disks and
+reserved addresses still bill while it is stopped.
 
-To change the time or turn it off: In the canvas, click empty space, then Topology settings > Auto-stop, and export again.
+To change the time or turn it off: in the canvas, open the Inspector tab and click
+empty space, then Topology settings > Auto-stop (on a shipped defense blueprint,
+click Unlock to edit first), and export again.
 
 """ % (noun, when)
 
@@ -225,25 +226,30 @@ lives, and asks you to type the range name (or `yes`); any other answer deletes
 nothing. Add `--yes` to skip the question, for example in a script: without a
 terminal to ask on and without `--yes`, it stops and deletes nothing. It then runs
 `terraform -chdir=terraform destroy -auto-approve` after copying `deploy.tfvars`
-into place, the same handoff the deploy uses; running that raw command yourself
-from `terraform/` works too, once `terraform.tfvars` is there."""
+into place, the same handoff the deploy uses. Running that command yourself from
+this folder works too, as does `terraform destroy` from inside `terraform/`, once
+`terraform/terraform.tfvars` is there. Teardown writes its own log to
+`logs/teardown-<timestamp>.log`, named in its closing box; if a teardown fails,
+attach that log to an issue."""
 
 # What `teardown --force` deletes first, per provider. The GCP and AWS sweeps
 # match this deployment's own id, so another range in the project or region is
 # never touched. See deploy._SWEEP_STATE.
 FORCE_SWEEP = {
-    "gcp": """It first deletes this deployment's instances, then destroys the rest,
-so nothing is left billing. It finds them by the instances in the Terraform state
+    "gcp": """It first deletes this deployment's instances, then destroys the rest.
+It finds them by the instances in the Terraform state
 and by the `redstackpro_deploy` label every instance carries, a random id kept in
 that state, so it also finds an instance an interrupted apply created but never
 recorded. It never touches another deployment in the same project. With no
-Terraform state it deletes no instance.""",
+Terraform state it deletes no instance. The sweep covers instances only, so check
+the console afterwards for a leftover static IP.""",
     "aws": """It first terminates this deployment's instances, then destroys the
-rest, so nothing is left billing. It finds them by the instances in the Terraform
+rest. It finds them by the instances in the Terraform
 state and by the `redstackpro_deploy` tag every instance carries, a random id kept
 in that state, so it also finds an instance an interrupted apply created but never
 recorded. It never touches another deployment in the same region. With no
-Terraform state it terminates no instance.""",
+Terraform state it terminates no instance. The sweep covers instances only, so
+check the console afterwards for a leftover Elastic IP or NAT gateway.""",
     "azure": """It first deletes the deployment's resource group and everything in
 it, then destroys the rest, so nothing is left billing.""",
 }
@@ -269,8 +275,8 @@ and one per redirector), so the default holds only one or two at a time. The
 running On-Demand Standard vCPU quota also caps a region, and a large forest or
 several ranges at once can exceed a new account's default. Raise both in Service
 Quotas before deploying: a shortfall (`AddressLimitExceeded`, `VcpuLimitExceeded`)
-stops the apply with instances already running, and `manage.sh teardown` clears
-them.
+stops the apply with instances already running, and `bash manage.sh teardown`
+(`.\\manage.ps1 teardown`) clears them.
 """,
     "azure": """
 ## Quotas
@@ -282,12 +288,11 @@ barred from a size in a region, which apply reports as `SkuNotAvailable`.
 """,
 }
 
-# Making the key is the OTHER place the platforms differ, and it is the one that
-# bites hardest because nothing complains at the time. PowerShell passes `-N ""`
-# through as two literal quote characters, so the key gets a passphrase of `""`
-# and the deploy fails minutes later with `Permission denied (publickey)` from
-# the jumpbox. `-N ''` is the form that yields no passphrase there. Found by
-# following the bash version of this line at a PowerShell prompt.
+# Making the key is the OTHER place the platforms differ. Windows PowerShell 5.1
+# drops an empty argument to a native program, so `-N ''` and `-N ""` both leave
+# -N without a value and ssh-keygen stops; PowerShell 7 passes either. Leaving -N
+# off and pressing Enter twice works on both. The key must have no passphrase:
+# deploy.sh connects with BatchMode=yes.
 MAKE_A_KEY = """Extract the download to its own folder, for example `C:\\redstackpro\\my-range` on
 Windows or `~/redstackpro/my-range` on macOS and Linux, and open PowerShell or a
 terminal in it. On Windows the path must not contain an apostrophe: `deploy.ps1`
@@ -296,9 +301,9 @@ this guide is in: `keys/` below is relative to it, and `manage.sh` runs from it
 after the deploy, so keep it.
 
 This is an SSH key you generate yourself. It is not your cloud
-credentials: your cloud login (for example `aws configure`, or `gcloud auth login`)
-is separate and is what applies the Terraform. This key is only how you log into the
-range hosts once they exist.
+credentials: your cloud login (`aws configure`, `gcloud auth login`, or `az login`,
+step 3) is separate and is what applies the Terraform. This key is only how you log
+into the range hosts once they exist.
 
 **macOS, Linux, or Git Bash on Windows:**
 
@@ -306,17 +311,19 @@ range hosts once they exist.
 ssh-keygen -t ed25519 -f keys/id_ed25519 -N ""
 ```
 
-**Windows PowerShell** (the quoting differs, and getting it wrong does not fail until
-much later):
+**Windows PowerShell** (5.1 or 7). Leave `-N` off and press Enter twice when it asks
+for a passphrase. The deploy needs a key with no passphrase, and Windows PowerShell
+5.1 drops an empty `-N ''`, so ssh-keygen stops without writing a key:
 
 ```powershell
-ssh-keygen -t ed25519 -f keys\\id_ed25519 -N ''
+ssh-keygen -t ed25519 -f keys\\id_ed25519
 ```
 
 That writes two files: the private key `keys/id_ed25519` (leave it in `keys/`, the
-deploy finds it there) and the public key `keys/id_ed25519.pub` (step 2 puts its one
-line into `deploy.tfvars`). Already have a key? Point at it instead with
-`REDSTACKPRO_SSH_KEY=/path/to/key`.
+deploy finds it there) and the public key `keys/id_ed25519.pub` (step 2 can leave
+`ssh_public_key` empty; the deploy fills it from this key). Already have a key? Point
+at it instead: `REDSTACKPRO_SSH_KEY=/path/to/key bash deploy.sh`, or in PowerShell
+`$env:REDSTACKPRO_SSH_KEY = 'C:/path/to/key'; .\\deploy.ps1`.
 
 Get this right before the first apply. The public key is written into each host at
 creation and Terraform ignores later changes to it, so changing it afterwards means
@@ -386,8 +393,8 @@ Attack infrastructure for **{provider}**, generated by redStackPRO. Nothing here
 has been applied and nothing here holds a credential.
 
 **Read `OFFENSE-BRIEFING.md` next.** It lists the access model, the Guacamole
-portal and operator accounts, any per-operator VPN credentials, and every host in
-this stack. This file is only how to stand it up.
+portal and operator accounts, where to fetch each operator's VPN credential, and
+every host in this stack. This file is only how to stand it up.
 
 ## What you need
 
@@ -434,7 +441,7 @@ The deploy then runs the same way on all three.
 
 `deploy.sh` is the whole deploy. It applies the Terraform, fills the address
 placeholders from `terraform output`, stages the Ansible tree onto the jumpbox,
-and provisions **from the jumpbox** -- the other hosts sit on a private subnet
+and provisions **from the jumpbox**: the other hosts sit on a private subnet
 only it can reach, so the playbook cannot be driven from your machine.
 
 It refuses early, with a reason, if a tool is missing, if your cloud credentials
@@ -459,7 +466,7 @@ Ctrl-C stops the watching, not the build.
 `terraform -chdir=terraform output guacamole` for the credentials. On a
 `wireguard` or `openvpn` access mode the portal is closed to the internet and
 reached over the tunnel instead, so bring your VPN up first; `OFFENSE-BRIEFING.md`
-has the per-operator VPN credentials and the tunnel details.
+has the VPN endpoint and where on the jumpbox to fetch each operator's credential.
 
 Every run also writes a full log to `logs/deploy-<timestamp>.log`. If a deploy
 fails or a range comes up wrong, that file is what to attach to a GitHub issue: it
@@ -495,9 +502,9 @@ server, decoy, per-teamserver gating, and backend reachability, in one command.
 
 ## Notes that save an hour
 
-A Windows operator box is reached over `psrp` on 5986, not ssh, so it has no
-ProxyJump. Put the control node on the jumpbox VPN, or set `ansible_psrp_proxy`
-to a SOCKS proxy through the jumpbox, before running the operators play.
+A Windows operator box is reached over `psrp` on 5986, not ssh. The deploy runs
+Ansible on the jumpbox, which reaches it directly on the private subnet, so there
+is nothing to set. To run a play against it yourself, run it from the jumpbox.
 
 The jumpbox builds a certificate authority first and everything else validates
 against it, which is why its play runs before the rest. Play order comes from the
@@ -535,15 +542,15 @@ the whole cloud account or project.
 
 {teardown_asks}
 
-To pause overnight and keep the cost down, use `manage.sh stop` and then
-`manage.sh start` the next day: this halts the instances without destroying
-anything, so the same deployment comes back. Save `teardown` for when you are
-finished with it.
+To pause overnight and keep the cost down, use `bash manage.sh stop`
+(`.\\manage.ps1 stop` on Windows) and then `bash manage.sh start` the next day:
+this halts the instances without destroying anything, so the same deployment
+comes back. Save `teardown` for when you are finished with it.
 
 **Recovering from an interrupted deploy.** If you stop `deploy.sh` partway (Ctrl-C,
 or a closed terminal), the cloud can hold instances Terraform created but did not
 record in its state. A plain `teardown` cannot see those, and may fail trying to
-destroy a network they still sit in. Run `manage.sh teardown --force` (or
+destroy a network they still sit in. Run `bash manage.sh teardown --force` (or
 `.\\manage.ps1 teardown --force`).
 {force_sweep}
 It asks first, the same as a plain teardown. Once a teardown finishes cleanly,
@@ -554,11 +561,15 @@ re-running `deploy.sh` starts fresh.
 It did not run Terraform, hold a credential, or reach any environment. It
 generated files. Everything above happens on your machine under your credentials.
 
-No credentials, no key material and no tfvars values are in this export. The
-certificate authority key, the portal password and any HEC token are generated on
-your hosts at run time and never leave them.
+The download holds no credentials, no key material and no tfvars values. The
+certificate authority key is generated on your hosts at run time and never leaves
+them. The shared lab password, which is also the portal password, is generated by
+Terraform at apply (unless you set `lab_password` in `deploy.tfvars`) and kept in
+the Terraform state under `terraform/`; read it with
+`terraform -chdir=terraform output guacamole`.
 
-Terraform and Ansible are not bundled. Install your own.
+Terraform is not bundled; install your own. Ansible installs itself on the jumpbox
+during the deploy, so you do not need it on your machine.
 """
 
 
@@ -578,7 +589,7 @@ you are attacking; this file is only how to stand it up.
 |---|---|
 | On your machine | {machine_needs} |
 | On the hosts | nothing: Ansible is installed on the jumpbox for you |
-| Time | roughly 45 minutes for a small forest, longer for a large one |
+| Time | roughly 45 to 75 minutes, longer for a large forest |
 
 `ssh` and `tar` are already on macOS and Linux and ship with Git for Windows;
 install {install_yourself} yourself.
@@ -618,7 +629,7 @@ The deploy then runs the same way on all three.
 `deploy.sh` is the whole deploy. It applies the Terraform, captures the shared
 lab password from `terraform output` (it is never written into this export),
 fills the address placeholders, stages the Ansible tree onto the jumpbox, and
-builds the directory **from the jumpbox** -- the controllers and members sit on a
+builds the directory **from the jumpbox**: the controllers and members sit on a
 private lab subnet only it can reach.
 
 Standing up a forest is slower than it looks and that is expected: the deploy
@@ -706,16 +717,26 @@ whole cloud account or project.
 
 {teardown_asks}
 
-To pause the range overnight and keep the cost down, use `manage.sh stop` and
-then `manage.sh start` the next day: this halts the instances without destroying
-anything, so the same range comes back. Save `teardown` for when you are finished
-with it.
+To pause the range overnight and keep the cost down, use `bash manage.sh stop`
+(`.\\manage.ps1 stop` on Windows) and then `bash manage.sh start` the next day:
+this halts the instances without destroying anything, so the same range comes
+back. Save `teardown` for when you are finished with it.
+
+**Recovering from an interrupted deploy.** If you stop `deploy.sh` partway (Ctrl-C,
+or a closed terminal), the cloud can hold instances Terraform created but did not
+record in its state. A plain `teardown` cannot see those, and may fail trying to
+destroy a network they still sit in. Run `bash manage.sh teardown --force` (or
+`.\\manage.ps1 teardown --force`).
+{force_sweep}
+It asks first, the same as a plain teardown. Once a teardown finishes cleanly,
+re-running `deploy.sh` starts fresh.
 
 ## What redStackPRO did not do
 
 It did not run Terraform, hold a credential, or reach any environment. It
 generated files. Everything above happens on your machine under your credentials.
-Terraform and Ansible are not bundled. Install your own.
+Terraform is not bundled; install your own. Ansible installs itself on the jumpbox
+during the deploy, so you do not need it on your machine.
 """
 
 
@@ -859,7 +880,7 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
     machine_needs, install_yourself = _needs(provider)
     files["DEPLOYMENT-GUIDE.md"] = (RANGE_README if is_range else README).format(
         name=document.get("name", "redStackPRO export"),
-        provider=provider,
+        provider=_PROVIDER_LABEL.get(provider, provider),
         jumpuser=platform_account((document or {}).get("mode")),
         tfvars=TFVARS_TO_FILL.get(provider, "see variables.tf"),
         machine_needs=machine_needs,

@@ -58,14 +58,13 @@ assert.equal(PLATFORMS.windows.run, ".\\deploy.ps1");
 assert.match(PLATFORMS.windows.note, /WSL/);
 assert.equal(PLATFORMS.unix.run, "bash deploy.sh");
 
-// The keygen line is platform specific, and this is not cosmetic. PowerShell
-// passes -N "" through as two literal quote characters, so the key is created
-// with a passphrase of `""`. Nothing complains at the time; the deploy fails
-// minutes later with Permission denied (publickey) from the jumpbox. Found by
-// running the bash form at a PowerShell prompt on a live deploy.
-assert.match(PLATFORMS.windows.keygen, /-N ''/,
-  "Windows must use single quotes for an empty passphrase");
-assert.doesNotMatch(PLATFORMS.windows.keygen, /-N ""/);
+// The keygen line is platform specific. Windows PowerShell 5.1 drops an empty
+// argument to a native program, so -N '' or -N "" leaves -N with no value and
+// ssh-keygen stops without writing a key. The Windows line leaves -N off and
+// its note says to press Enter twice: the deploy needs a key with no passphrase.
+assert.doesNotMatch(PLATFORMS.windows.keygen, /-N/,
+  "Windows must not pass -N: PowerShell 5.1 drops the empty value");
+assert.match(PLATFORMS.windows.keygenNote, /Enter twice/);
 assert.match(PLATFORMS.unix.keygen, /-N ""/);
 assert.notEqual(PLATFORMS.windows.keygen, PLATFORMS.unix.keygen);
 

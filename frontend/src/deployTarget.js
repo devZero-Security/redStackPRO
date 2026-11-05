@@ -33,11 +33,12 @@ export const PLATFORMS = {
     // C:\Windows\System32\bash.exe, the WSL launcher, so the deploy runs in a
     // different filesystem with a different home and different cloud
     // credentials, and fails for reasons that look nothing like the cause.
-    note: "Run it from PowerShell. Not `bash deploy.sh` there: that is WSL's bash, not Git Bash.",
-    // PowerShell passes -N "" through as two literal quote characters, so the
-    // key ends up with a passphrase of `""`. Nothing complains until the deploy
-    // fails minutes later with Permission denied (publickey) from the jumpbox.
-    keygen: "ssh-keygen -t ed25519 -f keys\\id_ed25519 -N ''",
+    note: "Run it from PowerShell. Not bash deploy.sh there: that is WSL's bash, not Git Bash.",
+    // Windows PowerShell 5.1 drops an empty argument, so -N '' leaves -N with no
+    // value and ssh-keygen stops. No -N plus Enter twice works on 5.1 and 7. The
+    // key must have no passphrase: deploy.sh uses BatchMode.
+    keygen: "ssh-keygen -t ed25519 -f keys\\id_ed25519",
+    keygenNote: "Press Enter twice when it asks for a passphrase: the deploy needs a key without one.",
   },
   unix: {
     label: "macOS / Linux",
@@ -85,8 +86,12 @@ export const PROVIDER_SETUP = {
       winget: "Google.CloudSDK",
       docs: "https://cloud.google.com/sdk/docs/install",
     },
-    login: ["gcloud auth login", "gcloud auth application-default login"],
-    loginNote: "Run both: Terraform reads the application default login, manage.sh uses the other.",
+    login: [
+      "gcloud auth login",
+      "gcloud auth application-default login",
+      "gcloud services enable compute.googleapis.com --project <your-project-id>",
+    ],
+    loginNote: "Run all three: Terraform reads the application default login, manage.sh uses the other, and the last turns on the Compute Engine API, which a new project has off.",
   },
   aws: {
     fields: ["region", "operator_source_ranges"],
@@ -101,7 +106,8 @@ export const PROVIDER_SETUP = {
     loginNote: "Credentials come from your AWS CLI profile, not deploy.tfvars. Set AWS_PROFILE to pick a profile.",
   },
   azure: {
-    fields: ["subscription_id", "location", "resource_group", "operator_source_ranges"],
+    fields: ["subscription_id", "location", "operator_source_ranges"],
+    fieldsNote: "resource_group is created by the deploy: keep the generated name, or pick one that does not exist yet.",
     cli: {
       name: "Azure CLI",
       bin: "az",

@@ -466,8 +466,17 @@ def test_a_missing_key_says_how_to_make_one(staged):
 
     done = _run(export, stubs, env_extra={"HOME": _msys(export / "nowhere")})
     assert done.returncode == 1
-    assert "ssh-keygen -t ed25519 -f keys/id_ed25519" in done.stdout, done.stdout
+    assert 'ssh-keygen -t ed25519 -f keys/id_ed25519 -N ""' in done.stdout, done.stdout
     assert "ssh_public_key" in done.stdout
+
+    # From deploy.ps1 the hint is the PowerShell form. Windows PowerShell 5.1 drops
+    # an empty -N '' argument, so it leaves -N off and says to press Enter twice.
+    ps1 = _run(export, stubs, env_extra={"HOME": _msys(export / "nowhere"),
+                                         "REDSTACKPRO_FROM_PS1": "1"})
+    assert ps1.returncode == 1
+    assert "ssh-keygen -t ed25519 -f keys\\id_ed25519\n" in ps1.stdout, ps1.stdout
+    assert "press Enter twice" in ps1.stdout
+    assert "id_ed25519 -N" not in ps1.stdout
 
 
 def test_each_provider_checks_its_credentials_before_apply():
@@ -1068,14 +1077,14 @@ _HELP_ROWS = {
     "gcp": ["  status            Each instance's status and the portal",
             "  stop              Stop every instance. Compute billing",
             "                    stops; disks and the jumpbox static IP",
-            "  teardown --force  First delete this range's instances, also",
-            "                    any an interrupted apply left out of the",
-            "                    state, and no other range's; use it when a"],
+            "  teardown --force  Delete this range's instances first,",
+            "                    including any an interrupted apply left",
+            "                    out of the state, but never another"],
     "aws": ["  status            Each instance's state and the portal",
             "  stop              Stop every instance. Compute billing",
             "                    stops; EBS volumes, the jumpbox Elastic IP",
             "                    and the NAT gateway still bill. Nothing is",
-            "  teardown --force  First terminate this range's instances,"],
+            "  teardown --force  Terminate this range's instances first,"],
 }
 # The box rows under the title, after the wordmark.
 _HELP_HEAD = {

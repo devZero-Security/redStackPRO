@@ -103,8 +103,8 @@ def test_a_build_that_would_stop_mid_provision_refuses_to_start(registry):
     # The one-line fix has to be named: a refusal the operator cannot act on is
     # just an obstacle. The guard is only emitted for a fixed `at`, so the fix is
     # moving that time (re-exporting the same value changes nothing).
-    assert ("In the canvas, click empty space, then Topology settings > "
-            "Auto-stop, and export again.") in body
+    assert ("In the canvas, open the Inspector tab and click empty space, then "
+            "Topology settings > Auto-stop, and export again.") in body
     assert "re-run the compile now" not in body
     assert "REDSTACKPRO_MIN_STOP_LEAD=0" in body, "an override must exist"
 
@@ -438,8 +438,8 @@ def test_static_files_refuses_a_provider_that_is_not_a_bare_name(provider):
 
 # -- the deployment guide and deploy.tfvars
 
-CHANGE_AUTO_STOP = ("In the canvas, click empty space, then Topology settings > "
-                    "Auto-stop, and export again.")
+CHANGE_AUTO_STOP = ("in the canvas, open the Inspector tab and click\nempty space, "
+                    "then Topology settings > Auto-stop")
 
 
 def _guide(doc, provider="gcp"):
@@ -457,7 +457,8 @@ def test_the_guide_says_when_the_range_stops_itself():
     guide = _guide(doc)
     assert ("This range stops itself 8 hours after the first apply, then daily "
             "at that time.") in guide
-    assert "Start it again with `manage.sh start`." in guide
+    assert ("Start it again with `bash manage.sh start` (`.\\manage.ps1 start` on "
+            "Windows).") in guide
     assert CHANGE_AUTO_STOP in guide
 
     doc["auto_stop"] = {"enabled": True, "at": "21:30", "timezone": "Europe/London"}

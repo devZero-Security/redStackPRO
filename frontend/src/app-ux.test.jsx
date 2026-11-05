@@ -237,7 +237,7 @@ describe("export panel", () => {
     ["gcp", ["project", "region", "zone", "operator_source_ranges"],
       ["gcloud auth application-default login"]],
     ["aws", ["region", "operator_source_ranges"], ["aws configure", "aws sso login"]],
-    ["azure", ["subscription_id", "location", "resource_group", "operator_source_ranges"],
+    ["azure", ["subscription_id", "location", "operator_source_ranges"],
       ["az login"]],
   ])("%s: step 2 names the tfvars fields and step 3 the login command",
     async (provider, fields, logins) => {
@@ -310,8 +310,9 @@ describe("export panel", () => {
       expect(first).toMatch(/The key lands in the export's keys folder\. Keep the folder/);
       expect(commands(items[0])).toEqual([
         "cd C:\\redstackpro\\my-range",
-        "ssh-keygen -t ed25519 -f keys\\id_ed25519 -N ''",
+        "ssh-keygen -t ed25519 -f keys\\id_ed25519",
       ]);
+      expect(first).toMatch(/Press Enter twice when it asks for a passphrase/);
     });
 
     test.each([

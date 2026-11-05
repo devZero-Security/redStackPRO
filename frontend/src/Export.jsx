@@ -267,7 +267,7 @@ export function ExportPanel({ document, provider }) {
           <Cmd>{`cd ${folder}`}</Cmd>
           Make a key:
           <Cmd>{target.keygen}</Cmd>
-          The key lands in the export's keys folder. Keep the folder: status,
+          {target.keygenNote ? `${target.keygenNote} ` : ""}The key lands in the export's keys folder. Keep the folder: status,
           stop, start and teardown run from it too.
         </li>
         <li>
@@ -279,6 +279,7 @@ export function ExportPanel({ document, provider }) {
           )}
           . <code>ssh_public_key</code> can stay empty; deploy fills it
           from <code>keys/</code>.
+          {setup.fieldsNote ? ` ${setup.fieldsNote}` : ""}
         </li>
         <li>
           {setup.login?.length ? (

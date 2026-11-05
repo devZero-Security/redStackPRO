@@ -438,7 +438,7 @@ if [ "$RSP_STOP_LEAD" -lt "${REDSTACKPRO_MIN_STOP_LEAD:-150}" ]; then
     "  To deploy anyway, run:" \\
     "    $(rsp_cmd deploy REDSTACKPRO_MIN_STOP_LEAD=0)" \\
     "  Or set a later stop time:" \\
-    "  In the canvas, click empty space, then Topology settings > Auto-stop, and export again." \\
+    "  In the canvas, open the Inspector tab and click empty space, then Topology settings > Auto-stop, and export again." \\
     "  It is a daily clock time, so exporting again with the same time changes" \\
     "  nothing; a stop after N hours counts from the apply and never trips this check."
 fi
@@ -561,13 +561,16 @@ def _jumpbox_name(ctx):
     return None
 
 
-_AWS_TTL_IAM_NOTE = """# auto_stop creates an IAM role and policy for the shutdown schedule, the stack's
+_AWS_TTL_IAM_NOTE = """# auto_stop creates an IAM role, its policy and a Scheduler schedule, the stack's
 # first IAM resources. A caller who cannot create roles fails there, on a resource
 # they did not add by hand, so say so before the apply rather than after.
-note "this range has an auto-stop schedule; the AWS apply needs iam:CreateRole and" \\
-  "iam:PutRolePolicy, or it fails creating the scheduler role. Grant those, or turn" \\
-  "auto-stop off. In the canvas, click empty space, then Topology settings >" \\
-  "Auto-stop, and export again."
+note "this topology has an auto-stop schedule. On AWS that is an IAM role and an" \\
+  "EventBridge Scheduler schedule, which AmazonEC2FullAccess does not cover: the" \\
+  "apply needs iam:CreateRole, iam:PutRolePolicy, iam:PassRole and" \\
+  "scheduler:CreateSchedule, and later runs and teardown need their read and" \\
+  "delete actions (the wiki Cloud Prerequisites lists them). Grant those, or turn" \\
+  "auto-stop off: in the canvas, open the Inspector tab and click empty space," \\
+  "then Topology settings > Auto-stop, and export again."
 """
 
 
@@ -959,10 +962,11 @@ _TEMPLATE = r"""#!/usr/bin/env bash
 # jumpbox and provisions from there. Run it from the export root (the directory
 # holding this script, terraform/ and ansible/).
 #
-# Needs on your machine: terraform, ssh, tar, and Python 3.8+. Ansible is installed
-# on the jumpbox automatically -- you do not need it locally. Every one of these
-# ships with Git for Windows, macOS and any Linux, so this runs the same way on
-# all three. On Windows run it from Git Bash, or use deploy.ps1 beside this file.
+# Needs on your machine: terraform 1.5+, ssh, tar, Python 3.8+, and on GCP, AWS
+# or Azure that cloud's CLI (gcloud, aws or az). Ansible installs itself on the
+# jumpbox, so you do not need it locally. ssh and tar ship with Git for Windows,
+# macOS and Linux; install terraform, Python and the cloud CLI yourself. On
+# Windows run it from Git Bash, or use deploy.ps1 beside this file.
 #
 #   1. fill deploy.tfvars in this directory
 #   2. bash deploy.sh
@@ -998,7 +1002,7 @@ done
 #   2. a key you dropped in keys/, beside this script
 #   3. ~/.ssh/id_ed25519
 # keys/ exists so the export is self contained: extract it, drop your key in,
-# deploy. Nothing is ever written there by us and it is not in the download.
+# deploy. It ships empty (keys/.keep) and nothing is ever written there by us.
 if [ -n "${REDSTACKPRO_SSH_KEY:-}" ]; then
   KEY="$REDSTACKPRO_SSH_KEY"
 else
@@ -1020,13 +1024,22 @@ else
     KEY="$HOME/.ssh/id_ed25519"
   fi
 fi
+# From deploy.ps1 the hint is the PowerShell form: Windows PowerShell 5.1 drops an
+# empty -N '' argument, so there the passphrase prompts are answered with Enter.
+if [ "${REDSTACKPRO_FROM_PS1:-}" = "1" ]; then
+  RSP_KEYGEN='ssh-keygen -t ed25519 -f keys\id_ed25519'
+  RSP_KEYGEN_NOTE="  and press Enter twice at the passphrase prompt, then run the deploy again."
+else
+  RSP_KEYGEN='ssh-keygen -t ed25519 -f keys/id_ed25519 -N ""'
+  RSP_KEYGEN_NOTE="  then run the deploy again."
+fi
 [ -f "$KEY" ] || die "no ssh private key found." \
   "  looked at: \$REDSTACKPRO_SSH_KEY, then keys/, then $HOME/.ssh/id_ed25519" \
   "" \
   "  To make one, run:" \
-  "    ssh-keygen -t ed25519 -f keys/id_ed25519 -N \"\"" \
-  "  then put the contents of keys/id_ed25519.pub into" \
-  "  deploy.tfvars as ssh_public_key, and re-run."
+  "    $RSP_KEYGEN" \
+  "$RSP_KEYGEN_NOTE" \
+  "  Leave ssh_public_key empty in deploy.tfvars; the deploy fills it from the key."
 
 # SSH enforces private-key perms on Linux and macOS (StrictModes): a group- or
 # world-readable key is refused and it drops to a password the later non-interactive
@@ -1047,7 +1060,7 @@ case "$(uname -s)" in
 esac
 SSHKEY="${KEYSAFE:-$KEY}"
 # BatchMode=yes: never fall back to an interactive password prompt. Without it, a
-# fresh jumpbox whose cloud-init has not yet written redop's authorized_keys answers
+# fresh jumpbox whose cloud-init has not yet written the platform account's authorized_keys answers
 # port 22 but refuses the key, ssh prompts for a password, and the "wait for ssh"
 # probe below stalls on that prompt instead of retrying (and the first heredoc step
 # dies with "Permission denied, please try again"). With it, the probe fails fast and
@@ -1120,7 +1133,7 @@ set -e
 trap 'RSP_ERR="exit $? from: $BASH_COMMAND"' ERR
 @@AZURE_PREFLIGHT@@
 phase "Terraform apply"
-@@INIT@@terraform -chdir=terraform apply -auto-approve -input=false 2>&1 | rsp_tf mark || die "terraform apply failed (its error is above). Nothing was provisioned." \
+@@INIT@@terraform -chdir=terraform apply -auto-approve -input=false 2>&1 | rsp_tf mark || die "terraform apply failed (its error is above). Provisioning did not start, but resources the apply created may still be running." \
   "If it reports resources that already exist, an earlier run was interrupted and" \
   "left them outside the state. To clear them, run:" \
   "  $(rsp_cmd manage teardown --force)" \
@@ -1716,12 +1729,12 @@ _HELP_ADDRESS = {"azure": "public IP", "gcp": "static IP", "aws": "Elastic IP"}
 _HELP_FORCE = {
     "azure": "Delete the resource group directly first; use it when a plain "
              "teardown stops on a leftover resource.",
-    "gcp": "First delete this range's instances, also any an interrupted apply "
-           "left out of the state, and no other range's; use it when a plain "
-           "teardown stops on a leftover instance.",
-    "aws": "First terminate this range's instances, also any an interrupted apply "
-           "left out of the state, and no other range's; use it when a plain "
-           "teardown stops on a leftover instance.",
+    "gcp": "Delete this range's instances first, including any an interrupted "
+           "apply left out of the state, but never another range's. Use it when "
+           "a plain teardown stops on a leftover instance.",
+    "aws": "Terminate this range's instances first, including any an interrupted "
+           "apply left out of the state, but never another range's. Use it when "
+           "a plain teardown stops on a leftover instance.",
 }
 _FORCE_NOTE = {
     "azure": "deletes the resource group directly first",
