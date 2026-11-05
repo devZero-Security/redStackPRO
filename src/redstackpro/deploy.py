@@ -799,7 +799,7 @@ _MANAGE_SWEEP = {
     PROJECT="$(grep -E '^[[:space:]]*project[[:space:]]*=' deploy.tfvars 2>/dev/null | head -1 | sed -E 's/[^=]*=[[:space:]]*"?([^"]*)"?.*/\1/')"
     PROJ_ARG=""; [ -n "$PROJECT" ] && PROJ_ARG="--project $PROJECT"
     gcloud compute instances list $PROJ_ARG --filter="labels.redstackpro_kind:*" --format="value(name,zone)" 2>/dev/null \
-      | while IFS=$'\t' read -r sweep_name sweep_zone; do
+      | tr -d '\r' | while IFS=$'\t' read -r sweep_name sweep_zone; do
           [ -n "$sweep_name" ] || continue
           echo "  deleting $sweep_name ($sweep_zone)"
           gcloud compute instances delete "$sweep_name" --zone "$sweep_zone" $PROJ_ARG --quiet 2>/dev/null || true
@@ -866,6 +866,9 @@ fi
 # Per-provider status/start/stop. Each reads redstackpro_instances, which
 # carries exactly what that provider's CLI needs to address a host: an AWS
 # instance id, or a GCP instance name plus its zone. See plan.outputs.
+# Every `read` loop strips \r: Python and gcloud on Windows end lines with \r\n,
+# and Git Bash's read keeps the \r (its $() drops it), so the last field of each
+# line reached the CLI with a \r on it and every call failed.
 _MANAGE_PROVIDER_BLOCK = {
     "aws": r'''command -v aws >/dev/null 2>&1 || { echo "aws (the AWS CLI) not found on PATH -- install it and run: aws configure"; exit 1; }
 INSTANCES="$(terraform -chdir=terraform output -json redstackpro_instances 2>/dev/null)"
@@ -910,7 +913,7 @@ if [ "$cmd" = "status" ]; then
       --format='table(name,status,networkInterfaces[0].accessConfigs[0].natIP)' || RSP_FAIL=1
   done < <(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
 for v in json.load(sys.stdin).values():
-    print(v['name'], v['zone'])")
+    print(v['name'], v['zone'])" | tr -d '\r')
   [ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
   [ "$RSP_FAIL" -eq 0 ] || { echo "$cmd failed on at least one instance (see above)."; exit 1; }
 else
@@ -927,7 +930,7 @@ z={}
 for v in json.load(sys.stdin).values():
     z.setdefault(v['zone'], []).append(v['name'])
 for zone, names in z.items():
-    print(zone, ' '.join(names))")
+    print(zone, ' '.join(names))" | tr -d '\r')
   [ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
   [ "$RSP_FAIL" -eq 0 ] || { echo "$cmd failed on at least one instance (see above)."; exit 1; }
 fi
@@ -951,7 +954,7 @@ while IFS=' ' read -r vm rg; do
   esac
 done < <(printf '%s' "$INSTANCES" | "$PY" -c "import json,sys
 for v in json.load(sys.stdin).values():
-    print(v['name'], v['resource_group'])")
+    print(v['name'], v['resource_group'])" | tr -d '\r')
 [ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
 [ "$RSP_FAIL" -eq 0 ] || { echo "$cmd failed on at least one instance (see above)."; exit 1; }
 ''',

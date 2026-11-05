@@ -678,6 +678,29 @@ def test_manage_script_rejects_an_unknown_subcommand(manage_script):
     assert exit1 > usage, "an unrecognized subcommand does not print usage and stop"
 
 
+@pytest.mark.parametrize("provider", ["gcp", "aws", "azure"])
+def test_manage_read_loops_strip_carriage_returns(provider):
+    """Python and gcloud on Windows end lines with \\r\\n, and Git Bash's read keeps
+    the \\r, so every name a read loop handed the CLI ended in \\r. Found live from
+    Windows on Azure: az vm show answered Bad Request for every VM."""
+    script = generate_manage_script(example("redstack.json"), Registry(), provider=provider)
+    lines = script.splitlines()
+    loops = 0
+    for i, line in enumerate(lines):
+        if "done < <(" in line:
+            loops += 1
+            # the line that closes the python -c string ends the substitution
+            j = i
+            while not (lines[j].rstrip().endswith('")') or "| tr -d" in lines[j]):
+                j += 1
+            assert "tr -d '\\r')" in lines[j], "read loop input keeps \\r: " + lines[j]
+        if "| while" in line and "read -r" in line:
+            loops += 1
+            assert "tr -d '\\r' |" in line, "piped read loop keeps \\r: " + line
+    if provider in ("gcp", "azure"):
+        assert loops, "expected the per-instance read loops"
+
+
 def test_teardown_copies_deploy_tfvars_before_destroying(manage_script):
     """Same handoff as deploy.sh: the editable config lives at the export root as
     deploy.tfvars, and terraform only auto-loads terraform/terraform.tfvars, so
