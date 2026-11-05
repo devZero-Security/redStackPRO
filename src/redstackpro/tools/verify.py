@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Check a deployed range against the export that built it.
 
-    python -m redstackpro.tools.verify doors build/   probe the front doors from outside
-    python -m redstackpro.tools.verify stack build/   check the stack from its jumpbox
-    python -m redstackpro.tools.verify doors build/ --plan   print the checks, run none
+    python verify.py doors .          probe the front doors from outside (in an export)
+    python verify.py stack .          check the stack from its jumpbox
+    python verify.py doors . --plan   print the checks, run none
+    (from a source checkout: python -m redstackpro.tools.verify doors <export>)
 
 Both subcommands read the compiled export and derive every input from it: which
 hosts are redirectors, the domain each one answers on, its gating header and
@@ -40,7 +41,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-import yaml
+try:
+    import yaml
+except ImportError:
+    # A missing module is "could not run" (exit 2), not a failed check (exit 1).
+    sys.stderr.write("verify.py needs PyYAML. Install it with: python -m pip install pyyaml\n")
+    sys.exit(2)
 
 # redirect_rules bounces curl's default user agent on purpose, so a probe that
 # sends it measures the bouncer rather than the route behind it. Cost a false
@@ -734,7 +740,7 @@ def main(argv=None):
     stack = sub.add_parser("stack", help="check the stack from its jumpbox")
     stack.add_argument("build", help="a compiled export directory")
     stack.add_argument("--plan", action="store_true",
-                       help="print the checks and run none")
+                       help="print the checks and run none (needs a deployed export)")
     stack.add_argument("--key", default=os.environ.get("REDSTACKPRO_SSH_KEY"),
                        help="ssh private key; defaults to $REDSTACKPRO_SSH_KEY, then "
                             "the key in keys/, then ~/.ssh/id_ed25519, as deploy.sh")

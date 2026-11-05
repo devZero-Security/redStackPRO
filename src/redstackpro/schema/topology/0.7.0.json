@@ -24,7 +24,7 @@
         "offense",
         "defense"
       ],
-      "description": "The canvas: offense is redStackPRO (red team infrastructure), defense is Cyber Ranges (an AD forest to attack). Gates the palette, prefix, and chrome, not the compiler. Fixed at creation. Renamed from artie/haven in 0.7.0. See 0047."
+      "description": "The canvas mode: offense (attack infrastructure) or defense (an AD range to attack). Gates the palette, prefix, and chrome, not the compiler. Fixed at creation. Renamed from artie/haven in 0.7.0. See 0047."
     },
     "name": {
       "title": "Topology name",
@@ -1251,7 +1251,7 @@
             "sentinelone"
           ],
           "x-redstackpro-source": "user",
-          "description": "Label shown in the briefing only. To run Defender, tick defender_enabled. SIEM agents install automatically when the range has a Wazuh or ELK box."
+          "description": "Label shown in the briefing only. To run Defender, tick Defender on. SIEM agents install automatically when the range has a Wazuh or ELK box."
         },
         "defender_enabled": {
           "title": "Defender on",

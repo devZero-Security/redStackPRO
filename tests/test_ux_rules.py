@@ -520,7 +520,7 @@ def test_cap005_a_windows_client_build_on_gcp_or_aws_is_an_info_note(
         assert found[0].severity == "info" and found[0].field == "os"
         assert found[0].message == ("ws01 asks for Windows 10; %s has no client "
                                     "image, so it boots Windows Server 2022."
-                                    % provider)
+                                    % {"gcp": "GCP", "aws": "AWS"}[provider])
     assert not _of(_range(("ws01", "wks", {"os": "windows_server_2022"})),
                    "CAP005", provider="gcp")
 

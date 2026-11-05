@@ -486,10 +486,10 @@ def validate_topology(topology_id: str, provider: str | None = Query(default=Non
                  "valid": False, "errors": 2, "warnings": 0, "infos": 0,
                  "findings": [{
                      "code": "MGT001", "severity": "error",
-                     "target_ids": ["ts-01"],
+                     "target_ids": ["myth-ts01"],
                      "template": "{name} has no management path.",
-                     "values": {"name": "rt-ts-01"},
-                     "message": "rt-ts-01 has no management path.",
+                     "values": {"name": "off-myth-ts01"},
+                     "message": "off-myth-ts01 has no management path.",
                      "remedy": "Draw a manages edge from a jumpbox to its network.",
                  }, {
                      "code": "SCH001", "severity": "error",

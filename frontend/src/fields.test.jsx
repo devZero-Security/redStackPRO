@@ -872,7 +872,7 @@ describe.each(MODES)("with the %s schema", (mode, schema) => {
             finding("services", "file-srv01 lists the service smb, which nothing installs on this host.", {
               id: "file-srv01", severity: "warning", code: "SVC001",
             }),
-            finding("os", "file-srv01 asks for Windows 10; gcp has no client image.", {
+            finding("os", "file-srv01 asks for Windows 10; GCP has no client image.", {
               id: "file-srv01", severity: "info", code: "CAP005",
             }),
           ]}

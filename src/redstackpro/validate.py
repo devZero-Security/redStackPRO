@@ -17,6 +17,11 @@ from .migrate import PUBLIC_BY_DEFAULT
 from .naming import abbrev_of, compose, ordinal_of, too_long
 from .registry import Registry
 
+# How a message names a provider. The same map as deploy._PROVIDER_LABEL, kept
+# here because deploy imports this module.
+_PROVIDER_LABEL = {"gcp": "GCP", "aws": "AWS", "azure": "Azure",
+                   "proxmox": "Proxmox", "esxi": "ESXi"}
+
 
 class Context:
     """Resolved views over a topology document. Built once, read by every rule."""
@@ -662,7 +667,7 @@ def net006_internal_ip_in_reserved_range(ctx, provider):
             "{tail}.",
             remedy="Pin an address from %s upwards, or clear internal_ip and "
                    "let the provider assign one." % first_free,
-            name=ctx.name(n["id"]), ip=ip, provider=provider, cidr=cidr,
+            name=ctx.name(n["id"]), ip=ip, provider=_PROVIDER_LABEL.get(provider, provider), cidr=cidr,
             head=head, tail=tail)
 
 
@@ -1115,7 +1120,8 @@ def cap_provider_capabilities(ctx, provider):
                 "CAP002" if container else "CAP001", "error", [n["id"]],
                 "{name} needs {req}, which {provider} does not provide. {reason}",
                 remedy=remedy, field=field,
-                name=ctx.name(n["id"]), req=req, provider=provider, reason=reason)
+                name=ctx.name(n["id"]), req=req,
+                provider=_PROVIDER_LABEL.get(provider, provider), reason=reason)
 
 
 # CAP003 (a mixed-exposure segment) is deliberately GONE. It warned that on AWS
@@ -1140,9 +1146,9 @@ def cap004_network_peering(ctx, provider):
         yield finding(
             "CAP004", "error", [e["id"], e["source"], e["target"]],
             "{a} and {b} are peered, which {provider} does not render. {reason}",
-            remedy="Target a provider that renders network peering, such as gcp.",
+            remedy="Target a provider that renders network peering, such as GCP.",
             a=ctx.name(e["source"]), b=ctx.name(e["target"]),
-            provider=provider, reason=reason)
+            provider=_PROVIDER_LABEL.get(provider, provider), reason=reason)
 
 
 def net001_cross_provider_edge(ctx):
@@ -1532,7 +1538,7 @@ def rng004_siem_without_product(ctx):
             yield finding(
                 "RNG004", "warning", [n["id"]],
                 "{name} has no telemetry product set.",
-                remedy="Set its product to wazuh or elk.",
+                remedy="Set its product to Wazuh or ELK.",
                 name=n["id"])
 
 
@@ -1993,10 +1999,10 @@ def cap005_no_windows_client_image(ctx, provider):
             "CAP005", "info", [n["id"]],
             "{host} asks for {build}; {provider} has no client image, so it boots "
             "Windows Server 2022.",
-            remedy="Fine for most attack paths. Use azure for a real client "
+            remedy="Fine for most attack paths. Deploy to Azure for a real client "
                    "build.", field="os",
             host=display_name(ctx, n["id"]), build=_CLIENT_BUILDS[build],
-            provider=provider)
+            provider=_PROVIDER_LABEL.get(provider, provider))
 
 
 def cap006_windows_10_past_end_of_support(ctx, provider):

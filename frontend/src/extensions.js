@@ -19,7 +19,7 @@ export const EXTENSIONS = [
     title: "Workstation (ws01)",
     // GOAD's ws01 is hardened; no role here applies hardening yet, so the blurb
     // states only what the seed below deploys.
-    blurb: "A Windows 11 workstation (ws01) joined to the root domain, with no planted vulnerabilities. Defender is turned off, as on every range host, unless you tick defender_enabled on it. GCP and AWS have no Windows client image, so there it boots Windows Server 2022.",
+    blurb: "A Windows 11 workstation (ws01) joined to the root domain, with no planted vulnerabilities. Defender is turned off, as on every range host, unless you tick Defender on for it. GCP and AWS have no Windows client image, so there it boots Windows Server 2022.",
     requiresDomain: true,
     compatibility: ["GOAD", "GOAD-Light", "GOAD-Mini"],
     boxes: [{
