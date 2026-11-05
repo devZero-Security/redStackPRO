@@ -257,8 +257,24 @@ versioning, and dates are UTC.
   `gcloud compute instances list` call) instead of a table per VM. AWS `status`,
   `start` and `stop` pass the region from `deploy.tfvars`, so a different AWS CLI
   default region no longer misses the instances.
+- `deploy.sh` and `manage.sh` share one look. Both open on a redStackPRO wordmark
+  (`deploy.sh` and the `manage.sh` help) and a title box with the range name,
+  provider, region and resource group, project or profile. The help lists COMMANDS
+  and EXAMPLES in sections, wraps descriptions to the box width and never splits a
+  command in parentheses. `status`, `start`, `stop` and `teardown` open on the same
+  box (`status` shows the portal address in it), `teardown` steps print like deploy
+  phases, and teardown ends on a `DONE` or `FAILED` box.
+- Colour on the terminal: red rules and wordmark, bold phase lines, green `ok` and
+  `DONE`, red `FAILED` and failure reasons, yellow notes and warnings, cyan commands.
+  It is on when the output is a terminal, or when `deploy.ps1` or `manage.ps1` see a
+  console that renders it. `NO_COLOR` turns it off, and output to a file or a pipe
+  gets none. The deploy log stays plain text.
 
 ### Fixed
+
+- The deploy log held terraform's colour escape codes (over a thousand lines of
+  them in a plan of about 50 resources). `deploy.sh` now writes the log through a
+  filter that removes escape codes, so the file attached to an issue reads as text.
 
 - `manage.ps1 status`, `start` and `stop` work from Windows on Azure and GCP. Python
   and gcloud on Windows end lines with `\r\n`, and Git Bash kept the `\r` on each VM's

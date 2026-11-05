@@ -28,14 +28,58 @@ def _redstackpro_version():
         return "unknown"
 
 
-# How a deploy reads on screen: a title box, numbered phases "[n/N] Title ....
-# HH:MM" that each end on an indented "ok" line, and a closing DONE or FAILED box
-# that says what to do next. Plain ASCII and no colour, because every line is
-# also written to the log. The run.log on the jumpbox uses the same rules.
+# How a deploy reads on screen: the wordmark and a title box, numbered phases
+# "[n/N] Title .... HH:MM" that each end on an indented "ok" line, and a closing
+# DONE or FAILED box that says what to do next. Plain ASCII. Colour reaches the
+# terminal only: the deploy log gets the same lines without it (see _SPLIT). The
+# run.log on the jumpbox uses the same rules, without colour.
 RULE = "=" * 62
 THIN = "-" * 62
 # Title, dot leader and HH:MM fill this many columns.
 PHASE_WIDTH = 58
+
+# FIGlet "standard". Shown on the terminal only, never in a log.
+WORDMARK = r"""              _ ____  _             _    ____  ____   ___
+ _ __ ___  __| / ___|| |_ __ _  ___| | _|  _ \|  _ \ / _ \
+| '__/ _ \/ _` \___ \| __/ _` |/ __| |/ / |_) | |_) | | | |
+| | |  __/ (_| |___) | || (_| | (__|   <|  __/|  _ <| |_| |
+|_|  \___|\__,_|____/ \__\__,_|\___|_|\_\_|   |_| \_\\___/
+"""
+
+# Colour for deploy.sh and manage.sh, and the helpers both draw boxes with.
+# REDSTACKPRO_COLOR comes from deploy.ps1 and manage.ps1: Git Bash started from
+# PowerShell does not always see a terminal, and PowerShell knows whether its
+# console shows colour. NO_COLOR (no-color.org) always wins.
+_COLOR = r'''rsp_color_on(){
+  [ -z "${NO_COLOR:-}" ] || return 1
+  case "${REDSTACKPRO_COLOR:-}" in 1) return 0 ;; 0) return 1 ;; esac
+  [ -t 1 ] && [ "${TERM:-dumb}" != dumb ]
+}
+if rsp_color_on; then
+  rsp_e="$(printf '\033')"
+  C_RED="$rsp_e[31m"; C_GRN="$rsp_e[32m"; C_YEL="$rsp_e[33m"; C_CYN="$rsp_e[36m"
+  C_BLD="$rsp_e[1m"; C_DIM="$rsp_e[2m"; C_OFF="$rsp_e[0m"
+else
+  C_RED=""; C_GRN=""; C_YEL=""; C_CYN=""; C_BLD=""; C_DIM=""; C_OFF=""
+fi
+RSP_RULE="@@RULE@@"
+RSP_THIN="@@THIN@@"
+rsp_wordmark(){
+  printf '%s' "$C_RED$C_BLD"
+  cat <<'RSP_MARK'
+@@WORDMARK@@RSP_MARK
+  printf '%s' "$C_OFF"
+}
+# A box: rsp_rule [colour], rsp_title WORD [name], rsp_thin, rsp_row LABEL VALUE.
+rsp_rule(){ printf '%s%s%s\n' "${1-$C_RED}" "$RSP_RULE" "$C_OFF"; }
+rsp_thin(){ printf '%s%s%s\n' "$C_DIM" "$RSP_THIN" "$C_OFF"; }
+rsp_title(){
+  printf ' %s%s%s' "$C_BLD" "$1" "$C_OFF"
+  [ -z "${2:-}" ] || printf '   %s%s%s' "$C_BLD" "$2" "$C_OFF"
+  echo
+}
+rsp_row(){ printf ' %-15s %s\n' "$1" "$2"; }
+'''
 
 # Phase titles, in order. Azure alone has a provider preflight, so N is 8 there
 # and 7 elsewhere. The Wait title carries the address, known only at run time.
@@ -91,34 +135,35 @@ rsp_cmd(){
 # The output helpers every later block uses. `say` indents a line under the
 # current phase; `die` and `fail` stop the run and keep the reason for the
 # closing box. Built apart from the template so the bash keeps single braces.
-_OUTPUT = r'''# Output helpers. Plain ASCII and no colour: every line also lands in the log.
-RSP_PH=0
+_OUTPUT = r'''# Output helpers. Plain ASCII; colour, when on, reaches the terminal only.
+@@COLOR@@RSP_PH=0
 RSP_PHASE="local checks"
 RSP_REASON=""
 RSP_ERR=""
 RSP_DNS_TODO=""
 RSP_T0=$(date +%s)
-RSP_RULE="@@RULE@@"
-RSP_THIN="@@THIN@@"
 RSP_DOTS="@@DOTS@@"
 say(){ for rsp_l in "$@"; do if [ -n "$rsp_l" ]; then printf '      %s\n' "$rsp_l"; else echo; fi; done; }
 indent(){ sed 's/^./      &/'; }
-note(){ say "note  $1"; shift; for rsp_l in "$@"; do say "      $rsp_l"; done; }
+note(){ say "${C_YEL}note${C_OFF}  $1"; shift; for rsp_l in "$@"; do say "      $rsp_l"; done; }
 phase(){
   RSP_PH=$((RSP_PH + 1)); RSP_T0=$(date +%s); RSP_PHASE="[$RSP_PH/$RSP_PHASES] $1"
   rsp_n=$((@@DOTW@@ - ${#RSP_PHASE})); [ "$rsp_n" -ge 3 ] || rsp_n=3
   echo
-  echo "$RSP_PHASE ${RSP_DOTS:0:$rsp_n} $(date +%H:%M)"
+  printf '%s[%s/%s]%s %s%s%s %s%s %s%s\n' "$C_CYN$C_BLD" "$RSP_PH" "$RSP_PHASES" "$C_OFF" \
+    "$C_BLD" "$1" "$C_OFF" "$C_DIM" "${RSP_DOTS:0:$rsp_n}" "$(date +%H:%M)" "$C_OFF"
 }
-ok(){ say "ok${1:+  $1}"; }
+ok(){ say "${C_GRN}ok${C_OFF}${1:+  $1}"; }
 took(){
   rsp_s=$(( $(date +%s) - RSP_T0 ))
   if [ "$rsp_s" -ge 60 ]; then printf '%dm%02ds' $((rsp_s / 60)) $((rsp_s % 60)); else printf '%ds' "$rsp_s"; fi
 }
 # die: the deploy's own checks, exit 1. fail, after `cmd ||`: exit with that
 # command's status, the code set -e gave these steps before they named themselves.
-die(){ RSP_REASON="$1"; say "$@"; exit 1; }
-fail(){ rsp_rc=$?; [ "$rsp_rc" -ne 0 ] || rsp_rc=1; RSP_REASON="$1"; say "$@"; exit "$rsp_rc"; }
+# The first line is the reason, so it is the one in red.
+rsp_why(){ say "$C_RED$1$C_OFF"; shift; say "$@"; }
+die(){ RSP_REASON="$1"; rsp_why "$@"; exit 1; }
+fail(){ rsp_rc=$?; [ "$rsp_rc" -ne 0 ] || rsp_rc=1; RSP_REASON="$1"; rsp_why "$@"; exit "$rsp_rc"; }
 # deploy.ps1 sets REDSTACKPRO_FROM_PS1, so the closing box writes paths the way
 # PowerShell does (keys\id_ed25519) and its ssh line pastes as is.
 rsp_path(){
@@ -154,10 +199,16 @@ LOG="logs/deploy-$(date -u +%Y%m%d-%H%M%SZ).log"
   echo "----------------------------------------------------------------------"
 } > "$LOG"
 exec 3>&1 4>&2
-# tee writes down its own pid so finish can wait for it to drain before the
-# closing lines and the scrub: bash 3.2 gives no handle on a process substitution.
+# A tee that leaves colour out of the log: every line goes to the terminal as is
+# and to the log without escape codes, ours and terraform's alike (its plan colours
+# filled a log once). The log is what a user attaches to an issue.
+RSP_SPLIT='BEGIN { re = sprintf("%c", 27) "\\[[0-9;?]*[A-Za-z]"; out = ENVIRON["RSP_SPLIT_TO"] }
+{ print; fflush(); s = $0; gsub(re, "", s); print s >> out; fflush(out) }'
+rsp_split(){ RSP_SPLIT_TO="$1" awk "$RSP_SPLIT"; }
+# The splitter writes down its own pid so finish can wait for it to drain before
+# the closing lines and the scrub: bash 3.2 gives no handle on a process substitution.
 RSP_TEE_PID="$LOG.tee-pid"
-exec > >(sh -c 'echo $$ > "$1"; exec tee -a "$2"' rsp "$RSP_TEE_PID" "$LOG") 2>&1
+exec > >(RSP_SPLIT_TO="$LOG" sh -c 'echo $$ > "$1"; exec awk "$2"' rsp "$RSP_TEE_PID" "$RSP_SPLIT") 2>&1
 
 # Redact the obvious secrets from the log before it is shared: private key blocks
 # and password/secret/token assignments. deploy.sh does not print the lab password
@@ -200,23 +251,23 @@ rsp_done(){
   rsp_k="$(rsp_path "$KEY")"
   case "$rsp_k" in *" "*) rsp_k="\"$rsp_k\"" ;; esac
   echo
-  echo "$RSP_RULE"
-  echo " DONE  Infrastructure is up. Provisioning is running."
-  echo "$RSP_THIN"
-  echo " Portal    https://$JUMP/guacamole"
+  rsp_rule "$C_GRN"
+  echo " $C_GRN${C_BLD}DONE$C_OFF  ${C_BLD}Infrastructure is up. Provisioning is running.$C_OFF"
+  rsp_thin
+  echo " Portal    ${C_CYN}https://$JUMP/guacamole$C_OFF"
   echo
   echo " Logins, run:"
-  echo "   terraform -chdir=terraform output guacamole"
+  echo "   ${C_CYN}terraform -chdir=terraform output guacamole$C_OFF"
   echo
   echo " Watch provisioning, run (Ctrl-C stops watching, not the build):"
-  echo "   ssh -i $rsp_k $JUMPUSER@$JUMP \"tail -f ~/provision/run.log\""
+  echo "   ${C_CYN}ssh -i $rsp_k $JUMPUSER@$JUMP \"tail -f ~/provision/run.log\"$C_OFF"
   echo
   echo " Finished  when run.log shows RUN EXITED ok=1 (@@ETA@@)"
   printf '%s' "$RSP_DNS_TODO" | while IFS= read -r rsp_l; do
-    [ -z "$rsp_l" ] || echo " DNS       set the A record $rsp_l"
+    [ -z "$rsp_l" ] || echo " ${C_YEL}DNS$C_OFF       set the A record $rsp_l"
   done
   echo " Log       $(rsp_path "$LOG")"
-  echo "$RSP_RULE"
+  rsp_rule "$C_GRN"
 }
 
 rsp_failed(){
@@ -225,15 +276,15 @@ rsp_failed(){
     if [ "$1" -eq 130 ]; then rsp_why="interrupted (Ctrl-C)"; else rsp_why="see the output above"; fi
   fi
   echo
-  echo "$RSP_RULE"
-  echo " FAILED  $RSP_PHASE"
-  echo "$RSP_THIN"
-  echo " Reason    $rsp_why"
+  rsp_rule
+  echo " $C_RED${C_BLD}FAILED$C_OFF  $C_BLD$RSP_PHASE$C_OFF"
+  rsp_thin
+  echo " Reason    $C_RED$rsp_why$C_OFF"
   echo " Exit      $1"
   echo " Log       $(rsp_path "$LOG") (secrets scrubbed)"
   echo " Report    attach the log to a new issue:"
   echo "           https://github.com/devZero-Security/redStackPRO/issues/new/choose"
-  echo "$RSP_RULE"
+  rsp_rule
 }
 
 # Runs on every exit, success or failure. tee is stopped and drained first, so
@@ -247,10 +298,10 @@ finish(){
   exec 1>&3 2>&4
   rsp_drain
   if [ "$rc" -eq 0 ]; then
-    rsp_done | tee -a "$LOG"
+    rsp_done | rsp_split "$LOG"
     echo "result: ok" >> "$LOG"
   else
-    rsp_failed "$rc" | tee -a "$LOG"
+    rsp_failed "$rc" | rsp_split "$LOG"
     echo "result: FAILED (exit $rc) in phase $RSP_PHASE" >> "$LOG"
   fi
   scrub_log
@@ -379,11 +430,22 @@ if (-not $bash) {
 # Git Bash reads a drive letter path happily as long as the separators are
 # forward slashes, so no /c/-style translation is needed.
 $here = (Split-Path -Parent $MyInvocation.MyCommand.Path) -replace '\\', '/'
+@@PS1_COLOR@@
 # REDSTACKPRO_FROM_PS1 has deploy.sh print its closing paths the PowerShell way
 # (keys\id_ed25519). Set for that one process, so it does not stay in the session.
-& $bash -lc "cd '$here' && REDSTACKPRO_FROM_PS1=1 bash deploy.sh"
+& $bash -lc "cd '$here' && REDSTACKPRO_FROM_PS1=1 REDSTACKPRO_COLOR=$color bash deploy.sh"
 exit $LASTEXITCODE
 """
+
+# Git Bash started from PowerShell does not always see a terminal, so the
+# wrapper decides colour: on when this console renders it and nothing redirects
+# the output. NO_COLOR (no-color.org) turns it off.
+_PS1_COLOR = r"""# Colour only when this console renders it; NO_COLOR turns it off.
+$color = 0
+try {
+  if (-not $env:NO_COLOR -and -not [Console]::IsOutputRedirected -and $Host.UI.SupportsVirtualTerminal) { $color = 1 }
+} catch {}"""
+DEPLOY_PS1 = DEPLOY_PS1.replace("@@PS1_COLOR@@", _PS1_COLOR)
 
 
 # Find a Python that actually RUNS, rather than one that merely sits on PATH.
@@ -516,9 +578,14 @@ def _rules(text):
             .replace("@@DOTS@@", "." * 60).replace("@@DOTW@@", str(PHASE_WIDTH - 7)))
 
 
+def color_helpers():
+    """The palette, the wordmark and the box helpers deploy.sh and manage.sh share."""
+    return _rules(_COLOR.replace("@@WORDMARK@@", WORDMARK))
+
+
 def output_helpers():
     """The bash output helpers deploy.sh opens with (phase, ok, say, die, fail)."""
-    return _rules(_OUTPUT)
+    return _rules(_OUTPUT.replace("@@COLOR@@", color_helpers()))
 
 
 def _shell_word(text):
@@ -839,12 +906,14 @@ RSP_PHASES=@@PHASES@@
 
 cd "$(dirname "$0")"
 @@OUTPUT@@@@LOGGING_SETUP@@
-@@TFVAR_HELPER@@@@WHERE@@RSP_TITLE="redStackPRO deploy"
-[ -z "$RSP_NAME" ] || RSP_TITLE="$RSP_TITLE . $RSP_NAME"
-[ -z "$RSP_WHERE" ] || RSP_TITLE="$RSP_TITLE . $RSP_WHERE"
-echo "$RSP_RULE"
-echo " $RSP_TITLE"
-echo "$RSP_RULE"
+@@TFVAR_HELPER@@@@WHERE@@# The wordmark goes straight to the terminal, past the log.
+rsp_wordmark >&3
+rsp_rule
+rsp_title DEPLOY "$RSP_NAME"
+rsp_thin
+[ -z "$RSP_WHERE" ] || rsp_row Provider "$RSP_WHERE"
+rsp_row Log "$(rsp_path "$LOG")"
+rsp_rule
 
 for t in terraform ssh tar; do
   command -v "$t" >/dev/null || die "$t not found on PATH -- install it first"
@@ -937,7 +1006,7 @@ if [ -f deploy.tfvars ] && ! grep -Eq '^[[:space:]]*operator_source_ranges[[:spa
 fi
 if grep -Eq 'operator_source_ranges[^#]*"0\.0\.0\.0/0"' deploy.tfvars 2>/dev/null; then
   if [ "${REDSTACKPRO_ALLOW_OPEN_INGRESS:-0}" = "1" ]; then
-    say "WARNING: operator_source_ranges is 0.0.0.0/0 (ssh and the portal are open to" \
+    say "${C_YEL}WARNING${C_OFF}: operator_source_ranges is 0.0.0.0/0 (ssh and the portal are open to" \
       "         the whole internet). Narrow it in deploy.tfvars."
     # Let the Terraform precondition through too (it fails closed by default).
     export TF_VAR_allow_open_ingress=true
@@ -1128,7 +1197,13 @@ _MANAGE_HEAD = r'''#!/usr/bin/env bash
 set -uo pipefail
 
 cd "$(dirname "$0")"
-say(){ echo "== [$(date +%H:%M:%S)] $* =="; }
+@@COLOR@@RSP_DOTS="@@DOTS@@"
+# A step, the same shape as a deploy phase: "Title ..... HH:MM".
+say(){
+  rsp_n=$((@@DOTW@@ - ${#1})); [ "$rsp_n" -ge 3 ] || rsp_n=3
+  echo
+  printf '%s%s%s %s%s %s%s\n' "$C_BLD" "$1" "$C_OFF" "$C_DIM" "${RSP_DOTS:0:$rsp_n}" "$(date +%H:%M)" "$C_OFF"
+}
 
 RSP_NAME=@@NAME@@
 RSP_LABEL=@@LABEL@@
@@ -1136,31 +1211,34 @@ RSP_LABEL=@@LABEL@@
 RSP_RUN="$(rsp_cmd manage)"
 @@TFVAR_HELPER@@@@WHERE@@RSP_WHERE="$RSP_LABEL $RSP_REGION"; RSP_WHERE="${RSP_WHERE% }"
 
+# The top of every screen: what it does, to which range, and where it lives.
+rsp_head(){
+  rsp_rule
+  rsp_title "$1" "$RSP_NAME"
+  rsp_thin
+  [ -z "$RSP_WHERE" ] || rsp_row Provider "$RSP_WHERE"
+  [ -z "$RSP_GROUP_LABEL" ] || rsp_row "$RSP_GROUP_LABEL" "$RSP_GROUP"
+}
+rsp_section(){ printf ' %s%s%s\n %s%s%s\n' "$C_BLD" "$1" "$C_OFF" "$C_DIM" "${RSP_THIN:0:${#1}}" "$C_OFF"; }
 rsp_help(){
-  rsp_t="redStackPRO manage"
-  [ -z "$RSP_NAME" ] || rsp_t="$rsp_t . $RSP_NAME"
-  [ -z "$RSP_WHERE" ] || rsp_t="$rsp_t . $RSP_WHERE"
-  printf '%s\n' "$rsp_t"
-  [ -z "$RSP_GROUP_LABEL" ] || printf '%s  %s\n' "$RSP_GROUP_LABEL" "$RSP_GROUP"
+  rsp_wordmark
+  rsp_head MANAGE
+@@FOOTER@@  rsp_rule
   echo
-  printf 'Usage   %s <command>\n\n' "$RSP_RUN"
-  cat <<'RSP_HELP'
-@@COMMANDS@@
-Examples
-RSP_HELP
-  for rsp_c in @@EXAMPLES@@; do printf '  %s %s\n' "$RSP_RUN" "$rsp_c"; done
-  echo
-@@FOOTER@@}
+  rsp_section COMMANDS
+@@COMMANDS@@  rsp_section EXAMPLES
+  for rsp_c in @@EXAMPLES@@; do printf '  %s%s %s%s\n' "$C_CYN" "$RSP_RUN" "$rsp_c" "$C_OFF"; done
+}
 
 # What teardown is about to delete. manage.ps1 shows the same lines, through
 # _teardown_summary, before its own Read-Host.
 rsp_summary(){
-  echo "This deletes the whole range. It cannot be undone."
-  echo
-  printf '  %-16s%s\n' "Range" "${RSP_NAME:-unnamed}" "Provider" "$RSP_WHERE"
-  [ -z "$RSP_GROUP_LABEL" ] || printf '  %-16s%s\n' "$RSP_GROUP_LABEL" "$RSP_GROUP"
+  rsp_head TEARDOWN
   if [ "$RSP_FORCE" = 1 ]; then
 @@FORCE_NOTE@@  fi
+  rsp_rule
+  echo
+  printf ' %s%s%s\n' "$C_RED$C_BLD" "This deletes the whole range. It cannot be undone." "$C_OFF"
   echo
 }
 rsp_prompt(){
@@ -1181,7 +1259,7 @@ cmd="${1:-}"
 case "$cmd" in
   ""|help|-h|--help) rsp_help; exit 0 ;;
   status|start|stop|teardown|_teardown_summary) shift ;;
-  *) echo "unknown command: $cmd"; echo; rsp_help; exit 1 ;;
+  *) printf '%sunknown command: %s%s\n\n' "$C_RED" "$cmd" "$C_OFF"; rsp_help; exit 1 ;;
 esac
 RSP_FORCE=0
 RSP_YES=0
@@ -1190,7 +1268,7 @@ for rsp_o in "$@"; do
   case "$RSP_SHOW $rsp_o" in
     "teardown --force") RSP_FORCE=1 ;;
     "teardown --yes") RSP_YES=1 ;;
-    *) echo "unknown option for $RSP_SHOW: $rsp_o"; echo; rsp_help; exit 1 ;;
+    *) printf '%sunknown option for %s: %s%s\n\n' "$C_RED" "$RSP_SHOW" "$rsp_o" "$C_OFF"; rsp_help; exit 1 ;;
   esac
 done
 
@@ -1249,14 +1327,15 @@ if [ "$cmd" = "teardown" ] || [ "$cmd" = "_teardown_summary" ]; then
     if [ ! -t 0 ]; then
       if [ "$RSP_FORCE" = 1 ]; then rsp_f=" --force"; else rsp_f=""; fi
       echo "teardown asks before it deletes anything, and there is no terminal to ask on."
-      printf 'To delete it without the question:  %s teardown%s --yes\n' "$RSP_RUN" "$rsp_f"
-      echo "Nothing was deleted."
+      echo "To delete it without the question, run:"
+      printf '  %s%s teardown%s --yes%s\n' "$C_CYN" "$RSP_RUN" "$rsp_f" "$C_OFF"
+      printf '%sNothing was deleted.%s\n' "$C_YEL" "$C_OFF"
       exit 1
     fi
     printf '%s: ' "$(rsp_prompt)"
     RSP_ANSWER=""
     read -r RSP_ANSWER || true
-    rsp_confirmed "$RSP_ANSWER" || { echo "Not confirmed. Nothing was deleted."; exit 1; }
+    rsp_confirmed "$RSP_ANSWER" || { printf '%sNot confirmed. Nothing was deleted.%s\n' "$C_YEL" "$C_OFF"; exit 1; }
   fi
   # Same handoff as deploy.sh: the editable config lives at the export root as
   # deploy.tfvars and terraform auto-loads terraform/terraform.tfvars, so copy
@@ -1301,7 +1380,7 @@ for h in out.values():
 '''
 
 _MANAGE_SWEEP = {
-    "gcp": r'''    say "force teardown: deleting this range's instances in the cloud first"
+    "gcp": r'''    say "--force: delete this range's instances first"
     PROJ_ARG=""; [ -n "$RSP_PROJECT" ] && PROJ_ARG="--project $RSP_PROJECT"
 ''' + _SWEEP_STATE.replace("@@KEYS@@", '"name", "zone"') + r'''    RSP_LABELED=""
     if [ -n "$RSP_DEPLOY" ]; then
@@ -1315,7 +1394,7 @@ _MANAGE_SWEEP = {
       gcloud compute instances delete "$sweep_name" --zone "$sweep_zone" $PROJ_ARG --quiet 2>/dev/null || true
     done
 ''',
-    "aws": r'''    say "force teardown: terminating this range's instances in the cloud first"
+    "aws": r'''    say "--force: terminate this range's instances first"
     REG_ARG="--region $RSP_REGION"
 ''' + _SWEEP_STATE.replace("@@KEYS@@", '"instance_id",') + r'''    RSP_LIVE="Name=instance-state-name,Values=pending,running,stopping,stopped"
     SWEEP_IDS=""
@@ -1336,7 +1415,7 @@ _MANAGE_SWEEP = {
       aws ec2 wait instance-terminated $REG_ARG --instance-ids $SWEEP_IDS 2>/dev/null || true
     fi
 ''',
-    "azure": r'''    say "force teardown: deleting the whole resource group (clears anything a failed apply left behind)"
+    "azure": r'''    say "--force: delete the resource group first"
     # A range is one dedicated resource group, so the sure way to clear an interrupted
     # deploy is to delete the group itself. terraform destroy alone stalls when a failed
     # apply left a resource it does not fully track (a stranded NIC pins its subnet, which
@@ -1365,21 +1444,48 @@ _MANAGE_TEARDOWN_TAIL = r'''  fi
   say "terraform destroy"
   terraform -chdir=terraform destroy -auto-approve
   rc=$?
-  if [ "$rc" -ne 0 ]; then
-    echo "teardown did not finish cleanly."
-    echo "If it said an instance still holds a subnet or policy, an interrupted apply left"
-    printf 'instances outside the state; clear them with:  %s teardown --force\n' "$RSP_RUN"
+  echo
+  if [ "$rc" -eq 0 ]; then
+    rsp_rule "$C_GRN"
+    echo " $C_GRN${C_BLD}DONE$C_OFF  ${C_BLD}The range is deleted.$C_OFF"
+    rsp_rule "$C_GRN"
+  else
+    rsp_rule
+    echo " $C_RED${C_BLD}FAILED$C_OFF  ${C_BLD}teardown did not finish cleanly.$C_OFF"
+    rsp_thin
+    echo " If it said an instance still holds a subnet or policy, an interrupted"
+    echo " apply left instances outside the state. To clear them, run:"
+    echo "   $C_CYN$RSP_RUN teardown --force$C_OFF"
+    rsp_rule
   fi
   exit $rc
 fi
 
 '''
 
-_MANAGE_STATUS_PORTAL = r'''if [ "$cmd" = "status" ]; then
-  GUAC_URL="$(terraform -chdir=terraform output -json guacamole 2>/dev/null | "$PY" -c "import json,sys; print(json.load(sys.stdin).get('url',''))" 2>/dev/null)"
-  [ -n "$GUAC_URL" ] && echo "portal: $GUAC_URL"
-fi
+# status, start and stop open on the same box as the help, and status puts the
+# portal address in it.
+_MANAGE_STATUS_PORTAL = r'''case "$cmd" in
+  status|start|stop)
+    rsp_head "$(printf '%s' "$cmd" | tr '[:lower:]' '[:upper:]')"
+    if [ "$cmd" = "status" ]; then
+      GUAC_URL="$(terraform -chdir=terraform output -json guacamole 2>/dev/null | "$PY" -c "import json,sys; print(json.load(sys.stdin).get('url',''))" 2>/dev/null)"
+      [ -z "$GUAC_URL" ] || rsp_row Portal "$C_CYN$GUAC_URL$C_OFF"
+    fi
+    rsp_rule
+    echo
+    ;;
+esac
 
+'''
+
+# After a start or stop that went through. status ends on the CLI's own table.
+# The aws block ends on the CLI call itself, so its status is kept first.
+_MANAGE_DONE = r'''rsp_rc=$?
+[ "$rsp_rc" -eq 0 ] || exit "$rsp_rc"
+if [ "$cmd" != "status" ]; then
+  printf '%sok%s  %s ran on every @@NOUN@@\n' "$C_GRN" "$C_OFF" "$cmd"
+fi
 '''
 
 # Per-provider status/start/stop. Each reads redstackpro_instances, which
@@ -1452,7 +1558,7 @@ for v in json.load(sys.stdin).values():
 for zone, names in z.items():
     print(zone, ' '.join(names))" | tr -d '\r')
   [ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
-  [ "$RSP_FAIL" -eq 0 ] || { echo "$cmd failed on at least one instance (see above)."; exit 1; }
+  [ "$RSP_FAIL" -eq 0 ] || { printf '%s%s failed on at least one instance (see above).%s\n' "$C_RED" "$cmd" "$C_OFF"; exit 1; }
 fi
 ''',
     "azure": r'''command -v az >/dev/null 2>&1 || { echo "az (the Azure CLI) not found on PATH -- install it and run: az login (or az login --service-principal)"; exit 1; }
@@ -1490,7 +1596,7 @@ for v in json.load(sys.stdin).values():
     print(v['name'], v['resource_group'])" | tr -d '\r')
 fi
 [ "$RSP_ANY" -eq 1 ] || { echo "no instances found in this range."; exit 1; }
-[ "$RSP_FAIL" -eq 0 ] || { echo "$cmd failed on at least one instance (see above)."; exit 1; }
+[ "$RSP_FAIL" -eq 0 ] || { printf '%s%s failed on at least one instance (see above).%s\n' "$C_RED" "$cmd" "$C_OFF"; exit 1; }
 ''',
 }
 
@@ -1534,7 +1640,11 @@ _HELP_NEEDS = {
     "aws": "the AWS CLI, signed in (aws configure)",
 }
 _HELP_CONSOLE = {"proxmox": "the Proxmox web UI", "esxi": "the vSphere client"}
-HELP_WIDTH = 40
+# Command rows end at the rule: 2 + 16 + 2 + 42 = 62. Box rows: 17 + 45.
+HELP_WIDTH = 42
+ROW_WIDTH = 45
+# Shown in yellow wherever a help line carries it whole.
+_HELP_WARN = "Cannot be undone."
 
 
 def _held_addresses(plan, provider):
@@ -1576,8 +1686,12 @@ def _stop_help(plan, provider):
 
 
 def _wrap(text, width=HELP_WIDTH):
+    """Wrapped lines; a (parenthesized) group, usually a command, stays whole."""
+    import re
     import textwrap
-    return textwrap.wrap(text, width, break_on_hyphens=False, break_long_words=False)
+    kept = re.sub(r"\([^)]*\)", lambda m: m.group(0).replace(" ", "\0"), text)
+    return [line.replace("\0", " ") for line in textwrap.wrap(
+        kept, width, break_on_hyphens=False, break_long_words=False)]
 
 
 def _help_commands(plan, provider, label):
@@ -1596,15 +1710,30 @@ def _help_commands(plan, provider, label):
     else:
         rows = [("teardown", teardown)]
         console = _HELP_CONSOLE.get(provider, "your provider's own console")
-        note = [""] + ["  " + line for line in _wrap(
+        note = _wrap(
             "status, start and stop are not available for %s; only teardown is. "
             "Use %s to power the VMs on and off." % (label or "this provider", console),
-            56)]
-    lines = []
+            58)
+    out = []
     for cmd, text in rows:
         for i, line in enumerate(_wrap(text)):
-            lines.append("  %-16s  %s" % (cmd if i == 0 else "", line))
-    return "\n".join(lines + note) + "\n"
+            out.append(_help_line(cmd if i == 0 else "", line))
+        out.append("  echo\n")
+    if note:
+        out += ["  printf '  %%s\\n' %s\n" % _shell_word(line) for line in note]
+        out.append("  echo\n")
+    return "".join(out)
+
+
+def _help_line(cmd, line):
+    """One command row as a printf: the name in cyan, the warning in yellow."""
+    head, warn, tail = line.partition(_HELP_WARN)
+    if not warn:
+        return ("  printf '  %%s%%-16s%%s  %%s\\n' \"$C_CYN\" %s \"$C_OFF\" %s\n"
+                % (_shell_word(cmd), _shell_word(line)))
+    return ("  printf '  %%s%%-16s%%s  %%s%%s%%s%%s%%s\\n' \"$C_CYN\" %s \"$C_OFF\" %s "
+            "\"$C_YEL\" %s \"$C_OFF\" %s\n"
+            % (_shell_word(cmd), _shell_word(head), _shell_word(warn), _shell_word(tail)))
 
 
 def _auto_stop_help(plan, provider, label):
@@ -1634,20 +1763,21 @@ def _auto_stop_help(plan, provider, label):
 def _help_footer(plan, provider, label):
     rows = [("Auto-stop", _auto_stop_help(plan, provider, label)),
             ("Needs", _HELP_NEEDS.get(provider, "terraform"))]
+    return _box_rows(rows, "  ")
+
+
+def _box_rows(rows, indent):
+    """rsp_row calls for a box, each value wrapped to the rule."""
     out = []
     for name, text in rows:
-        for i, line in enumerate(_wrap(text, 56)):
-            out.append("  printf '%%-9s  %%s\\n' %s %s\n"
-                       % (_shell_word(name if i == 0 else ""), _shell_word(line)))
+        for i, line in enumerate(_wrap(text, ROW_WIDTH)):
+            out.append("%srsp_row %s %s\n"
+                       % (indent, _shell_word(name if i == 0 else ""), _shell_word(line)))
     return "".join(out)
 
 
 def _force_note(provider):
-    out = []
-    for i, line in enumerate(_wrap(_FORCE_NOTE.get(provider, _FORCE_NOTE_NONE), 44)):
-        out.append("    printf '  %%-16s%%s\\n' %s %s\n"
-                   % (_shell_word("--force" if i == 0 else ""), _shell_word(line)))
-    return "".join(out)
+    return _box_rows([("--force", _FORCE_NOTE.get(provider, _FORCE_NOTE_NONE))], "    ")
 
 
 def generate_manage_script(topology, registry=None, provider=None, region=None):
@@ -1671,17 +1801,22 @@ def generate_manage_script(topology, registry=None, provider=None, region=None):
     live = provider in _MANAGE_PROVIDER_BLOCK
     head = _MANAGE_HEAD
     for token, value in (
+            ("@@COLOR@@", color_helpers()),
+            ("@@DOTS@@", "." * 60),
+            ("@@DOTW@@", str(PHASE_WIDTH - 7)),
             ("@@NAME@@", _shell_word(topology.get("name"))),
             ("@@LABEL@@", _shell_word(label)),
             ("@@RSP_CMD@@", _RSP_CMD),
             ("@@TFVAR_HELPER@@", _TFVAR_HELPER),
             ("@@WHERE@@", where),
             ("@@COMMANDS@@", _help_commands(plan, provider, label)),
-            ("@@EXAMPLES@@", "status stop" if live else "teardown"),
+            ("@@EXAMPLES@@", "status teardown" if live else "teardown"),
             ("@@FOOTER@@", _help_footer(plan, provider, label)),
             ("@@FORCE_NOTE@@", _force_note(provider))):
         head = head.replace(token, value)
     provider_block = _MANAGE_PROVIDER_BLOCK.get(provider, _MANAGE_NO_LIVE_CONTROL)
+    if live:
+        provider_block += _MANAGE_DONE.replace("@@NOUN@@", _HELP_NOUN[provider])
     sweep = _MANAGE_SWEEP.get(provider, _MANAGE_SWEEP_NONE)
     teardown = _MANAGE_TEARDOWN_HEAD + sweep + _MANAGE_TEARDOWN_TAIL
     script = (head + _FIND_PYTHON + teardown + _MANAGE_STATUS_PORTAL
@@ -1727,12 +1862,13 @@ if (-not $bash) {
 function ConvertTo-BashWord([string]$s) { "'" + ($s -replace "'", "'\''") + "'" }
 $here = ConvertTo-BashWord ((Split-Path -Parent $MyInvocation.MyCommand.Path) -replace '\\', '/')
 $words = @($args)
+@@PS1_COLOR@@
 
 # teardown asks first, here: Git Bash started from PowerShell may see no
 # terminal to read an answer from. manage.sh prints what it will delete.
 if ($words.Count -gt 0 -and $words[0] -ceq 'teardown' -and $words -cnotcontains '--yes') {
   $ask = (@('_teardown_summary') + @($words | Select-Object -Skip 1) | ForEach-Object { ConvertTo-BashWord $_ }) -join ' '
-  $info = @(& $bash -lc "cd $here && REDSTACKPRO_FROM_PS1=1 bash manage.sh $ask")
+  $info = @(& $bash -lc "cd $here && REDSTACKPRO_FROM_PS1=1 REDSTACKPRO_COLOR=$color bash manage.sh $ask")
   $code = $LASTEXITCODE
   $name = ''
   $prompt = 'Type yes to delete it'
@@ -1744,13 +1880,14 @@ if ($words.Count -gt 0 -and $words[0] -ceq 'teardown' -and $words -cnotcontains 
   if ($code -ne 0) { exit $code }
   try { $answer = Read-Host $prompt } catch { $answer = $null }
   if ($null -eq $answer) {
-    Write-Host "No answer could be read. To delete it without the question:  .\manage.ps1 teardown --yes"
-    Write-Host "Nothing was deleted."
+    Write-Host "No answer could be read. To delete it without the question, run:"
+    Write-Host "  .\manage.ps1 teardown --yes"
+    Write-Host "Nothing was deleted." -ForegroundColor Yellow
     exit 1
   }
   $answer = "$answer".Trim()
   if (-not ($answer -eq 'yes' -or ($name -ne '' -and $answer -eq $name))) {
-    Write-Host "Not confirmed. Nothing was deleted."
+    Write-Host "Not confirmed. Nothing was deleted." -ForegroundColor Yellow
     exit 1
   }
   $words += '--yes'
@@ -1759,6 +1896,7 @@ if ($words.Count -gt 0 -and $words[0] -ceq 'teardown' -and $words -cnotcontains 
 # REDSTACKPRO_FROM_PS1 has manage.sh print .\manage.ps1 in its usage lines. Set
 # for that one process, so it does not stay in the session.
 $fwd = ($words | ForEach-Object { ConvertTo-BashWord $_ }) -join ' '
-& $bash -lc "cd $here && REDSTACKPRO_FROM_PS1=1 bash manage.sh $fwd"
+& $bash -lc "cd $here && REDSTACKPRO_FROM_PS1=1 REDSTACKPRO_COLOR=$color bash manage.sh $fwd"
 exit $LASTEXITCODE
 """
+MANAGE_PS1 = MANAGE_PS1.replace("@@PS1_COLOR@@", _PS1_COLOR)

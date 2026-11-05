@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 from redstackpro import Registry
-from redstackpro.deploy import generate_deploy_script, generate_manage_script
+from redstackpro.deploy import WORDMARK, generate_deploy_script, generate_manage_script
 from redstackpro.export import compile_topology
 
 from shipped import example
@@ -126,7 +126,7 @@ def test_open_ingress_override_downgrades_the_abort_to_a_warning(script):
     aborting, the same shape as REDSTACKPRO_MIN_STOP_LEAD on the auto-stop guard."""
     code = _code(script)
     assert 'REDSTACKPRO_ALLOW_OPEN_INGRESS:-0' in code
-    warn = "WARNING: operator_source_ranges is 0.0.0.0/0"
+    warn = "WARNING${C_OFF}: operator_source_ranges is 0.0.0.0/0"
     assert warn in script
     # The message tells the user the one-line fix and the override.
     assert '"    $(rsp_cmd deploy REDSTACKPRO_ALLOW_OPEN_INGRESS=1)"' in script
@@ -303,7 +303,8 @@ def _run(script_dir, stub_dir, env_extra=None):
     """
     bash = _bash()
     env = dict(os.environ)
-    env.pop("REDSTACKPRO_SSH_KEY", None)
+    for name in ("REDSTACKPRO_SSH_KEY", "REDSTACKPRO_COLOR", "NO_COLOR"):
+        env.pop(name, None)
     env.update(env_extra or {})
     command = 'export PATH="%s:/usr/bin:/bin"; exec bash deploy.sh' % _msys(stub_dir)
     return subprocess.run([bash, "-c", command], cwd=script_dir, env=env, stdin=subprocess.DEVNULL,
@@ -675,7 +676,8 @@ def test_the_deploy_tees_a_scrubbed_log_and_points_a_failure_at_the_tracker(scri
     failed run prints where the log is and where to raise the issue."""
     # One consolidated log, redirected so terraform and the provision both land in it.
     assert 'LOG="logs/deploy-' in script
-    assert 'tee -a "$LOG"' in script
+    assert 'RSP_SPLIT_TO="$LOG" sh -c' in script
+    assert 'rsp_done | rsp_split "$LOG"' in script
     # A header for triage: version and provider.
     assert "redStackPRO deploy log" in script
     from importlib.metadata import version
@@ -767,7 +769,7 @@ def test_status_start_stop_never_run_before_the_teardown_check(manage_script):
 
 def test_status_prints_the_guacamole_portal_url(manage_script):
     assert 'output -json guacamole' in manage_script
-    assert "portal:" in manage_script
+    assert 'rsp_row Portal "$C_CYN$GUAC_URL$C_OFF"' in manage_script
 
 
 def test_aws_targets_instances_by_id():
@@ -801,7 +803,7 @@ def test_teardown_force_sweeps_orphan_instances_before_destroy():
     aws = generate_manage_script(example("redstack.json"), Registry(), provider="aws")
     for s in (gcp, aws):
         assert '"teardown --force") RSP_FORCE=1 ;;' in s, "teardown --force is recognized"
-        assert ("clear them with:  %s teardown --force\\n' \"$RSP_RUN\"" in s), \
+        assert 'echo "   $C_CYN$RSP_RUN teardown --force$C_OFF"' in s, \
             "a failed destroy points at --force"
     assert "labels.redstackpro_deploy=$RSP_DEPLOY" in gcp
     assert "gcloud compute instances delete" in gcp
@@ -897,7 +899,7 @@ def test_MANAGE_ps1_forwards_every_argument_not_just_the_first():
     assert "$args[0]" not in MANAGE_PS1
     assert "$words = @($args)" in MANAGE_PS1
     assert "$fwd = ($words | ForEach-Object { ConvertTo-BashWord $_ }) -join ' '" in MANAGE_PS1
-    assert "REDSTACKPRO_FROM_PS1=1 bash manage.sh $fwd" in MANAGE_PS1
+    assert "REDSTACKPRO_FROM_PS1=1 REDSTACKPRO_COLOR=$color bash manage.sh $fwd" in MANAGE_PS1
 
 
 def _powershell():
@@ -1033,12 +1035,15 @@ def _manage_export(tmp_path, provider, doc=None, tfvars=True):
     return export, stubs, calls
 
 
-def _manage(export, stubs, *args, ps1=False, path_extra=":/usr/bin:/bin", stdin=None):
+def _manage(export, stubs, *args, ps1=False, path_extra=":/usr/bin:/bin", stdin=None,
+            env_extra=None):
     env = dict(os.environ)
-    for name in ("REDSTACKPRO_FROM_PS1", "AWS_PROFILE", "AWS_ACCESS_KEY_ID"):
+    for name in ("REDSTACKPRO_FROM_PS1", "AWS_PROFILE", "AWS_ACCESS_KEY_ID",
+                 "REDSTACKPRO_COLOR", "NO_COLOR"):
         env.pop(name, None)
     if ps1:
         env["REDSTACKPRO_FROM_PS1"] = "1"
+    env.update(env_extra or {})
     words = " ".join("'%s'" % a for a in args)
     command = 'export PATH="%s%s"; exec bash manage.sh %s' % (_msys(stubs), path_extra, words)
     return subprocess.run([_bash(), "-c", command], cwd=export, env=env,
@@ -1056,34 +1061,37 @@ _HELP_ROWS = {
               "                    stops; disks, the jumpbox public IP and",
               "                    the NAT gateway still bill. Nothing is",
               "                    deleted.",
-              "  start             Start every VM again. Provisioning is",
-              "  teardown --force  Delete the resource group directly"],
+              "  start             Start every VM again. Provisioning is not",
+              "  teardown          Delete the whole range",
+              "                    (terraform destroy). Cannot be undone.",
+              "  teardown --force  Delete the resource group directly first;"],
     "gcp": ["  status            Each instance's status and the portal",
             "  stop              Stop every instance. Compute billing",
             "                    stops; disks and the jumpbox static IP",
-            "  teardown --force  First delete this range's instances,",
-            "                    also any an interrupted apply left out",
-            "                    of the state, and no other range's; use"],
+            "  teardown --force  First delete this range's instances, also",
+            "                    any an interrupted apply left out of the",
+            "                    state, and no other range's; use it when a"],
     "aws": ["  status            Each instance's state and the portal",
             "  stop              Stop every instance. Compute billing",
-            "                    stops; EBS volumes, the jumpbox Elastic",
-            "                    IP and the NAT gateway still bill.",
+            "                    stops; EBS volumes, the jumpbox Elastic IP",
+            "                    and the NAT gateway still bill. Nothing is",
             "  teardown --force  First terminate this range's instances,"],
 }
+# The box rows under the title, after the wordmark.
 _HELP_HEAD = {
-    "azure": ["redStackPRO manage . smoketest-gl . Azure westus3",
-              "Resource group  smk-lab-rg"],
-    "gcp": ["redStackPRO manage . smoketest-gl . GCP us-central1",
-            "Project  dz-rt-range"],
-    "aws": ["redStackPRO manage . smoketest-gl . AWS eu-west-2", "Profile  default"],
+    "azure": [" Provider        Azure westus3", " Resource group  smk-lab-rg"],
+    "gcp": [" Provider        GCP us-central1", " Project         dz-rt-range"],
+    "aws": [" Provider        AWS eu-west-2", " Profile         default"],
 }
+# A (parenthesized) command is never split over two lines.
 _HELP_FOOT = {
-    "azure": ["Auto-stop  every day at 18:00 Eastern Standard Time",
-              "Needs      the Azure CLI, signed in (az login)"],
-    "gcp": ["Auto-stop  every day at 18:00 America/New_York",
-            "Needs      the Google Cloud CLI, signed in (gcloud auth login)"],
-    "aws": ["Auto-stop  every day at 18:00 America/New_York",
-            "Needs      the AWS CLI, signed in (aws configure)"],
+    "azure": [" Auto-stop       every day at 18:00 Eastern Standard Time",
+              " Needs           the Azure CLI, signed in (az login)"],
+    "gcp": [" Auto-stop       every day at 18:00 America/New_York",
+            " Needs           the Google Cloud CLI, signed in",
+            "                 (gcloud auth login)"],
+    "aws": [" Auto-stop       every day at 18:00 America/New_York",
+            " Needs           the AWS CLI, signed in (aws configure)"],
 }
 # What each provider's stop really runs; the help's stop row describes it.
 _STOP_CALL = {"azure": 'az vm deallocate -g "$rg" -n "$vm"',
@@ -1100,20 +1108,22 @@ def test_manage_with_no_command_prints_the_help_screen(tmp_path, provider):
     done = _manage(export, stubs)
     assert done.returncode == 0, done.stdout + done.stderr
     lines = done.stdout.splitlines()
-    assert lines[:4] == _HELP_HEAD[provider] + ["", "Usage   bash manage.sh <command>"]
+    assert lines[:5] == WORDMARK.splitlines()
+    assert lines[5:10] == ["=" * 62, " MANAGE   smoketest-gl", "-" * 62] + _HELP_HEAD[provider]
+    foot = _HELP_FOOT[provider]
+    assert lines[10:11 + len(foot)] == foot + ["=" * 62]
     for row in _HELP_ROWS[provider]:
         assert row in lines, (row, done.stdout)
-    assert ["Examples", "  bash manage.sh status", "  bash manage.sh stop", ""] == \
-        lines[lines.index("Examples"):lines.index("Examples") + 4]
-    assert lines[-2:] == _HELP_FOOT[provider]
-    assert max(len(line) for line in lines) <= 72
+    assert lines[lines.index(" EXAMPLES"):] == [
+        " EXAMPLES", " --------", "  bash manage.sh status", "  bash manage.sh teardown"]
+    assert max(len(line) for line in lines) <= 62
+    assert "\x1b" not in done.stdout, "colour with no terminal"
     assert _STOP_CALL[provider] in (export / "manage.sh").read_text(encoding="utf-8")
     assert _calls(calls) == [], "the help ran something"
 
     ps1 = _manage(export, stubs, ps1=True)
     assert ps1.returncode == 0
-    assert "Usage   .\\manage.ps1 <command>" in ps1.stdout
-    assert "  .\\manage.ps1 status\n  .\\manage.ps1 stop\n" in ps1.stdout
+    assert ps1.stdout.endswith("  .\\manage.ps1 status\n  .\\manage.ps1 teardown\n")
     assert "bash manage.sh" not in ps1.stdout
 
 
@@ -1142,9 +1152,9 @@ def test_the_help_needs_no_terraform_and_falls_back_to_the_compiled_defaults(tmp
     (export / "deploy.tfvars").unlink()
     done = _manage(export, stubs)
     assert done.returncode == 0, done.stdout
-    assert done.stdout.splitlines()[:2] == [
-        "redStackPRO manage . smoketest-gl . Azure eastus2",
-        "Resource group  smk-smoketest-gl-rg"]
+    assert done.stdout.splitlines()[8:10] == [
+        " Provider        Azure eastus2",
+        " Resource group  smk-smoketest-gl-rg"]
 
 
 @pytest.mark.parametrize("doc_stop,expect", [
@@ -1158,8 +1168,10 @@ def test_the_help_states_the_compiled_auto_stop(doc_stop, expect):
     doc = _smoketest_gl()
     doc["auto_stop"] = doc_stop
     script = generate_manage_script(doc, Registry(), provider="azure")
-    footer = script[script.index("printf '%-9s  %s\\n' 'Auto-stop'"):].splitlines()[0]
-    assert footer.endswith(" '%s'" % expect.replace("Auto-stop  ", "")), footer
+    footer = script[script.index("rsp_row 'Auto-stop'"):].splitlines()
+    rows = [footer[0]] + [r for r in footer[1:3] if r.startswith("  rsp_row '' ")]
+    said = " ".join(r.rsplit(" '", 1)[1].rstrip("'") for r in rows)
+    assert said.endswith(expect.replace("Auto-stop  ", "")), footer
 
 
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
@@ -1173,12 +1185,12 @@ def test_a_provider_without_live_control_offers_only_teardown(tmp_path):
                           text=True, stdin=subprocess.DEVNULL, timeout=120)
     assert done.returncode == 0
     out = done.stdout
-    assert out.startswith("redStackPRO manage . GOAD-Light . Proxmox\n"
-                          "Endpoint  https://pve.lab:8006/\n")
+    assert (" MANAGE   GOAD-Light\n" + "-" * 62 + "\n Provider        Proxmox\n"
+            " Endpoint        https://pve.lab:8006/\n") in out
     assert "  status " not in out and "  teardown --force" not in out
-    assert "status, start and stop are not available for Proxmox;" in out
-    assert "Examples\n  bash manage.sh teardown\n" in out
-    assert "Auto-stop  not available for Proxmox" in out
+    assert "  status, start and stop are not available for Proxmox; only\n" in out
+    assert out.endswith(" EXAMPLES\n --------\n  bash manage.sh teardown\n")
+    assert " Auto-stop       not available for Proxmox\n" in out
 
 
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
@@ -1188,15 +1200,16 @@ def test_teardown_without_a_terminal_or_yes_refuses_and_runs_nothing(tmp_path, f
     done = _manage(export, stubs, "teardown", *force)
     assert done.returncode == 1, done.stdout
     out = done.stdout.splitlines()
-    assert out[:6] == ["This deletes the whole range. It cannot be undone.", "",
-                       "  Range           smoketest-gl",
-                       "  Provider        Azure westus3",
-                       "  Resource group  smk-lab-rg",
-                       "  --force         deletes the resource group directly first"
-                       if force else ""]
-    assert ("To delete it without the question:  bash manage.sh teardown%s --yes"
-            % (" --force" if force else "")) in out
-    assert out[-1] == "Nothing was deleted."
+    assert out[:5] == ["=" * 62, " TEARDOWN   smoketest-gl", "-" * 62,
+                       " Provider        Azure westus3",
+                       " Resource group  smk-lab-rg"]
+    rest = out[5:]
+    if force:
+        assert rest.pop(0) == " --force         deletes the resource group directly first"
+    assert rest[:4] == ["=" * 62, "", " This deletes the whole range. It cannot be undone.", ""]
+    assert rest[-3:] == ["To delete it without the question, run:",
+                         "  bash manage.sh teardown%s --yes" % (" --force" if force else ""),
+                         "Nothing was deleted."]
     assert _calls(calls) == [], "terraform or the cloud CLI ran"
     assert not (export / "terraform/terraform.tfvars").exists()
 
@@ -1324,7 +1337,7 @@ def test_teardown_on_a_terminal_deletes_only_on_the_name_or_yes(tmp_path, answer
     finally:
         os.close(follower)
         os.close(leader)
-    assert "  Project         dz-rt-range" in done.stdout
+    assert "\n Project         dz-rt-range\n" in done.stdout
     assert "Type the range name (smoketest-gl) or yes to delete it: " in done.stdout
     ran = _calls(calls)
     if deleted:
@@ -1342,12 +1355,13 @@ def test_the_teardown_summary_manage_ps1_reads_is_the_same_text(tmp_path):
     done = _manage(export, stubs, "_teardown_summary", "--force", ps1=True)
     assert done.returncode == 0, done.stdout
     assert done.stdout.splitlines() == [
-        "This deletes the whole range. It cannot be undone.", "",
-        "  Range           smoketest-gl",
-        "  Provider        GCP us-central1",
-        "  Project         dz-rt-range",
-        "  --force         first deletes this range's instances, also",
-        "                  any left out of its state", "",
+        "=" * 62, " TEARDOWN   smoketest-gl", "-" * 62,
+        " Provider        GCP us-central1",
+        " Project         dz-rt-range",
+        " --force         first deletes this range's instances, also",
+        "                 any left out of its state",
+        "=" * 62, "",
+        " This deletes the whole range. It cannot be undone.", "",
         "prompt=Type the range name (smoketest-gl) or yes to delete it",
         "name=smoketest-gl"]
     assert _calls(calls) == []
@@ -1411,9 +1425,12 @@ def test_MANAGE_ps1_prints_the_powershell_help_from_a_real_export(tmp_path):
         [ps, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(tmp_path / "manage.ps1")],
         capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL)
     assert done.returncode == 0, done.stdout + done.stderr
-    assert done.stdout.startswith("redStackPRO manage . smoketest-gl . Azure eastus2\n"
-                                  "Resource group  smk-smoketest-gl-rg\n\n"
-                                  "Usage   .\\manage.ps1 <command>\n")
+    assert done.stdout.startswith(WORDMARK + "=" * 62 + "\n MANAGE   smoketest-gl\n"
+                                  + "-" * 62 + "\n Provider        Azure eastus2\n"
+                                  " Resource group  smk-smoketest-gl-rg\n")
+    assert done.stdout.endswith("  .\\manage.ps1 status\n  .\\manage.ps1 teardown\n")
+    # PowerShell's output is redirected here, so it asks for no colour.
+    assert "\x1b" not in done.stdout
 
 
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
@@ -1434,7 +1451,8 @@ def test_status_is_one_list_call_for_the_whole_range(tmp_path, provider, expect)
     export, stubs, calls = _manage_export(tmp_path, provider)
     done = _manage(export, stubs, "status")
     assert done.returncode == 0, done.stdout + done.stderr
-    assert done.stdout.startswith("portal: https://203.0.113.9/guacamole\n")
+    assert done.stdout.splitlines()[1] == " STATUS   smoketest-gl"
+    assert " Portal          https://203.0.113.9/guacamole\n" + "=" * 62 + "\n" in done.stdout
     cloud = [c for c in _calls(calls) if not c.startswith("terraform ")]
     assert cloud == [expect]
 
@@ -1711,6 +1729,59 @@ def test_from_deploy_ps1_the_done_box_writes_windows_paths(tmp_path):
     assert ('\n   ssh -i keys\\id_ed25519 blueop@%s "tail -f ~/provision/run.log"\n'
             % JUMP_IP) in done.stdout
     assert re.search(r"^ Log       logs\\deploy-\d{8}-\d{6}Z\.log$", done.stdout, re.M)
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_colour_reaches_the_terminal_and_never_the_log(tmp_path):
+    """The log is the file a user attaches to an issue. terraform's own plan
+    colours once filled 1028 lines of it with escape codes."""
+    export, stubs, _ = _range_export(tmp_path)
+    tf = stubs / "terraform"
+    tf.write_text(tf.read_text(encoding="utf-8").replace(
+        'echo "Apply complete!"',
+        "printf '\\033[32m+\\033[0m create\\n'; echo \"Apply complete!\""),
+        encoding="utf-8", newline="\n")
+    done = _run(export, stubs, env_extra={"REDSTACKPRO_COLOR": "1"})
+    assert done.returncode == 0, done.stdout + done.stderr
+    out = done.stdout
+    assert "\x1b[32m+\x1b[0m create" in out
+    assert "\x1b[32mok\x1b[0m" in out
+    assert "\x1b[32m\x1b[1mDONE\x1b[0m" in out
+    log = _log(export)
+    assert "\x1b" not in log
+    assert "\n+ create\n" in log
+    assert " DONE  Infrastructure is up. Provisioning is running." in log
+    assert log.splitlines()[-1] == "result: ok"
+    # The wordmark is the terminal's alone.
+    assert out.startswith("\x1b[31m\x1b[1m" + WORDMARK)
+    assert WORDMARK not in log
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_no_color_wins_and_a_pipe_gets_no_colour(tmp_path):
+    export, stubs, _ = _range_export(tmp_path)
+    for env in ({"REDSTACKPRO_COLOR": "1", "NO_COLOR": "1"}, {}):
+        done = _run(export, stubs, env_extra=env)
+        assert done.returncode == 0, done.stdout + done.stderr
+        assert "\x1b" not in done.stdout, env
+    (tmp_path / "m").mkdir()
+    export, stubs, _ = _manage_export(tmp_path / "m", "azure")
+    on = _manage(export, stubs, env_extra={"REDSTACKPRO_COLOR": "1"}).stdout
+    assert "  \x1b[36mstatus          \x1b[0m  " in on
+    assert "\x1b[33mCannot be undone.\x1b[0m" in on
+    off = _manage(export, stubs, env_extra={"REDSTACKPRO_COLOR": "1", "NO_COLOR": "1"}).stdout
+    assert "\x1b" not in off
+    assert off == re.sub("\x1b\\[[0-9;]*m", "", on), "colour is all that differs"
+
+
+def test_the_ps1_wrappers_pass_their_colour_choice():
+    from redstackpro.deploy import MANAGE_PS1
+    for ps1 in (DEPLOY_PS1, MANAGE_PS1):
+        assert "-not [Console]::IsOutputRedirected -and $Host.UI.SupportsVirtualTerminal" in ps1
+        assert "-not $env:NO_COLOR" in ps1
+        assert "@@" not in ps1
+    assert "REDSTACKPRO_COLOR=$color bash deploy.sh" in DEPLOY_PS1
+    assert MANAGE_PS1.count("REDSTACKPRO_COLOR=$color bash manage.sh") == 2
 
 
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
