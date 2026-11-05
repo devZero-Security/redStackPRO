@@ -448,7 +448,7 @@ def test_each_range_gets_its_own_resource_group_by_default(redstack):
     assert ("# Created by this deploy and deleted by teardown. Must not already "
             "exist; use one per range.") in tfvars
     assert 'default     = "%s"' % rg in files["terraform/variables.tf"]
-    assert 'RG="${RG:-%s}"' % rg in files["manage.sh"]
+    assert 'RSP_GROUP="${RSP_GROUP:-%s}"' % rg in files["manage.sh"]
     assert json.loads(files["terraform/preflight.json"])["default_resource_group"] == rg
 
     other = json.loads(json.dumps(redstack))
