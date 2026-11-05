@@ -365,6 +365,40 @@ def test_the_guide_explains_vm_sizes_and_the_preflight_for_azure_only():
             assert "azure_preflight" not in other
 
 
+LICENSING_URL = ("https://learn.microsoft.com/azure/virtual-machines/windows/"
+                 "windows-desktop-multitenant-hosting-deployment")
+
+
+def test_the_guide_has_the_client_licensing_note_on_azure_with_a_workstation():
+    doc = load(ROOT / "frontend/public/goad/minilab.json")
+    guide = compile_topology(doc, Registry(), provider="azure")["DEPLOYMENT-GUIDE.md"]
+    section = guide.split("## Azure: Windows client licensing")[1].split("\n## ")[0]
+    for needle in ("E3 or E5", "Microsoft 365", "`license_type`", LICENSING_URL):
+        assert needle in section
+    assert guide.index("## Azure: Windows client licensing") < guide.index("## 4. Run the deploy")
+    # A workstation with no os is Windows 11, so it still gets the note.
+    ws = next(n for n in doc["nodes"] if n["kind"] == "wks")
+    ws["overlay"].pop("os")
+    guide = compile_topology(doc, Registry(), provider="azure")["DEPLOYMENT-GUIDE.md"]
+    assert "## Azure: Windows client licensing" in guide
+    for provider in ("gcp", "aws"):
+        other = compile_topology(doc, Registry(), provider=provider)["DEPLOYMENT-GUIDE.md"]
+        assert "license_type" not in other
+
+
+def test_the_guide_has_no_licensing_note_without_a_client_host():
+    for doc in (example("redstack.json"),
+                load(ROOT / "frontend/public/goad/goad-light.json")):
+        assert not any(n["kind"] == "wks" for n in doc["nodes"])
+        guide = compile_topology(doc, Registry(), provider="azure")["DEPLOYMENT-GUIDE.md"]
+        assert "Windows client licensing" not in guide
+
+
+def test_the_readme_carries_the_azure_licensing_note():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "`license_type`" in readme and LICENSING_URL in readme
+
+
 def test_a_burstable_default_is_replaced_by_general_purpose_memory():
     """Live 2026-11-04: with B2as_v2 barred, the suggestion for a workstation was a
     4 GB compute-optimized F2as_v7 although 8 GB D sizes had quota. B maps to D, and

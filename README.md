@@ -191,6 +191,13 @@ one forest, two domain controllers and a member server, plus a jumpbox.
 > restrictions are in the wiki
 > [Cloud Prerequisites](https://github.com/devZero-Security/redStackPRO/wiki/Cloud-Prerequisites#azure).
 >
+> Windows 10 and 11 workstations on Azure boot Microsoft's client images, which
+> Microsoft licenses only for customers with a qualifying license, for example
+> Windows Enterprise E3 or E5 per user, a Microsoft 365 plan that includes it, or
+> a Visual Studio subscription for dev and test. redStackPRO does not set
+> `license_type`, so license eligibility is yours to confirm; see
+> [Microsoft's page](https://learn.microsoft.com/azure/virtual-machines/windows/windows-desktop-multitenant-hosting-deployment).
+>
 > Full permission tables, install links, and the GCP vCPU quota note
 > (`CPUS_ALL_REGIONS`, default 32 per project) are in the wiki
 > [Cloud Prerequisites](https://github.com/devZero-Security/redStackPRO/wiki/Cloud-Prerequisites).
