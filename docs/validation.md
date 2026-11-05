@@ -135,8 +135,9 @@ Names are composed from the topology `prefix` and the node `id`, never stored. S
 - `NET007` error. A subnet whose `cidr` is not inside its network's `cidr`. GCP
   takes it; AWS and Azure refuse it at apply. The remedy suggests a range inside
   the network.
-- `RDR001` error. A redirector has no `hostname`, or its hostname is still a
-  placeholder (`example`, `CHANGE-ME`, `your-domain`). A domain cannot be generated
+- `RDR001` error. A redirector has no `hostname`, or its hostname still contains a
+  placeholder (`example`, `change-me`, `changeme`, `your-domain`, in any case), so
+  any `example.com` style name is refused. A domain cannot be generated
   the way the gating header value is: someone has to register one and point it at the
   redirector's address. Shipping a plausible placeholder hid that until deploy, where
   it surfaced as the redirector blocking on "create an A record for
@@ -291,7 +292,7 @@ Requirements come from the node kind registry, not from the document.
   the segment's subnet free to route at the NAT for everyone else, so AWS now
   declares the `mixed_exposure_segment` capability alongside GCP. The rule had also
   never fired in practice, being gated on `exposure: internet` while every shipped
-  template uses `local`, and its description had drifted to the opposite of the
+  blueprint uses `local`, and its description had drifted to the opposite of the
   real failure. See 0054.
 - `CAP005` info, provider-specific. A range host with `os: windows_10` or
   `windows_11` on GCP or AWS. Neither publishes a Windows client image, so the
@@ -332,9 +333,9 @@ than the ordering logic.
 ## Range model
 
 These fire only in defense mode (`mode: defense`); the offense rules above are gated
-off there, since a lab jumpbox on a local subnet is correct and the `cyb` naming
-scheme is deferred for blueprints. See 0047. The shipped GOAD blueprints are clean
-of all of them except `RNG011`.
+off there, since a lab jumpbox on a local subnet is correct and defense blueprints
+keep GOAD's host names instead of the kind tag and ordinal id scheme (`NAM001`,
+`NAM002`). See 0047. The shipped defense blueprints are clean of all of them.
 
 - `RNG001` warning. A domain member (`dc`, `srv`, or `wks`) with no `joins`
   edge. In an AD range a host that joins no domain is drawn but part of nothing.
@@ -353,8 +354,9 @@ of all of them except `RNG011`.
   warning: both cannot stand up, so the run would fail on the second.
 - `RNG007` error. Two users in one domain with the same username. A
   sAMAccountName is unique within a domain, so the duplicate cannot be created.
-- `RNG008` warning. More than one `siem` box in a range. Agents report to a
-  single manager; a second SIEM has no agents pointed at it.
+- `RNG008` warning. Two `siem` boxes with the same `product`. A host reports to
+  every SIEM box, one agent per product, so a Wazuh box and an ELK box coexist,
+  but an agent can target only one box of a product and the second receives nothing.
 - `RNG009` warning. A host declares a vuln that is really an account property
   (`kerberoasting`, `asreproasting`, `weak_password`, `password_in_description`).
   A host has no task for these, so declaring them in the host's `vulns` plants

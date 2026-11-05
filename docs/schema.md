@@ -55,14 +55,14 @@ guard between two files that would otherwise diverge.
   prefixes, with a collector in its own tier. Kept to a single redirector because
   that is the familiar redStack shape; the rollover pool of a second redirector is
   exercised by the `rollover` test fixture rather than shipped here.
-- `parallel-chains.json`, two independent chains in separate routing domains with
-  one management network reaching both.
+- `parallel-chains.json`, two independent chains in separate routing domains, each
+  with its own jumpbox and collector, so burning one does not burn the other.
 - `peered.json`, two networks joined by a `peers` edge so a jumpbox in one manages
   hosts in the other across the peered boundary
 
 ## Range model
 
-Defense mode (`mode: defense`) is the Cyber Ranges canvas. A `domain` is a
+Defense mode (`mode: defense`) is the range canvas. A `domain` is a
 container node the way a segment is; a host joins it with a `joins` edge and
 nests inside its box. Domains link to each other with a `trusts` edge carrying
 `direction`, `trust_type` (`parent_child`, `tree_root`, `external`, `forest`),
@@ -74,7 +74,8 @@ The range host kinds `dc`, `srv`, `wks`, and `fw` share one overlay,
 - `os`, the image: `windows_server_2019`, `windows_server_2022`, `windows_10`,
   `windows_11`, `linux`, or a named distribution (`debian_13`, `debian_12`,
   `ubuntu_2204`, `ubuntu_2004`). Empty builds Windows Server 2022 for a `dc` or
-  `srv` and Windows 11 for a `wks`. GCP and AWS have no Windows client image, so
+  `srv`, Windows 11 for a `wks`, and Debian for `fw` and `appliance`. GCP and AWS
+  have no Windows client image, so
   `windows_10` and `windows_11` boot Server 2022 there (`CAP005`). Windows 10 is
   past end of support (Microsoft ended it on 2025-10-14); it stays a choice for
   labs that need it (`CAP006`).
@@ -121,7 +122,7 @@ Not in 0.7.0. See 0012.
   backends render it as network peering with CIDR based cross-network firewall
   rules: gcp in 0030, aws in 0031, azure (VNet peering) in 0.10.0. Proxmox and
   ESXi cannot peer and refuse through `CAP004`. Both
-  the `peered` example and the seeded redStack blueprint now run two networks, with
+  the `peered` example and the shipped redStack blueprint now run two networks, with
   redStack isolating its redirector in a network of its own peered to the main
   range
 - `desktop` landed in 0.5.0: an optional boolean on `overlay_operator` that
@@ -137,13 +138,15 @@ Anticipated, not decided. None of these is an ADR yet.
 - `tunnel` as a standalone role if defense mode produces a pivot host case where
   the transport is the entire relationship
 - Mixed-provider compilation, reading the optional `provider` field on networks.
-  The field exists in the schema but nothing reads it yet, so it is a seam for a
-  future hybrid export rather than a capability that ships today
+  The field exists in the schema and only the validator reads it (`NET001` refuses
+  a fronts or logs_to edge across two providers); the compiler ignores it, so it is
+  a seam for a future hybrid export rather than a capability that ships today
 
 ## Fixed constraints
 
-- No provider vocabulary at this layer. `exposure` and `egress` describe intent so
-  they mean the same thing on Proxmox as on a cloud
+- No provider vocabulary in the node and edge model (the document records only the
+  deploy target and region). `exposure` and `egress` describe intent so they mean
+  the same thing on Proxmox as on a cloud
 - `schema_version` on every document, pinned per schema file, with migrations from
   the first release
 - Validation errors carry a machine-readable code and prose written for a reader
