@@ -212,12 +212,16 @@ for detail.
 
 `deploy.sh` applies the Terraform and then provisions from the range's own
 jumpbox, because the managed hosts sit on a private subnet nothing else can
-reach. Your cloud credentials stay on your machine throughout.
+reach. Your cloud credentials stay on your machine throughout. It prints
+numbered phases, each ending on an `ok` line, and finishes on a `DONE` box with
+the portal address and the command to watch provisioning in
+`~/provision/run.log` on the jumpbox, or on a `FAILED` box naming the phase and
+the reason.
 
 Every run writes a timestamped, secret-scrubbed log to
-`logs/deploy-<timestamp>.log` in the export. If a deploy fails or a range
-comes up wrong, attach the newest one to a GitHub issue; `deploy.sh` prints
-its path and a link when something goes wrong.
+`logs/deploy-<timestamp>.log` in the export. Its last line records how the run
+ended. If a deploy fails or a range comes up wrong, attach the newest one to a
+GitHub issue; the `FAILED` box prints its path and the link.
 
 **Check it worked.** The export ships `verify.py` next to `deploy.sh`. Run it
 against the deployed range to confirm the path end to end:

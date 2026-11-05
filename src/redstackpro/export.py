@@ -12,11 +12,12 @@ under src/redstackpro/assets/ rather than at the repo root.
 import copy
 import os
 import re
+import textwrap
 from pathlib import Path
 
 from .ansible import (generate as generate_ansible, _randomize_gating,
                       apply_compile_defaults)
-from .deploy import generate_deploy_script, generate_manage_script
+from .deploy import generate_deploy_script, generate_manage_script, phase_titles
 from .naming import platform_account
 from .registry import Registry
 from .terraform import GenerationError
@@ -270,6 +271,43 @@ Get this right before the first apply. The public key is written into each host 
 creation and Terraform ignores later changes to it, so changing it afterwards means
 destroying and re-applying."""
 
+# What a person sees while deploy.sh runs and on the jumpbox afterwards. The
+# phase list comes from deploy.py, so the guide names the phases the script prints.
+_COUNT = {7: "seven", 8: "eight"}
+
+
+def _para(text):
+    # A code span is kept on one line.
+    held = re.sub(r"`[^`]*`", lambda m: m.group(0).replace(" ", "\0"), text)
+    return textwrap.fill(held, width=82, break_long_words=False,
+                         break_on_hyphens=False).replace("\0", " ")
+
+
+def deploy_output(provider):
+    """The guide's paragraph on deploy.sh's own output, for this provider."""
+    titles = phase_titles(provider)
+    n = len(titles)
+    return _para(
+        "The run prints %s numbered phases, from `[1/%d] %s` to `[%d/%d] %s`. Each "
+        "ends on an `ok` line, and Terraform's own output stays inside its phase, "
+        "because that is where a real error shows. A run that gets through ends on a "
+        "`DONE` box with the portal address, the command that prints the logins, the "
+        "ssh line to watch provisioning, and the log's path. A run that stops ends on "
+        "a `FAILED` box naming the phase, the reason and the exit code."
+        % (_COUNT.get(n, str(n)), n, titles[0], n, n, titles[-1]))
+
+
+def run_log(is_range):
+    """The guide's paragraph on run.log and run-full.log."""
+    stages = ("`Jumpbox pass 1 of 3`, `Waiting for authenticated WinRM`, then "
+              "`site.yml attempt 1 of 8`" if is_range else "`site.yml attempt 1 of 8`")
+    return _para(
+        "`run.log` gives each stage a heading (%s, and so on), leaves out hosts a "
+        "task skipped, and marks a failed task `!!`. It ends on a `RUN EXITED` line "
+        "and the last PLAY RECAP line for every host. Every line Ansible printed, "
+        "skips included, is in `~/provision/run-full.log`." % stages)
+
+
 # The deploy step is the one place the two platforms genuinely differ, so it is
 # the one place the instructions split. Everything above and below it is shared.
 # deploy.ps1 is a wrapper around the same deploy.sh, not a second implementation.
@@ -351,11 +389,15 @@ only it can reach, so the playbook cannot be driven from your machine.
 It refuses early, with a reason, if a tool is missing, if your cloud credentials
 are not set, or if the build's own auto-stop would fire before it finished.
 
+{deploy_output}
+
 Provisioning runs in a detached `screen` and keeps going if you disconnect:
 
 ```bash
 ssh {jumpuser}@<jumpbox> 'tail -f ~/provision/run.log'
 ```
+
+{run_log}
 
 `RUN EXITED ok=1` means it is done. Then open the portal at
 `https://<jumpbox>/guacamole`, with
@@ -366,15 +408,17 @@ has the per-operator VPN credentials and the tunnel details.
 
 Every run also writes a full log to `logs/deploy-<timestamp>.log`. If a deploy
 fails or a range comes up wrong, that file is what to attach to a GitHub issue: it
-records the versions, the provider, and where the run stopped, and it is scrubbed
-of secrets (private keys and passwords) before it is written. `deploy.sh` prints
-its path, and the link to open an issue, on a failure. Bug reports and
-feedback are welcome any time in GitHub Issues.
+records the versions, the provider, and every phase, its last line says how the
+run ended (`result: ok`, or `result: FAILED (exit N) in phase ...`), and it is
+scrubbed of secrets (private keys and passwords) when the run ends. The closing
+box prints its path, and a `FAILED` box adds the link to open an issue. Bug
+reports and feedback are welcome any time in GitHub Issues.
 
 If a redirector uses Let's Encrypt, `deploy.sh` prints the exact DNS A record to
-create the moment the address exists. Create it while the build runs: issuance
-waits about 15 minutes, then carries on with a self-signed certificate that
-`sudo rsp-issue-cert` can replace later without redeploying.
+create the moment the address exists, and repeats it in the `DONE` box. Create it
+while the build runs: issuance waits about 15 minutes, then carries on with a
+self-signed certificate that `sudo rsp-issue-cert` can replace later without
+redeploying.
 
 ## Checking the redirectors
 
@@ -526,11 +570,15 @@ waits for each fresh Windows host to answer an *authenticated* WinRM ping before
 promoting it, and retries to ride the WinRM flap a freshly promoted domain
 controller shows. An attempt that fails and is retried is normal, not a fault.
 
+{deploy_output}
+
 Provisioning runs in a detached `screen` and keeps going if you disconnect:
 
 ```bash
 ssh {jumpuser}@<jumpbox> 'tail -f ~/provision/run.log'
 ```
+
+{run_log}
 
 `RUN EXITED ok=1` means it is done. Then open the portal at
 `https://<jumpbox>/guacamole`, with
@@ -540,9 +588,10 @@ range's assumed-breach user.
 
 Every run also writes a full log to `logs/deploy-<timestamp>.log`. If a deploy
 fails or the range comes up wrong, that file is what to attach to a GitHub issue:
-it records the versions, the provider, and where the run stopped, and it is
-scrubbed of secrets before it is written. `deploy.sh` prints its path, and the
-link to open an issue, on a failure. Bug reports and feedback are welcome
+it records the versions, the provider, and every phase, its last line says how
+the run ended (`result: ok`, or `result: FAILED (exit N) in phase ...`), and it
+is scrubbed of secrets when the run ends. The closing box prints its path, and a
+`FAILED` box adds the link to open an issue. Bug reports and feedback are welcome
 any time in GitHub Issues.
 
 ## What this builds
@@ -759,6 +808,8 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
                       "a credential."),
         make_a_key=MAKE_A_KEY.format(folder=_folder_name(document.get("name"))),
         run_the_deploy=RUN_THE_DEPLOY,
+        deploy_output=deploy_output(provider),
+        run_log=run_log(is_range),
         quotas=QUOTA_NOTES.get(provider, ""),
         preconditions="" if is_range else ACCOUNT_PRECONDITIONS.get(provider, ""),
         provider_notes=PROVIDER_NOTES.get(provider, ""),
