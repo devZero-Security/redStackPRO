@@ -13,6 +13,7 @@ candidate, not merely find it. The executed test at the bottom is the one that
 matters here; the rest would pass against a script that never runs.
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -760,7 +761,7 @@ def test_status_start_stop_never_run_before_the_teardown_check(manage_script):
     teardown_at = manage_script.index('"$cmd" = "teardown"')
     exit_at = manage_script.index("exit $rc", teardown_at)
     status_at = manage_script.index('"$cmd" = "status"', teardown_at)
-    instances_at = manage_script.index("redstackpro_instances", teardown_at)
+    instances_at = manage_script.index("output -json redstackpro_instances", teardown_at)
     assert teardown_at < exit_at < status_at < instances_at
 
 
@@ -802,9 +803,14 @@ def test_teardown_force_sweeps_orphan_instances_before_destroy():
         assert '"teardown --force") RSP_FORCE=1 ;;' in s, "teardown --force is recognized"
         assert ("clear them with:  %s teardown --force\\n' \"$RSP_RUN\"" in s), \
             "a failed destroy points at --force"
-    assert "labels.redstackpro_kind" in gcp and "gcloud compute instances delete" in gcp
-    assert "tag:redstackpro,Values=true" in aws and "aws ec2 terminate-instances" in aws
+    assert "labels.redstackpro_deploy=$RSP_DEPLOY" in gcp
+    assert "gcloud compute instances delete" in gcp
+    assert "Name=tag:redstackpro_deploy,Values=$RSP_DEPLOY" in aws
+    assert "aws ec2 terminate-instances" in aws
     assert "aws ec2" not in gcp
+    # Never the label or tag every redStackPRO range carries.
+    assert "labels.redstackpro_kind" not in gcp
+    assert "tag:redstackpro,Values=true" not in aws
 
 
 def test_aws_auto_stop_warns_about_iam_before_apply():
@@ -1055,13 +1061,14 @@ _HELP_ROWS = {
     "gcp": ["  status            Each instance's status and the portal",
             "  stop              Stop every instance. Compute billing",
             "                    stops; disks and the jumpbox static IP",
-            "  teardown --force  First delete every redStackPRO instance",
-            "                    in the project, not only this range's;"],
+            "  teardown --force  First delete this range's instances,",
+            "                    also any an interrupted apply left out",
+            "                    of the state, and no other range's; use"],
     "aws": ["  status            Each instance's state and the portal",
             "  stop              Stop every instance. Compute billing",
             "                    stops; EBS volumes, the jumpbox Elastic",
             "                    IP and the NAT gateway still bill.",
-            "  teardown --force  First terminate every redStackPRO"],
+            "  teardown --force  First terminate this range's instances,"],
 }
 _HELP_HEAD = {
     "azure": ["redStackPRO manage . smoketest-gl . Azure westus3",
@@ -1207,6 +1214,102 @@ def test_teardown_yes_skips_the_question_in_any_order(tmp_path, flags):
     assert swept == ("--force" in flags), ran
 
 
+# This range's state as `terraform state pull` prints it: its deploy id and two
+# instances in redstackpro_instances. A random_id.deploy inside a module is not
+# the root one and must not be read.
+def _state(hex_id, instances):
+    return json.dumps({
+        "version": 4,
+        "resources": [
+            {"mode": "managed", "type": "random_id", "name": "deploy",
+             "instances": [{"attributes": {"hex": hex_id}}]},
+            {"module": "module.other", "mode": "managed", "type": "random_id",
+             "name": "deploy", "instances": [{"attributes": {"hex": "ffff0000"}}]},
+        ],
+        "outputs": {"redstackpro_instances": {"value": instances}},
+    })
+
+
+_SWEEP_STATE = {
+    "gcp": {"a": {"name": "smk-jump", "zone": "us-central1-a"},
+            "b": {"name": "smk-dc01", "zone": "us-central1-b"}},
+    "aws": {"a": {"instance_id": "i-0aaa"}, "b": {"instance_id": "i-0gone"}},
+}
+# What each cloud CLI answers. The label or tag query finds the orphan an
+# interrupted apply left, plus a tracked instance; the instance-id query on AWS
+# drops the id that no longer exists. Lines end in \r\n, as on Windows.
+_SWEEP_CLI = {
+    "gcp": ('case "$*" in *"instances list"*) '
+            "printf 'smk-orphan\\tus-central1-a\\r\\nsmk-jump\\tus-central1-a\\r\\n' ;; esac"),
+    "aws": ('case "$*" in *"tag:redstackpro_deploy"*) printf \'i-0orphan\\ti-0aaa\\r\\n\' ;; '
+            "*\"instance-id,Values=\"*) printf 'i-0aaa\\r\\n' ;; esac"),
+}
+
+
+def _sweep_export(tmp_path, provider, state):
+    export, stubs, calls = _manage_export(tmp_path, provider)
+    (export / "state.json").write_text(state, encoding="utf-8", newline="\n")
+    log = 'echo "$(basename "$0") $*" >> "%s"' % _msys(calls)
+    _stub(stubs, "terraform", "\n".join([
+        log, 'case "$*" in', '  *"state pull"*) cat state.json ;;', "esac"]))
+    cli = {"gcp": "gcloud", "aws": "aws"}[provider]
+    _stub(stubs, cli, log + "\n" + _SWEEP_CLI[provider])
+    return export, stubs, calls
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+@pytest.mark.parametrize("provider,swept", [
+    ("gcp", ["gcloud compute instances list --project dz-rt-range "
+             "--filter=labels.redstackpro_deploy=abcd1234 "
+             "--format=value(name,zone.basename())",
+             "gcloud compute instances delete smk-dc01 --zone us-central1-b "
+             "--project dz-rt-range --quiet",
+             "gcloud compute instances delete smk-jump --zone us-central1-a "
+             "--project dz-rt-range --quiet",
+             "gcloud compute instances delete smk-orphan --zone us-central1-a "
+             "--project dz-rt-range --quiet"]),
+    ("aws", ["aws ec2 describe-instances --region eu-west-2 --filters "
+             "Name=tag:redstackpro_deploy,Values=abcd1234 "
+             "Name=instance-state-name,Values=pending,running,stopping,stopped "
+             "--query Reservations[].Instances[].InstanceId --output text",
+             "aws ec2 describe-instances --region eu-west-2 --filters "
+             "Name=instance-id,Values=i-0aaa,i-0gone "
+             "Name=instance-state-name,Values=pending,running,stopping,stopped "
+             "--query Reservations[].Instances[].InstanceId --output text",
+             "aws ec2 terminate-instances --region eu-west-2 --instance-ids i-0aaa i-0orphan",
+             "aws ec2 wait instance-terminated --region eu-west-2 --instance-ids "
+             "i-0aaa i-0orphan"]),
+])
+def test_teardown_force_deletes_only_this_ranges_instances(tmp_path, provider, swept):
+    """The sweep used to match the label or tag every redStackPRO range carries,
+    so a team with several ranges in one project or region lost all of them. It
+    now takes this range's instances from its state, plus whatever carries its
+    own deploy id, which finds the instances an interrupted apply never recorded."""
+    export, stubs, calls = _sweep_export(tmp_path, provider, _state("abcd1234", _SWEEP_STATE[provider]))
+    done = _manage(export, stubs, "teardown", "--force", "--yes")
+    assert done.returncode == 0, done.stdout + done.stderr
+    ran = _calls(calls)
+    cli = [c for c in ran if not c.startswith("terraform ")]
+    assert cli == swept, ran
+    assert ran[-1] == "terraform -chdir=terraform destroy -auto-approve"
+    assert ran.index("terraform -chdir=terraform state pull") < ran.index(cli[0])
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+@pytest.mark.parametrize("provider", ["gcp", "aws"])
+@pytest.mark.parametrize("state", ["", _state("*", {})], ids=["no-state", "wildcard-id"])
+def test_teardown_force_without_this_ranges_state_deletes_nothing(tmp_path, provider, state):
+    """No state, or a deploy id that is not one (a * would match every range),
+    proves nothing about which instance is this range's."""
+    export, stubs, calls = _sweep_export(tmp_path, provider, state)
+    done = _manage(export, stubs, "teardown", "--force", "--yes")
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "no terraform state for this range" in done.stdout
+    ran = _calls(calls)
+    assert [c for c in ran if not c.startswith("terraform ")] == [], ran
+    assert ran[-1] == "terraform -chdir=terraform destroy -auto-approve"
+
+
 @pytest.mark.skipif(not hasattr(os, "openpty") or _bash() is None,
                     reason="needs a POSIX pty to stand in for a terminal")
 @pytest.mark.parametrize("answer,deleted", [
@@ -1243,8 +1346,8 @@ def test_the_teardown_summary_manage_ps1_reads_is_the_same_text(tmp_path):
         "  Range           smoketest-gl",
         "  Provider        GCP us-central1",
         "  Project         dz-rt-range",
-        "  --force         first deletes every redStackPRO instance in",
-        "                  the project, from any range", "",
+        "  --force         first deletes this range's instances, also",
+        "                  any left out of its state", "",
         "prompt=Type the range name (smoketest-gl) or yes to delete it",
         "name=smoketest-gl"]
     assert _calls(calls) == []

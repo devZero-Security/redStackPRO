@@ -12,6 +12,11 @@ variable "kind" {
   type        = string
 }
 
+variable "deploy_id" {
+  description = "This deployment's random id, carried as the redstackpro_deploy tag. manage.sh teardown --force terminates only instances carrying it."
+  type        = string
+}
+
 variable "vpc_id" {
   description = "id of the network this host's segment belongs to. The security group lives in it."
   type        = string

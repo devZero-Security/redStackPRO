@@ -1262,22 +1262,74 @@ if [ "$cmd" = "teardown" ] || [ "$cmd" = "_teardown_summary" ]; then
   # deploy.tfvars and terraform auto-loads terraform/terraform.tfvars, so copy
   # it into place first, or destroy runs with no vars at all.
   cp deploy.tfvars terraform/terraform.tfvars
+  # Before the sweep too, which reads the state.
+  terraform -chdir=terraform init -input=false -upgrade >/dev/null
   if [ "$RSP_FORCE" = 1 ]; then
 '''
 
+# What the GCP and AWS sweeps may delete: THIS deployment's instances and no
+# other's. Read from its state: the instances in redstackpro_instances, and
+# random_id.deploy, which every instance carries as its redstackpro_deploy
+# label or tag. That id finds an instance an interrupted apply created but never
+# recorded. random_id is created before any instance, so it is in the state
+# whenever an instance can exist. With no state there is nothing that proves an
+# instance is this range's, so nothing is deleted. Every value is checked
+# against [a-z0-9-] before it reaches a filter, where * would match any range.
+_SWEEP_STATE = r'''    RSP_SWEEP="$(terraform -chdir=terraform state pull 2>/dev/null | "$PY" -c '
+import json, re, sys
+try:
+    s = json.load(sys.stdin)
+except ValueError:
+    s = {}
+ok = lambda v: isinstance(v, str) and re.fullmatch("[a-z0-9-]+", v) is not None
+ids = [i.get("attributes", {}).get("hex") for r in s.get("resources", [])
+       if (r.get("mode"), r.get("type"), r.get("name")) == ("managed", "random_id", "deploy")
+       and "module" not in r for i in r.get("instances", [])]
+print(next((v for v in ids if ok(v)), ""))
+out = s.get("outputs", {}).get("redstackpro_instances", {}).get("value") or {}
+for h in out.values():
+    f = [h.get(k) for k in (@@KEYS@@)]
+    if all(ok(v) for v in f):
+        print(" ".join(f))
+' 2>/dev/null | tr -d '\r')"
+    RSP_DEPLOY="$(printf '%s\n' "$RSP_SWEEP" | head -1)"
+    RSP_KNOWN="$(printf '%s\n' "$RSP_SWEEP" | tail -n +2)"
+    if [ -z "$RSP_DEPLOY$RSP_KNOWN" ]; then
+      echo "  no terraform state for this range, so no instance can be shown to be its own;"
+      echo "  none deleted."
+    fi
+'''
+
 _MANAGE_SWEEP = {
-    "gcp": r'''    say "force teardown: sweeping redStackPRO instances in the cloud first"
+    "gcp": r'''    say "force teardown: deleting this range's instances in the cloud first"
     PROJ_ARG=""; [ -n "$RSP_PROJECT" ] && PROJ_ARG="--project $RSP_PROJECT"
-    gcloud compute instances list $PROJ_ARG --filter="labels.redstackpro_kind:*" --format="value(name,zone)" 2>/dev/null \
-      | tr -d '\r' | while IFS=$'\t' read -r sweep_name sweep_zone; do
-          [ -n "$sweep_name" ] || continue
-          echo "  deleting $sweep_name ($sweep_zone)"
-          gcloud compute instances delete "$sweep_name" --zone "$sweep_zone" $PROJ_ARG --quiet 2>/dev/null || true
-        done
+''' + _SWEEP_STATE.replace("@@KEYS@@", '"name", "zone"') + r'''    RSP_LABELED=""
+    if [ -n "$RSP_DEPLOY" ]; then
+      RSP_LABELED="$(gcloud compute instances list $PROJ_ARG --filter="labels.redstackpro_deploy=$RSP_DEPLOY" --format="value(name,zone.basename())" 2>/dev/null)"
+    fi
+    # Name and zone together: a name alone could match another range's instance
+    # in a different zone.
+    printf '%s\n%s\n' "$RSP_KNOWN" "$RSP_LABELED" | tr -d '\r' | tr '\t' ' ' | sort -u | while IFS=' ' read -r sweep_name sweep_zone; do
+      [ -n "$sweep_name" ] && [ -n "$sweep_zone" ] || continue
+      echo "  deleting $sweep_name ($sweep_zone)"
+      gcloud compute instances delete "$sweep_name" --zone "$sweep_zone" $PROJ_ARG --quiet 2>/dev/null || true
+    done
 ''',
-    "aws": r'''    say "force teardown: sweeping redStackPRO instances in the cloud first"
+    "aws": r'''    say "force teardown: terminating this range's instances in the cloud first"
     REG_ARG="--region $RSP_REGION"
-    SWEEP_IDS="$(aws ec2 describe-instances $REG_ARG --filters Name=tag:redstackpro,Values=true Name=instance-state-name,Values=pending,running,stopping,stopped --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null)"
+''' + _SWEEP_STATE.replace("@@KEYS@@", '"instance_id",') + r'''    RSP_LIVE="Name=instance-state-name,Values=pending,running,stopping,stopped"
+    SWEEP_IDS=""
+    if [ -n "$RSP_DEPLOY" ]; then
+      SWEEP_IDS="$(aws ec2 describe-instances $REG_ARG --filters "Name=tag:redstackpro_deploy,Values=$RSP_DEPLOY" "$RSP_LIVE" --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null)"
+    fi
+    if [ -n "$RSP_KNOWN" ]; then
+      # A filter, not --instance-ids: an id that is gone drops out instead of
+      # failing the whole call.
+      RSP_CSV="$(printf '%s\n' $RSP_KNOWN | tr '\n' ',')"
+      SWEEP_IDS="$SWEEP_IDS $(aws ec2 describe-instances $REG_ARG --filters "Name=instance-id,Values=${RSP_CSV%,}" "$RSP_LIVE" --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null)"
+    fi
+    SWEEP_IDS="$(printf '%s\n' $SWEEP_IDS | tr -d '\r' | sort -u | tr '\n' ' ')"
+    SWEEP_IDS="${SWEEP_IDS# }"; SWEEP_IDS="${SWEEP_IDS% }"
     if [ -n "$SWEEP_IDS" ]; then
       echo "  terminating: $SWEEP_IDS"
       aws ec2 terminate-instances $REG_ARG --instance-ids $SWEEP_IDS >/dev/null 2>&1 || true
@@ -1311,7 +1363,6 @@ _MANAGE_SWEEP_NONE = r'''    echo "note: a --force instance sweep is not wired f
 
 _MANAGE_TEARDOWN_TAIL = r'''  fi
   say "terraform destroy"
-  terraform -chdir=terraform init -input=false -upgrade >/dev/null
   terraform -chdir=terraform destroy -auto-approve
   rc=$?
   if [ "$rc" -ne 0 ]; then
@@ -1464,15 +1515,17 @@ _HELP_ADDRESS = {"azure": "public IP", "gcp": "static IP", "aws": "Elastic IP"}
 _HELP_FORCE = {
     "azure": "Delete the resource group directly first; use it when a plain "
              "teardown stops on a leftover resource.",
-    "gcp": "First delete every redStackPRO instance in the project, not only "
-           "this range's; use it when a plain teardown stops on a leftover instance.",
-    "aws": "First terminate every redStackPRO instance in the region, not only "
-           "this range's; use it when a plain teardown stops on a leftover instance.",
+    "gcp": "First delete this range's instances, also any an interrupted apply "
+           "left out of the state, and no other range's; use it when a plain "
+           "teardown stops on a leftover instance.",
+    "aws": "First terminate this range's instances, also any an interrupted apply "
+           "left out of the state, and no other range's; use it when a plain "
+           "teardown stops on a leftover instance.",
 }
 _FORCE_NOTE = {
     "azure": "deletes the resource group directly first",
-    "gcp": "first deletes every redStackPRO instance in the project, from any range",
-    "aws": "first terminates every redStackPRO instance in the region, from any range",
+    "gcp": "first deletes this range's instances, also any left out of its state",
+    "aws": "first terminates this range's instances, also any left out of its state",
 }
 _FORCE_NOTE_NONE = "no instance sweep for this provider; a plain destroy"
 _HELP_NEEDS = {

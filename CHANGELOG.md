@@ -375,6 +375,14 @@ versioning, and dates are UTC.
   prints, in the `DONE` box and in the reasons it stops (the cloud sign-in, an empty
   `project` or `subscription_id`, a missing key, an unregistered Azure provider),
   sits alone on its own line under a label ending `run:`.
+- `manage.sh teardown --force` on GCP and AWS deleted every redStackPRO instance in
+  the project or region, so a team running several ranges there lost all of them.
+  Every GCP and AWS instance now carries a `redstackpro_deploy` label or tag, a
+  random id Terraform keeps in that deployment's state, and the sweep deletes only
+  the instances in this deployment's state and those carrying its id, which still
+  finds one an interrupted apply created but never recorded. With no state it
+  deletes no instance. The help screen, the teardown summary and the
+  DEPLOYMENT-GUIDE say so.
 
 ## [0.9.2] (2026-11-04)
 

@@ -409,8 +409,8 @@ def test_deployment_guide_documents_managing_the_range(redstack, registry):
 
 
 @pytest.mark.parametrize("provider,sweep", [
-    ("gcp", "It first deletes every redStackPRO instance in the GCP project"),
-    ("aws", "It first terminates every redStackPRO instance in the region"),
+    ("gcp", "It never touches another deployment in the same project."),
+    ("aws", "It never touches another deployment in the same region."),
     ("azure", "It first deletes the deployment's resource group and everything in"),
 ])
 def test_the_guide_says_teardown_asks_first_and_what_force_deletes(redstack, provider, sweep):
@@ -420,6 +420,7 @@ def test_the_guide_says_teardown_asks_first_and_what_force_deletes(redstack, pro
     assert "Run it with no command for a help\nscreen" in guide
     assert sweep in guide
     assert "deletes this deployment's instances in the\ncloud first" not in guide
+    assert "every redStackPRO instance" not in guide
     range_guide = _guide(_goad_light(), provider)
     assert "asks you to type the range name (or `yes`)" in range_guide
 

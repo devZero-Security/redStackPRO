@@ -1771,3 +1771,21 @@ def test_no_auto_stop_pulls_in_no_time_provider(redstack):
         files = generate(redstack, provider=provider, skip_validation=True)
         assert "hashicorp/time" not in files["terraform/versions.tf"]
         assert "time_offset" not in files["terraform/main.tf"]
+
+
+# -- the per deployment id that scopes manage.sh teardown --force
+
+@pytest.mark.parametrize("provider", ["gcp", "aws"])
+def test_every_instance_carries_its_deployments_random_id(redstack, provider):
+    """teardown --force deletes only instances with this deployment's id, so
+    another range in the same project or region is never swept with it."""
+    parsed = parse(files(redstack, provider=provider)["terraform/main.tf"])
+    ids = [b["random_id"]["deploy"] for b in parsed.get("resource", [])
+           if "deploy" in b.get("random_id", {})]
+    assert ids == [{"byte_length": 4}]
+    hosts = {name: body for name, body in _modules_for(redstack, provider=provider).items()
+             if body["source"] == "./modules/%s/host" % provider}
+    assert hosts
+    assert {body.get("deploy_id") for body in hosts.values()} == {"${random_id.deploy.hex}"}
+    main = ROOT / ("src/redstackpro/assets/terraform/modules/%s/host/main.tf" % provider)
+    assert "redstackpro_deploy = var.deploy_id" in main.read_text(encoding="utf-8")

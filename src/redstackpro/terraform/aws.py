@@ -244,6 +244,8 @@ def _main(plan):
         "",
         "# A per deployment random suffix so concurrent ranges in one AWS account",
         "# never collide on account global names (the IAM role and key pair). See 0001.",
+        "# Also the redstackpro_deploy tag on every instance, which scopes",
+        "# manage.sh teardown --force to this deployment.",
         'resource "random_id" "deploy" {',
         "  byte_length = 4",
         "}",
@@ -444,6 +446,8 @@ def _main(plan):
             ("name", '"%s"' % plan.tag(node["id"])),
             ("node_id", '"%s"' % plan.tag(node["id"])),
             ("kind", '"%s"' % node["kind"]),
+            # The redstackpro_deploy tag that scopes teardown --force.
+            ("deploy_id", "random_id.deploy.hex"),
             ("vpc_id", "module.%s.id" % plan.ref(network)),
             ("subnet_id", subnet_ref),
             ("image_owner", '"%s"' % owner),
