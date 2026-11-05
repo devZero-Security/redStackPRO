@@ -7,6 +7,7 @@ and this fills them in place. Run after `terraform apply`, before `ansible-playb
     python3 tools/tf_inventory.py
     python3 tools/tf_inventory.py --tf-dir terraform --ansible-dir ansible
     python3 tools/tf_inventory.py --dry-run
+    python3 tools/tf_inventory.py --quiet     # one count line, what deploy.sh shows
 
 Expects a terraform output named redstackpro_addresses shaped as:
 
@@ -84,6 +85,8 @@ def main():
                     help="report what would change, write nothing")
     ap.add_argument("--manifest", default=".tf_sources.json",
                     help="where the pristine token'd sources are recorded")
+    ap.add_argument("--quiet", action="store_true",
+                    help="one count line instead of a line per file")
     args = ap.parse_args()
 
     ansible_dir = Path(args.ansible_dir)
@@ -120,13 +123,17 @@ def main():
         touched += 1
         if not args.dry_run:
             path.write_text(filled, encoding="utf-8")
-        print("%s %s" % ("would fill" if args.dry_run else "filled", path))
+        if not args.quiet:
+            print("%s %s" % ("would fill" if args.dry_run else "filled", path))
 
     if manifest and not args.dry_run:
         manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
     if not touched:
         print("no placeholders found; already filled?")
+    elif args.quiet:
+        print("%d file%s %s" % (touched, "" if touched == 1 else "s",
+                                "would be filled" if args.dry_run else "filled"))
 
     if unresolved:
         print("\nunresolved, left as placeholders:")

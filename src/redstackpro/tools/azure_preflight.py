@@ -2,8 +2,10 @@
 """Check that an Azure subscription can take this export, before terraform apply.
 
     python azure_preflight.py [export_dir]
+    python azure_preflight.py [export_dir] --brief
 
-deploy.sh runs it after terraform init. It asks the subscription what an apply
+deploy.sh runs it with --brief after terraform init: a pass prints any warnings
+and one `summary:` line, and a failure prints the full table as without it. It asks the subscription what an apply
 would otherwise find out halfway through: whether each VM size is offered here
 and not restricted for this subscription, whether the regional and per-family
 vCPU quotas have room, whether the public IP quota has room, whether the
@@ -422,9 +424,10 @@ def _row(key, label, need, used, limit):
 
 
 def assess(manifest, settings, skus, compute, network, providers, state):
-    """Pure: every fact in, (lines, fails, fix, warns) out. A fail is a list of
-    lines, the first saying what is wrong. fix is the vm_sizes change that
-    clears the size and family failures, when there is one."""
+    """Pure: every fact in, (lines, fails, fix, warns, summary) out. A fail is
+    a list of lines, the first saying what is wrong. fix is the vm_sizes change
+    that clears the size and family failures, when there is one. summary is the
+    one line deploy.sh shows for a pass."""
     location, sizes = settings["location"], settings["sizes"]
     defaults = manifest.get("default_vm_sizes", {})
     existing_sizes, existing_ips = state
@@ -521,6 +524,16 @@ def assess(manifest, settings, skus, compute, network, providers, state):
         for key in PUBLIC_IP_COUNTERS:
             if key in network:
                 rows.append(_row(key, network[key][0], ip_need, *network[key][1:]))
+    # The summary names the vCPU quota with the least room left after apply.
+    hosts = manifest.get("hosts", [])
+    used = sorted({size_of(h["role"]) for h in hosts if size_of(h["role"])})
+    summary = "%d VM%s" % (len(hosts), "" if len(hosts) == 1 else "s")
+    if used:
+        summary += " on " + (", ".join(used) if len(used) <= 2 else "%d sizes" % len(used))
+    vcpu = [r for r in rows if r["key"] not in PUBLIC_IP_COUNTERS and r["limit"]]
+    if vcpu:
+        tight = max(vcpu, key=lambda r: (r["used"] + r["need"]) / float(r["limit"]))
+        summary += ", quota %d of %d vCPU" % (tight["used"] + tight["need"], tight["limit"])
     if rows:
         lines.append("   %-34s %5s %6s %6s  %s" % ("quota", "need", "used", "limit", "status"))
         for r in rows:
@@ -646,7 +659,7 @@ def assess(manifest, settings, skus, compute, network, providers, state):
                 warns.append("%s is %s. terraform registers it at apply when your "
                              "identity may register providers; if apply stops on a "
                              "registration error, run:  %s" % (ns, state_, register))
-    return lines, fails, fix, warns
+    return lines, fails, fix, warns, summary
 
 
 # ---------------------------------------------------------------- main
@@ -659,17 +672,22 @@ def _mask(subscription):
 def main(argv=None, env=None, http=_http, run=subprocess.run, out=print):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("export", nargs="?", default=".")
+    ap.add_argument("--brief", action="store_true",
+                    help="on a pass, print only warnings and one summary: line")
     args = ap.parse_args(argv)
     env = os.environ if env is None else env
     root = Path(args.export)
 
     if env.get(SKIP_ENV, "0") == "1":
-        out("azure preflight skipped (%s=1)." % SKIP_ENV)
+        out("summary: skipped (%s=1)" % SKIP_ENV if args.brief
+            else "azure preflight skipped (%s=1)." % SKIP_ENV)
         return 0
 
     def skip(why):
         out("WARNING: azure preflight did not run: %s" % why)
         out("         The deploy continues; apply reports any size or quota limit itself.")
+        if args.brief:
+            out("summary: not checked (see the warning)")
         return 0
 
     try:
@@ -690,8 +708,9 @@ def main(argv=None, env=None, http=_http, run=subprocess.run, out=print):
     az = Azure(token, http=http)
     sub = "/subscriptions/%s" % urllib.parse.quote(subscription)
 
-    out("azure preflight: subscription %s, location %s" % (_mask(subscription), location))
-    out("   sizes from %s; asking as %s" % (settings["source"], how))
+    # Held until the result is known: a brief pass leaves the table out.
+    head = ["azure preflight: subscription %s, location %s" % (_mask(subscription), location),
+            "   sizes from %s; asking as %s" % (settings["source"], how)]
     warns = []
 
     def ask(what, fn):
@@ -723,8 +742,9 @@ def main(argv=None, env=None, http=_http, run=subprocess.run, out=print):
             break  # one warning, not one per namespace
         providers[ns] = got.get("registrationState", "NotRegistered")
 
-    lines, fails, fix, more = assess(manifest, settings, skus, compute, network,
-                                     providers, state_usage(root / "terraform"))
+    lines, fails, fix, more, summary = assess(
+        manifest, settings, skus, compute, network, providers,
+        state_usage(root / "terraform"))
     rg_fail, rg_warn = check_resource_group(
         az, sub, settings.get("resource_group", ""),
         state_resource_groups(root / "terraform"))
@@ -734,8 +754,12 @@ def main(argv=None, env=None, http=_http, run=subprocess.run, out=print):
         warns.append(rg_warn)
     while lines and not lines[-1]:
         lines.pop()
-    out("")
-    for line in lines:
+    if args.brief and not fails:
+        for w in warns + more:
+            out("WARNING: %s" % w)
+        out("summary: %s" % summary)
+        return 0
+    for line in head + [""] + lines:
         out(line)
     for w in warns + more:
         out("WARNING: %s" % w)

@@ -462,3 +462,52 @@ def test_the_resource_group_check_is_a_read(export):
     run(export, arm)
     assert all(method in ("GET", "POST") for method, _ in arm.calls)
     assert [m for m, u in arm.calls if "/resourcegroups/" in u] == ["GET"]
+
+
+# -- --brief, what deploy.sh runs: a pass is one summary line, a failure the full table
+
+def brief(root, arm, env=None, runner=no_terraform):
+    lines = []
+    rc = ap.main([str(root), "--brief"], env=dict(SP_ENV, **(env or {})), http=arm,
+                 run=runner, out=lines.append)
+    assert SECRET not in "\n".join(lines) and TOKEN not in "\n".join(lines)
+    return rc, lines
+
+
+def test_brief_pass_is_one_summary_line_naming_the_tightest_vcpu_quota(export):
+    rc, lines = brief(export, FakeArm())
+    assert rc == 0, lines
+    assert [ln for ln in lines if not ln.startswith("WARNING")] == lines[-1:]
+    summary = lines[-1]
+    match = re.fullmatch(r"summary: (\d+) VMs on (.+), quota (\d+) of (\d+) vCPU", summary)
+    assert match, summary
+    assert int(match.group(1)) == len(json.loads(
+        (export / "terraform/preflight.json").read_text(encoding="utf-8"))["hosts"])
+    # The quota named is the vCPU row with the least room in the full table.
+    rc, text = run(export, FakeArm())
+    rows = re.findall(r"^   (.+?)\s+(\d+)\s+(\d+)\s+(\d+)  ok$", text, re.M)
+    vcpu = [(int(n) + int(u), int(lim)) for label, n, u, lim in rows if "vCPU" in label]
+    after, limit = max(vcpu, key=lambda r: r[0] / r[1])
+    assert (int(match.group(3)), int(match.group(4))) == (after, limit)
+
+
+def test_brief_failure_prints_the_full_table(export):
+    set_sizes(export, {"jumpbox": "Standard_Typo2_v9"})
+    rc, lines = brief(export, FakeArm())
+    text = "\n".join(lines)
+    assert rc == 1
+    assert "FAIL: Standard_Typo2_v9 is not offered" in text
+    assert re.search(r"^   role\s+hosts\s+size", text, re.M)
+    assert not any(ln.startswith("summary:") for ln in lines)
+
+
+def test_brief_skip_and_not_checked_still_end_on_a_summary(export, monkeypatch):
+    rc, lines = brief(export, FakeArm(), env={"REDSTACKPRO_SKIP_PREFLIGHT": "1"})
+    assert (rc, lines) == (0, ["summary: skipped (REDSTACKPRO_SKIP_PREFLIGHT=1)"])
+    monkeypatch.setattr(ap.shutil, "which", lambda name: None)
+    lines = []
+    rc = ap.main([str(export), "--brief"], env={"ARM_SUBSCRIPTION_ID": SUB},
+                 http=FakeArm(), run=no_terraform, out=lines.append)
+    assert rc == 0
+    assert lines[0].startswith("WARNING: azure preflight did not run: no Azure token")
+    assert lines[-1] == "summary: not checked (see the warning)"
