@@ -344,7 +344,7 @@ def test_deploy_runs_the_preflight_after_init_and_before_apply():
     from redstackpro.deploy import generate_deploy_script
     deploy = generate_deploy_script(example("redstack.json"), Registry(), provider="azure")
     init = deploy.index("terraform -chdir=terraform init")
-    pre = deploy.index('"$PY" azure_preflight.py . || exit 1')
+    pre = deploy.index('"$PY" azure_preflight.py . --brief')
     apply_ = deploy.index("terraform -chdir=terraform apply")
     assert init < pre < apply_
     for provider in ("gcp", "aws"):

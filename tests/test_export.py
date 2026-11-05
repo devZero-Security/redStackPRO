@@ -120,7 +120,7 @@ def test_the_stop_check_cannot_pass_by_failing(registry):
     # A non-numeric result (python3 missing, or erroring) takes the abort path.
     guard = body[body.index('case "$RSP_STOP_LEAD"'):]
     assert "''|*[!0-9]*)" in guard
-    assert guard.index("exit 1") < guard.index("esac")
+    assert guard.index("die ") < guard.index("esac")
 
 
 def test_no_ttl_means_no_stop_preflight(registry):

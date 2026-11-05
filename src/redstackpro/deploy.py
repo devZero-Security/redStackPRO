@@ -28,17 +28,114 @@ def _redstackpro_version():
         return "unknown"
 
 
+# How a deploy reads on screen: a title box, numbered phases "[n/N] Title ....
+# HH:MM" that each end on an indented "ok" line, and a closing DONE or FAILED box
+# that says what to do next. Plain ASCII and no colour, because every line is
+# also written to the log. The run.log on the jumpbox uses the same rules.
+RULE = "=" * 62
+THIN = "-" * 62
+# Title, dot leader and HH:MM fill this many columns.
+PHASE_WIDTH = 58
+
+# Phase titles, in order. Azure alone has a provider preflight, so N is 8 there
+# and 7 elsewhere. The Wait title carries the address, known only at run time.
+PREFLIGHT_PHASE = "Preflight: VM sizes, quota, providers"
+PHASES = (
+    "Terraform apply",
+    "Fill the inventory from Terraform",
+    "Wait for the jumpbox $JUMP",
+    "Install prerequisites on the jumpbox",
+    "Stage the Ansible tree and the key",
+    "Write the provision runner",
+    "Launch provisioning on the jumpbox",
+)
+
+
+def phase_titles(provider):
+    """The phase titles a deploy.sh for this provider prints, in order."""
+    return ((PREFLIGHT_PHASE,) if provider == "azure" else ()) + PHASES
+
+
+# Shown in the title box. The region comes from deploy.tfvars at run time, so the
+# box names where this run actually goes.
+_PROVIDER_LABEL = {"gcp": "GCP", "aws": "AWS", "azure": "Azure",
+                   "proxmox": "Proxmox", "esxi": "ESXi"}
+_REGION_VAR = {"gcp": "region", "aws": "region", "azure": "location"}
+
+# The provisioning estimates the export guide states, per mode.
+_ETA = {True: "45-75 min", False: "60-75 min"}
+
+
+# The output helpers every later block uses. `say` indents a line under the
+# current phase; `die` and `fail` stop the run and keep the reason for the
+# closing box. Built apart from the template so the bash keeps single braces.
+_OUTPUT = r'''# Output helpers. Plain ASCII and no colour: every line also lands in the log.
+RSP_PH=0
+RSP_PHASE="local checks"
+RSP_REASON=""
+RSP_ERR=""
+RSP_DNS_TODO=""
+RSP_T0=$(date +%s)
+RSP_RULE="@@RULE@@"
+RSP_THIN="@@THIN@@"
+RSP_DOTS="@@DOTS@@"
+say(){ for rsp_l in "$@"; do if [ -n "$rsp_l" ]; then printf '      %s\n' "$rsp_l"; else echo; fi; done; }
+indent(){ sed 's/^./      &/'; }
+note(){ say "note  $1"; shift; for rsp_l in "$@"; do say "      $rsp_l"; done; }
+phase(){
+  RSP_PH=$((RSP_PH + 1)); RSP_T0=$(date +%s); RSP_PHASE="[$RSP_PH/$RSP_PHASES] $1"
+  rsp_n=$((@@DOTW@@ - ${#RSP_PHASE})); [ "$rsp_n" -ge 3 ] || rsp_n=3
+  echo
+  echo "$RSP_PHASE ${RSP_DOTS:0:$rsp_n} $(date +%H:%M)"
+}
+ok(){ say "ok${1:+  $1}"; }
+took(){
+  rsp_s=$(( $(date +%s) - RSP_T0 ))
+  if [ "$rsp_s" -ge 60 ]; then printf '%dm%02ds' $((rsp_s / 60)) $((rsp_s % 60)); else printf '%ds' "$rsp_s"; fi
+}
+# die: the deploy's own checks, exit 1. fail, after `cmd ||`: exit with that
+# command's status, the code set -e gave these steps before they named themselves.
+die(){ RSP_REASON="$1"; say "$@"; exit 1; }
+fail(){ rsp_rc=$?; [ "$rsp_rc" -ne 0 ] || rsp_rc=1; RSP_REASON="$1"; say "$@"; exit "$rsp_rc"; }
+# deploy.ps1 sets REDSTACKPRO_FROM_PS1, so the closing box writes paths the way
+# PowerShell does (keys\id_ed25519) and its ssh line pastes as is.
+rsp_path(){
+  if [ "${REDSTACKPRO_FROM_PS1:-}" = "1" ]; then
+    case "$1" in
+      /*) if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; return; fi ;;
+    esac
+    printf '%s\n' "$1" | tr '/' '\\'
+  else
+    printf '%s\n' "$1"
+  fi
+}
+'''
+
+
 # The deployment log. Everything deploy.sh prints (terraform apply and the whole
 # jumpbox-staged provision) is tee'd to one timestamped file, so a user who hits a
 # failed or broken deploy has a single artifact to attach to a GitHub issue and we
 # can see what went wrong. Secrets are scrubbed on exit so the file is safe to
-# share on a public tracker. Built here rather than inline in the template so the
-# bash keeps single braces (the template goes through str.format). See 0022.
+# share on a public tracker. The file ends on a `result:` line, so a log attached
+# to an issue says how the run ended. See 0022.
 _LOGGING_SETUP = r'''
 mkdir -p logs
 LOG="logs/deploy-$(date -u +%Y%m%d-%H%M%SZ).log"
+# The triage header goes to the log only; the terminal gets the title box.
+{
+  echo "redStackPRO deploy log"
+  echo "version:   @@VERSION@@"
+  echo "provider:  @@PROVIDER@@"
+  echo "started:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "system:    $(uname -a 2>/dev/null || echo unknown)"
+  echo "terraform: $(terraform version 2>/dev/null | head -1 || echo 'not found')"
+  echo "----------------------------------------------------------------------"
+} > "$LOG"
 exec 3>&1 4>&2
-exec > >(tee -a "$LOG") 2>&1
+# tee writes down its own pid so finish can wait for it to drain before the
+# closing lines and the scrub: bash 3.2 gives no handle on a process substitution.
+RSP_TEE_PID="$LOG.tee-pid"
+exec > >(sh -c 'echo $$ > "$1"; exec tee -a "$2"' rsp "$RSP_TEE_PID" "$LOG") 2>&1
 
 # Redact the obvious secrets from the log before it is shared: private key blocks
 # and password/secret/token assignments. deploy.sh does not print the lab password
@@ -64,32 +161,71 @@ open(p, "w", encoding="utf-8").write(t)
 PYSCRUB
 }
 
-# Runs on every exit, success or failure: flush and scrub the log, restore the
-# real stdout, and point a failed run at the issue tracker.
+rsp_drain(){
+  rsp_pid="$(cat "$RSP_TEE_PID" 2>/dev/null)"
+  rm -f "$RSP_TEE_PID"
+  [ -n "$rsp_pid" ] || { sleep 1; return 0; }
+  for rsp_i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+    kill -0 "$rsp_pid" 2>/dev/null || return 0
+    sleep 0.1
+  done
+}
+
+rsp_done(){
+  echo
+  echo "$RSP_RULE"
+  echo " DONE  Infrastructure is up. Provisioning is running."
+  echo "$RSP_THIN"
+  echo " Portal    https://$JUMP/guacamole"
+  echo " Logins    terraform -chdir=terraform output guacamole"
+  echo " Watch     ssh -i $(rsp_path "$KEY") $JUMPUSER@$JUMP"
+  echo "           tail -f ~/provision/run.log"
+  echo " Finished  when run.log shows RUN EXITED ok=1 (@@ETA@@)"
+  printf '%s' "$RSP_DNS_TODO" | while IFS= read -r rsp_l; do
+    [ -z "$rsp_l" ] || echo " DNS       set the A record $rsp_l"
+  done
+  echo " Log       $(rsp_path "$LOG")"
+  echo "$RSP_RULE"
+}
+
+rsp_failed(){
+  rsp_why="${RSP_REASON:-$RSP_ERR}"
+  if [ -z "$rsp_why" ]; then
+    if [ "$1" -eq 130 ]; then rsp_why="interrupted (Ctrl-C)"; else rsp_why="see the output above"; fi
+  fi
+  echo
+  echo "$RSP_RULE"
+  echo " FAILED  $RSP_PHASE"
+  echo "$RSP_THIN"
+  echo " Reason    $rsp_why"
+  echo " Exit      $1"
+  echo " Log       $(rsp_path "$LOG") (secrets scrubbed)"
+  echo " Report    attach the log to a new issue:"
+  echo "           https://github.com/devZero-Security/redStackPRO/issues/new/choose"
+  echo "$RSP_RULE"
+}
+
+# Runs on every exit, success or failure. tee is stopped and drained first, so
+# the closing box lands after everything it follows, in the terminal and in the
+# log, and the result line is the log's last line before the scrub.
 finish(){
   rc=$?
-  rm -f "${KEYSAFE:-}" 2>/dev/null || true
-  scrub_log
+  set +e
+  trap - ERR
+  rm -f "${KEYSAFE:-}" 2>/dev/null
   exec 1>&3 2>&4
+  rsp_drain
   if [ "$rc" -eq 0 ]; then
-    echo "== deploy log saved (secrets scrubbed): $LOG =="
+    rsp_done | tee -a "$LOG"
+    echo "result: ok" >> "$LOG"
   else
-    echo "== deploy FAILED (exit $rc). Log saved (secrets scrubbed): $LOG =="
-    echo "   Attach that file to a new issue so we can see what went wrong:"
-    echo "   https://github.com/devZero-Security/redStackPRO/issues/new/choose"
+    rsp_failed "$rc" | tee -a "$LOG"
+    echo "result: FAILED (exit $rc) in phase $RSP_PHASE" >> "$LOG"
   fi
+  scrub_log
+  exit "$rc"
 }
 trap finish EXIT
-
-{
-  echo "redStackPRO deploy log"
-  echo "version:   @@VERSION@@"
-  echo "provider:  @@PROVIDER@@"
-  echo "started:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  echo "system:    $(uname -a 2>/dev/null || echo unknown)"
-  echo "terraform: $(terraform version 2>/dev/null | head -1 || echo 'not found')"
-  echo "----------------------------------------------------------------------"
-}
 '''
 
 
@@ -138,22 +274,20 @@ print(int((stop - now).total_seconds() // 60))
 # resource because its token had expired. Say so and stop instead.
 case "$RSP_STOP_LEAD" in
   ''|*[!0-9]*)
-    echo "Could not work out when this build stops itself -- the check did not run."
-    echo "This build carries a daily stop at %(hour)02d:%(minute)02d %(timezone)s."
-    echo "Confirm that is more than a build away, then:"
-    echo "  Override: REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh"
-    exit 1 ;;
+    die "Could not work out when this build stops itself -- the check did not run." \\
+      "This build carries a daily stop at %(hour)02d:%(minute)02d %(timezone)s." \\
+      "Confirm that is more than a build away, then:" \\
+      "  Override: REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh" ;;
 esac
 if [ "$RSP_STOP_LEAD" -lt "${REDSTACKPRO_MIN_STOP_LEAD:-150}" ]; then
-  echo "This build stops itself at %(hour)02d:%(minute)02d %(timezone)s, which is $RSP_STOP_LEAD minutes away."
-  echo "Provisioning takes up to 75 minutes, so the range would stop part-built."
-  echo
-  echo "  Override: REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh"
-  echo "  Or set a later stop time:"
-  echo "  In the canvas, click empty space, then Topology settings > Auto-stop, and export again."
-  echo "  It is a daily clock time, so exporting again with the same time changes"
-  echo "  nothing; a stop after N hours counts from the apply and never trips this check."
-  exit 1
+  die "This build stops itself at %(hour)02d:%(minute)02d %(timezone)s, which is $RSP_STOP_LEAD minutes away." \\
+    "Provisioning takes up to 75 minutes, so the range would stop part-built." \\
+    "" \\
+    "  Override: REDSTACKPRO_MIN_STOP_LEAD=0 bash deploy.sh" \\
+    "  Or set a later stop time:" \\
+    "  In the canvas, click empty space, then Topology settings > Auto-stop, and export again." \\
+    "  It is a daily clock time, so exporting again with the same time changes" \\
+    "  nothing; a stop after N hours counts from the apply and never trips this check."
 fi
 """
 
@@ -192,7 +326,9 @@ if (-not $bash) {
 # Git Bash reads a drive letter path happily as long as the separators are
 # forward slashes, so no /c/-style translation is needed.
 $here = (Split-Path -Parent $MyInvocation.MyCommand.Path) -replace '\\', '/'
-& $bash -lc "cd '$here' && bash deploy.sh"
+# REDSTACKPRO_FROM_PS1 has deploy.sh print its closing paths the PowerShell way
+# (keys\id_ed25519). Set for that one process, so it does not stay in the session.
+& $bash -lc "cd '$here' && REDSTACKPRO_FROM_PS1=1 bash deploy.sh"
 exit $LASTEXITCODE
 """
 
@@ -202,8 +338,9 @@ exit $LASTEXITCODE
 # python3 that is on PATH by default, prints an advert and exits non-zero. A PATH
 # check passes, and the first real call then fails for a reason that reads
 # unrelated to Python. A check must execute its candidate. Shared between
-# deploy.sh and manage.sh, both of which parse a `terraform output -json` with it.
-_FIND_PYTHON = r'''# Find a Python that actually RUNS, rather than one that merely sits on PATH.
+# deploy.sh and manage.sh, both of which parse a `terraform output -json` with it;
+# only the way each stops differs.
+_PYTHON_PROBE = r'''# Find a Python that actually RUNS, rather than one that merely sits on PATH.
 # `command -v python3` is not enough: Windows ships a Microsoft Store stub named
 # python3 that is on PATH by default, prints an advert and exits non-zero. A PATH
 # check passes, and the first real call then fails for a reason that reads
@@ -214,12 +351,19 @@ for c in python3 python py; do
   "$c" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)' \
     >/dev/null 2>&1 && { PY="$c"; break; }
 done
-[ -n "$PY" ] || {
+'''
+
+_FIND_PYTHON = _PYTHON_PROBE + r'''[ -n "$PY" ] || {
   echo "no working Python 3.8 or newer found (tried: python3, python, py)."
   echo "One of them may be on PATH but not runnable -- on Windows the Microsoft"
   echo "Store stub does exactly that. Install Python and re-run."
   exit 1
 }
+'''
+
+_FIND_PYTHON_DEPLOY = _PYTHON_PROBE + r'''[ -n "$PY" ] || die "no working Python 3.8 or newer found (tried: python3, python, py)." \
+  "One of them may be on PATH but not runnable -- on Windows the Microsoft" \
+  "Store stub does exactly that. Install Python and re-run."
 '''
 
 
@@ -233,13 +377,17 @@ def _jumpbox_name(ctx):
 _AWS_TTL_IAM_NOTE = """# auto_stop creates an IAM role and policy for the shutdown schedule, the stack's
 # first IAM resources. A caller who cannot create roles fails there, on a resource
 # they did not add by hand, so say so before the apply rather than after.
-echo "note: this range has an auto-stop schedule; the AWS apply needs iam:CreateRole and iam:PutRolePolicy, or it fails creating the scheduler role. Grant those, or turn auto-stop off. In the canvas, click empty space, then Topology settings > Auto-stop, and export again."
+note "this range has an auto-stop schedule; the AWS apply needs iam:CreateRole and" \\
+  "iam:PutRolePolicy, or it fails creating the scheduler role. Grant those, or turn" \\
+  "auto-stop off. In the canvas, click empty space, then Topology settings >" \\
+  "Auto-stop, and export again."
 """
 
 
 # Values in deploy.tfvars that otherwise fail deep inside terraform. A value set
 # in the file wins over TF_VAR_*, the same precedence terraform applies, so the
-# environment is read only when the file leaves the line out.
+# environment is read only when the file leaves the line out. Emitted for every
+# provider: the title box reads the region with it too.
 _TFVAR_HELPER = r'''rsp_tfvar(){
   if grep -Eq "^[[:space:]]*$1[[:space:]]*=" deploy.tfvars 2>/dev/null; then
     grep -E "^[[:space:]]*$1[[:space:]]*=" deploy.tfvars | tail -1 \
@@ -252,41 +400,76 @@ _TFVAR_HELPER = r'''rsp_tfvar(){
 '''
 
 _TFVARS_PREFLIGHT = {
-    "gcp": _TFVAR_HELPER + r'''if [ -f deploy.tfvars ]; then
+    "gcp": r'''if [ -f deploy.tfvars ]; then
   RSP_PROJECT="$(rsp_tfvar project)"
   if [ -z "$RSP_PROJECT" ]; then
-    echo "project is empty in deploy.tfvars. Set it to your GCP project ID (gcloud config get-value project)."
-    exit 1
+    die "project is empty in deploy.tfvars. Set it to your GCP project ID (gcloud config get-value project)."
   fi
   RSP_REGION="$(rsp_tfvar region)"; RSP_ZONE="$(rsp_tfvar zone)"
   if [ -n "$RSP_REGION" ] && [ -n "$RSP_ZONE" ]; then
     case "$RSP_ZONE" in
       "$RSP_REGION"-*) ;;
-      *) echo "zone $RSP_ZONE is not in region $RSP_REGION. Pick a zone that starts with $RSP_REGION-, e.g. $RSP_REGION-a."; exit 1 ;;
+      *) die "zone $RSP_ZONE is not in region $RSP_REGION. Pick a zone that starts with $RSP_REGION-, e.g. $RSP_REGION-a." ;;
     esac
   fi
 fi
 ''',
-    "aws": _TFVAR_HELPER + r'''if [ -f deploy.tfvars ]; then
+    "aws": r'''if [ -f deploy.tfvars ]; then
   RSP_REGION="$(rsp_tfvar region)"; RSP_ZONE="$(rsp_tfvar availability_zone)"
   if [ -n "$RSP_REGION" ] && [ -n "$RSP_ZONE" ] && [ "$RSP_ZONE" != "null" ]; then
     case "$RSP_ZONE" in
       "$RSP_REGION"[a-z]) ;;
-      *) echo "availability_zone $RSP_ZONE is not in region $RSP_REGION. Pick a zone that starts with $RSP_REGION, e.g. ${RSP_REGION}a."; exit 1 ;;
+      *) die "availability_zone $RSP_ZONE is not in region $RSP_REGION. Pick a zone that starts with $RSP_REGION, e.g. ${RSP_REGION}a." ;;
     esac
   fi
 fi
 ''',
-    "azure": _TFVAR_HELPER + r'''if [ -f deploy.tfvars ]; then
+    "azure": r'''if [ -f deploy.tfvars ]; then
   RSP_SUB="$(rsp_tfvar subscription_id)"
   # azurerm falls back to ARM_SUBSCRIPTION_ID when subscription_id is empty.
   if [ -z "$RSP_SUB" ] && [ -z "${ARM_SUBSCRIPTION_ID:-}" ]; then
-    echo "subscription_id is empty in deploy.tfvars. Set it to: az account show --query id -o tsv"
-    exit 1
+    die "subscription_id is empty in deploy.tfvars. Set it to: az account show --query id -o tsv"
   fi
 fi
 ''',
 }
+
+
+_INIT = ('terraform -chdir=terraform init -input=false -upgrade >/dev/null '
+         '|| die "terraform init failed -- check the provider download and your network"\n')
+
+# Azure subscriptions differ in which VM sizes they may allocate and how many
+# vCPUs and public IPs they get, and a no otherwise arrives mid-apply. After
+# init, because the check asks terraform for the effective sizes. --brief keeps
+# the size and quota table for a failure and makes a pass one summary line; run
+# `python azure_preflight.py .` for the full table.
+_AZURE_PREFLIGHT = 'phase "' + PREFLIGHT_PHASE + '"\n' + _INIT + r'''if RSP_OUT="$("$PY" azure_preflight.py . --brief 2>&1 | tr -d '\r')"; then
+  printf '%s\n' "$RSP_OUT" | grep -v '^summary: ' | indent || true
+  ok "$(printf '%s\n' "$RSP_OUT" | sed -n 's/^summary: //p' | tail -1)"
+else
+  printf '%s\n' "$RSP_OUT" | indent
+  RSP_REASON="$(printf '%s\n' "$RSP_OUT" | sed -n 's/^FAIL: //p' | head -1)"
+  RSP_REASON="${RSP_REASON:-the azure preflight stopped the deploy; nothing was created}"
+  exit 1
+fi
+'''
+
+
+def _rules(text):
+    """Fill the rule, dot leader and width tokens deploy.sh and run.sh share."""
+    return (text.replace("@@RULE@@", RULE).replace("@@THIN@@", THIN)
+            .replace("@@DOTS@@", "." * 60).replace("@@DOTW@@", str(PHASE_WIDTH - 7)))
+
+
+def output_helpers():
+    """The bash output helpers deploy.sh opens with (phase, ok, say, die, fail)."""
+    return _rules(_OUTPUT)
+
+
+def _shell_word(text):
+    """A single-quoted bash word holding printable ASCII only."""
+    clean = "".join(c if 32 <= ord(c) < 127 else "?" for c in (text or ""))
+    return "'" + clean.replace("'", "'\\''") + "'"
 
 
 def generate_deploy_script(topology, registry=None, provider=None):
@@ -307,19 +490,19 @@ def generate_deploy_script(topology, registry=None, provider=None):
         cloud_preflight = (
             "if ! gcloud auth application-default print-access-token "
             ">/dev/null 2>&1; then\n"
-            '  echo "GCP credentials are not set. Run:  gcloud auth login  &&  '
-            'gcloud auth application-default login"; exit 1\n'
+            '  die "GCP credentials are not set. Run:  gcloud auth login  &&  '
+            'gcloud auth application-default login"\n'
             "fi\n"
         )
     elif provider == "aws":
         cloud_preflight = (
             "if ! aws sts get-caller-identity >/dev/null 2>&1; then\n"
-            '  echo "AWS credentials are not set or not working. Run:  aws configure  '
-            '(then check:  aws sts get-caller-identity)"; exit 1\n'
+            '  die "AWS credentials are not set or not working. Run:  aws configure  '
+            '(then check:  aws sts get-caller-identity)"\n'
             "fi\n"
-            'echo "note: an AWS range needs Elastic IP and vCPU quota headroom, and a '
-            "Kali operator needs a one-time Marketplace subscription; see "
-            'DEPLOYMENT-GUIDE.md if apply hits a limit or an OptInRequired error."\n'
+            'note "an AWS range needs Elastic IP and vCPU quota headroom, and a Kali operator" \\\n'
+            '  "needs a one-time Marketplace subscription; see DEPLOYMENT-GUIDE.md if apply" \\\n'
+            '  "hits a limit or an OptInRequired error."\n'
         )
     elif provider == "azure":
         # Accept either auth path: an `az login` session (az account show) OR a
@@ -327,20 +510,10 @@ def generate_deploy_script(topology, registry=None, provider=None):
         # azurerm provider reads directly and which az account show does not see).
         cloud_preflight = (
             'if ! az account show >/dev/null 2>&1 && [ -z "${ARM_CLIENT_ID:-}" ]; then\n'
-            '  echo "Azure credentials are not set. Run:  az login  (or set '
+            '  die "Azure credentials are not set. Run:  az login  (or set '
             "ARM_CLIENT_ID/ARM_CLIENT_SECRET/ARM_TENANT_ID/ARM_SUBSCRIPTION_ID for a "
-            'service principal)"; exit 1\n'
+            'service principal)"\n'
             "fi\n"
-        )
-
-    # Azure subscriptions differ in which VM sizes they may allocate and how
-    # many vCPUs and public IPs they get, and a no otherwise arrives mid-apply.
-    # After init, because the check asks terraform for the effective sizes.
-    apply_preflight = ""
-    if provider == "azure":
-        apply_preflight = (
-            'say "azure preflight: VM sizes, quota, resource providers"\n'
-            '"$PY" azure_preflight.py . || exit 1\n'
         )
 
     # Resolved through TerraformPlan rather than re-read from the topology, so the
@@ -362,35 +535,13 @@ def generate_deploy_script(topology, registry=None, provider=None):
     # The provision runner that lands on the jumpbox. Mode is baked in here rather
     # than branched at run time, so the emitted runner is straight-line.
     if is_range:
-        gate = (
-            "  # The jumpbox play runs FIRST, in a pass of its own. The AD loop\n"
-            "  # below excludes jumpboxes so the portal does not ride the WinRM\n"
-            "  # wait or the Windows retry cadence -- Guacamole and the\n"
-            "  # assumed-breach foothold are how the operator reaches the range at\n"
-            "  # all, so they must not wait on a Windows box finishing its boot.\n"
-            "  # This pass is what provisions the jumpbox: without it the excluded\n"
-            "  # play ran nowhere, and the range came up with no portal and no\n"
-            "  # foothold account even though the run reported ok=1.\n"
-            "  for i in 1 2 3; do\n"
-            '    echo "== jumpbox pass $i $(date) ==" | tee -a run.log\n'
-            '    ansible-playbook -i ansible/inventory.yml ansible/site.yml --limit jumpboxes "${C[@]}" 2>&1 | tee -a run.log && break\n'
-            '    echo "== jumpbox pass $i failed; retry in 60s ==" | tee -a run.log\n'
-            "    sleep 60\n"
-            "  done\n"
-            "  # A fresh cloud Windows box sets its Administrator password a few\n"
-            "  # minutes after WinRM starts; wait for an AUTHENTICATED win_ping\n"
-            "  # before the promotion, a port check is not enough.\n"
-            '  echo "== waiting for authenticated WinRM ==" | tee -a run.log\n'
-            "  for i in $(seq 1 60); do\n"
-            '    ansible -i ansible/inventory.yml windows -m ansible.windows.win_ping "${C[@]}" >/dev/null 2>&1 && break\n'
-            "    sleep 30\n"
-            "  done\n"
-        )
+        gate = _RANGE_GATE
         # The jumpbox got its own pass above; the AD plays run on everything else.
-        limit = "--limit 'all:!jumpboxes' "
+        limit = " --limit 'all:!jumpboxes'"
     else:
         gate = ""
         limit = ""
+    runner = _rules(_RUNNER.replace("@@GATE@@", gate).replace("@@LIMIT@@", limit))
 
     # A redirector that gets a Let's Encrypt certificate needs its domain pointed
     # at its public address, and only the operator can create that DNS record.
@@ -408,12 +559,11 @@ def generate_deploy_script(topology, registry=None, provider=None):
     if dns_targets:
         pairs = " ".join('"%s|%s"' % (name, host) for name, host in dns_targets)
         dns_actions = (
-            'say "DNS action required before the redirector certificate can issue"\n'
-            'RSP_ADDRS="$(terraform -chdir=terraform output -json redstackpro_addresses)" || { echo "   >> could not read addresses for the DNS reminder -- set the redirector A record by hand once the box is up"; RSP_ADDRS=""; }\n'
+            'RSP_ADDRS="$(terraform -chdir=terraform output -json redstackpro_addresses)" || { say "could not read addresses for the DNS reminder -- set the redirector A record by hand once the box is up"; RSP_ADDRS=""; }\n'
             "for pair in " + pairs + "; do\n"
             '  rsp_host="${pair##*|}"\n'
             "  rsp_ip=\"$(printf '%s' \"$RSP_ADDRS\" | \"$PY\" -c "
-            "\"import json,sys;print(json.load(sys.stdin).get('${pair%%|*}',{}).get('public_address') or '')\")\"\n"
+            "\"import json,sys;print(json.load(sys.stdin).get('${pair%%|*}',{}).get('public_address') or '')\" 2>/dev/null | tr -d '\\r' || true)\"\n"
             '  [ -n "$rsp_ip" ] || continue\n'
             # Show what the name resolves to TODAY, not just what it must become.
             # Every apply mints a new address while the canvas hands out a static
@@ -425,34 +575,183 @@ def generate_deploy_script(topology, registry=None, provider=None):
             # || true: gethostbyname raises on an unresolved name (the normal first-deploy
             # case), which under set -e would kill the deploy here instead of printing the
             # "does not resolve" branch below. Keep the substitution exit 0, empty on failure.
-            '  rsp_cur="$("$PY" -c "import socket;print(socket.gethostbyname(\'$rsp_host\'))" 2>/dev/null || true)"\n'
+            '  rsp_cur="$("$PY" -c "import socket;print(socket.gethostbyname(\'$rsp_host\'))" 2>/dev/null | tr -d \'\\r\' || true)"\n'
             '  if [ "$rsp_cur" = "$rsp_ip" ]; then\n'
-            '    echo "   >> $rsp_host already resolves to $rsp_ip -- nothing to do"\n'
+            '    say "DNS   $rsp_host already resolves to $rsp_ip -- nothing to do"\n'
             "  else\n"
-            '    echo "   >> at your DNS registrar, set this A record NOW:"\n'
-            '    echo "         $rsp_host   ->   $rsp_ip"\n'
+            '    say "DNS   at your DNS registrar, set this A record NOW:" \\\n'
+            '      "         $rsp_host   ->   $rsp_ip"\n'
             '    if [ -n "$rsp_cur" ]; then\n'
-            '      echo "      it currently points at $rsp_cur -- STALE, from an earlier deploy"\n'
+            '      say "      it currently points at $rsp_cur -- STALE, from an earlier deploy"\n'
             "    else\n"
-            '      echo "      it does not resolve at all right now"\n'
+            '      say "      it does not resolve at all right now"\n'
             "    fi\n"
-            '    echo "      issuance waits ~15 min for it, then continues on a self-signed cert"\n'
+            '    say "      issuance waits ~15 min for it, then continues on a self-signed cert"\n'
+            '    RSP_DNS_TODO="$RSP_DNS_TODO$rsp_host -> $rsp_ip\n"\n'
             "  fi\n"
             "done\n"
         )
 
+    region_var = _REGION_VAR.get(provider)
+    label = _PROVIDER_LABEL.get(provider, provider or "")
+    where = ('RSP_WHERE="%s $(rsp_tfvar %s)"; RSP_WHERE="${RSP_WHERE%% }"\n'
+             % (label, region_var)) if region_var else 'RSP_WHERE="%s"\n' % label
     logging_setup = (_LOGGING_SETUP
                      .replace("@@VERSION@@", _redstackpro_version())
-                     .replace("@@PROVIDER@@", provider or "not specified"))
-    return _TEMPLATE.format(jumpbox=jumpbox,
-                            jumpuser=platform_account(topology.get("mode")),
-                            is_range="true" if is_range else "false",
-                            gate=gate, limit=limit, dns_actions=dns_actions,
-                            cloud_preflight=cloud_preflight,
-                            tfvars_preflight=_TFVARS_PREFLIGHT.get(provider, ""),
-                            apply_preflight=apply_preflight,
-                            logging_setup=logging_setup,
-                            find_python=_FIND_PYTHON)
+                     .replace("@@PROVIDER@@", provider or "not specified")
+                     .replace("@@ETA@@", _ETA[is_range]))
+    script = _TEMPLATE
+    for token, value in (
+            ("@@JUMPBOX@@", jumpbox),
+            ("@@JUMPUSER@@", platform_account(topology.get("mode"))),
+            ("@@IS_RANGE@@", "true" if is_range else "false"),
+            ("@@NAME@@", _shell_word(topology.get("name"))),
+            ("@@PHASES@@", str(len(phase_titles(provider)))),
+            ("@@OUTPUT@@", output_helpers()),
+            ("@@LOGGING_SETUP@@", logging_setup),
+            ("@@TFVAR_HELPER@@", _TFVAR_HELPER),
+            ("@@WHERE@@", where),
+            ("@@FIND_PYTHON@@", _FIND_PYTHON_DEPLOY),
+            ("@@CLOUD_PREFLIGHT@@", cloud_preflight),
+            ("@@TFVARS_PREFLIGHT@@", _TFVARS_PREFLIGHT.get(provider, "")),
+            ("@@AZURE_PREFLIGHT@@", _AZURE_PREFLIGHT if provider == "azure" else ""),
+            ("@@INIT@@", "" if provider == "azure" else _INIT),
+            ("@@DNS_ACTIONS@@", dns_actions),
+            ("@@RUNNER@@", runner)):
+        script = script.replace(token, value)
+    assert "@@" not in script, "an unfilled token in the deploy template"
+    return script
+
+
+# The defense half of the runner: the jumpbox pass, then the WinRM gate.
+_RANGE_GATE = r'''# The jumpbox play runs FIRST, in a pass of its own. The AD loop below
+# excludes jumpboxes so the portal does not ride the WinRM wait or the Windows
+# retry cadence -- Guacamole and the assumed-breach foothold are how the operator
+# reaches the range at all, so they must not wait on a Windows box finishing its
+# boot. This pass is what provisions the jumpbox: without it the excluded play
+# ran nowhere, and the range came up with no portal and no foothold account even
+# though the run reported ok=1.
+for i in 1 2 3; do
+  stage "Jumpbox pass $i of 3"
+  if play --limit jumpboxes; then say "      ok  jumpbox pass $i done in $(took "$T0")"; break; fi
+  say "      FAILED  jumpbox pass $i after $(took "$T0"); retry in 60s"
+  sleep 60
+done
+JB_RECAP="$LAST_RECAP"
+# A fresh cloud Windows box sets its Administrator password a few minutes after
+# WinRM starts; wait for an AUTHENTICATED win_ping before the promotion, a port
+# check is not enough.
+stage "Waiting for authenticated WinRM"
+winrm=0
+for i in $(seq 1 60); do
+  ansible -i ansible/inventory.yml windows -m ansible.windows.win_ping "${C[@]}" >/dev/null 2>&1 && { winrm=1; break; }
+  sleep 30
+done
+if [ "$winrm" = 1 ]; then
+  say "      ok  WinRM answered after $(took "$T0")"
+else
+  say "      !! no authenticated WinRM after $(took "$T0"); running site.yml anyway"
+fi
+'''
+
+
+# ~/provision/run.sh. run.log is the view to follow: skipped hosts hidden, a task
+# banner shown only once that task reports something, failed results marked
+# "!! ". run-full.log keeps every line Ansible printed. The filter is a few lines
+# of python3, which the jumpbox has because ansible runs on it, and it never
+# stops reading, so a fault in it cannot stall the play upstream.
+_RUNNER = r'''#!/usr/bin/env bash
+set -uo pipefail
+cd ~/provision
+export PATH="$HOME/.local/bin:$PATH" ANSIBLE_HOST_KEY_CHECKING=False
+C=(-e ansible_ssh_common_args='' -e redstackpro_ssh_key_path=$HOME/.ssh/deploy-key)
+# The operator's one password, in both modes. A range needs it to provision
+# Windows; an ops stack needs it so a service can put the operator's own
+# credential in its config instead of whatever its upstream sample shipped.
+[ -f ~/provision/.labpw ] && export REDSTACKPRO_LAB_PASSWORD="$(cat ~/provision/.labpw)"
+: > run.log
+: > run-full.log
+RULE="@@RULE@@"
+THIN="@@THIN@@"
+DOTS="@@DOTS@@"
+START=$(date +%s)
+T0=$START
+say(){ printf '%s\n' "$@" | tee -a run.log run-full.log; }
+took(){ s=$(( $(date +%s) - $1 )); if [ "$s" -ge 60 ]; then printf '%dm%02ds' $((s / 60)) $((s % 60)); else printf '%ds' "$s"; fi; }
+stage(){ T0=$(date +%s); n=$((@@DOTW@@ - ${#1})); [ "$n" -ge 3 ] || n=3; say "" "$1 ${DOTS:0:$n} $(date +%H:%M)"; }
+CONDENSE=$(cat <<'PY'
+import sys
+TASK = (b"TASK [", b"RUNNING HANDLER [")
+PLAY = (b"PLAY [", b"PLAY RECAP")
+FAIL = (b"fatal: [", b"failed: [", b"ERROR!", b"[ERROR]")
+out = sys.stdout.buffer
+
+
+def put(data):
+    try:
+        out.write(data)
+        out.flush()
+    except Exception:
+        pass
+
+
+held = b""
+for line in iter(sys.stdin.buffer.readline, b""):
+    try:
+        text = line.strip()
+        if text.startswith(b"skipping: ["):
+            continue
+        if line.startswith(TASK):
+            held = b"\n" + line
+            continue
+        if not text:
+            held = held or b"\n"
+            continue
+        if line.startswith(PLAY):
+            held = b"\n"
+        elif line.startswith(FAIL):
+            line = b"!! " + line
+        put(held + line)
+        held = b""
+    except Exception:
+        put(line)
+PY
+)
+LAST_RECAP=""
+# The playbook's own exit status, not the filter's, decides an attempt. The
+# recap of this run alone is kept for the summary at the end.
+play(){
+  from=$(( $(wc -l < run-full.log) + 1 ))
+  ansible-playbook -i ansible/inventory.yml ansible/site.yml "$@" "${C[@]}" 2>&1 \
+    | tee -a run-full.log | python3 -u -c "$CONDENSE" | tee -a run.log
+  rc=${PIPESTATUS[0]}
+  LAST_RECAP="$(tail -n +"$from" run-full.log | awk '/^PLAY RECAP/ {r = ""; f = 1; next} f && !NF {f = 0} f {sub(/[ \t]+$/, ""); r = r " " $0 "\n"} END {printf "%s", r}')"
+  return "$rc"
+}
+say "$RULE" " redStackPRO provision . $(hostname) . started $(date '+%Y-%m-%d %H:%M %Z')" \
+  " This view hides skipped hosts and marks failed tasks with !!" \
+  " Every line Ansible printed: ~/provision/run-full.log" "$RULE"
+JB_RECAP=""
+@@GATE@@ok=0
+for attempt in 1 2 3 4 5 6 7 8; do
+  stage "site.yml attempt $attempt of 8"
+  if play@@LIMIT@@; then
+    say "      ok  PLAYBOOK SUCCEEDED (attempt $attempt, $(took "$T0"))"; ok=1; break
+  fi
+  say "      FAILED  attempt $attempt after $(took "$T0"); retry in 150s (idempotent; rides the WinRM/boot flap)"
+  sleep 150
+done
+SITE_RECAP="$LAST_RECAP"
+say "" "$RULE" " RUN EXITED ok=$ok at $(date '+%Y-%m-%d %H:%M %Z'), $(took "$START") in all" "$THIN" \
+  " PLAY RECAP, the last run of each pass:"
+[ -n "$JB_RECAP$SITE_RECAP" ] || say " (none: Ansible stopped before a play finished)"
+for r in "$JB_RECAP" "$SITE_RECAP"; do
+  [ -z "$r" ] || printf '%s\n' "$r" | tee -a run.log run-full.log
+done
+say "$THIN"
+[ "$ok" = 1 ] || say " The last attempt failed. Lines marked !! above name the failed tasks."
+say " Every line Ansible printed: ~/provision/run-full.log" "$RULE"
+'''
 
 
 _TEMPLATE = r"""#!/usr/bin/env bash
@@ -474,18 +773,26 @@ _TEMPLATE = r"""#!/usr/bin/env bash
 # Re-running is safe: Terraform reconciles and the playbook is idempotent.
 set -uo pipefail
 
-JUMPBOX="{jumpbox}"
-IS_RANGE={is_range}
-JUMPUSER={jumpuser}
+JUMPBOX="@@JUMPBOX@@"
+IS_RANGE=@@IS_RANGE@@
+JUMPUSER=@@JUMPUSER@@
+RSP_NAME=@@NAME@@
+RSP_PHASES=@@PHASES@@
 
 cd "$(dirname "$0")"
-say(){{ echo "== [$(date +%H:%M:%S)] $* =="; }}
-{logging_setup}
+@@OUTPUT@@@@LOGGING_SETUP@@
+@@TFVAR_HELPER@@@@WHERE@@RSP_TITLE="redStackPRO deploy"
+[ -z "$RSP_NAME" ] || RSP_TITLE="$RSP_TITLE . $RSP_NAME"
+[ -z "$RSP_WHERE" ] || RSP_TITLE="$RSP_TITLE . $RSP_WHERE"
+echo "$RSP_RULE"
+echo " $RSP_TITLE"
+echo "$RSP_RULE"
+
 for t in terraform ssh tar; do
-  command -v "$t" >/dev/null || {{ echo "$t not found on PATH -- install it first"; exit 1; }}
+  command -v "$t" >/dev/null || die "$t not found on PATH -- install it first"
 done
 
-{find_python}
+@@FIND_PYTHON@@
 # The PRIVATE key whose public half is in deploy.tfvars
 # (ssh_public_key), looked for where a person would expect it:
 #   1. $REDSTACKPRO_SSH_KEY, when you set it
@@ -493,7 +800,7 @@ done
 #   3. ~/.ssh/id_ed25519
 # keys/ exists so the export is self contained: extract it, drop your key in,
 # deploy. Nothing is ever written there by us and it is not in the download.
-if [ -n "${{REDSTACKPRO_SSH_KEY:-}}" ]; then
+if [ -n "${REDSTACKPRO_SSH_KEY:-}" ]; then
   KEY="$REDSTACKPRO_SSH_KEY"
 else
   RSP_KEYS=""
@@ -505,24 +812,20 @@ else
     RSP_N=$((RSP_N + 1))
   done
   if [ "$RSP_N" -eq 1 ]; then
-    KEY="${{RSP_KEYS# }}"
+    KEY="${RSP_KEYS# }"
   elif [ "$RSP_N" -gt 1 ]; then
-    echo "more than one private key in keys/:$RSP_KEYS"
-    echo "say which:  REDSTACKPRO_SSH_KEY=keys/<name> bash deploy.sh"
-    exit 1
+    die "more than one private key in keys/:$RSP_KEYS" \
+      "say which:  REDSTACKPRO_SSH_KEY=keys/<name> bash deploy.sh"
   else
     KEY="$HOME/.ssh/id_ed25519"
   fi
 fi
-[ -f "$KEY" ] || {{
-  echo "no ssh private key found."
-  echo "  looked at: \$REDSTACKPRO_SSH_KEY, then keys/, then $HOME/.ssh/id_ed25519"
-  echo
-  echo "  make one:  ssh-keygen -t ed25519 -f keys/id_ed25519 -N \"\""
-  echo "  then put the contents of keys/id_ed25519.pub into"
-  echo "  deploy.tfvars as ssh_public_key, and re-run."
-  exit 1
-}}
+[ -f "$KEY" ] || die "no ssh private key found." \
+  "  looked at: \$REDSTACKPRO_SSH_KEY, then keys/, then $HOME/.ssh/id_ed25519" \
+  "" \
+  "  make one:  ssh-keygen -t ed25519 -f keys/id_ed25519 -N \"\"" \
+  "  then put the contents of keys/id_ed25519.pub into" \
+  "  deploy.tfvars as ssh_public_key, and re-run."
 
 # SSH enforces private-key perms on Linux and macOS (StrictModes): a group- or
 # world-readable key is refused and it drops to a password the later non-interactive
@@ -536,12 +839,12 @@ KEYSAFE=""
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) ;;
   *)
-    KEYBASE="${{TMPDIR:-/tmp}}"; case "$KEYBASE" in *" "*) KEYBASE="/tmp" ;; esac
+    KEYBASE="${TMPDIR:-/tmp}"; case "$KEYBASE" in *" "*) KEYBASE="/tmp" ;; esac
     KEYSAFE="$(mktemp "$KEYBASE/rsp-key.XXXXXX")"
     cp "$KEY" "$KEYSAFE" && chmod 600 "$KEYSAFE"
     ;;
 esac
-SSHKEY="${{KEYSAFE:-$KEY}}"
+SSHKEY="${KEYSAFE:-$KEY}"
 # BatchMode=yes: never fall back to an interactive password prompt. Without it, a
 # fresh jumpbox whose cloud-init has not yet written redop's authorized_keys answers
 # port 22 but refuses the key, ssh prompts for a password, and the "wait for ssh"
@@ -550,7 +853,7 @@ SSHKEY="${{KEYSAFE:-$KEY}}"
 # rides out the cloud-init race, which is what its retry loop was written to do.
 SSH="ssh -i $SSHKEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o BatchMode=yes"
 
-{cloud_preflight}# Refuse to apply when management ingress is open to the whole internet.
+@@CLOUD_PREFLIGHT@@# Refuse to apply when management ingress is open to the whole internet.
 # operator_source_ranges is a tfvars value the topology validator never sees, so
 # the check happens here, at apply time. A range can hold deliberately vulnerable
 # hosts, so a literal 0.0.0.0/0 entry is a blocking abort, not a warning; it aborts
@@ -560,36 +863,37 @@ SSH="ssh -i $SSHKEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o 
 # First: it must be set at all. The export ships it commented, so a range is never
 # exposed by default; the deploy stops here until the operator names their range.
 if [ -f deploy.tfvars ] && ! grep -Eq '^[[:space:]]*operator_source_ranges[[:space:]]*=[[:space:]]*\[[^]]*"' deploy.tfvars; then
-  echo "operator_source_ranges is not set in deploy.tfvars."
-  echo '  Set it to the IP/CIDR operators connect from, for example ["203.0.113.5/32"].'
   # A hint only: omitted when the lookup fails or returns something unexpected.
   RSP_MYIP="$(curl -s --max-time 5 https://checkip.amazonaws.com 2>/dev/null | tr -d '[:space:]')"
+  RSP_HINT=""
   case "$RSP_MYIP" in
     ''|*[!0-9.]*) ;;
-    *) echo "  Your current public IP looks like $RSP_MYIP; use [\"$RSP_MYIP/32\"]." ;;
+    *) RSP_HINT="  Your current public IP looks like $RSP_MYIP; use [\"$RSP_MYIP/32\"]." ;;
   esac
-  echo "  A range is never exposed by default, so the deploy stops until you set this."
-  exit 1
+  die "operator_source_ranges is not set in deploy.tfvars." \
+    '  Set it to the IP/CIDR operators connect from, for example ["203.0.113.5/32"].' \
+    ${RSP_HINT:+"$RSP_HINT"} \
+    "  A range is never exposed by default, so the deploy stops until you set this."
 fi
 if grep -Eq 'operator_source_ranges[^#]*"0\.0\.0\.0/0"' deploy.tfvars 2>/dev/null; then
-  if [ "${{REDSTACKPRO_ALLOW_OPEN_INGRESS:-0}}" = "1" ]; then
-    echo "WARNING: operator_source_ranges is 0.0.0.0/0 (ssh and the portal are open to the whole internet). Narrow it in deploy.tfvars."
+  if [ "${REDSTACKPRO_ALLOW_OPEN_INGRESS:-0}" = "1" ]; then
+    say "WARNING: operator_source_ranges is 0.0.0.0/0 (ssh and the portal are open to" \
+      "         the whole internet). Narrow it in deploy.tfvars."
     # Let the Terraform precondition through too (it fails closed by default).
     export TF_VAR_allow_open_ingress=true
   else
-    echo "operator_source_ranges is 0.0.0.0/0, which exposes ssh and the portal to the"
-    echo "entire internet. This range may contain deliberately vulnerable hosts, so an"
-    echo "open range is a mistake, not a shortcut."
-    echo
-    echo "  Fix:      set operator_source_ranges to your own IP/CIDR in deploy.tfvars,"
-    echo '            for example ["203.0.113.5/32"].'
-    echo "  Override: REDSTACKPRO_ALLOW_OPEN_INGRESS=1 bash deploy.sh"
-    exit 1
+    die "operator_source_ranges is 0.0.0.0/0, which exposes ssh and the portal to the whole internet." \
+      "This range may contain deliberately vulnerable hosts, so an open range is a" \
+      "mistake, not a shortcut." \
+      "" \
+      "  Fix:      set operator_source_ranges to your own IP/CIDR in deploy.tfvars," \
+      '            for example ["203.0.113.5/32"].' \
+      "  Override: REDSTACKPRO_ALLOW_OPEN_INGRESS=1 bash deploy.sh"
   fi
 fi
-{tfvars_preflight}# deploy.tfvars is the one config file you edit, here in the export root. Terraform
+@@TFVARS_PREFLIGHT@@# deploy.tfvars is the one config file you edit, here in the export root. Terraform
 # auto-loads terraform/terraform.tfvars, so copy it into place for apply and destroy.
-[ -f deploy.tfvars ] || {{ echo "deploy.tfvars not found next to this script. Fill it in first (see DEPLOYMENT-GUIDE.md)."; exit 1; }}
+[ -f deploy.tfvars ] || die "deploy.tfvars not found next to this script. Fill it in first (see DEPLOYMENT-GUIDE.md)."
 cp deploy.tfvars terraform/terraform.tfvars
 # If ssh_public_key is left empty, derive it from the private key resolved above so
 # the operator never hand-copies it and the two halves cannot drift. A value the
@@ -602,54 +906,64 @@ cp deploy.tfvars terraform/terraform.tfvars
 # key fails fast instead of prompting.
 rm -f terraform/zz-derived.auto.tfvars
 if grep -Eq '^[[:space:]]*ssh_public_key[[:space:]]*=[[:space:]]*""[[:space:]]*$' deploy.tfvars; then
-  RSP_PUBKEY="$(ssh-keygen -y -f "$SSHKEY" </dev/null 2>/dev/null)" || {{ echo "ssh_public_key is empty and deriving it from $KEY failed -- paste keys/<name>.pub into deploy.tfvars"; exit 1; }}
+  RSP_PUBKEY="$(ssh-keygen -y -f "$SSHKEY" </dev/null 2>/dev/null)" || die "ssh_public_key is empty and deriving it from $KEY failed -- paste keys/<name>.pub into deploy.tfvars"
   printf 'ssh_public_key = "%s"\n' "$RSP_PUBKEY" > terraform/zz-derived.auto.tfvars
-  echo "note: ssh_public_key was empty in deploy.tfvars; derived it from $KEY"
+  note "ssh_public_key was empty in deploy.tfvars; derived it from $KEY"
 fi
 # Fail fast from here on. Without this a failed apply ran on and the user saw a
 # misleading "unfilled address placeholders remain" instead of the real error;
 # the tolerant spots below guard themselves (|| true, trailing true, if/&&).
+# A command that stops the run without naming a reason names itself instead.
 set -e
-say "terraform apply"
-terraform -chdir=terraform init -input=false -upgrade >/dev/null || {{ echo "terraform init failed -- check the provider download and your network"; exit 1; }}
-{apply_preflight}terraform -chdir=terraform apply -auto-approve -input=false || {{ echo "terraform apply failed (its error is above) -- nothing was provisioned."; echo "If it reports resources that already exist, an earlier run was interrupted and left them outside the state. Reconcile with: bash manage.sh teardown --force   (then re-run deploy.sh)."; exit 1; }}
+trap 'RSP_ERR="exit $? from: $BASH_COMMAND"' ERR
+@@AZURE_PREFLIGHT@@
+phase "Terraform apply"
+@@INIT@@terraform -chdir=terraform apply -auto-approve -input=false || die "terraform apply failed (its error is above) -- nothing was provisioned." \
+  "If it reports resources that already exist, an earlier run was interrupted and" \
+  "left them outside the state. Reconcile with: bash manage.sh teardown --force" \
+  "(then re-run deploy.sh)."
+RSP_RES="$(terraform -chdir=terraform state list 2>/dev/null | grep -Evc '(^|\.)data\.' || true)"
+case "$RSP_RES" in
+  ''|*[!0-9]*|0) ok "applied in $(took)" ;;
+  *) ok "$RSP_RES resources in $(took)" ;;
+esac
 
+phase "Fill the inventory from Terraform"
 # Both modes. Terraform calls this "the shared password for the admin account,
 # the Windows operator, and the portal" and emits it either way, but only a range
 # used to read it back, so nothing an ops stack provisioned could reach the one
 # credential the operator is actually given. A teamserver that wants to put that
 # password in its own config had no way to learn it.
-REDSTACKPRO_LAB_PASSWORD="$(terraform -chdir=terraform output -raw lab_password)" || {{ echo "could not read lab_password from terraform output -- did apply finish?"; exit 1; }}
+REDSTACKPRO_LAB_PASSWORD="$(terraform -chdir=terraform output -raw lab_password)" || die "could not read lab_password from terraform output -- did apply finish?"
 # An empty value here would provision the Windows hosts and the portal with a
 # blank credential, so stop rather than carry it forward.
-[ -n "$REDSTACKPRO_LAB_PASSWORD" ] || {{ echo "lab_password came back empty -- apply looks incomplete; re-run before provisioning"; exit 1; }}
+[ -n "$REDSTACKPRO_LAB_PASSWORD" ] || die "lab_password came back empty -- apply looks incomplete; re-run before provisioning"
 export REDSTACKPRO_LAB_PASSWORD
-
-say "fill inventory addresses from terraform output"
-"$PY" tf_inventory.py || {{ echo "filling the inventory from terraform output failed"; exit 1; }}
+# --quiet prints one count line; run python tf_inventory.py by hand for the
+# per-file list.
+RSP_OUT="$("$PY" tf_inventory.py --quiet 2>&1 | tr -d '\r')" || { printf '%s\n' "$RSP_OUT" | indent; die "filling the inventory from terraform output failed"; }
 # Scan the whole ansible tree (and the mode briefing, DEFENSE-/OFFENSE-BRIEFING.md),
 # not a fixed pair of subdirectories: an ops export has no ansible/vars, which made
 # the old grep exit non-zero on the missing path and skip the check entirely. Pipe
 # to grep -q so the result is decided by whether any file still holds a token, not
 # by grep's exit code over a path that may not exist.
 if grep -rl "<<tf:" ansible *-BRIEFING.md 2>/dev/null | grep -q .; then
-  echo "unfilled address placeholders remain -- aborting"; exit 1
+  die "unfilled address placeholders remain -- aborting"
 fi
-
 JUMP=$(terraform -chdir=terraform output -json redstackpro_addresses \
-  | "$PY" -c "import json,sys;print(json.load(sys.stdin)['$JUMPBOX']['public_address'])") || {{ echo "could not read the jumpbox address from terraform output"; exit 1; }}
-[ -n "$JUMP" ] || {{ echo "the jumpbox address is empty -- apply may not have created it"; exit 1; }}
-say "jumpbox public address: $JUMP"
-{dns_actions}
+  | "$PY" -c "import json,sys;print(json.load(sys.stdin)['$JUMPBOX']['public_address'])") || die "could not read the jumpbox address from terraform output"
+[ -n "$JUMP" ] || die "the jumpbox address is empty -- apply may not have created it"
+@@DNS_ACTIONS@@ok "$(printf '%s\n' "$RSP_OUT" | tail -1)"
 
-say "wait for the jumpbox to accept ssh"
+phase "Wait for the jumpbox $JUMP"
 ssh-keygen -f "$HOME/.ssh/known_hosts" -R "$JUMP" >/dev/null 2>&1 || true
 ok_ssh=0
-for i in $(seq 1 30); do $SSH "$JUMPUSER@$JUMP" true 2>/dev/null && {{ ok_ssh=1; break; }}; sleep 10; done
-[ "$ok_ssh" = 1 ] || {{ echo "jumpbox $JUMP never accepted ssh after ~5 min -- check it booted and 22 is open to your operator_source_ranges"; exit 1; }}
+for i in $(seq 1 30); do $SSH "$JUMPUSER@$JUMP" true 2>/dev/null && { ok_ssh=1; break; }; sleep 10; done
+[ "$ok_ssh" = 1 ] || die "jumpbox $JUMP never accepted ssh after ~5 min -- check it booted and 22 is open to your operator_source_ranges"
+ok "ssh is up after $(took)"
 
-say "install prerequisites on the jumpbox"
-$SSH "$JUMPUSER@$JUMP" 'bash -s' <<'BOOT'
+phase "Install prerequisites on the jumpbox"
+$SSH "$JUMPUSER@$JUMP" 'bash -s' <<'BOOT' || fail "installing screen, pip and Ansible on the jumpbox failed (its output is above)"
 set -e
 export DEBIAN_FRONTEND=noninteractive
 # Each prerequisite is checked on its own. They used to ride on a single
@@ -662,55 +976,48 @@ export DEBIAN_FRONTEND=noninteractive
 RSP_NEED=""
 command -v screen >/dev/null 2>&1 || RSP_NEED="$RSP_NEED screen"
 python3 -m pip --version >/dev/null 2>&1 || RSP_NEED="$RSP_NEED python3-pip"
-if [ -n "$RSP_NEED" ]; then sudo apt-get update -qq; sudo apt-get install -y -qq $RSP_NEED >/dev/null; fi
+# sudo drops the exported DEBIAN_FRONTEND, so it is passed to apt-get itself;
+# without it debconf prints a page of "unable to initialize frontend" warnings.
+if [ -n "$RSP_NEED" ]; then
+  sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $RSP_NEED >/dev/null
+fi
 # `python3 -m pip` rather than `pip`: the Debian package installs the module but
-# does not always leave a `pip` on PATH for a non-root user.
-command -v ansible-playbook >/dev/null 2>&1 || ~/.local/bin/ansible-playbook --version >/dev/null 2>&1 || python3 -m pip install --user --break-system-packages -q "ansible-core>=2.16" pypsrp PySocks requests
+# does not always leave a `pip` on PATH for a non-root user. The runner puts
+# ~/.local/bin on PATH itself, so pip's warning that it is not is noise.
+command -v ansible-playbook >/dev/null 2>&1 || ~/.local/bin/ansible-playbook --version >/dev/null 2>&1 || python3 -m pip install --user --break-system-packages -q --no-warn-script-location "ansible-core>=2.16" pypsrp PySocks requests
 mkdir -p ~/provision ~/.ssh && chmod 700 ~/.ssh
 BOOT
+ok "screen, pip and Ansible ready in $(took)"
 
-say "stage the ansible tree and the connection key onto the jumpbox"
-scp -i "$SSHKEY" -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$SSHKEY" "$JUMPUSER@$JUMP:.ssh/deploy-key" >/dev/null
-$SSH "$JUMPUSER@$JUMP" 'chmod 600 ~/.ssh/deploy-key'
+phase "Stage the Ansible tree and the key"
+scp -i "$SSHKEY" -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$SSHKEY" "$JUMPUSER@$JUMP:.ssh/deploy-key" >/dev/null || fail "copying the connection key to the jumpbox failed"
+$SSH "$JUMPUSER@$JUMP" 'chmod 600 ~/.ssh/deploy-key' || fail "setting the connection key's mode on the jumpbox failed"
 # Staged with tar over ssh rather than rsync. rsync is not on a stock Windows box
 # and there is no rsync package in chocolatey or winget, so requiring it meant the
 # export simply could not be launched from Windows; tar ships with Git for
 # Windows, macOS and every Linux. The remote delete reproduces rsync --delete:
 # without it a re-deploy into a reused export would leave files the new compile no
-# longer emits, and ansible would happily run them.
+# longer emits, and ansible would happily run them. -m: the files get the
+# jumpbox's clock, not the archive's, which may be hours ahead when the download
+# was stamped in another timezone and would warn once per file.
 tar czf - ansible ansible.cfg \
-  | $SSH "$JUMPUSER@$JUMP" 'rm -rf ~/provision/ansible ~/provision/ansible.cfg; mkdir -p ~/provision; tar xzf - -C ~/provision'
-$SSH "$JUMPUSER@$JUMP" 'export PATH="$HOME/.local/bin:$PATH"; for i in 1 2 3 4 5; do ansible-galaxy collection install -r ~/provision/ansible/requirements.yml > ~/provision/galaxy.log 2>&1 && exit 0; echo "galaxy install attempt $i failed; retry in 20s" | tee -a ~/provision/galaxy.log; sleep 20; done; exit 1' || {{ echo "ansible-galaxy failed on the jumpbox after 5 tries -- see ~/provision/galaxy.log on $JUMP"; exit 1; }}
+  | $SSH "$JUMPUSER@$JUMP" 'rm -rf ~/provision/ansible ~/provision/ansible.cfg; mkdir -p ~/provision; tar xzmf - -C ~/provision' || fail "copying the Ansible tree to the jumpbox failed"
+$SSH "$JUMPUSER@$JUMP" 'export PATH="$HOME/.local/bin:$PATH"; for i in 1 2 3 4 5; do ansible-galaxy collection install -r ~/provision/ansible/requirements.yml > ~/provision/galaxy.log 2>&1 && exit 0; echo "galaxy install attempt $i failed; retry in 20s" | tee -a ~/provision/galaxy.log; sleep 20; done; exit 1' || die "ansible-galaxy failed on the jumpbox after 5 tries -- see ~/provision/galaxy.log on $JUMP"
 
 # The jumpbox provisions itself over a LOCAL connection: a cloud VM cannot ssh to
 # its own public address, so its own play must not go over the network.
-$SSH "$JUMPUSER@$JUMP" "grep -q 'ansible_connection: local' ~/provision/ansible/host_vars/$JUMPBOX.yml 2>/dev/null || echo 'ansible_connection: local' >> ~/provision/ansible/host_vars/$JUMPBOX.yml"
+$SSH "$JUMPUSER@$JUMP" "grep -q 'ansible_connection: local' ~/provision/ansible/host_vars/$JUMPBOX.yml 2>/dev/null || echo 'ansible_connection: local' >> ~/provision/ansible/host_vars/$JUMPBOX.yml" || fail "setting the jumpbox's local connection failed"
 
-printf '%s' "$REDSTACKPRO_LAB_PASSWORD" | $SSH "$JUMPUSER@$JUMP" 'cat > ~/provision/.labpw && chmod 600 ~/provision/.labpw'
+printf '%s' "$REDSTACKPRO_LAB_PASSWORD" | $SSH "$JUMPUSER@$JUMP" 'cat > ~/provision/.labpw && chmod 600 ~/provision/.labpw' || fail "copying the lab password to the jumpbox failed"
+ok "staged in $(took)"
 
-say "write the provision runner on the jumpbox"
-$SSH "$JUMPUSER@$JUMP" "cat > ~/provision/run.sh" <<'RUNNER'
-#!/usr/bin/env bash
-set -uo pipefail
-cd ~/provision
-export PATH="$HOME/.local/bin:$PATH" ANSIBLE_HOST_KEY_CHECKING=False
-C=(-e ansible_ssh_common_args='' -e redstackpro_ssh_key_path=$HOME/.ssh/deploy-key)
-# The operator's one password, in both modes. A range needs it to provision
-# Windows; an ops stack needs it so a service can put the operator's own
-# credential in its config instead of whatever its upstream sample shipped.
-[ -f ~/provision/.labpw ] && export REDSTACKPRO_LAB_PASSWORD="$(cat ~/provision/.labpw)"
-: > run.log
-{gate}ok=0
-for attempt in 1 2 3 4 5 6 7 8; do
-  echo "== site.yml attempt $attempt $(date) ==" | tee -a run.log
-  if ansible-playbook -i ansible/inventory.yml ansible/site.yml {limit}"${{C[@]}}" 2>&1 | tee -a run.log; then
-    echo "== PLAYBOOK SUCCEEDED (attempt $attempt) ==" | tee -a run.log; ok=1; break
-  fi
-  echo "== attempt $attempt failed; retry in 150s (idempotent; rides the WinRM/boot flap) ==" | tee -a run.log
-  sleep 150
-done
-echo "== RUN EXITED ok=$ok $(date) ==" | tee -a run.log
-RUNNER
+phase "Write the provision runner"
+$SSH "$JUMPUSER@$JUMP" "cat > ~/provision/run.sh" <<'RUNNER' || fail "writing ~/provision/run.sh on the jumpbox failed"
+@@RUNNER@@RUNNER
+ok "~/provision/run.sh written"
+
+phase "Launch provisioning on the jumpbox"
 # Quitting the screen does not reap the ansible-playbook it launched: that process
 # reparents to init and keeps running, so a re-deploy would leave the previous run
 # racing the new one over the same hosts (a hang that looks like a stall). Reap any
@@ -718,17 +1025,11 @@ RUNNER
 # the same command that names run.sh would match that very command line and kill
 # the launching shell. The bracketed patterns ([r], [p]) keep pgrep from matching
 # its own command line either.
-$SSH "$JUMPUSER@$JUMP" 'screen -S provision -X quit 2>/dev/null; for p in $(pgrep -f "ansible-[p]laybook -i ansible/inventory.yml"); do kill -9 "$p" 2>/dev/null; done; for p in $(pgrep -f "provision/[r]un.sh"); do kill -9 "$p" 2>/dev/null; done; true'
-$SSH "$JUMPUSER@$JUMP" 'chmod +x ~/provision/run.sh; screen -dmS provision ~/provision/run.sh; sleep 2; screen -ls | grep -qi provision' || {{ echo "the provision screen did not start on the jumpbox"; exit 1; }}
-
-say "provisioning launched under screen 'provision' on the jumpbox"
-echo "   watch it:   ssh -i $KEY $JUMPUSER@$JUMP   then   screen -r provision"
-echo "   or tail it: ssh -i $KEY $JUMPUSER@$JUMP 'tail -f ~/provision/run.log'"
-echo
-echo "The build continues on the jumpbox even if you disconnect. When run.log"
-echo "shows 'RUN EXITED ok=1', the deploy is complete; open the Guacamole portal"
-echo "at https://$JUMP/guacamole (credentials: terraform -chdir=terraform output guacamole)."
+$SSH "$JUMPUSER@$JUMP" 'screen -S provision -X quit >/dev/null 2>&1; for p in $(pgrep -f "ansible-[p]laybook -i ansible/inventory.yml"); do kill -9 "$p" 2>/dev/null; done; for p in $(pgrep -f "provision/[r]un.sh"); do kill -9 "$p" 2>/dev/null; done; true' || fail "clearing an earlier provision run on the jumpbox failed"
+$SSH "$JUMPUSER@$JUMP" 'chmod +x ~/provision/run.sh; screen -dmS provision ~/provision/run.sh; sleep 2; screen -ls | grep -qi provision' || die "the provision screen did not start on the jumpbox"
+ok "running in screen 'provision'; it keeps going if you disconnect"
 """
+
 
 
 # manage.sh: the other half of managing a deployed range. deploy.sh answers "get
