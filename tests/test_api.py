@@ -277,6 +277,45 @@ def test_archive_is_the_same_files_as_the_map(client, topology_id):
         assert zf.read(first["path"]).decode() == first["contents"]
 
 
+def _stamps(client, topology_id, query=""):
+    body = client.post(V1 + "/topologies/%s/compile" % topology_id).json()
+    r = client.get(V1 + "/compile/%s/archive%s" % (body["compile_id"], query))
+    assert r.status_code == 200, r.text
+    with zipfile.ZipFile(BytesIO(r.content)) as zf:
+        infos = zf.infolist()
+        assert zf.read(body["files"][0]["path"]).decode() == body["files"][0]["contents"]
+    return infos
+
+
+def _near(info, expected):
+    from datetime import datetime
+    got = datetime(*info.date_time)
+    # DOS times have two-second resolution; allow for the call itself too.
+    return abs((got - expected).total_seconds()) <= 120
+
+
+def test_archive_entries_carry_the_callers_local_time(client, topology_id):
+    """Zip times have no zone and unzip reads them as local time. Stamped with a
+    UTC server clock, a US user's files extracted hours in the future and tar on
+    the jumpbox warned once per file. The browser's offset fixes the stamp."""
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for offset, minutes in (("300", 300), ("-330", -330), ("99999", 840), ("-99999", -840)):
+        infos = _stamps(client, topology_id, "?tz_offset=%s" % offset)
+        assert all(_near(i, now - timedelta(minutes=minutes)) for i in infos), offset
+        # Same entry shape as before: deflated, rw for the owner.
+        assert {i.compress_type for i in infos} == {zipfile.ZIP_DEFLATED}
+        assert {i.external_attr >> 16 for i in infos} == {0o600}
+
+
+def test_archive_without_a_usable_offset_keeps_the_server_clock(client, topology_id):
+    from datetime import datetime
+    now = datetime.now()
+    for query in ("", "?tz_offset=", "?tz_offset=abc", "?tz_offset=1.5"):
+        infos = _stamps(client, topology_id, query)
+        assert all(_near(i, now) for i in infos), query
+
+
 def test_archive_is_not_readable_by_another_principal(app, client, topology_id):
     body = client.post(V1 + "/topologies/%s/compile" % topology_id).json()
     as_principal(app)

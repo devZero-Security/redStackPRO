@@ -9,6 +9,7 @@ See architecture.md.
 import io
 import json
 import zipfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Header, Query, Response
@@ -591,6 +592,23 @@ def _compile_response(sess, document, provider, principal, topology_id=None,
     }
 
 
+# Zip entry times carry no zone and unzip tools read them as local time. A server
+# clock in UTC (the Docker image) put a US user's extracted files hours in the
+# future, and tar on the jumpbox warned once per file. The browser says its offset.
+_MAX_TZ_OFFSET = 14 * 60
+
+
+def _zip_stamp(tz_offset):
+    """Local wall time for zip entries, or None for the server's own clock."""
+    try:
+        minutes = int(tz_offset)
+    except (TypeError, ValueError):
+        return None
+    minutes = max(-_MAX_TZ_OFFSET, min(_MAX_TZ_OFFSET, minutes))
+    local = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    return local.timetuple()[:6]
+
+
 def ApiValidationFailed(errors, findings):
     return invalid(
         "The topology has %d validation error%s. The compiler refuses to run."
@@ -605,15 +623,27 @@ def ApiValidationFailed(errors, findings):
                              "description":
                              "The same files the compile call returned."}})
 def compile_archive(compile_id: str, sess=Depends(session),
-                    principal: Principal = CurrentPrincipal):
+                    principal: Principal = CurrentPrincipal,
+                    tz_offset: str | None = Query(
+                        None, description="The browser's Date.getTimezoneOffset(), in "
+                                          "minutes. Entries are stamped with that local "
+                                          "time; without it, the server's clock.")):
     result = sess.get(db.CompileResult, compile_id)
     if result is None or result.principal_id != principal.id:
         raise not_found("compile result", compile_id)
 
+    stamp = _zip_stamp(tz_offset)
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for path, contents in sorted(result.files.items()):
-            archive.writestr(path, contents)
+            if stamp is None:
+                archive.writestr(path, contents)
+                continue
+            # The same entry writestr(path, ...) builds, at the caller's wall time.
+            info = zipfile.ZipInfo(path, date_time=stamp)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o600 << 16
+            archive.writestr(info, contents)
 
     return Response(
         content=buffer.getvalue(),

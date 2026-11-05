@@ -196,6 +196,28 @@ versioning, and dates are UTC.
   width, so switching tabs no longer resizes the panel.
 - The header wraps onto a second row when its controls do not fit, where it used to
   push the whole page into a sideways scroll.
+- `deploy.sh` output is laid out to be followed at a glance. It opens on a title box
+  naming the topology, provider and region, prints numbered phases (`[1/7]` to
+  `[7/7]`, or eight on Azure with the preflight first) that each end on an `ok` line
+  with a short result, and ends on a `DONE` box (portal, logins command, the ssh line
+  to watch provisioning, the expected time, the log path) or a `FAILED` box naming
+  the phase, the reason and the exit code. Terraform's output is unchanged, and so
+  are the exit codes. Run from `deploy.ps1`, the box writes Windows paths
+  (`keys\id_ed25519`).
+- The deploy log ends on `result: ok` or `result: FAILED (exit N) in phase ...`, so a
+  log attached to an issue records how the run ended. The version and system header
+  goes to the log only.
+- `~/provision/run.log` on the jumpbox gives each stage a heading, leaves out skipped
+  hosts and task banners with nothing else under them, marks failed tasks with `!!`,
+  and ends on `RUN EXITED` followed by the last PLAY RECAP line for every host. Every
+  line Ansible printed is in `~/provision/run-full.log`. The `RUN EXITED ok=<0|1>`
+  and `PLAYBOOK SUCCEEDED` lines are still there for anything that greps for them.
+- Noise removed from the deploy: the debconf frontend warnings (sudo dropped
+  `DEBIAN_FRONTEND`), pip's warnings that `~/.local/bin` is not on PATH, one
+  `filled ...` line per inventory file (now one count line; `python tf_inventory.py`
+  still lists the files), the Azure preflight table on a pass (now one summary line;
+  `python azure_preflight.py .` prints the table), tar's "time stamp in the future"
+  warnings, and "No screen session found." on a first deploy.
 
 ### Fixed
 
@@ -211,6 +233,11 @@ versioning, and dates are UTC.
 - SMBv1 (`smbv1`) is on after the deploy. Enabling the feature needs a reboot before
   the server offers the dialect, and the role never rebooted. It now reboots when the
   server still reports SMBv1 off.
+- The downloaded zip stamps its files with the browser's local time. The server
+  clock is UTC in the Docker image and unzip reads zip times as local time, so files
+  extracted in a US timezone were hours in the future. The jumpbox also extracts the
+  Ansible tree with `tar -m`, so the file times on the operator's machine no longer
+  matter there.
 - `manage.ps1` forwards every argument to `manage.sh`, so
   `.\manage.ps1 teardown --force` works on Windows.
 - `verify.py stack` reaches a defense range's jumpbox at its public address rather

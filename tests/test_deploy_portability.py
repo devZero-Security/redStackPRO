@@ -72,7 +72,7 @@ def _code(script, local_only=False):
         stripped = line.strip()
         if local_only and skipping is None:
             for marker in remote:
-                if stripped.endswith("<<'%s'" % marker):
+                if "<<'%s'" % marker in stripped:
                     skipping = marker
                     break
             if skipping:
@@ -91,7 +91,7 @@ def _remote_block(script, marker):
     """The body of a heredoc sent to the jumpbox, e.g. BOOT or RUNNER."""
     body, inside = [], False
     for line in script.splitlines():
-        if not inside and line.strip().endswith("<<'%s'" % marker):
+        if not inside and "<<'%s'" % marker in line:
             inside = True
             continue
         if inside:
@@ -116,7 +116,7 @@ def test_a_wide_open_operator_source_ranges_aborts_before_apply(script):
     assert "REDSTACKPRO_ALLOW_OPEN_INGRESS" in code
     # The abort is before apply, and it exits.
     abort_at = code.index("REDSTACKPRO_ALLOW_OPEN_INGRESS")
-    assert code.index("exit 1", abort_at) < code.index('say "terraform apply"')
+    assert code.index("die ", abort_at) < code.index('phase "Terraform apply"')
 
 
 def test_open_ingress_override_downgrades_the_abort_to_a_warning(script):
@@ -141,13 +141,13 @@ def test_the_deploy_does_not_need_rsync(script):
 def test_the_ansible_tree_is_staged_with_tar(script):
     """tar ships with Git for Windows, macOS and every Linux."""
     assert "tar czf -" in script
-    assert "tar xzf -" in script
+    assert "tar xzmf -" in script
 
 
 def test_staging_still_clears_what_it_replaces(script):
     """rsync carried --delete. Without an equivalent, a re-deploy into a reused
     export leaves files the new compile no longer emits and ansible runs them."""
-    stage = [line for line in script.splitlines() if "tar xzf -" in line][0]
+    stage = [line for line in script.splitlines() if "tar xzmf -" in line][0]
     assert "rm -rf ~/provision/ansible" in stage, (
         "the tar staging does not clear the old tree first: %s" % stage)
 
@@ -305,7 +305,7 @@ def _run(script_dir, stub_dir, env_extra=None):
     env.pop("REDSTACKPRO_SSH_KEY", None)
     env.update(env_extra or {})
     command = 'export PATH="%s:/usr/bin:/bin"; exec bash deploy.sh' % _msys(stub_dir)
-    return subprocess.run([bash, "-c", command], cwd=script_dir, env=env,
+    return subprocess.run([bash, "-c", command], cwd=script_dir, env=env, stdin=subprocess.DEVNULL,
                           capture_output=True, text=True, timeout=120)
 
 
@@ -364,7 +364,7 @@ def test_a_python_that_is_on_path_but_broken_is_refused(staged):
     assert done.returncode == 1
     assert "no working Python" in done.stdout, done.stdout + done.stderr
     # It must not have carried on into the deploy.
-    assert "terraform apply" not in done.stdout
+    assert "] Terraform apply" not in done.stdout
 
 
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
@@ -425,9 +425,9 @@ def test_each_provider_checks_its_credentials_before_apply():
     gcp = generate_deploy_script(example("redstack.json"), Registry(), provider="gcp")
     aws = generate_deploy_script(example("redstack.json"), Registry(), provider="aws")
     assert "gcloud auth application-default print-access-token" in gcp
-    assert gcp.index("application-default print-access-token") < gcp.index('say "terraform apply"')
+    assert gcp.index("application-default print-access-token") < gcp.index('phase "Terraform apply"')
     assert "aws sts get-caller-identity" in aws
-    assert aws.index("aws sts get-caller-identity") < aws.index('say "terraform apply"')
+    assert aws.index("aws sts get-caller-identity") < aws.index('phase "Terraform apply"')
 
 
 def _past_preflight_tfvars(export):
@@ -505,7 +505,7 @@ def test_azure_deploy_aborts_without_az_credentials(azure_staged):
     done = _run(export, stubs)
     assert done.returncode == 1
     assert "Azure credentials are not set" in done.stdout, done.stdout + done.stderr
-    assert "terraform apply" not in done.stdout
+    assert "] Terraform apply" not in done.stdout
 
 
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
@@ -518,7 +518,7 @@ def test_azure_deploy_aborts_on_unset_ingress(azure_staged):
     done = _run(export, stubs)
     assert done.returncode == 1
     assert "operator_source_ranges is not set" in done.stdout, done.stdout
-    assert "terraform apply" not in done.stdout
+    assert "] Terraform apply" not in done.stdout
 
 
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
@@ -571,7 +571,7 @@ def test_unset_operator_source_ranges_aborts_until_set(staged):
     done = _run(export, stubs)
     assert done.returncode == 1
     assert "operator_source_ranges is not set" in done.stdout, done.stdout
-    assert "terraform apply" not in done.stdout
+    assert "] Terraform apply" not in done.stdout
 
 
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
@@ -591,11 +591,11 @@ def test_explicit_open_ingress_aborts_and_the_override_reaches_apply(staged):
     blocked = _run(export, stubs)
     assert blocked.returncode == 1
     assert "which exposes ssh and the portal" in blocked.stdout, blocked.stdout
-    assert "terraform apply" not in blocked.stdout
+    assert "] Terraform apply" not in blocked.stdout
 
     allowed = _run(export, stubs, env_extra={"REDSTACKPRO_ALLOW_OPEN_INGRESS": "1"})
     assert "which exposes ssh and the portal" not in allowed.stdout, allowed.stdout
-    assert "terraform apply" in allowed.stdout, allowed.stdout + allowed.stderr
+    assert "] Terraform apply" in allowed.stdout, allowed.stdout + allowed.stderr
 
 
 def test_an_empty_ssh_public_key_is_derived_from_the_private_key(script):
@@ -958,7 +958,7 @@ def test_an_empty_gcp_project_stops_before_terraform(staged):
     assert done.returncode == 1
     assert ("project is empty in deploy.tfvars. Set it to your GCP project ID "
             "(gcloud config get-value project).") in done.stdout, done.stdout
-    assert "terraform apply" not in done.stdout
+    assert "] Terraform apply" not in done.stdout
 
 
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
@@ -972,7 +972,7 @@ def test_a_zone_outside_the_region_stops_before_terraform(staged):
     assert done.returncode == 1
     assert ("zone us-east4-a is not in region us-central1. Pick a zone that starts "
             "with us-central1-, e.g. us-central1-a.") in done.stdout, done.stdout
-    assert "terraform apply" not in done.stdout
+    assert "] Terraform apply" not in done.stdout
 
 
 @pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
@@ -995,7 +995,7 @@ def test_an_empty_azure_subscription_stops_unless_the_environment_names_one(azur
 def test_aws_checks_the_availability_zone_against_the_region():
     body = generate_deploy_script(example("redstack.json"), Registry(), provider="aws")
     assert "availability_zone $RSP_ZONE is not in region $RSP_REGION" in body
-    assert body.index("rsp_tfvar availability_zone") < body.index('say "terraform apply"')
+    assert body.index("rsp_tfvar availability_zone") < body.index('phase "Terraform apply"')
 
 
 @pytest.mark.parametrize("path", [
@@ -1012,3 +1012,426 @@ def test_scripts_the_export_ships_parse_as_python_3_8(path):
 
 def test_deploy_accepts_python_3_8_like_the_guide_says(script):
     assert "sys.version_info >= (3, 8)" in script
+
+
+# -- what the deploy prints: numbered phases, the DONE and FAILED boxes, the log's
+# result line, and the condensed run.log on the jumpbox
+
+import re
+
+from redstackpro.deploy import DEPLOY_PS1, PHASE_WIDTH, output_helpers, phase_titles
+
+from shipped import load
+
+GOAD_LIGHT = TEMPLATES / "goad/goad-light.json"
+JUMP_IP = "20.114.255.159"
+
+
+@pytest.mark.parametrize("provider", ["gcp", "aws", "azure"])
+def test_phases_are_numbered_against_the_count_the_script_prints(provider):
+    """N in [n/N] is baked in, and a phase only Azure has must not leave the
+    others counting to a number they never reach."""
+    script = generate_deploy_script(example("redstack.json"), Registry(), provider=provider)
+    called = re.findall(r'^phase "([^"]+)"$', _code(script, local_only=True), re.M)
+    assert called == list(phase_titles(provider))
+    assert len(called) == (8 if provider == "azure" else 7)
+    assert "\nRSP_PHASES=%d\n" % len(called) in script
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the helpers")
+def test_the_phase_and_ok_lines_render_as_designed():
+    body = output_helpers() + "\n".join([
+        "RSP_PHASES=8",
+        'phase "Preflight: VM sizes, quota, providers"',
+        'ok "5 VMs on Standard_D2as_v7, quota 10 of 10 vCPU"',
+        'phase "Terraform apply"',
+        "RSP_T0=$(( $(date +%s) - 417 ))",
+        'ok "47 resources in $(took)"',
+        'phase "Wait for the jumpbox %s"' % JUMP_IP,
+        "ok",
+    ])
+    done = subprocess.run([_bash(), "-c", body], capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    lines = re.sub(r"\d\d:\d\d$", "HH:MM", done.stdout, flags=re.M).splitlines()
+    assert lines[0] == lines[3] == lines[6] == ""
+    assert lines[1] == "[1/8] Preflight: VM sizes, quota, providers ........ HH:MM"
+    assert lines[2] == "      ok  5 VMs on Standard_D2as_v7, quota 10 of 10 vCPU"
+    assert lines[4] == "[2/8] Terraform apply .............................. HH:MM"
+    assert re.fullmatch(r"      ok  47 resources in 6m5[78]s", lines[5]), lines[5]
+    assert lines[7] == "[3/8] Wait for the jumpbox %s .......... HH:MM" % JUMP_IP
+    assert lines[8] == "      ok"
+    assert {len(lines[i]) for i in (1, 4, 7)} == {PHASE_WIDTH}
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the helpers")
+def test_die_exits_1_and_fail_keeps_the_failed_commands_status():
+    """fail replaced bare set -e exits, so it must keep their codes."""
+    for line, rc in (('die "nope" "detail"', 1), ('(exit 100) || fail "boot failed"', 100)):
+        done = subprocess.run([_bash(), "-c", output_helpers() + line],
+                              capture_output=True, text=True)
+        assert done.returncode == rc, (line, done.stdout, done.stderr)
+        assert done.stdout.startswith("      ")
+
+
+def _range_export(tmp_path, preflight="pass", boot_rc=0):
+    """An Azure defense export, its stub PATH, and the calls terraform saw. Every
+    step runs; only the network and the cloud are stubbed."""
+    doc = load(GOAD_LIGHT)
+    files = compile_topology(doc, Registry(), provider="azure")
+    export = tmp_path / "export"
+    for path, contents in files.items():
+        target = export / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(contents, encoding="utf-8", newline="\n")
+    (export / "keys/id_ed25519").write_text("not a real key", encoding="utf-8")
+    (export / "deploy.tfvars").write_text(
+        'subscription_id = "s"\nlocation = "eastus2"\n'
+        'ssh_public_key = "ssh-ed25519 AAAATEST test"\n'
+        'operator_source_ranges = ["203.0.113.5/32"]\n', encoding="utf-8", newline="\n")
+    # tf_inventory calls terraform itself, which a Windows Python cannot reach as a
+    # shell stub, so a stand-in fills the tokens the same way.
+    (export / "tf_inventory.py").write_text(
+        "import pathlib\n"
+        "n = 0\n"
+        "for p in list(pathlib.Path('ansible').rglob('*.yml')) + "
+        "list(pathlib.Path('.').glob('*-BRIEFING.md')):\n"
+        "    t = p.read_text(encoding='utf-8')\n"
+        "    if '<<tf:' in t:\n"
+        "        p.write_text(t.replace('<<tf:', 'filled:'), encoding='utf-8')\n"
+        "        n += 1\n"
+        "print('%d files filled' % n)\n", encoding="utf-8")
+    if preflight == "pass":
+        body = "print('summary: 5 VMs on Standard_D2as_v7, quota 10 of 10 vCPU')\n"
+    else:
+        body = ("print('   quota   need  used  limit  status')\n"
+                "print('FAIL: Standard_D2as_v7 is not offered in eastus2. Roles using it: dc.')\n"
+                "print('azure preflight failed, so apply was not started and nothing was created.')\n"
+                "raise SystemExit(1)\n")
+    (export / "azure_preflight.py").write_text(body, encoding="utf-8")
+    jumpbox = re.search(r'^JUMPBOX="([^"]+)"', files["deploy.sh"], re.M).group(1)
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    calls = tmp_path / "terraform-calls.log"
+    _stub(stubs, "terraform", "\n".join([
+        'echo "$*" >> "%s"' % _msys(calls),
+        'case "$*" in',
+        '  *"output -raw lab_password"*) echo "Lab-Pass-123" ;;',
+        "  *\"output -json redstackpro_addresses\"*) echo '{\"%s\": {\"public_address\": \"%s\"}}' ;;"
+        % (jumpbox, JUMP_IP),
+        '  *"state list"*) for r in a b c; do echo "azurerm_x.$r"; done; echo data.azurerm_y.z ;;',
+        '  *apply*) echo "lab_password = Lab-Pass-123"; echo "Apply complete!" ;;',
+        "esac",
+        "exit 0"]))
+    _stub(stubs, "ssh", "\n".join([
+        'case "$*" in',
+        '  *"bash -s"*) cat >/dev/null; exit %d ;;' % boot_rc,
+        '  *"cat >"*|*"tar xzmf"*) cat >/dev/null ;;',
+        "esac",
+        "exit 0"]))
+    for tool in ("scp", "ssh-keygen", "tar", "az"):
+        _stub(stubs, tool, "exit 0")
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    return export, stubs, calls
+
+
+def _log(export):
+    logs = sorted((export / "logs").iterdir())
+    assert [p.suffix for p in logs] == [".log"], "a stray file in logs/: %s" % logs
+    return logs[0].read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_a_full_run_prints_every_phase_then_the_done_box(tmp_path):
+    export, stubs, _ = _range_export(tmp_path)
+    done = _run(export, stubs)
+    assert done.returncode == 0, done.stdout + done.stderr
+    out = done.stdout
+    heads = re.findall(r"^\[(\d)/8\] (.+?) \.{3,} \d\d:\d\d$", out, re.M)
+    assert [int(n) for n, _ in heads] == list(range(1, 9))
+    assert [t for _, t in heads] == [
+        t.replace("$JUMP", JUMP_IP) for t in phase_titles("azure")]
+    # Every phase closes on an ok line before the next one opens.
+    for block in re.split(r"^\[\d/8\] .*$", out, flags=re.M)[1:]:
+        assert re.search(r"^      ok\b", block, re.M), block
+    box = out[out.index(" DONE  "):].splitlines()
+    assert box[:7] == [
+        " DONE  Infrastructure is up. Provisioning is running.",
+        "-" * 62,
+        " Portal    https://%s/guacamole" % JUMP_IP,
+        " Logins    terraform -chdir=terraform output guacamole",
+        " Watch     ssh -i keys/id_ed25519 blueop@%s" % JUMP_IP,
+        "           tail -f ~/provision/run.log",
+        " Finished  when run.log shows RUN EXITED ok=1 (45-75 min)"]
+    assert re.fullmatch(r" Log       logs/deploy-\d{8}-\d{6}Z\.log", box[7]), box[7]
+    assert box[8] == "=" * 62
+    # The triage header is the log's alone, and the old stage markers are gone.
+    assert "redStackPRO deploy log" not in out
+    assert "== [" not in out
+    log = _log(export)
+    assert log.startswith("redStackPRO deploy log\n")
+    assert log.splitlines()[-1] == "result: ok"
+    assert " DONE  Infrastructure is up." in log
+    # The scrub still covers what a tool printed, and runs after the closing lines.
+    assert "Lab-Pass-123" not in log
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_from_deploy_ps1_the_done_box_writes_windows_paths(tmp_path):
+    export, stubs, _ = _range_export(tmp_path)
+    done = _run(export, stubs, env_extra={"REDSTACKPRO_FROM_PS1": "1"})
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert " Watch     ssh -i keys\\id_ed25519 blueop@%s" % JUMP_IP in done.stdout
+    assert re.search(r"^ Log       logs\\deploy-\d{8}-\d{6}Z\.log$", done.stdout, re.M)
+
+
+def test_deploy_ps1_tells_deploy_sh_it_came_from_powershell(tmp_path):
+    """Executed: the wrapper runs a stub deploy.sh that prints what it was told,
+    and the variable is not left behind in the PowerShell session."""
+    ps = _powershell()
+    if ps is None or _bash() is None:
+        pytest.skip("needs Windows PowerShell and Git Bash")
+    (tmp_path / "deploy.ps1").write_text(DEPLOY_PS1, encoding="utf-8")
+    (tmp_path / "deploy.sh").write_text(
+        'echo "from-ps1=${REDSTACKPRO_FROM_PS1:-unset}"\n', encoding="utf-8", newline="\n")
+    done = subprocess.run(
+        [ps, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+         "& '%s'; Write-Host \"after=$env:REDSTACKPRO_FROM_PS1\"" % (tmp_path / "deploy.ps1")],
+        capture_output=True, text=True, timeout=120)
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "from-ps1=1" in done.stdout
+    assert re.search(r"^after=$", done.stdout, re.M), done.stdout
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_a_failed_preflight_ends_on_a_failed_box_and_the_log_says_so(tmp_path):
+    export, stubs, calls = _range_export(tmp_path, preflight="fail")
+    done = _run(export, stubs)
+    assert done.returncode == 1, done.stdout + done.stderr
+    out = done.stdout
+    phase = "[1/8] Preflight: VM sizes, quota, providers"
+    assert " FAILED  %s" % phase in out
+    assert " Reason    Standard_D2as_v7 is not offered in eastus2. Roles using it: dc." in out
+    assert " Exit      1" in out
+    assert "issues/new/choose" in out
+    assert "] Terraform apply" not in out
+    assert "apply" not in calls.read_text(encoding="utf-8")
+    assert _log(export).splitlines()[-1] == "result: FAILED (exit 1) in phase %s" % phase
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_a_failed_jumpbox_step_keeps_its_own_exit_code(tmp_path):
+    """The BOOT step used to end the run through set -e with ssh's status. It now
+    names itself in the FAILED box, with the same status."""
+    export, stubs, _ = _range_export(tmp_path, boot_rc=100)
+    done = _run(export, stubs)
+    assert done.returncode == 100, done.stdout + done.stderr
+    assert " FAILED  [5/8] Install prerequisites on the jumpbox" in done.stdout
+    assert " Exit      100" in done.stdout
+    assert _log(export).splitlines()[-1] == (
+        "result: FAILED (exit 100) in phase [5/8] Install prerequisites on the jumpbox")
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted script")
+def test_a_local_check_failure_is_named_and_logged(staged):
+    export, stubs = staged
+    _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    done = _run(export, stubs)  # no gcloud: the credential check stops it
+    assert done.returncode == 1
+    assert " FAILED  local checks" in done.stdout
+    assert " Reason    GCP credentials are not set." in done.stdout
+    assert _log(export).splitlines()[-1] == "result: FAILED (exit 1) in phase local checks"
+
+
+def test_the_jumpbox_noise_is_cut_at_the_source(script):
+    boot = _code(_remote_block(script, "BOOT"))
+    # sudo drops an exported DEBIAN_FRONTEND, so apt-get has to get it directly.
+    apt = [ln for ln in boot.splitlines() if "apt-get" in ln]
+    assert apt and all("sudo DEBIAN_FRONTEND=noninteractive apt-get" in ln for ln in apt), apt
+    assert "--no-warn-script-location" in boot
+    # A zip stamped in another timezone must not warn once per file on extract.
+    assert "tar xzmf - -C ~/provision" in script
+    # "No screen session found." on a first deploy.
+    assert "screen -S provision -X quit >/dev/null 2>&1" in script
+
+
+def test_the_long_steps_print_one_line_each(script):
+    assert '"$PY" tf_inventory.py --quiet' in script
+    azure = generate_deploy_script(example("redstack.json"), Registry(), provider="azure")
+    assert '"$PY" azure_preflight.py . --brief' in azure
+
+
+def _tf_inventory():
+    import importlib.util
+    path = ROOT / "src/redstackpro/assets/tf_inventory.py"
+    spec = importlib.util.spec_from_file_location("shipped_tf_inventory", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("quiet", [False, True])
+def test_tf_inventory_quiet_prints_one_count_line(tmp_path, monkeypatch, capsys, quiet):
+    tool = _tf_inventory()
+    for name in ("a", "b"):
+        path = tmp_path / ("ansible/host_vars/%s.yml" % name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("ansible_host: <<tf:%s:private_address>>\n" % name, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(tool, "lookup_table", lambda tf_dir: {
+        "a": {"private_address": "10.0.0.4"}, "b": {"private_address": "10.0.0.5"}})
+    monkeypatch.setattr(sys, "argv", ["tf_inventory.py"] + (["--quiet"] if quiet else []))
+    tool.main()
+    lines = capsys.readouterr().out.splitlines()
+    if quiet:
+        assert lines == ["2 files filled"]
+    else:
+        assert lines == ["filled %s" % Path("ansible/host_vars/a.yml"),
+                         "filled %s" % Path("ansible/host_vars/b.yml")]
+    assert "10.0.0.5" in (tmp_path / "ansible/host_vars/b.yml").read_text(encoding="utf-8")
+
+
+def _runner(document, provider="azure"):
+    script = generate_deploy_script(document, Registry(), provider=provider)
+    return _remote_block(script, "RUNNER") + "\n"
+
+
+def test_run_log_keeps_the_strings_its_watchers_grep_for():
+    """verify.py, the export guide, the lab docs and live watchers all read these."""
+    for doc in (load(GOAD_LIGHT), example("redstack.json")):
+        runner = _runner(doc)
+        assert ": > run.log" in runner and ": > run-full.log" in runner
+        assert "RUN EXITED ok=$ok" in runner
+        assert "PLAYBOOK SUCCEEDED (attempt $attempt" in runner
+        assert "for attempt in 1 2 3 4 5 6 7 8; do" in runner
+    script = generate_deploy_script(load(GOAD_LIGHT), Registry(), provider="azure")
+    assert "screen -dmS provision ~/provision/run.sh" in script
+
+
+_PLAY_JUMPBOX = """
+PLAY [jumpboxes] ***************************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [def-jumpbox]
+
+TASK [redstackpro.jumpbox : Configure wireguard] *******************************
+skipping: [def-jumpbox]
+
+TASK [redstackpro.jumpbox : Start guacamole] ***********************************
+changed: [def-jumpbox]
+
+PLAY RECAP *********************************************************************
+def-jumpbox                : ok=61   changed=38   unreachable=0    failed=0    skipped=14
+"""
+
+_PLAY_FAILS = """
+PLAY [domain_controllers] ******************************************************
+
+TASK [redstackpro.dc : Wait for the parent forest] *****************************
+skipping: [def-kingslanding]
+fatal: [def-winterfell]: FAILED! => {"changed": false, "msg": "WinRM reset"}
+
+PLAY RECAP *********************************************************************
+def-kingslanding           : ok=40   changed=21   unreachable=0    failed=0    skipped=9
+def-winterfell             : ok=12   changed=4    unreachable=0    failed=1    skipped=3
+"""
+
+_PLAY_PASSES = """
+PLAY [domain_controllers] ******************************************************
+
+TASK [redstackpro.dc : Promote] ************************************************
+changed: [def-winterfell]
+
+TASK [redstackpro.dc : Linux only] *********************************************
+skipping: [def-kingslanding]
+skipping: [def-winterfell]
+
+PLAY RECAP *********************************************************************
+def-kingslanding           : ok=88   changed=41   unreachable=0    failed=0    skipped=20
+def-winterfell             : ok=79   changed=40   unreachable=0    failed=0    skipped=18
+"""
+
+
+def _run_runner(tmp_path, runner):
+    """run.sh against a fake ansible: the jumpbox pass passes, site.yml fails once
+    and then passes. sleep is stubbed so the retry costs nothing."""
+    home = tmp_path / "home"
+    (home / "provision").mkdir(parents=True)
+    (home / "provision/run.sh").write_text(runner, encoding="utf-8", newline="\n")
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    for name, text in (("jb", _PLAY_JUMPBOX), ("fail", _PLAY_FAILS), ("ok", _PLAY_PASSES)):
+        (tmp_path / ("%s.txt" % name)).write_text(text, encoding="utf-8", newline="\n")
+    work, count = _msys(tmp_path), _msys(tmp_path / "count")
+    _stub(stubs, "ansible-playbook", "\n".join([
+        'case "$*" in *"--limit jumpboxes"*) cat "%s/jb.txt"; exit 0 ;; esac' % work,
+        'n=$(cat "%s" 2>/dev/null || echo 0); n=$((n + 1)); echo $n > "%s"' % (count, count),
+        'if [ $n -eq 1 ]; then cat "%s/fail.txt"; exit 2; fi' % work,
+        'cat "%s/ok.txt"' % work]))
+    for name in ("ansible", "sleep"):
+        _stub(stubs, name, "exit 0")
+    _stub(stubs, "hostname", "echo def-jumpbox")
+    _stub(stubs, "python3", 'exec %s "$@"' % Path(sys.executable).as_posix())
+    env = dict(os.environ, HOME=_msys(home))
+    command = 'export PATH="%s:/usr/bin:/bin"; exec bash ~/provision/run.sh' % _msys(stubs)
+    done = subprocess.run([_bash(), "-c", command], env=env, stdin=subprocess.DEVNULL,
+                          capture_output=True, text=True, timeout=120)
+
+    def read(name):
+        return (home / "provision" / name).read_text(encoding="utf-8")
+    return done, read("run.log"), read("run-full.log")
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted runner")
+def test_run_log_is_condensed_and_run_full_log_is_not(tmp_path):
+    done, view, full = _run_runner(tmp_path, _runner(load(GOAD_LIGHT)))
+    assert done.returncode == 0, done.stdout + done.stderr
+    # What screen shows is what run.log holds.
+    assert done.stdout == view
+    # Skipped hosts, and a task banner with nothing but skips under it, are hidden.
+    assert "skipping: [" not in view and "skipping: [def-kingslanding]" in full
+    assert "Configure wireguard" not in view and "Configure wireguard" in full
+    assert "Linux only" not in view
+    assert "TASK [redstackpro.jumpbox : Start guacamole]" in view
+    # A failed task stands out; the full log keeps Ansible's own line.
+    assert '!! fatal: [def-winterfell]: FAILED! => {"changed": false' in view
+    assert "\nfatal: [def-winterfell]" in full
+    lines = view.splitlines()
+    for stage in ("Jumpbox pass 1 of 3", "Waiting for authenticated WinRM",
+                  "site.yml attempt 1 of 8", "site.yml attempt 2 of 8"):
+        assert any(re.fullmatch(r"%s \.{3,} \d\d:\d\d" % re.escape(stage), ln)
+                   for ln in lines), stage
+    assert any(re.fullmatch(r"      ok  WinRM answered after \d+s", ln) for ln in lines)
+    assert any(ln.startswith("      FAILED  attempt 1 after") for ln in lines)
+    # The strings watchers grep for, each on a line of its own, once.
+    succeeded = [ln for ln in lines if "PLAYBOOK SUCCEEDED" in ln]
+    assert len(succeeded) == 1
+    assert succeeded[0].startswith("      ok  PLAYBOOK SUCCEEDED (attempt 2,")
+    exited = [ln for ln in lines if "RUN EXITED" in ln]
+    assert len(exited) == 1 and exited[0].startswith(" RUN EXITED ok=1 at ")
+    # The closing summary: one recap line per host, the jumpbox pass included.
+    summary = view[view.index(" RUN EXITED"):]
+    recap = [ln.split()[0] for ln in summary.splitlines() if " : ok=" in ln]
+    assert recap == ["def-jumpbox", "def-kingslanding", "def-winterfell"]
+    assert "~/provision/run-full.log" in summary
+    assert "RUN EXITED ok=1" in full
+
+
+@pytest.mark.skipif(_bash() is None, reason="no bash to run the emitted runner")
+def test_an_offense_run_log_has_no_jumpbox_pass_or_winrm_gate(tmp_path):
+    done, view, _ = _run_runner(tmp_path, _runner(example("redstack.json"), "gcp"))
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "Jumpbox pass" not in view and "authenticated WinRM" not in view
+    assert "      ok  PLAYBOOK SUCCEEDED (attempt 2," in view
+    assert re.search(r"^ RUN EXITED ok=1 at ", view, re.M)
+
+
+@pytest.mark.parametrize("provider", ["gcp", "aws", "azure", "proxmox"])
+@pytest.mark.parametrize("name", ["redstack.json", "minimal.json"])
+def test_deploy_sh_and_its_runner_are_valid_bash(provider, name):
+    bash = _bash()
+    if bash is None:
+        pytest.skip("no bash to syntax-check the emitted script")
+    script = generate_deploy_script(example(name), Registry(), provider=provider)
+    for body in (script, _remote_block(script, "RUNNER")):
+        done = subprocess.run([bash, "-n", "-c", body], capture_output=True, text=True)
+        assert done.returncode == 0, done.stderr

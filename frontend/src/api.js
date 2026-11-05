@@ -82,5 +82,9 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ document, provider: provider || "gcp" }),
     }),
-  archiveUrl: (compileId) => `${BASE}/compile/${compileId}/archive`,
+  // Zip entry times carry no zone and unzip reads them as local time, so the
+  // server stamps them with the browser's offset. Without it, a UTC server clock
+  // puts the extracted files hours in the future.
+  archiveUrl: (compileId, tzOffset = new Date().getTimezoneOffset()) =>
+    `${BASE}/compile/${compileId}/archive?tz_offset=${tzOffset}`,
 };
