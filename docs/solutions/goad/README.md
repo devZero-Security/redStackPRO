@@ -28,8 +28,8 @@ See the [range access model](../README.md#range-access-model). Conventions we fo
    is the default starting point for the series and it runs live: it models
    initial access more realistically than dropping a beacon on the jumpbox
    itself. See the [range access model](../README.md#range-access-model). (The
-   jumpbox SSH SOCKS path, `ssh -D 1080 hodor@<jumpbox>`, still exists as an
-   agent/admin convenience and a fallback, but it is **not** the engagement's
+   jumpbox SSH SOCKS path, `ssh -i keys/id_ed25519 -D 1080 blueop@<jumpbox>`, still
+   exists as an agent/admin convenience and a fallback, but it is **not** the engagement's
    initial access.)
 3. **Mythic is the C2.** From that first beacon the engagement runs through C2:
    - Apollo built-ins (`net`, `ls`, token ops),
@@ -49,9 +49,9 @@ operable purely from within redStack.
 > **Provider note (range access).** The public surface above (the jumpbox and the
 > redirector) assumes a cloud backend, where both get an allocated public address.
 > On an on-prem backend (`proxmox`, `esxi`) there is no allocated external IP: you
-> reach the jumpbox over your own network or VPN, whatever fronts the range. There
-> is also no managed private DNS on-prem, so name resolution runs off static hosts
-> entries (part 1). The attack chain itself is unchanged. See
+> reach the jumpbox over your own network or VPN, whatever fronts the range. On
+> every backend, cloud included, name resolution runs off static hosts entries
+> (part 1). The attack chain itself is unchanged. See
 > [Provider differences](#provider-differences) below.
 
 ## Which GOAD lab these pages target
@@ -63,10 +63,11 @@ and MSSQL surface across both forests. A step that names a host is naming a full
 GOAD host.
 
 **If you deployed a smaller lab, read that lab's own set instead of this one:**
-[goad-light](../goad-light/README.md) and [goad-mini](../goad-mini/README.md) are
-generated from these pages by `python -m redstackpro.tools.gen_solutions`, filtered to what
-each lab actually carries, so a step that has no target on your range is removed
-up front rather than footnoted at the end of the section you just read. The
+[goad-light](../goad-light/README.md) is generated from these pages by
+`python -m redstackpro.tools.gen_solutions`, filtered to what it carries, so a step
+that has no target on your range is removed up front rather than footnoted at the
+end of the section you just read. [goad-mini](../goad-mini/README.md) has its own
+hand-written page, since its single-domain story does not follow these pages. The
 pages below are the authored source and target full GOAD.
 
 **The smaller labs are strict subsets, so a subset of these pages applies.** The
@@ -93,7 +94,7 @@ The infrastructure side (the attack range) is **redStack**
 (`frontend/public/redstack.json`): Mythic / Sliver / Adaptix teamservers, an
 Apache redirector, the jumpbox (Guacamole), Kali and Windows operators, and the
 collector. Mythic is the C2 of record. redStack and the GOAD range are **separate
-GCP projects** (one for redStack, one for the range); the operator reaches the range
+exports, deployed separately** (on GCP, typically one project each); the operator reaches the range
 through the C2 (beacon + SOCKS), not by direct L2 adjacency. GOAD's range subnet
 is `192.168.56.0/24`.
 
@@ -107,8 +108,8 @@ backends declare fewer network capabilities (`src/redstackpro/schema/registry/pr
 | capability | cloud (gcp/aws/azure) | on-prem (proxmox/esxi) |
 |------------|-----------------------|------------------------|
 | public address | allocated: the jumpbox gets an external IP | none: reachability depends on the operator's own network and any upstream NAT or firewall |
-| private DNS | gcp, aws: managed zone, hosts resolve by name. azure: none, use static hosts entries | none: use static hosts entries |
-| network peering | managed: a jumpbox or collector can serve across the project boundary | none: joining networks is the host network's routing, which redStackPRO does not control |
+| private DNS | none on any provider: no backend creates a managed zone, so use static hosts entries | none: use static hosts entries |
+| network peering | managed: a jumpbox or collector in one network of the export can serve another network of the same export | none: joining networks is the host network's routing, which redStackPRO does not control |
 | host firewall | per-VM firewall on gcp and aws, a Network Security Group per subnet on azure | proxmox has one, esxi has none (layer-2 VLAN isolation only) |
 
 Two steps change in practice:
@@ -117,9 +118,8 @@ Two steps change in practice:
   allocated public address (still per-deploy and ephemeral, so read it from
   `DEFENSE-BRIEFING.md`). On on-prem there is no allocated external IP: reach the
   jumpbox over the operator's own network or VPN.
-- **Name resolution.** On GCP and AWS the range can resolve through managed
-  private DNS. On on-prem and Azure there is no managed zone, so populate static
-  hosts entries (the
+- **Name resolution.** No backend creates a managed DNS zone, on any provider,
+  so populate static hosts entries (the
   operator's `/etc/hosts`, and the Windows hosts file where needed) from the
   internal IPs. Part 1 sets these up either way, so the commands stay identical.
 

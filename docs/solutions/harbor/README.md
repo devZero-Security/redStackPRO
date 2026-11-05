@@ -38,17 +38,16 @@ backends declare fewer network capabilities (`src/redstackpro/schema/registry/pr
 | capability | cloud (gcp/aws/azure) | on-prem (proxmox/esxi) |
 |------------|-----------------------|------------------------|
 | public address | allocated: the jumpbox gets an external IP | none: reachability depends on the operator's own network and any upstream NAT or firewall |
-| private DNS | gcp, aws: managed zone, hosts resolve by name. azure: none, use static hosts entries | none: use static hosts entries |
-| network peering | managed: a jumpbox or collector can serve across the project boundary | none: joining networks is the host network's routing, which redStackPRO does not control |
+| private DNS | none on any provider: no backend creates a managed zone, so use static hosts entries | none: use static hosts entries |
+| network peering | managed: a jumpbox or collector in one network of the export can serve another network of the same export | none: joining networks is the host network's routing, which redStackPRO does not control |
 | host firewall | per-VM firewall on gcp and aws, a Network Security Group per subnet on azure | proxmox has one, esxi has none (layer-2 VLAN isolation only) |
 
 - **Range access.** On cloud the jumpbox has an allocated (per-deploy, ephemeral)
   public address, read from `DEFENSE-BRIEFING.md`. On on-prem there is no allocated
   external IP: reach the jumpbox over the operator's own network or VPN.
-- **Name resolution.** On GCP and AWS the range can resolve through managed
-  private DNS. On on-prem and Azure there is no managed zone, so populate static
-  hosts entries from the internal IPs below. Static entries work on cloud too
-  and keep the commands identical.
+- **Name resolution.** No backend creates a managed DNS zone, on any provider,
+  so populate static hosts entries from the internal IPs below. The commands are
+  then the same everywhere.
 
 Azure is supported from 0.10.0. This lab is not among those validated on Azure
 so far (the minilab, goad-light, and goad-wazuh blueprints). Azure has an
@@ -61,14 +60,14 @@ on-prem.
 Two domains in one forest, joined by a bidirectional, transitive parent-child
 trust: `harbor.corp` (HARBOR) is the root, `freight.harbor.corp` (FREIGHT) is the
 child. Four Windows hosts and a jumpbox on one flat subnet, `172.20.10.0/24`
-inside `172.20.0.0/16`. The internal addresses are pinned in the template.
+inside `172.20.0.0/16`. The internal addresses are pinned in the blueprint.
 
 | host | AD name | domain | range IP | role in the chain |
 |------|---------|--------|----------|-------------------|
 | hq-dc01 | HQ-DC01 | harbor.corp (root) | 172.20.10.10 | root DC, `ldap_signing_off`, holds the enterprise admins |
 | fr-dc01 | FR-DC01 | freight.harbor.corp | 172.20.10.11 | child DC, `llmnr_poisoning`, `nbtns_poisoning` |
 | fr-app01 | FR-APP01 | freight.harbor.corp | 172.20.10.20 | member, MSSQL + IIS, `unconstrained_delegation`, `openshares`, no EDR |
-| fr-wks01 | FR-WKS01 | freight.harbor.corp | 172.20.10.30 | Windows 11 workstation, `stored_credential`, patient zero's host |
+| fr-wks01 | FR-WKS01 | freight.harbor.corp | 172.20.10.30 | Windows 11 workstation (Windows Server 2022 on GCP and AWS), `stored_credential`, patient zero's host |
 | jumpbox | - | - | 172.20.10.4 | foothold, Guacamole, SSH, range CA |
 
 Cast:
@@ -95,7 +94,7 @@ App Maintainers  --ForceChangePassword-->       eric.vance        (child DA)
 ## The chain
 
 Read passwords and exact names from this deploy's `DEFENSE-BRIEFING.md`; the names
-below are the template's. Steps are numbered from 0, the order patient zero
+below are the blueprint's. Steps are numbered from 0, the order patient zero
 actually meets them.
 
 ### 0. Foothold as patient zero
@@ -111,7 +110,7 @@ step 2. `cmdkey /list` shows it; the password comes out of the vault with a DPAP
 tool run as her.
 
 ```
-proxychains cmdkey /list                 # from a beacon on fr-wks01
+cmdkey /list                             # run through the beacon on fr-wks01
 # and, from the operator side once you have a domain user:
 proxychains bloodhound-python -d freight.harbor.corp -u dana.brooks -p '<pw>' \
   -c all -ns 172.20.10.11
@@ -237,11 +236,10 @@ attempt against a monitored, patched forest.
 
 ## Detection note
 
-`fr-app01` ships with **no EDR**; the two DCs and the workstation run Defender.
-The unconstrained-delegation and open-share activity on `fr-app01` is therefore
-the quietest part of the chain, while the ACL writes (4728/4724 on `fr-dc01`) and
-the Kerberoast (4769 with RC4) are the loud, detectable steps on the monitored
-hosts.
+`fr-app01` carries no EDR label. The other hosts carry the Defender label, with
+real-time protection off unless `defender_enabled` is set, so nothing on the range
+blocks the chain. The ACL writes (4728/4724 on `fr-dc01`) and the Kerberoast (4769
+with RC4) are the loud, detectable steps for whatever collects the Security log.
 
 ## Step results
 

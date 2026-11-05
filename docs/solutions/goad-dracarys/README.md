@@ -14,10 +14,10 @@ roles that reproduce it.
 
 ## Methodology
 
-Same external red-team framing as the [GOAD series](../goad/README.md), see the
+Same external red team framing as the [GOAD series](../goad/README.md), see the
 [range access model](../README.md#range-access-model): the jumpbox is the only
-public host, everything else is private, and the operator pivots through the
-jumpbox (SSH SOCKS or a beacon).
+public host, everything else is private, and the operator works through a
+beacon's SOCKS proxy (see [tests run through the beacon](../README.md#tests-run-through-the-beacon)).
 Within the lab, the challenge's own start point is the Linux member.
 
 ## Provider differences
@@ -30,17 +30,16 @@ backends declare fewer network capabilities (`src/redstackpro/schema/registry/pr
 | capability | cloud (gcp/aws/azure) | on-prem (proxmox/esxi) |
 |------------|-----------------------|------------------------|
 | public address | allocated: the jumpbox gets an external IP | none: reachability depends on the operator's own network and any upstream NAT or firewall |
-| private DNS | gcp, aws: managed zone, hosts resolve by name. azure: none, use static hosts entries | none: use static hosts entries |
-| network peering | managed: a jumpbox or collector can serve across the project boundary | none: joining networks is the host network's routing, which redStackPRO does not control |
+| private DNS | none on any provider: no backend creates a managed zone, so use static hosts entries | none: use static hosts entries |
+| network peering | managed: a jumpbox or collector in one network of the export can serve another network of the same export | none: joining networks is the host network's routing, which redStackPRO does not control |
 | host firewall | per-VM firewall on gcp and aws, a Network Security Group per subnet on azure | proxmox has one, esxi has none (layer-2 VLAN isolation only) |
 
 - **Range access.** On cloud the jumpbox has an allocated (per-deploy, ephemeral)
   public address, read from `DEFENSE-BRIEFING.md`. On on-prem there is no allocated
   external IP: reach the jumpbox over the operator's own network or VPN.
-- **Name resolution.** On GCP and AWS the range can resolve through managed
-  private DNS. On on-prem and Azure there is no managed zone, so populate static
-  hosts entries from the internal IPs. Static entries work on cloud too and keep
-  the commands identical.
+- **Name resolution.** No backend creates a managed DNS zone, on any provider,
+  so populate static hosts entries from the internal IPs. The commands are then
+  the same everywhere.
 
 Azure is supported from 0.10.0 (the minilab, goad-light, and goad-wazuh
 blueprints are validated there). This lab is validated on Azure too: it deploys
@@ -59,7 +58,7 @@ jumpbox:
 |------|---------|----|--------------------|
 | balerion | BALERION | Server 2019 | DC, serves LDAPS, runs the CredSSP `keepass_bot` |
 | vhagar | VHAGAR | Server 2019 | member, holds the KeePass vault, runs `bot_ssh`, CredSSP server |
-| syrax | SYRAX | Ubuntu | Linux member, the challenge start point |
+| syrax | SYRAX | Debian 13 | Linux member, the challenge start point |
 | jumpbox | - | Debian | foothold, Guacamole, SSH |
 
 Cast: `drogon` (Domain Admin, also LinuxAdmins), `rhaegal` (local admin on
@@ -118,8 +117,10 @@ mimikatz # sekurlsa::logonpasswords     # the delegated CredSSP credential
 
 ### 4. Loot the vault -> drogon (Domain Admin)
 
-The `keepass_bot` opens `C:\vault.kdbx` on vhagar. Its master password is visible
-in the bot script (`C:\keepass_bot.ps1`, readable once you are on the host).
+The `keepass_bot` opens `C:\vault.kdbx` on vhagar. The bot script lives on
+balerion (`C:\keepass_bot.ps1`) and holds the master password; on vhagar the
+password is on the command line of the `cmd /c` that launches KeePass every
+minute, so a process listing there during that window recovers it.
 Open the vault and read the entry: it holds **drogon**'s credential, and drogon
 is a Domain Admin.
 
@@ -148,13 +149,13 @@ Every element above is built by the canvas blueprint, not hand-placed:
 | CredSSP double-hop | `enable_credssp_client` (balerion) + `enable_credssp_server` (vhagar) |
 | the two bots | `schedule` vulns: `keepass_bot` (CredSSP) and `bot_ssh` (SSH to syrax) |
 | rhaegal local admin | `privilege: local_admin` -> `redstackpro_srv_local_admins` on vhagar |
-| the vault | `keepass_vault`: KeePass DB generated on vhagar, entry filled from drogon's deployed password (no secret in the template) |
+| the vault | `keepass_vault`: KeePass DB generated on vhagar, entry filled from drogon's deployed password (no secret in the blueprint) |
 | LDAPS realism | `ldaps`: a server-auth cert on balerion |
 
 ## Notes
 
 - **No secret is committed for the vault.** The vault entry password is taken
-  from drogon's actual deployed password at provision time, so the template ships
+  from drogon's actual deployed password at provision time, so the blueprint ships
   no domain-admin secret. The per-user lab passwords in the topology are lab
   fixtures, as in upstream GOAD.
 - **Constrained delegation.** vhagar carries `constrained_delegation_kerberos`

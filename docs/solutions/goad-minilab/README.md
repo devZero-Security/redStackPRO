@@ -1,7 +1,8 @@
 # minilab solution - redStackPRO edition
 
 `minilab` is the smallest GOAD-family lab that is **not** a subset of goad: a
-single domain, one DC and one Windows 11 workstation, built around two techniques
+single domain, one DC and one Windows 11 workstation (Windows Server 2022 on GCP
+and AWS), built around two techniques
 the GOAD series never exercises, CredSSP credential delegation and scheduled-task
 abuse. It is covered technique-by-technique in
 [the coverage page](../labs/minilab.md); this page walks the intended chain end to
@@ -36,17 +37,16 @@ backends declare fewer network capabilities (`src/redstackpro/schema/registry/pr
 | capability | cloud (gcp/aws/azure) | on-prem (proxmox/esxi) |
 |------------|-----------------------|------------------------|
 | public address | allocated: the jumpbox gets an external IP | none: reachability depends on the operator's own network and any upstream NAT or firewall |
-| private DNS | gcp, aws: managed zone, hosts resolve by name. azure: none, use static hosts entries | none: use static hosts entries |
-| network peering | managed: a jumpbox or collector can serve across the project boundary | none: joining networks is the host network's routing, which redStackPRO does not control |
+| private DNS | none on any provider: no backend creates a managed zone, so use static hosts entries | none: use static hosts entries |
+| network peering | managed: a jumpbox or collector in one network of the export can serve another network of the same export | none: joining networks is the host network's routing, which redStackPRO does not control |
 | host firewall | per-VM firewall on gcp and aws, a Network Security Group per subnet on azure | proxmox has one, esxi has none (layer-2 VLAN isolation only) |
 
 - **Range access.** On cloud the jumpbox has an allocated (per-deploy, ephemeral)
   public address, read from `DEFENSE-BRIEFING.md`. On on-prem there is no allocated
   external IP: reach the jumpbox over the operator's own network or VPN.
-- **Name resolution.** On GCP and AWS the range can resolve through managed
-  private DNS. On on-prem and Azure there is no managed zone, so populate static
-  hosts entries from the internal IPs. Static entries work on cloud too and keep
-  the commands identical.
+- **Name resolution.** No backend creates a managed DNS zone, on any provider,
+  so populate static hosts entries from the internal IPs. The commands are then
+  the same everywhere.
 
 Azure is supported from 0.10.0, and this lab has been deployed and validated on
 it. Azure has an allocated public address and network peering, like GCP and AWS.
@@ -60,8 +60,8 @@ One domain, `mini.lab` (MINILAB), on `192.168.56.0/24`.
 | host | AD name | role in the chain |
 |------|---------|-------------------|
 | dc | DC | domain controller, `stored_credential`, `enable_credssp_client`, runs the `connect_bot` scheduled task |
-| ws | WS | Windows 11 workstation, `enable_credssp_server` (the CredSSP receiver) |
-| jumpbox | - | foothold, Guacamole, SSH, WireGuard, range CA |
+| ws | WS | Windows 11 workstation (Windows Server 2022 on GCP and AWS), `enable_credssp_server` (the CredSSP receiver) |
+| jumpbox | - | foothold, Guacamole, SSH, range CA |
 
 Cast (lab passwords are fixtures; read the briefing for this deploy's real ones):
 
@@ -70,7 +70,7 @@ Cast (lab passwords are fixtures; read the briefing for this deploy's real ones)
 - `wsadmin` is the local-admin group on `ws`; every listed user carries a weak,
   guessable password, which is the point of the lab.
 
-The two ACL edges the template plants both grant
+The two ACL edges the blueprint plants both grant
 `NT AUTHORITY\ANONYMOUS LOGON` read over the domain root. That configures
 anonymous LDAP enumeration (part 2 material), not an escalation chain, so there is
 no part 11 ACL walk here; see the coverage page.

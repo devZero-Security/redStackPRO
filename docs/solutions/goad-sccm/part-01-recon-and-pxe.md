@@ -14,8 +14,9 @@ impacket/enumeration tooling under it.
 > then `proxychains` at `127.0.0.1:1080`) is still available as an admin/scripting
 > convenience, but the beacon is the engagement's initial access.
 
-Addresses below are the `sccm.lab` range defaults: DC `192.168.56.5`, MECM
-`192.168.56.3`, MSSQL `192.168.56.6`, CLIENT `192.168.56.4`.
+The blueprint pins no addresses. The ones below (DC `192.168.56.5`, MECM
+`192.168.56.3`, MSSQL `192.168.56.6`, CLIENT `192.168.56.4`) are examples; read
+yours from `DEFENSE-BRIEFING.md` and substitute them.
 
 ## Recon without a user
 

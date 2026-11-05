@@ -1,6 +1,6 @@
 # nha solution - redStackPRO edition
 
-`nha` (Ninja Hack Academy, a GOAD community lab) is covered technique-by-technique
+`nha` (Ninja Hacker Academy, a GOAD community lab) is covered technique-by-technique
 in [the coverage page](../labs/nha.md). This page exists because that audit found
 a technique the lab really plants and **no page anywhere taught**: an ESC4
 certificate-template takeover in `ninja.hack`, reached across a forest trust.
@@ -22,7 +22,7 @@ known limit, of which this is the concrete instance.
 
 ## Methodology
 
-Same external red-team framing as the [GOAD series](../goad/README.md), see the
+Same external red team framing as the [GOAD series](../goad/README.md), see the
 [range access model](../README.md#range-access-model): the jumpbox is the only
 public host, everything else is private, and the operator works through a
 beacon's SOCKS proxy (see [tests run through the
@@ -39,18 +39,15 @@ backends declare fewer network capabilities (`src/redstackpro/schema/registry/pr
 | capability | cloud (gcp/aws/azure) | on-prem (proxmox/esxi) |
 |------------|-----------------------|------------------------|
 | public address | allocated: the jumpbox gets an external IP | none: reachability depends on the operator's own network and any upstream NAT or firewall |
-| private DNS | gcp, aws: managed zone, hosts resolve by name. azure: none, use static hosts entries | none: use static hosts entries |
-| network peering | managed: a jumpbox or collector can serve across the project boundary | none: joining networks is the host network's routing, which redStackPRO does not control |
+| private DNS | none on any provider: no backend creates a managed zone, so use static hosts entries | none: use static hosts entries |
+| network peering | managed: a jumpbox or collector in one network of the export can serve another network of the same export | none: joining networks is the host network's routing, which redStackPRO does not control |
 | host firewall | per-VM firewall on gcp and aws, a Network Security Group per subnet on azure | proxmox has one, esxi has none (layer-2 VLAN isolation only) |
 
 - **Range access.** On cloud the jumpbox has an allocated (per-deploy, ephemeral)
   public address, read from `DEFENSE-BRIEFING.md`. On on-prem there is no allocated
   external IP: reach the jumpbox over the operator's own network or VPN.
 - **Name resolution.** The two domains already go in `/etc/hosts` above, which is
-  exactly what on-prem and Azure need (`proxmox`, `esxi`, `azure` have no managed
-  private DNS). On GCP or AWS the range can also resolve through managed private
-  DNS, but the
-  static entries keep the commands identical, so use them either way.
+  what every provider needs: no backend creates a managed DNS zone.
 
 Azure is supported from 0.10.0. This lab is not among those validated on Azure
 so far (the minilab, goad-light, and goad-wazuh blueprints). Azure has an

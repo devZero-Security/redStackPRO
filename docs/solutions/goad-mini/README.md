@@ -38,7 +38,7 @@ prefix, Windows and AD names do not. Read your deploy's own
 
 | host | AD name | address | role |
 |------|---------|---------|------|
-| def-jumpbox | - | 192.168.56.4 | foothold, Guacamole, ssh, wireguard, CA |
+| def-jumpbox | - | 192.168.56.4 | foothold, Guacamole, ssh, range CA |
 | def-kingslanding | KINGSLANDING | 192.168.56.10 | domain controller, ADCS |
 
 The single domain carries the full Lannister and Baratheon cast (tywin, jaime,

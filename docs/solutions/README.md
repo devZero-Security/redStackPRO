@@ -4,7 +4,7 @@ Each shipped lab gets a walkthrough here: the attack path an operator runs
 against a live deploy, written against that lab's own topology. Read a lab's
 `DEFENSE-BRIEFING.md` (written into the export at compile time, filled in with your deploy's real addresses after `terraform apply`)
 alongside its walkthrough for the exact hosts, addresses, and credentials of
-your deploy; the pages below name the template's hosts, which are not yours.
+your deploy; the pages below name the blueprint's hosts, which are not yours.
 
 | lab | path | what it is |
 |-----|------|------------|
@@ -12,7 +12,7 @@ your deploy; the pages below name the template's hosts, which are not yours.
 | goad-light | [goad-light/README.md](goad-light/README.md) | two domains, three Windows hosts; generated from the goad series |
 | goad-mini | [goad-mini/README.md](goad-mini/README.md) | the smallest lab; hand-written coverage, ESC1 and the sevenkingdoms ACL chain |
 | minilab | [goad-minilab/README.md](goad-minilab/README.md) | one domain, a DC and a workstation; CredSSP delegation and scheduled-task abuse |
-| nha | [goad-nha/README.md](goad-nha/README.md) | Ninja Hack Academy, two forests, an ESC4 certificate-template takeover across the trust |
+| nha | [goad-nha/README.md](goad-nha/README.md) | Ninja Hacker Academy, two forests, an ESC4 certificate-template takeover across the trust |
 | sccm | [goad-sccm/README.md](goad-sccm/README.md) | an SCCM/MECM site, recon through execution |
 | goad-wazuh | [goad-wazuh/README.md](goad-wazuh/README.md) | GOAD-Light plus a Wazuh SIEM, the attack walked alongside what it should trip in detection |
 | dracarys | [goad-dracarys/README.md](goad-dracarys/README.md) | the DRACARYS challenge lab, no starting credentials to Domain Admin |

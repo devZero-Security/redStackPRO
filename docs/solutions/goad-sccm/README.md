@@ -47,17 +47,16 @@ backends declare fewer network capabilities (`src/redstackpro/schema/registry/pr
 | capability | cloud (gcp/aws/azure) | on-prem (proxmox/esxi) |
 |------------|-----------------------|------------------------|
 | public address | allocated: the jumpbox gets an external IP | none: reachability depends on the operator's own network and any upstream NAT or firewall |
-| private DNS | gcp, aws: managed zone, hosts resolve by name. azure: none, use static hosts entries | none: use static hosts entries |
-| network peering | managed: a jumpbox or collector can serve across the project boundary | none: joining networks is the host network's routing, which redStackPRO does not control |
+| private DNS | none on any provider: no backend creates a managed zone, so use static hosts entries | none: use static hosts entries |
+| network peering | managed: a jumpbox or collector in one network of the export can serve another network of the same export | none: joining networks is the host network's routing, which redStackPRO does not control |
 | host firewall | per-VM firewall on gcp and aws, a Network Security Group per subnet on azure | proxmox has one, esxi has none (layer-2 VLAN isolation only) |
 
 - **Range access.** On cloud the jumpbox has an allocated (per-deploy, ephemeral)
   public address, read from `DEFENSE-BRIEFING.md`. On on-prem there is no allocated
   external IP: reach the jumpbox over the operator's own network or VPN.
-- **Name resolution.** On GCP and AWS the range can resolve through managed
-  private DNS. On on-prem and Azure there is no managed zone, so populate static
-  hosts entries from the internal IPs. Static entries work on cloud too and keep
-  the commands identical.
+- **Name resolution.** No backend creates a managed DNS zone, on any provider,
+  so populate static hosts entries from the internal IPs. The commands are then
+  the same everywhere.
 
 Azure is supported from 0.10.0. This lab is not among those validated on Azure
 so far (the minilab, goad-light, and goad-wazuh blueprints). Azure has an
@@ -70,13 +69,17 @@ on-prem.
 Domain `sccm.lab`, subnet `192.168.56.0/24`, prefix `def` (defense mode).
 Cloud resource names carry the prefix, Windows and AD names do not.
 
-| host | AD name | address | role |
-|------|---------|---------|------|
+| host | AD name | example address | role |
+|------|---------|-----------------|------|
 | def-jumpbox | - | 192.168.56.2 | foothold, Guacamole, ssh |
 | def-mecm | MECM | 192.168.56.3 | site server, MECM primary site |
-| def-client | CLIENT | 192.168.56.4 | Windows 11 client |
+| def-client | CLIENT | 192.168.56.4 | Windows 11 client (Windows Server 2022 on GCP and AWS) |
 | def-dc | DC | 192.168.56.5 | domain controller |
 | def-mssql | MSSQL | 192.168.56.6 | remote site database |
+
+This blueprint pins no addresses, so the cloud assigns them and yours will differ
+(AWS and Azure reserve the first four of a subnet, so .2 and .3 never occur there).
+Read each host's address from this deploy's `DEFENSE-BRIEFING.md`.
 
 The separate site database matters: it is what makes TAKEOVER-1 and TAKEOVER-2
 reachable, because the site server authenticates to a **different** host.

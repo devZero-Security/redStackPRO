@@ -39,17 +39,16 @@ backends declare fewer network capabilities (`src/redstackpro/schema/registry/pr
 | capability | cloud (gcp/aws/azure) | on-prem (proxmox/esxi) |
 |------------|-----------------------|------------------------|
 | public address | allocated: the jumpbox gets an external IP | none: reachability depends on the operator's own network and any upstream NAT or firewall |
-| private DNS | gcp, aws: managed zone, hosts resolve by name. azure: none, use static hosts entries | none: use static hosts entries |
-| network peering | managed: a jumpbox or collector can serve across the project boundary | none: joining networks is the host network's routing, which redStackPRO does not control |
+| private DNS | none on any provider: no backend creates a managed zone, so use static hosts entries | none: use static hosts entries |
+| network peering | managed: a jumpbox or collector in one network of the export can serve another network of the same export | none: joining networks is the host network's routing, which redStackPRO does not control |
 | host firewall | per-VM firewall on gcp and aws, a Network Security Group per subnet on azure | proxmox has one, esxi has none (layer-2 VLAN isolation only) |
 
 - **Range access.** On cloud the jumpbox has an allocated (per-deploy, ephemeral)
   public address, read from `DEFENSE-BRIEFING.md`. On on-prem there is no allocated
   external IP: reach the jumpbox over the operator's own network or VPN.
-- **Name resolution.** On GCP and AWS the range can resolve through managed
-  private DNS. On on-prem and Azure there is no managed zone, so populate static
-  hosts entries from the internal IPs. Static entries work on cloud too and keep
-  the commands identical.
+- **Name resolution.** No backend creates a managed DNS zone, on any provider,
+  so populate static hosts entries from the internal IPs. The commands are then
+  the same everywhere.
 
 Azure is supported from 0.10.0, and this lab has been deployed and validated on
 it. Azure has an allocated public address and network peering, like GCP and AWS.
@@ -59,14 +58,14 @@ entries, as on-prem.
 ## Topology
 
 Two domains in one forest (parent-child, bidirectional, transitive), plus the
-SIEM and a hardened workstation, on `192.168.56.0/24`.
+SIEM and a workstation, on `192.168.56.0/24`.
 
 | host | AD name | domain | range IP | role |
 |------|---------|--------|----------|------|
 | kingslanding | KINGSLANDING | sevenkingdoms.local (root) | 192.168.56.10 | DC, `ldap_signing_off`, the full sevenkingdoms ACL chain (12 edges), Wazuh agent |
 | winterfell | WINTERFELL | north.sevenkingdoms.local | 192.168.56.11 | DC, `unconstrained_delegation`, `llmnr_poisoning`, `ldap_signing_off`, Wazuh agent |
 | castelblack | CASTELBLACK | north.sevenkingdoms.local | 192.168.56.22 | member, MSSQL + IIS, `iis_webshell`, `mssql_impersonation`, `gpp_password`, Wazuh agent |
-| ws01 | WS01 | sevenkingdoms.local | 192.168.56.30 | Windows 11 workstation, **hardened** (ASR, RunAsPPL, constrained PowerShell, Defender tamper protection), no planted vulns |
+| ws01 | WS01 | sevenkingdoms.local | 192.168.56.30 | Windows 11 workstation (Windows Server 2022 on GCP and AWS), no planted vulns, no hardening, Defender off unless `defender_enabled` is set |
 | wazuh | - | - | 192.168.56.5 | the SIEM (Ubuntu) |
 | jumpbox | - | - | 192.168.56.4 | foothold, Guacamole, SSH, range CA |
 
@@ -93,7 +92,9 @@ otherwise-blind rows come into range here. See the coverage page for the full ma
 2. **LLMNR / NBT-NS poisoning** on the winterfell segment
    ([part 4](../goad/part-04-poison-and-relay.md)). `responder` for NetNTLM.
    Detection: **blind** on the victim host, this is a network technique; a host
-   sensor or Sysmon DNS (event 22) helps.
+   sensor or Sysmon DNS (event 22) helps. GCP, AWS and Azure drop the broadcast and
+   multicast it needs, so the compiler leaves `llmnr_poisoning` out on those
+   providers and `DEFENSE-BRIEFING.md` marks it not planted.
 3. **Kerberoast `sql_svc` / `sansa.stark`** and **AS-REP roast `brandon.stark`**
    ([part 3](../goad/part-03-enumeration-with-user.md)). Detection: **good**,
    4769 (TGS, RC4 0x17 for an SPN account) and 4768 (AS-REQ, pre-auth not
@@ -121,12 +122,9 @@ otherwise-blind rows come into range here. See the coverage page for the full ma
    ([part 12](../goad/part-12-trusts.md)): the child-to-root hop applies (parent
    and child, one forest; there is no second forest).
 
-`ws01` is a deliberate **negative control**, not a target: it is hardened (ASR
-rules block LSASS theft and PsExec/WMI child processes, LSASS runs as a Protected
-Process Light, PowerShell is constrained) and ships no planted vulnerability. Use
-it to confirm that the loud techniques (credential dumping, remote exec) are
-blocked and, where they are attempted, generate the ASR and Defender events the
-detection story wants.
+`ws01` is a plain workstation with no planted vulnerability. Hardening controls are
+recorded but not deployed in this release, so it is not a negative control yet:
+credential dumping and remote exec against it are not blocked.
 
 ## How to validate detection
 
@@ -154,7 +152,6 @@ confirmed PASS).
 | 7 unconstrained delegation | | partial | coerce a DC |
 | 8 ACL chain to DA | | partial/blind (5136) | 12 edges, sevenkingdoms |
 | 9 child to parent trust | | partial | one forest |
-| ws01 hardening control | | ASR/Defender events | negative control, not a target |
 
 Attribution: GOAD and its wazuh/ws01 extensions are the GOAD project's. Recreated
 natively on the redStackPRO canvas and documented in our own words.
