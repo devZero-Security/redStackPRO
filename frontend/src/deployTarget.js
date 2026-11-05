@@ -24,11 +24,16 @@ export const PLATFORMS = {
     file: "windows",
     run: ".\\deploy.ps1",
     shell: "PowerShell",
+    // keys\ in the keygen line is relative, so every step runs from here.
+    folder: "C:\\ranges\\",
+    // deploy.ps1 hands its own folder to Git Bash inside single quotes.
+    pathNote: "The path must not contain an apostrophe: deploy.ps1 cannot run from one.",
+    needs: ["terraform", "Git for Windows (for ssh, tar and Git Bash)", "Python 3.8 or newer"],
     // The one trap worth spending a line on. `bash` at a PowerShell prompt is
     // C:\Windows\System32\bash.exe, the WSL launcher, so the deploy runs in a
     // different filesystem with a different home and different cloud
     // credentials, and fails for reasons that look nothing like the cause.
-    note: "Needs terraform, Git for Windows (for ssh, tar and Git Bash) and Python 3.8 or newer. Run it from PowerShell. Not `bash deploy.sh` there: that is WSL's bash, not Git Bash.",
+    note: "Run it from PowerShell. Not `bash deploy.sh` there: that is WSL's bash, not Git Bash.",
     // PowerShell passes -N "" through as two literal quote characters, so the
     // key ends up with a passphrase of `""`. Nothing complains until the deploy
     // fails minutes later with Permission denied (publickey) from the jumpbox.
@@ -39,28 +44,70 @@ export const PLATFORMS = {
     file: "macos-linux",
     run: "bash deploy.sh",
     shell: "a terminal",
-    note: "Needs terraform, ssh, tar and Python 3.8 or newer.",
+    folder: "~/ranges/",
+    needs: ["terraform", "ssh", "tar", "Python 3.8 or newer"],
+    note: "",
     keygen: 'ssh-keygen -t ed25519 -f keys/id_ed25519 -N ""',
   },
 };
 
+// "a, b and c"
+function listed(items) {
+  if (items.length < 2) return items.join("");
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+// The cloud CLI is on the list because deploy.sh checks the login with it and
+// manage.sh runs status, stop, start and teardown through it.
+export function requirements(platform, provider) {
+  const target = PLATFORMS[platform] || PLATFORMS.unix;
+  const cli = providerSetup(provider).cli;
+  const needs = [...target.needs];
+  if (cli) needs.push(platform === "windows" ? `the ${cli.name} for Windows` : `the ${cli.name}`);
+  return `Needs ${listed(needs)}.`;
+}
+
+// An example folder to extract into, named like the download.
+export function extractFolder(platform, name) {
+  return (PLATFORMS[platform] || PLATFORMS.unix).folder + slug(name);
+}
+
 // What to set in deploy.tfvars and how to log in, per provider. Field names
 // match terraform/<provider>.py. ssh_public_key is left out on purpose: deploy.sh
-// fills it from keys/ when it is empty.
+// fills it from keys/ when it is empty. cli.winget ids are checked with
+// `winget show`; keep CLI_INSTALL in export.py in step.
 export const PROVIDER_SETUP = {
   gcp: {
     fields: ["project", "region", "zone", "operator_source_ranges"],
+    cli: {
+      name: "Google Cloud CLI",
+      bin: "gcloud",
+      winget: "Google.CloudSDK",
+      docs: "https://cloud.google.com/sdk/docs/install",
+    },
     login: ["gcloud auth login", "gcloud auth application-default login"],
     loginNote: "Run both: Terraform reads the application default login, manage.sh uses the other.",
   },
   aws: {
     fields: ["region", "operator_source_ranges"],
+    cli: {
+      name: "AWS CLI",
+      bin: "aws",
+      winget: "Amazon.AWSCLI",
+      docs: "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html",
+    },
     login: ["aws configure"],
     altLogin: ["aws sso login"],
     loginNote: "Credentials come from your AWS CLI profile, not deploy.tfvars. Set AWS_PROFILE to pick a profile.",
   },
   azure: {
     fields: ["subscription_id", "location", "resource_group", "operator_source_ranges"],
+    cli: {
+      name: "Azure CLI",
+      bin: "az",
+      winget: "Microsoft.AzureCLI",
+      docs: "https://learn.microsoft.com/cli/azure/install-azure-cli",
+    },
     login: ["az login"],
   },
   proxmox: {

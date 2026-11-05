@@ -5,7 +5,7 @@ import React from "react";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { describe, expect, test, vi, beforeEach } from "vitest";
+import { describe, expect, test, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -18,7 +18,7 @@ import { VULN_CATALOG } from "./vulns.js";
 import { EXTENSIONS } from "./extensions.js";
 import { TEMPLATES } from "./templates.js";
 import { ExportPanel } from "./Export.jsx";
-import { PLATFORMS, PROVIDER_SETUP } from "./deployTarget.js";
+import { PLATFORMS, PLATFORM_KEY, PROVIDER_SETUP, requirements } from "./deployTarget.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -272,10 +272,91 @@ describe("export panel", () => {
   });
 
   test("Python 3.8 is the stated minimum on every platform", () => {
-    for (const p of Object.values(PLATFORMS)) {
-      expect(p.note).toMatch(/Python 3\.8 or newer/);
-      expect(p.note).not.toMatch(/3\.11/);
+    for (const platform of Object.keys(PLATFORMS)) {
+      for (const provider of Object.keys(PROVIDER_SETUP)) {
+        const needs = requirements(platform, provider);
+        expect(needs).toMatch(/Python 3\.8 or newer/);
+        expect(needs).not.toMatch(/3\.11/);
+      }
     }
+  });
+
+  describe("deploying from a chosen machine", () => {
+    afterEach(() => window.localStorage.removeItem(PLATFORM_KEY));
+
+    async function steps(provider, platform) {
+      window.localStorage.setItem(PLATFORM_KEY, platform);
+      compileBackend();
+      render(<ExportPanel document={{ ...DOC, name: "GOAD Light" }} provider={provider} />);
+      const list = await waitFor(() => {
+        const el = window.document.querySelector(".rg-export-steps");
+        expect(el).toBeTruthy();
+        return el;
+      });
+      const items = [...list.querySelectorAll(":scope > li")];
+      const commands = (li) => [...li.querySelectorAll("code.rg-cmd")].map((c) => c.textContent);
+      const note = list.nextElementSibling.textContent;
+      return { items, commands, note };
+    }
+
+    test("Windows: step 1 extracts to a folder and runs everything from it", async () => {
+      const { items, commands } = await steps("azure", "windows");
+      const first = items[0].textContent;
+      expect(first).toMatch(/Extract the zip to its own folder, for example C:\\ranges\\goad-light\./);
+      expect(first).toMatch(/must not contain an apostrophe/);
+      expect(first).toMatch(/Open PowerShell in that folder; every step below runs from there:/);
+      expect(first).toMatch(/The key lands in the export's keys folder\. Keep the folder/);
+      expect(commands(items[0])).toEqual([
+        "cd C:\\ranges\\goad-light",
+        "ssh-keygen -t ed25519 -f keys\\id_ed25519 -N ''",
+      ]);
+    });
+
+    test.each([
+      ["azure", "Azure CLI", "Microsoft.AzureCLI", ["az login"]],
+      ["gcp", "Google Cloud CLI", "Google.CloudSDK",
+        ["gcloud auth login", "gcloud auth application-default login"]],
+      ["aws", "AWS CLI", "Amazon.AWSCLI", ["aws configure", "aws sso login"]],
+    ])("Windows + %s: install the CLI with winget, then log in from a new window",
+      async (provider, name, id, logins) => {
+        const { items, commands, note } = await steps(provider, "windows");
+        const login = items[2];
+        expect(login.textContent).toMatch(new RegExp(`^Install the ${name} for Windows:`));
+        expect(login.textContent).toMatch(
+          /only updates PATH for new windows, so open a new PowerShell window in the export folder/);
+        const cmds = commands(login);
+        expect(cmds[0]).toBe(`winget install -e --id ${id}`);
+        for (const cmd of logins) expect(cmds).toContain(cmd);
+        expect(login.querySelector("a")).toBeNull();
+        expect(note).toMatch(new RegExp(`Python 3\\.8 or newer and the ${name} for Windows\\.`));
+      });
+
+    test("macOS / Linux + azure: the docs link, no winget", async () => {
+      const { items, commands, note } = await steps("azure", "unix");
+      expect(items[0].textContent).toMatch(
+        /for example ~\/ranges\/goad-light\. Open a terminal in that folder; every step below runs from there:/);
+      expect(items[0].textContent).not.toMatch(/apostrophe/);
+      expect(commands(items[0])[0]).toBe("cd ~/ranges/goad-light");
+      const login = items[2];
+      expect(login.textContent).toMatch(/^Install the Azure CLI \(install steps\), then log in to Azure:/);
+      expect(login.querySelector("a").getAttribute("href")).toBe(
+        "https://learn.microsoft.com/cli/azure/install-azure-cli");
+      expect(commands(login)).toEqual(["az login"]);
+      expect(window.document.body.textContent).not.toMatch(/winget/);
+      expect(note).toMatch(/Python 3\.8 or newer and the Azure CLI\./);
+      expect(note).not.toMatch(/for Windows\./);
+    });
+
+    test.each(["windows", "unix"])("proxmox on %s: no CLI to install", async (platform) => {
+      const { items, commands, note } = await steps("proxmox", platform);
+      const login = items[2];
+      expect(login.textContent).toBe(PROVIDER_SETUP.proxmox.loginNote);
+      expect(commands(login)).toEqual([]);
+      expect(login.querySelector("a")).toBeNull();
+      expect(window.document.body.textContent).not.toMatch(/winget|Install the/);
+      expect(note).toMatch(/Python 3\.8 or newer\./);
+      expect(note).not.toMatch(/CLI/);
+    });
   });
 });
 

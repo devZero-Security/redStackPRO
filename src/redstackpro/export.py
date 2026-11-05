@@ -102,6 +102,58 @@ az login
 ```""",
 }
 
+# The cloud's own CLI: deploy.sh checks the login with it and manage.sh runs
+# status, stop, start and teardown through it. Same names, winget ids and pages
+# as PROVIDER_SETUP in frontend/src/deployTarget.js.
+CLI_INSTALL = {
+    "gcp": ("Google Cloud CLI", "Google.CloudSDK",
+            "https://cloud.google.com/sdk/docs/install"),
+    "aws": ("AWS CLI", "Amazon.AWSCLI",
+            "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"),
+    "azure": ("Azure CLI", "Microsoft.AzureCLI",
+              "https://learn.microsoft.com/cli/azure/install-azure-cli"),
+}
+
+
+def install_cli(provider):
+    """Step 3's install paragraph, or "" when the provider has no CLI."""
+    if provider not in CLI_INSTALL:
+        return ""
+    name, winget, docs = CLI_INSTALL[provider]
+    return """Install the %s first. `deploy.sh` checks your login with it, and
+`manage.sh` runs status, stop, start and teardown through it.
+
+**Windows** (PowerShell):
+
+```powershell
+winget install -e --id %s
+```
+
+The install only updates PATH for new windows, so open a new PowerShell window in
+this folder before you log in.
+
+**macOS and Linux**: follow %s.
+
+Then log in, from this folder:
+
+""" % (name, winget, docs)
+
+
+def _needs(provider):
+    """The guide's two "What you need" phrasings, with the provider's CLI."""
+    cli = CLI_INSTALL.get(provider)
+    if not cli:
+        return ("`terraform`, `ssh`, `tar`, and a Python 3.8+",
+                "`terraform` and a Python 3.8+")
+    return ("`terraform`, `ssh`, `tar`, a Python 3.8+, and the %s" % cli[0],
+            "`terraform`, a Python 3.8+ and the %s (step 3)" % cli[0])
+
+
+def _folder_name(name):
+    """The example folder name, the same slug the canvas names the download with."""
+    return re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-") or "redstackpro"
+
+
 # The last step-2 bullet: what else in deploy.tfvars to check, per provider.
 CONFIRM_TFVARS = {
     "gcp": """- `project`: your GCP project ID, not its name or number
@@ -184,7 +236,14 @@ barred from a size in a region, which apply reports as `SkuNotAvailable`.
 # and the deploy fails minutes later with `Permission denied (publickey)` from
 # the jumpbox. `-N ''` is the form that yields no passphrase there. Found by
 # following the bash version of this line at a PowerShell prompt.
-MAKE_A_KEY = """This is an SSH key you generate yourself. It is not your cloud
+MAKE_A_KEY = """Extract the download to its own folder, for example `C:\\ranges\\{folder}` on
+Windows or `~/ranges/{folder}` on macOS and Linux, and open PowerShell or a
+terminal in it. On Windows the path must not contain an apostrophe: `deploy.ps1`
+cannot run from one. Every command in this guide runs from that folder, the one
+this guide is in: `keys/` below is relative to it, and `manage.sh` runs from it
+after the deploy, so keep it.
+
+This is an SSH key you generate yourself. It is not your cloud
 credentials: your cloud login (for example `aws configure`, or `gcloud auth login`)
 is separate and is what applies the Terraform. This key is only how you log into the
 range hosts once they exist.
@@ -245,13 +304,13 @@ this stack. This file is only how to stand it up.
 
 | | |
 |---|---|
-| On your machine | `terraform`, `ssh`, `tar`, and a Python 3.8+ |
+| On your machine | {machine_needs} |
 | On the hosts | nothing: Ansible is installed on the jumpbox for you |
 | Time | roughly 60 to 75 minutes, most of it building C2 agents |
 
 `ssh` and `tar` are already on macOS and Linux and ship with Git for Windows;
-install `terraform` and a Python 3.8+ yourself. The deploy then runs the same
-way on all three.
+install {install_yourself} yourself.
+The deploy then runs the same way on all three.
 
 ## 1. Make an ssh key
 
@@ -417,13 +476,13 @@ you are attacking; this file is only how to stand it up.
 
 | | |
 |---|---|
-| On your machine | `terraform`, `ssh`, `tar`, and a Python 3.8+ |
+| On your machine | {machine_needs} |
 | On the hosts | nothing: Ansible is installed on the jumpbox for you |
 | Time | roughly 45 minutes for a small forest, longer for a large one |
 
 `ssh` and `tar` are already on macOS and Linux and ship with Git for Windows;
-install `terraform` and a Python 3.8+ yourself. The deploy then runs the same
-way on all three.
+install {install_yourself} yourself.
+The deploy then runs the same way on all three.
 
 ## 1. Make an ssh key
 
@@ -687,15 +746,18 @@ def compile_topology(document, registry=None, provider="gcp", region=None):
             files["manage.sh"] = manage_script
             from .deploy import MANAGE_PS1
             files["manage.ps1"] = MANAGE_PS1
+    machine_needs, install_yourself = _needs(provider)
     files["DEPLOYMENT-GUIDE.md"] = (RANGE_README if is_range else README).format(
         name=document.get("name", "redStackPRO export"),
         provider=provider,
         jumpuser=platform_account((document or {}).get("mode")),
         tfvars=TFVARS_TO_FILL.get(provider, "see variables.tf"),
-        cloud_auth=CLOUD_AUTH.get(
+        machine_needs=machine_needs,
+        install_yourself=install_yourself,
+        cloud_auth=install_cli(provider) + CLOUD_AUTH.get(
             provider, "However your provider expects. redStackPRO never holds "
                       "a credential."),
-        make_a_key=MAKE_A_KEY,
+        make_a_key=MAKE_A_KEY.format(folder=_folder_name(document.get("name"))),
         run_the_deploy=RUN_THE_DEPLOY,
         quotas=QUOTA_NOTES.get(provider, ""),
         preconditions="" if is_range else ACCOUNT_PRECONDITIONS.get(provider, ""),

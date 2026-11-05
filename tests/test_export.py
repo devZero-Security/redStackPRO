@@ -11,7 +11,7 @@ import pytest
 
 from redstackpro import Registry
 from redstackpro.deploy import generate_deploy_script
-from redstackpro.export import compile_topology, static_files
+from redstackpro.export import CLI_INSTALL, compile_topology, static_files
 
 GOAD_LIGHT = (Path(__file__).resolve().parent.parent
               / "frontend/public/goad/goad-light.json")
@@ -344,6 +344,68 @@ def test_the_guide_names_what_to_confirm_per_provider(provider, expect, absent):
     assert absent not in guide.split("## 3.")[0].split("## 2.")[1]
     assert "(and, on GCP, the project)" not in guide
     assert "Python 3.8+" in guide and "3.11" not in guide
+
+
+def _section(guide, number):
+    return guide.split("## %d." % number)[1].split("\n## ")[0]
+
+
+@pytest.mark.parametrize("provider", ["gcp", "aws", "azure", "proxmox", "esxi"])
+def test_the_guide_runs_everything_from_the_export_folder(provider):
+    """keys/ in the keygen line is relative, so a key made from the home folder
+    lands where the deploy never looks. Found using the export panel for real."""
+    step = _section(_guide(_goad_light(), provider), 1)
+    assert "`C:\\ranges\\goad-light` on\nWindows or `~/ranges/goad-light`" in step
+    assert "must not contain an apostrophe" in step
+    assert "Every command in this guide runs from that folder" in step
+    assert step.index("runs from that folder") < step.index("ssh-keygen")
+
+
+@pytest.mark.parametrize("provider,name,winget,docs,login", [
+    ("gcp", "Google Cloud CLI", "Google.CloudSDK",
+     "https://cloud.google.com/sdk/docs/install", "gcloud auth login"),
+    ("aws", "AWS CLI", "Amazon.AWSCLI",
+     "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html",
+     "aws configure"),
+    ("azure", "Azure CLI", "Microsoft.AzureCLI",
+     "https://learn.microsoft.com/cli/azure/install-azure-cli", "az login"),
+])
+def test_the_guide_installs_the_cloud_cli_before_the_login(
+        redstack, provider, name, winget, docs, login):
+    """The login step assumed the CLI was there, and nothing said to install it.
+    manage.sh needs it for status, stop, start and teardown."""
+    for doc in (_goad_light(), redstack):
+        guide = _guide(doc, provider)
+        auth = _section(guide, 3)
+        assert auth.startswith(" Authenticate to your cloud\n\nInstall the %s first." % name)
+        assert "winget install -e --id %s" % winget in auth
+        assert "only updates PATH for new windows" in auth
+        assert "**macOS and Linux**: follow %s." % docs in auth
+        assert auth.index("winget install") < auth.index(login)
+        needs = guide.split("## What you need")[1].split("\n## ")[0]
+        assert "a Python 3.8+, and the %s |" % name in needs
+        for other, (other_name, other_id, _) in CLI_INSTALL.items():
+            if other != provider:
+                assert other_id not in guide and other_name not in guide
+
+
+@pytest.mark.parametrize("provider", ["proxmox", "esxi"])
+def test_a_guide_without_a_cloud_cli_has_no_install_step(provider):
+    guide = _guide(_goad_light(), provider)
+    assert "winget" not in guide
+    assert " CLI" not in guide
+    assert "`terraform`, `ssh`, `tar`, and a Python 3.8+ |" in guide
+
+
+def test_the_guide_and_the_export_panel_name_the_same_cli():
+    """The panel and the guide each carry the install line; they must agree."""
+    panel = (GOAD_LIGHT.parent.parent.parent / "src/deployTarget.js").read_text(
+        encoding="utf-8")
+    for provider, (name, winget, docs) in CLI_INSTALL.items():
+        block = panel.split("\n  %s: {" % provider)[1].split("\n  },")[0]
+        assert 'name: "%s"' % name in block, provider
+        assert 'winget: "%s"' % winget in block, provider
+        assert 'docs: "%s"' % docs in block, provider
 
 
 def test_the_gcp_guide_enables_compute_and_points_at_the_quota_page():

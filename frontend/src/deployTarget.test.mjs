@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { PLATFORMS, archiveName, defaultPlatform, slug } from "./deployTarget.js";
+import {
+  PLATFORMS, PROVIDER_SETUP, archiveName, defaultPlatform, extractFolder, requirements, slug,
+} from "./deployTarget.js";
 
 // What a download is called, and which machine it says to run it from.
 //
@@ -69,9 +71,41 @@ assert.notEqual(PLATFORMS.windows.keygen, PLATFORMS.unix.keygen);
 
 // Everything the panel renders is present for every platform.
 for (const [key, p] of Object.entries(PLATFORMS)) {
-  for (const field of ["label", "file", "run", "shell", "note", "keygen"]) {
+  for (const field of ["label", "file", "run", "shell", "folder", "needs", "keygen"]) {
     assert.ok(p[field], `${key}.${field} is missing`);
   }
 }
+
+// keys\ in the keygen line is relative, so the example folder is where every
+// step runs. Named like the download, so it is shell safe.
+assert.equal(extractFolder("windows", "GOAD Light"), "C:\\ranges\\goad-light");
+assert.equal(extractFolder("unix", "GOAD Light"), "~/ranges/goad-light");
+assert.doesNotMatch(extractFolder("windows", "Mike's range"), /'/);
+
+// The cloud CLI is a requirement, and on Windows it is the Windows build.
+assert.equal(
+  requirements("windows", "azure"),
+  "Needs terraform, Git for Windows (for ssh, tar and Git Bash), Python 3.8 or newer and the Azure CLI for Windows."
+);
+assert.equal(
+  requirements("unix", "azure"),
+  "Needs terraform, ssh, tar, Python 3.8 or newer and the Azure CLI."
+);
+assert.equal(requirements("unix", "proxmox"), "Needs terraform, ssh, tar and Python 3.8 or newer.");
+assert.equal(requirements("unix", "esxi"), "Needs terraform, ssh, tar and Python 3.8 or newer.");
+for (const [provider, setup] of Object.entries(PROVIDER_SETUP)) {
+  if (!setup.cli) continue;
+  for (const field of ["name", "bin", "winget", "docs"]) {
+    assert.ok(setup.cli[field], `${provider}.cli.${field} is missing`);
+  }
+  assert.match(setup.cli.docs, /^https:\/\//);
+  // The login commands run the binary the install step puts on PATH.
+  for (const cmd of setup.login) assert.ok(cmd.startsWith(`${setup.cli.bin} `), cmd);
+}
+assert.equal(PROVIDER_SETUP.azure.cli.winget, "Microsoft.AzureCLI");
+assert.equal(PROVIDER_SETUP.gcp.cli.winget, "Google.CloudSDK");
+assert.equal(PROVIDER_SETUP.aws.cli.winget, "Amazon.AWSCLI");
+assert.equal(PROVIDER_SETUP.proxmox.cli, undefined);
+assert.equal(PROVIDER_SETUP.esxi.cli, undefined);
 
 console.log("deployTarget.test.mjs: all passed");

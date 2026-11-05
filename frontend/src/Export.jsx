@@ -6,7 +6,9 @@ import {
   PLATFORM_KEY,
   archiveName,
   defaultPlatform,
+  extractFolder,
   providerSetup,
+  requirements,
 } from "./deployTarget.js";
 import { labelFor } from "./providers.js";
 
@@ -209,6 +211,24 @@ export function ExportPanel({ document, provider }) {
   const bytes = result.files.reduce((total, f) => total + f.contents.length, 0);
   const setup = providerSetup(provider);
   const cloud = labelFor(provider);
+  const target = PLATFORMS[platform];
+  const folder = extractFolder(platform, document.name);
+  const cli = setup.cli;
+  // The panel says Windows, so the CLI install has to be the Windows one.
+  const install = !cli ? null : platform === "windows" ? (
+    <>
+      Install the {cli.name} for Windows:
+      <Cmd>{`winget install -e --id ${cli.winget}`}</Cmd>
+      The install only updates PATH for new windows, so open a new PowerShell
+      window in the export folder, then log in to {cloud}:
+    </>
+  ) : (
+    <>
+      Install the {cli.name} (
+      <a href={cli.docs} target="_blank" rel="noreferrer">install steps</a>
+      ), then log in to {cloud}:
+    </>
+  );
 
   return (
     <aside className="rg-panel rg-export">
@@ -241,8 +261,14 @@ export function ExportPanel({ document, provider }) {
 
       <ol className="rg-export-steps">
         <li>
-          Extract it, then make a key:
-          <Cmd>{PLATFORMS[platform].keygen}</Cmd>
+          Extract the zip to its own folder, for example <code>{folder}</code>.
+          {target.pathNote ? ` ${target.pathNote}` : ""} Open {target.shell} in
+          that folder; every step below runs from there:
+          <Cmd>{`cd ${folder}`}</Cmd>
+          Make a key:
+          <Cmd>{target.keygen}</Cmd>
+          The key lands in the export's keys folder. Keep the folder: status,
+          stop, start and teardown run from it too.
         </li>
         <li>
           Open <code>deploy.tfvars</code> (in the export root) and set{" "}
@@ -257,7 +283,7 @@ export function ExportPanel({ document, provider }) {
         <li>
           {setup.login?.length ? (
             <>
-              Log in to {cloud}:
+              {install || <>Log in to {cloud}:</>}
               {setup.login.map((cmd) => <Cmd key={cmd}>{cmd}</Cmd>)}
               {setup.altLogin?.length ? (
                 <>
@@ -272,11 +298,12 @@ export function ExportPanel({ document, provider }) {
           )}
         </li>
         <li>
-          Then in {PLATFORMS[platform].shell}:
-          <Cmd>{PLATFORMS[platform].run}</Cmd>
+          Then in {target.shell}:
+          <Cmd>{target.run}</Cmd>
         </li>
       </ol>
-      <p className="rg-export-note">{PLATFORMS[platform].note} Both scripts are
+      <p className="rg-export-note">
+        {[requirements(platform, provider), target.note].filter(Boolean).join(" ")} Both scripts are
         in every download, so the same export deploys from either machine. After
         it is up, manage.sh (manage.ps1 on Windows) does status, stop, start, and
         teardown. DEPLOYMENT-GUIDE.md has the long version.</p>
