@@ -1144,6 +1144,34 @@ def test_the_portal_login_is_the_platform_account_not_operator(provider):
     assert 'var.operator_username' not in main
 
 
+def _password_outputs(doc, provider):
+    main = files(doc, provider=provider)["terraform/main.tf"]
+    outs = {}
+    for block in parse(main).get("output", []):
+        outs.update(block)
+    return {name: body for name, body in outs.items()
+            if name in ("lab_password", "guacamole")}
+
+
+@pytest.mark.parametrize("provider", ["aws", "gcp", "azure", "proxmox", "esxi"])
+def test_the_password_outputs_are_sensitive_in_a_range(provider):
+    """apply prints <sensitive> for them. deploy.sh reads lab_password with
+    -raw, and `terraform output guacamole` names the output, which prints it."""
+    outs = _password_outputs(_MANAGE_doc(), provider)
+    assert set(outs) == {"lab_password", "guacamole"}
+    for name, body in outs.items():
+        assert body.get("sensitive") is True, (provider, name)
+
+
+@pytest.mark.parametrize("provider", ["aws", "gcp", "azure"])
+def test_the_password_outputs_are_sensitive_in_an_offense_stack(provider, redstack):
+    set_redirector_hostname(redstack, "cdn.redops.design")
+    outs = _password_outputs(redstack, provider)
+    assert set(outs) == {"lab_password", "guacamole"}
+    for name, body in outs.items():
+        assert body.get("sensitive") is True, (provider, name)
+
+
 def test_MANAGE_rejects_a_provider_without_a_native_backend():
     from redstackpro.export import compile_topology
     with pytest.raises(GenerationError):
