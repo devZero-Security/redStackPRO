@@ -117,9 +117,10 @@ Not in 0.7.0. See 0012.
 
 - `peers` landed in 0.4.0: a network to network role for same-cloud links that do
   not warrant an endpoint host, which relaxes the cross-network management,
-  logging, and fronting rules across the peered boundary (0029, 0030). Both cloud
-  backends render it as VPC peering with CIDR based cross-network firewall rules:
-  gcp in 0030, aws in 0031. Proxmox cannot peer and refuses through `CAP004`. Both
+  logging, and fronting rules across the peered boundary (0029, 0030). The cloud
+  backends render it as network peering with CIDR based cross-network firewall
+  rules: gcp in 0030, aws in 0031, azure (VNet peering) in 0.10.0. Proxmox and
+  ESXi cannot peer and refuse through `CAP004`. Both
   the `peered` example and the seeded redStack blueprint now run two networks, with
   redStack isolating its redirector in a network of its own peered to the main
   range

@@ -235,8 +235,9 @@ apply, never in the export.
 
 A `peers` edge joins two networks so hosts in one can reach hosts in the other on
 private addresses. It is what makes cross-network `manages` and `logs_to` legal.
-Both cloud backends render it as VPC peering; only Proxmox, which cannot peer,
-refuses through `CAP004`. See 0029, 0030, and 0031.
+The cloud backends render it as VPC peering on GCP and AWS and VNet peering on
+Azure; Proxmox and ESXi, which cannot peer, refuse through `CAP004`. See 0029,
+0030, and 0031.
 
 - `PEER001` error. A `peers` edge whose source and target are the same network. A
   network peered with itself is not a connection.
@@ -303,8 +304,9 @@ Requirements come from the node kind registry, not from the document.
   requirement (for example `exposure` on a segment), in the remedy and in
   `field`.
 - `CAP004` error. A `peers` edge against a provider that does not render network
-  peering. Both clouds do; Proxmox cannot peer at all, since joining two networks
-  is a property of the host network's routing that redStackPRO does not control. The
+  peering. GCP, AWS, and Azure do; Proxmox and ESXi cannot peer at all, since
+  joining two networks is a property of the host network's routing that
+  redStackPRO does not control. The
   reason travels from the provider registry. See 0029, 0030, and 0031.
 
 ## Collector

@@ -90,9 +90,13 @@ to end: a topology compiles to Terraform and Ansible, and the export deploys.
 
 The whole canvas in one container, the API and the web app on one port:
 
-    docker compose up                    # builds from this repo, http://127.0.0.1:8000
+    docker compose up                    # http://127.0.0.1:8000
+    docker compose up --build            # build the image from this checkout instead
 
-Or pull the published image instead of building it:
+Compose runs the image it pins, `ghcr.io/devzero-security/redstackpro:0.10.0`,
+pulling it from GHCR and building it from this checkout only when the pull fails.
+Or run the published image without compose (`:latest` and `:0.10.0` are the same
+build):
 
     docker run -p 8000:8000 -v redstackpro-data:/data \
       ghcr.io/devzero-security/redstackpro:latest
@@ -131,7 +135,9 @@ canvas dev server at it with `REDSTACKPRO_API=http://127.0.0.1:8787`.
 Open it, use **Load blueprint** (the button, or the mode palette) to open a
 shipped starting point, choose your cloud in the toolbar
 provider selector (GCP, AWS, or Azure), open the Export tab (it compiles as you go), then
-Download. You get a zip of the working directory described below.
+Download. You get a zip of the working directory described below. Extract it to
+its own folder and run every step from there; the Export tab lists the steps for
+your cloud and for the machine you deploy from (Windows, or macOS and Linux).
 
 **Or skip the canvas entirely** and compile a shipped blueprint from the command
 line, same compiler, same output:
@@ -151,9 +157,19 @@ one forest, two domain controllers and a member server, plus a jumpbox.
 > **Two things before you deploy.** Your cloud identity needs permission to
 > create the resources the export builds (VPCs or networks, subnets, security
 > groups or firewall rules, instances, elastic or static IPs), and your machine
-> needs `terraform`, `ssh`, `tar`, and Python 3.8 or newer. redStackPRO generates
-> the code and installs none of that for you; Ansible installs itself on the
-> jumpbox.
+> needs `terraform`, `ssh`, `tar`, Python 3.8 or newer, and your cloud's CLI
+> (`gcloud`, `aws`, or `az`): `deploy.sh` checks your login with it and
+> `manage.sh` runs through it. redStackPRO generates the code and installs none
+> of that for you; Ansible installs itself on the jumpbox. On Windows, Git for
+> Windows supplies `ssh`, `tar`, and Git Bash, and `winget` installs the cloud
+> CLI (open a new PowerShell window afterwards so PATH picks it up):
+>
+>     winget install -e --id Google.CloudSDK      # GCP
+>     winget install -e --id Amazon.AWSCLI        # AWS
+>     winget install -e --id Microsoft.AzureCLI   # Azure
+>
+> On macOS and Linux, follow the CLI's own install steps, linked from the wiki
+> [Cloud Prerequisites](https://github.com/devZero-Security/redStackPRO/wiki/Cloud-Prerequisites).
 >
 > New to the AWS CLI, gcloud, or the Azure CLI? Quick setup for whichever you
 > target:
@@ -191,7 +207,8 @@ one forest, two domain controllers and a member server, plus a jumpbox.
 > restrictions are in the wiki
 > [Cloud Prerequisites](https://github.com/devZero-Security/redStackPRO/wiki/Cloud-Prerequisites#azure).
 >
-> Windows 10 and 11 workstations on Azure boot Microsoft's client images, which
+> Workstations on Azure (Windows 11 by default, or Windows 10, which is past end
+> of support) boot Microsoft's client images, which
 > Microsoft licenses only for customers with a qualifying license, for example
 > Windows Enterprise E3 or E5 per user, a Microsoft 365 plan that includes it, or
 > a Visual Studio subscription for dev and test. redStackPRO does not set
@@ -204,31 +221,47 @@ one forest, two domain controllers and a member server, plus a jumpbox.
 > See [Getting Started](https://github.com/devZero-Security/redStackPRO/wiki/Getting-Started)
 > for the full checklist.
 
-To deploy it, fill in `export/deploy.tfvars` (at the export root) and run:
+To deploy it, work from the export folder: make an SSH key for the range hosts
+in `keys/` (the deploy also finds `~/.ssh/id_ed25519`), fill in
+`deploy.tfvars` (at the export root), and run `deploy.sh`:
 
-    cd export && bash deploy.sh
+    cd export
+    ssh-keygen -t ed25519 -f keys/id_ed25519 -N ""
+    bash deploy.sh
 
 `deploy.sh` copies `deploy.tfvars` into `terraform/terraform.tfvars` at apply
 time and aborts if `deploy.tfvars` is missing, so edit the root file, not the
 one under `terraform/`.
 
-On Windows, run `.\deploy.ps1` instead: `bash deploy.sh` at a PowerShell prompt
-launches WSL, a different filesystem with different credentials. See the wiki
+On Windows, use PowerShell, where the key's empty passphrase is written `-N ''`,
+and run `.\deploy.ps1` instead: `bash deploy.sh` at a PowerShell prompt launches
+WSL, a different filesystem with different credentials.
+
+    ssh-keygen -t ed25519 -f keys\id_ed25519 -N ''
+    .\deploy.ps1
+
+See the wiki
 [Deploying a Range](https://github.com/devZero-Security/redStackPRO/wiki/Deploying-a-Range)
 for detail.
 
 `deploy.sh` applies the Terraform and then provisions from the range's own
 jumpbox, because the managed hosts sit on a private subnet nothing else can
-reach. Your cloud credentials stay on your machine throughout. It prints
-numbered phases, each ending on an `ok` line, and finishes on a `DONE` box with
-the portal address and the command to watch provisioning in
-`~/provision/run.log` on the jumpbox, or on a `FAILED` box naming the phase and
-the reason.
+reach. Your cloud credentials stay on your machine throughout. It opens on a
+title box naming the topology, provider, and region, then prints numbered phases
+(seven, or eight on Azure with the preflight first), each ending on an `ok` line.
+Terraform's output is condensed on screen to the plan line and one line per
+finished resource, with any error in full. The run finishes on a `DONE` box (the
+portal address, the command that prints the logins, a one-line ssh command that
+watches provisioning in `~/provision/run.log` on the jumpbox, the expected time,
+and the log path), or on a `FAILED` box naming the phase, the reason, and the
+exit code. Colour is for the terminal only; set `NO_COLOR` to turn it off.
 
-Every run writes a timestamped, secret-scrubbed log to
-`logs/deploy-<timestamp>.log` in the export. Its last line records how the run
-ended. If a deploy fails or a range comes up wrong, attach the newest one to a
-GitHub issue; the `FAILED` box prints its path and the link.
+Every run writes a plain-text, secret-scrubbed log to
+`logs/deploy-<UTC timestamp>.log` in the export, with everything Terraform
+printed. It ends on a `result:` line, `result: ok` or
+`result: FAILED (exit N) in phase ...`. If a deploy fails or a range comes up
+wrong, attach the newest one to a GitHub issue; the `FAILED` box prints its path
+and the link.
 
 **Check it worked.** The export ships `verify.py` next to `deploy.sh`. Run it
 against the deployed range to confirm the path end to end:
@@ -244,14 +277,19 @@ the same path from the box itself.
 **Manage and tear down.** The export also ships lifecycle scripts, `manage.sh`
 (and `manage.ps1` on Windows), for the running range. They take `status`,
 `start`, `stop`, and `teardown`: `stop` pauses compute billing without destroying
-the range, and `teardown` destroys it. `teardown` asks you to type the range name
-(or `yes`) first; `--yes` skips the question, for a script. Run either script with
-no command for its help, written for the export's provider.
+the range, and `teardown` destroys it. `teardown` shows what it will delete and
+asks you to type the range name (or `yes`) first; `--yes` skips the question, for
+a script. It writes its own `logs/teardown-<UTC timestamp>.log`, named in its
+closing box. Run either script with no command for a help screen written for the
+export's provider: what each command does there, what still bills after `stop`,
+and the CLI login it needs.
 
-    ./manage.sh status
-    ./manage.sh start
-    ./manage.sh stop
-    ./manage.sh teardown
+    bash manage.sh status
+    bash manage.sh start
+    bash manage.sh stop
+    bash manage.sh teardown
+
+On Windows, the same commands are `.\manage.ps1 status` and so on.
 
 ---
 
