@@ -168,7 +168,7 @@
       "id": "fr-wks01",
       "kind": "wks",
       "overlay": {
-        "os": "windows_10",
+        "os": "windows_11",
         "hostname": "fr-wks01",
         "internal_ip": "172.20.10.30",
         "edr": "defender",

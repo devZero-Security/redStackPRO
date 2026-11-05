@@ -233,7 +233,7 @@
         "y": 48
       },
       "overlay": {
-        "os": "windows_10",
+        "os": "windows_11",
         "hostname": "CLIENT",
         "notes": "Unmapped GOAD vulns: disable_firewall."
       }

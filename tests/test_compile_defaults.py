@@ -81,6 +81,14 @@ def test_a_wks_with_no_os_is_windows_11_in_both_halves(provider):
     assert image in files["terraform/main.tf"]
 
 
+@pytest.mark.parametrize("name, host", [
+    ("goad/goad-wazuh.json", "ws01"), ("goad/minilab.json", "ws"),
+    ("goad/sccm.json", "client"), ("harbor.json", "fr-wks01")])
+def test_shipped_workstations_are_windows_11(name, host):
+    """Windows 10 left support on 2025-10-14; the shipped labs moved off it."""
+    assert _node(load(PUBLIC / name), host)["overlay"]["os"] == "windows_11"
+
+
 def test_azure_terraform_falls_back_to_the_build_ansible_defaults_to():
     """image_for without apply_compile_defaults agrees with it per kind."""
     from redstackpro.terraform import azure

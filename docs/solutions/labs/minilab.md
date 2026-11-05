@@ -8,7 +8,7 @@ exercises either.
 
 - Domain: `mini.lab`
 - `dc` - DC, `stored_credential`, `schedule`, `enable_credssp_client`
-- `ws` - Windows 10 workstation, `enable_credssp_server`
+- `ws` - Windows 11 workstation, `enable_credssp_server`
 - `jumpbox` - ssh, Guacamole, wireguard
 
 ## Part mapping

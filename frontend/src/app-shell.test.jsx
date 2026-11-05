@@ -240,7 +240,7 @@ describe("findings by severity", () => {
 describe("blueprint picker text", () => {
   test("MINILAB says its workstation boots Server 2022 on GCP and AWS", () => {
     const minilab = TEMPLATES.defense.find((t) => t.name === "MINILAB");
-    expect(minilab.blurb).toMatch(/Windows 10 workstation/);
+    expect(minilab.blurb).toMatch(/Windows 11 workstation/);
     expect(minilab.blurb).toMatch(/Server 2022 on GCP and AWS/);
   });
 });

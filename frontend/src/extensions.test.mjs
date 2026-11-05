@@ -54,7 +54,7 @@ test("adding ws01 adds a workstation joined to the root domain", () => {
   const doc = applyExtension(base(), "ws01");
   const ws = doc.nodes.find((n) => n.id === "ws01");
   assert.equal(ws.kind, "wks");
-  assert.equal(ws.overlay.os, "windows_10");
+  assert.equal(ws.overlay.os, "windows_11");
   assert.ok(doc.edges.some((e) => e.role === "joins" && e.source === "ws01" && e.target === "sevenkingdoms"));
   assert.ok(doc.edges.some((e) => e.role === "attached" && e.source === "ws01" && e.target === "sub01"));
 });
