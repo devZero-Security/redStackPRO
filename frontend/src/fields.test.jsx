@@ -359,8 +359,8 @@ describe.each(MODES)("with the %s schema", (mode, schema) => {
       render(<Panel seen={seen} node={{ id: "dc01", kind: "dc", overlay: {} }} />);
       const os = selectNamed("range_host.os");
       expect(optionTexts(os)).toContain("Windows Server 2019");
-      expect(optionTexts(os)).toContain("Windows 10 (Server 2022 on GCP/AWS)");
-      expect(optionTexts(os)).toContain("Windows 11 (Server 2022 on GCP/AWS)");
+      expect(optionTexts(os)).toContain("Windows 10 (past end of support)");
+      expect(optionTexts(os)).toContain("Windows 11");
       expect(optionTexts(os)).toContain("Debian 13");
       expect(optionTexts(os)).not.toContain("windows_server_2019");
       await user.selectOptions(os, "Windows Server 2019");
@@ -378,15 +378,35 @@ describe.each(MODES)("with the %s schema", (mode, schema) => {
   });
 
   describe("the empty option names the default", () => {
-    test("a dc, srv or wks with no os says Windows Server 2022, never unset", () => {
-      for (const kind of ["dc", "srv", "wks"]) {
+    test("a dc or srv with no os says Windows Server 2022, a wks Windows 11, never unset", () => {
+      const want = { dc: "Windows Server 2022", srv: "Windows Server 2022", wks: "Windows 11" };
+      for (const [kind, label] of Object.entries(want)) {
         const { unmount } = render(<Panel node={{ id: `${kind}01`, kind, overlay: {} }} />);
         const os = selectNamed("range_host.os");
         expect(os.value).toBe("");
-        expect(os.options[os.selectedIndex].textContent).toBe("default (Windows Server 2022)");
+        expect(os.options[os.selectedIndex].textContent).toBe(`default (${label})`);
         expect(screen.queryByText("unset")).toBeNull();
         unmount();
       }
+    });
+
+    test("Windows 10 says it is past end of support, with the date", () => {
+      render(<Panel node={{ id: "ws01", kind: "wks", overlay: { os: "windows_10" } }} />);
+      const os = selectNamed("range_host.os");
+      expect(os.options[os.selectedIndex].textContent).toBe("Windows 10 (past end of support)");
+      expect(os.value).toBe("windows_10");
+      const help = fieldOf(os).querySelector(".rg-option-help");
+      expect(help.textContent).toMatch(/ended Windows 10 support on 2025-10-14/);
+      expect(help.textContent).toMatch(/GCP and AWS boot Windows Server 2022/);
+    });
+
+    test("Windows 11 is plain, its help names the GCP and AWS substitution", () => {
+      render(<Panel node={{ id: "ws01", kind: "wks", overlay: { os: "windows_11" } }} />);
+      const os = selectNamed("range_host.os");
+      expect(os.options[os.selectedIndex].textContent).toBe("Windows 11");
+      const help = fieldOf(os).querySelector(".rg-option-help");
+      expect(help.textContent).toMatch(/boots Windows Server 2022 there/);
+      expect(help.textContent).not.toMatch(/end of support/);
     });
 
     test("schema and known defaults label the empty option", () => {

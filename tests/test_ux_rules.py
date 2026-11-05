@@ -532,6 +532,26 @@ def test_an_info_finding_does_not_block_the_compile():
     assert is_valid(doc, provider="aws")
 
 
+@pytest.mark.parametrize("provider, fires", [
+    ("azure", True), ("proxmox", True), ("esxi", True),
+    ("gcp", False), ("aws", False), (None, False)])
+def test_cap006_windows_10_is_past_end_of_support_where_it_really_boots(
+        provider, fires):
+    from redstackpro import is_valid
+    doc = _range(("ws01", "wks", {"os": "windows_10"}))
+    found = _of(doc, "CAP006", provider=provider)
+    assert bool(found) == fires
+    if fires:
+        (f,) = found
+        assert f.severity == "info" and f.field == "os"
+        assert f.message == ("ws01 runs Windows 10, which Microsoft stopped "
+                             "supporting on 2025-10-14.")
+    assert is_valid(doc, provider="azure")
+    for build in ("windows_11", "windows_server_2022", None):
+        overlay = {"os": build} if build else {}
+        assert not _of(_range(("ws01", "wks", overlay)), "CAP006", provider="azure")
+
+
 # -- remedies a person can act on in the canvas
 
 def test_the_rewritten_remedies():

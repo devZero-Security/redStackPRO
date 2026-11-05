@@ -431,7 +431,8 @@ const SEED_OVERLAY = {
   // Without an os Ansible treats an AD host as Linux and provisioning fails.
   dc: { os: "windows_server_2022" },
   srv: { os: "windows_server_2022" },
-  wks: { os: "windows_server_2022" },
+  // GCP and AWS boot Server 2022 for it (CAP005).
+  wks: { os: "windows_11" },
 };
 
 // Kinds the registry still declares but the palette does not offer: no role

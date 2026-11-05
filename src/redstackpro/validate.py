@@ -1999,6 +1999,22 @@ def cap005_no_windows_client_image(ctx, provider):
             provider=provider)
 
 
+def cap006_windows_10_past_end_of_support(ctx, provider):
+    """Windows 10 left Microsoft support on 2025-10-14. Only where a client build
+    really boots: on GCP and AWS CAP005 already says it is Server 2022."""
+    if provider in _NO_CLIENT_IMAGE:
+        return
+    for n in ctx.of_kind(*_RANGE_HOST_KINDS):
+        if ctx.overlay(n["id"], "os") != "windows_10":
+            continue
+        yield finding(
+            "CAP006", "info", [n["id"]],
+            "{host} runs Windows 10, which Microsoft stopped supporting on "
+            "2025-10-14.",
+            remedy="Pick Windows 11 unless the lab needs Windows 10.", field="os",
+            host=display_name(ctx, n["id"]))
+
+
 RULES = [
     sch001_schema,
     nam001_id_matches_kind,
@@ -2094,6 +2110,7 @@ def validate(topology, provider=None, registry=None):
         findings.extend(cap004_network_peering(ctx, provider))
         findings.extend(net006_internal_ip_in_reserved_range(ctx, provider))
         findings.extend(cap005_no_windows_client_image(ctx, provider))
+        findings.extend(cap006_windows_10_past_end_of_support(ctx, provider))
 
     findings.sort(key=lambda f: (order[f.severity], f.code, f.target_ids))
     return findings
