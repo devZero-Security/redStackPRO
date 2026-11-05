@@ -171,6 +171,13 @@ versioning, and dates are UTC.
   renaming it or saving a copy keeps them available.
 - The canvas legend uses the Inspector's line names, and info findings are counted
   and listed apart from warnings.
+- The palette and the side panel can be dragged wider or narrower from their inner
+  edge (double-click resets, arrow keys work on a focused handle), and the widths
+  are kept in the browser. Both open at their widest, scaled down on a narrower
+  screen so the canvas keeps at least 480 pixels. Inspector and Export share one
+  width, so switching tabs no longer resizes the panel.
+- The header wraps onto a second row when its controls do not fit, where it used to
+  push the whole page into a sideways scroll.
 
 ### Fixed
 
