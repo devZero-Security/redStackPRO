@@ -10,6 +10,16 @@
     content: "{{ (redstackpro_host_vulns_vars.schedule | default({})).script_content | default('Start-Sleep -Seconds 5\n') }}"
   when: (redstackpro_host_vulns_vars.schedule | default({})).script_path is defined
 
+# A scheduled task as a Domain Users member needs Log on as a batch job, which
+# such users lack; without it the task never runs and nothing reports it.
+- name: Let the scheduled task user log on as a batch job
+  ansible.windows.win_user_right:
+    name: SeBatchLogonRight
+    users:
+      - "{{ (redstackpro_host_vulns_vars.schedule | default({})).user }}"
+    action: add
+  when: (redstackpro_host_vulns_vars.schedule | default({})).user | default('') | length > 0
+
 - name: Create the scheduled task
   ansible.windows.win_powershell:
     script: |
@@ -25,7 +35,7 @@
         Register-ScheduledTask -TaskName $Name -Action $a -Trigger $t -Principal $p -Force | Out-Null
       }
     parameters:
-      Name: "{{ (redstackpro_host_vulns_vars.schedule | default({})).name | default('connect_bot') }}"
+      Name: "{{ (redstackpro_host_vulns_vars.schedule | default({})).name | default('schedule_bot') }}"
       Cmd: "{{ (redstackpro_host_vulns_vars.schedule | default({})).command | default('Start-Sleep -Seconds 5') }}"
       Mins: "{{ (redstackpro_host_vulns_vars.schedule | default({})).interval_minutes | default(1) }}"
       User: "{{ (redstackpro_host_vulns_vars.schedule | default({})).user | default('') }}"

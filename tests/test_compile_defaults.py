@@ -347,3 +347,25 @@ def test_the_stored_credential_owner_gets_batch_logon():
     assert grant["ansible.windows.win_user_right"]["name"] == "SeBatchLogonRight"
     assert names.index("Let the vault owner log on as a batch job") < names.index(
         "Plant a Credential Manager credential in a user's vault")
+
+
+@pytest.mark.parametrize("task_file", [
+    "rdp_scheduler.yml", "responder.yml", "ntlm_relay.yml", "schedule.yml",
+])
+def test_every_bot_user_gets_batch_logon_before_its_task(task_file):
+    """Each bot is a scheduled task that runs as a domain user. Without Log on
+    as a batch job a Domain Users bot never runs, and nothing reports it."""
+    tasks = yaml.safe_load((ROLES / "redstackpro.host_vulns/tasks" / task_file)
+                           .read_text(encoding="utf-8"))
+    grants = [i for i, t in enumerate(tasks)
+              if t.get("ansible.windows.win_user_right", {}).get("name") == "SeBatchLogonRight"]
+    registers = [i for i, t in enumerate(tasks)
+                 if "Register-ScheduledTask" in str(t.get("ansible.windows.win_powershell", {}))]
+    assert grants and registers, task_file
+    assert grants[0] < registers[0], task_file
+
+
+def test_the_schedule_bot_does_not_reuse_the_logon_bot_task_name():
+    # Both defaulted to connect_bot, so a host with both kept only one.
+    text = (ROLES / "redstackpro.host_vulns/tasks/schedule.yml").read_text(encoding="utf-8")
+    assert "default('schedule_bot')" in text and "default('connect_bot')" not in text

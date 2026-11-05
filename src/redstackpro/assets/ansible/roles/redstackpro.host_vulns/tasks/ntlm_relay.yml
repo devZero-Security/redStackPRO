@@ -4,6 +4,16 @@
 # attacker can relay (e.g. to LDAP or the AD CS web endpoint). Runs as a
 # privileged domain user (GOAD uses eddard.stark) with the shared lab password.
 
+# A scheduled task as a Domain Users member needs Log on as a batch job, which
+# such users lack; without it the task never runs and nothing reports it.
+- name: Let the relay bot user log on as a batch job
+  ansible.windows.win_user_right:
+    name: SeBatchLogonRight
+    users:
+      - "{{ redstackpro_host_vulns_vars.ntlm_relay_user | default(redstackpro_host_vulns_vars.bot_user | default('')) }}"
+    action: add
+  when: (redstackpro_host_vulns_vars.ntlm_relay_user | default(redstackpro_host_vulns_vars.bot_user | default(''))) | length > 0
+
 - name: Create the NTLM-relay coercion bot
   ansible.windows.win_powershell:
     script: |

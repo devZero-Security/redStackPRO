@@ -18,6 +18,16 @@
       New-PSDrive -Name Home -PSProvider FileSystem -Root \\localhost\C$ -ErrorAction SilentlyContinue | Out-Null
       Start-Sleep -Seconds 5
 
+# A scheduled task as a Domain Users member needs Log on as a batch job, which
+# such users lack; without it the task never runs and nothing reports it.
+- name: Let the logon bot user log on as a batch job
+  ansible.windows.win_user_right:
+    name: SeBatchLogonRight
+    users:
+      - "{{ redstackpro_host_vulns_vars.bot_user }}"
+    action: add
+  when: redstackpro_host_vulns_vars.bot_user | default('') | length > 0
+
 - name: Create the RDP logon bot
   ansible.windows.win_powershell:
     script: |
