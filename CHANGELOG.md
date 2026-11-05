@@ -96,6 +96,19 @@ versioning, and dates are UTC.
     below as Edit as JSON, in step with the form, for keys the form does not show.
   - The SPNs of a Kerberoastable user offer the domain's SQL Server and IIS service
     SPNs.
+  - Every vulnerability setting has a plain label, with its `vulns_vars` key shown
+    small beside it.
+- Windows range hosts have a User activity section under Vulnerabilities: the
+  logon bot, a scheduled task, the share-browsing bot, the relay bot and a saved
+  credential, each written as one sentence with pickers. Ticking a line ticks its
+  vulnerability, and the settings form points there instead of repeating the keys.
+  The scheduled task offers what it does as a choice: stays logged on, runs a file,
+  browses a share, fetches a web page, your own PowerShell or your own script. The
+  canvas writes the PowerShell with safe quoting and reads an existing command
+  back. On GCP, AWS and Azure the share-browsing and relay bots show disabled, with
+  the reason.
+- The DEFENSE-BRIEFING has a User activity table: each bot, who it runs as, what it
+  does and how often, with the bots the provider cannot plant marked.
 - `RNG011` names the missing `vulns_vars` key as its field, so the finding shows
   next to that input.
 - A domain takes a `groups` list for groups that only an access right names. The
@@ -241,6 +254,12 @@ versioning, and dates are UTC.
   260, so in dracarys, minilab, nha and sccm a domain covered the jumpbox or the
   domain below it. Such a box now fits its contents; an empty one keeps the larger
   size as a drop target.
+- The bots that run as a domain user (the logon bot, the scheduled task, the
+  share-browsing bot and the relay bot) grant that user Log on as a batch job before
+  creating their task. An ordinary domain user lacks that right, so the task never
+  ran, and nothing reported it.
+- The scheduled task bot's default task name is `schedule_bot`. It shared
+  `connect_bot` with the logon bot, so a host with both kept only one.
 
 ## [0.9.2] (2026-11-04)
 
