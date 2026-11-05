@@ -7,6 +7,7 @@ import {
   PICKS, choicesFor, describeRow, formSections, getVar, isPlainObject, matchOption,
   rowColumns, rowKind, setElsewhere, setVar,
 } from "./vulnForm.js";
+import { ACTIVITY_IDS, showsActivity } from "./activity.js";
 
 const OTHER = "__other__";
 
@@ -89,7 +90,7 @@ export function PickInput({
 }
 
 // TERMSRV/<host>: pick the host, then the whole target stays editable.
-function HostServiceInput({ name, value, groups, onChange, disabled, placeholder }) {
+export function HostServiceInput({ name, value, groups, onChange, disabled, placeholder }) {
   const text = value == null ? "" : String(value);
   const m = /^([^/]+)\/(.*)$/.exec(text);
   const service = m ? m[1] : "TERMSRV";
@@ -244,9 +245,9 @@ function shapeOk(param, value) {
 
 const shown = (v) => (Array.isArray(v) ? v.join(", ") : typeof v === "object" ? JSON.stringify(v) : String(v));
 
-const userNote = "Not a user in this range.";
+export const userNote = "Not a user in this range.";
 
-function emptyTextFor(pick, joined) {
+export function emptyTextFor(pick, joined) {
   if (pick === "domain_user") return "No users in this range yet. Add them on a domain, or type one.";
   if (!joined) return "Join this host to a domain to pick from it, or type a value.";
   if (pick === "bare_user") return "No users on this domain yet. Add them on the domain, or type one.";
@@ -269,6 +270,8 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
       : null;
   const joined = !!hostDomain(document, hostId);
   const set = (v) => onSet(param.key, v);
+  // The plain label names the input; the key shows beside it for JSON users.
+  const name = param.label || param.key;
   const placeholder =
     "example" in param && typeof param.example !== "object" ? String(param.example) : undefined;
   const kind = rowKind(param);
@@ -301,7 +304,7 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
         onChange={set}
         checkLabel={(o) => `Link to ${o.value}`}
         emptyText="No SQL host in this range yet. Give a host the mssql service, or type an FQDN below."
-        otherLabel={`${param.key}, other host`}
+        otherLabel={`${name}, other host`}
         otherPlaceholder="Other SQL host, e.g. sql02.corp.local"
         addLabel="Add SQL host"
         customTitle="Typed by hand, not a SQL host in this range"
@@ -311,7 +314,7 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
   } else if (kind) {
     control = (
       <RowsInput
-        name={param.key}
+        name={name}
         kind={kind}
         rows={value || []}
         columns={rowColumns(kind, document, hostId, vars)}
@@ -322,7 +325,7 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
   } else if (param.pick === "termsrv") {
     control = (
       <HostServiceInput
-        name={param.key}
+        name={name}
         value={value}
         groups={choicesFor("termsrv", document, hostId)}
         disabled={disabled}
@@ -334,7 +337,7 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
     const users = param.pick === "domain_user" || param.pick === "bare_user";
     control = (
       <PickInput
-        name={param.key}
+        name={name}
         value={value}
         groups={choicesFor(param.pick, document, hostId)}
         required={param.required}
@@ -356,7 +359,7 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
     control = (
       <input
         type="number"
-        aria-label={param.key}
+        aria-label={name}
         value={value ?? ""}
         min={1}
         step={1}
@@ -368,7 +371,7 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
   } else if (param.input === "lines") {
     control = (
       <LinesInput
-        name={param.key}
+        name={name}
         value={value}
         placeholder={Array.isArray(param.example) ? param.example.join("\n") : undefined}
         disabled={disabled}
@@ -378,7 +381,7 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
   } else if (param.input === "multiline") {
     control = (
       <textarea
-        aria-label={param.key}
+        aria-label={name}
         value={value ?? ""}
         rows={Math.min(10, Math.max(3, String(value ?? "").split("\n").length))}
         spellCheck={false}
@@ -389,7 +392,7 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
   } else {
     control = (
       <input
-        aria-label={param.key}
+        aria-label={name}
         value={value ?? ""}
         placeholder={fallback || placeholder}
         disabled={disabled}
@@ -401,7 +404,12 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
   return (
     <div className={errors.length ? "rg-field rg-vuln-key-field is-invalid" : "rg-field rg-vuln-key-field"}>
       <span className="rg-vuln-key">
-        <code>{param.key}</code>
+        <span className="rg-vuln-key-label">{name}</span>
+        {name !== param.key ? (
+          <code className="rg-vuln-key-raw" title="The key in vulns_vars, as Edit as JSON writes it">
+            {param.key}
+          </code>
+        ) : null}
         {param.required ? (
           <span className="rg-required">required{param.or ? ` (or ${param.or})` : ""}</span>
         ) : (
@@ -422,11 +430,13 @@ function VulnKey({ param, vars, document, hostId, findings, disabled, onSet }) {
 // The vulnerability settings as a form: for each ticked vuln that reads
 // settings, one input per key it reads, a picker where the value names
 // something in the topology. It edits the same vulns_vars object as the JSON
-// view below it, so either one can be used and both stay in step.
+// view below it, so either one can be used and both stay in step. A vuln the
+// User activity section edits keeps its box here, pointing there, so no key
+// has two inputs.
 export function VulnSettings({ title, node, document, findings, disabled, onChange }) {
   const overlay = node.overlay || {};
   const vars = overlay.vulns_vars;
-  const sections = formSections(overlay.vulns);
+  const sections = formSections(overlay.vulns, showsActivity(node) ? ACTIVITY_IDS : null);
   if (!sections.length) return null;
   const malformed = vars != null && !isPlainObject(vars);
   return (
@@ -445,23 +455,29 @@ export function VulnSettings({ title, node, document, findings, disabled, onChan
         sections.map((s) => (
           <fieldset key={s.vuln} className="rg-fieldset rg-vuln-section">
             <legend>{s.label}</legend>
-            {s.params.map((p) => (
-              <VulnKey
-                key={p.key}
-                param={p}
-                vars={vars}
-                document={document}
-                hostId={node.id}
-                findings={findings}
-                disabled={disabled}
-                onSet={(key, value) => onChange(setVar(vars, key, value))}
-              />
-            ))}
-            {s.shared.map((x) => (
-              <span key={x.key} className="rg-field-help">
-                Also reads <code>{x.key}</code>, set under {x.under} above.
-              </span>
-            ))}
+            {s.elsewhere ? (
+              <span className="rg-field-help">Set under User activity above.</span>
+            ) : (
+              <>
+                {s.params.map((p) => (
+                  <VulnKey
+                    key={p.key}
+                    param={p}
+                    vars={vars}
+                    document={document}
+                    hostId={node.id}
+                    findings={findings}
+                    disabled={disabled}
+                    onSet={(key, value) => onChange(setVar(vars, key, value))}
+                  />
+                ))}
+                {s.shared.map((x) => (
+                  <span key={x.key} className="rg-field-help">
+                    Also reads <code>{x.key}</code>, set under {x.under} above.
+                  </span>
+                ))}
+              </>
+            )}
           </fieldset>
         ))
       )}

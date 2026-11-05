@@ -22,6 +22,8 @@ import { EdgeRole, FrontsPorts } from "./EdgeEditors.jsx";
 import { Connections } from "./Connections.jsx";
 import { TopologySettings } from "./TopologySettings.jsx";
 import { VulnSettings } from "./VulnSettings.jsx";
+import { UserActivity } from "./UserActivity.jsx";
+import { showsActivity } from "./activity.js";
 import { formKeys, keysOutsideForm, withVulnDefaults } from "./vulnForm.js";
 import { nodeName, roleTitle } from "./edgeRoles.js";
 
@@ -1192,23 +1194,34 @@ export function Inspector({
             .filter(([name, spec]) => !ruleOf(name, spec).hide)
             .map(([name, spec]) =>
               name === "vulns" ? (
-                <VulnPicker
-                  key={`${name}-${node.id}`}
-                  value={(node.overlay || {}).vulns}
-                  title={spec.title}
-                  ignored={ruleOf(name, spec).ignored}
-                  disabled={readOnly}
-                  provider={provider}
-                  document={document}
-                  hostId={node.id}
-                  onOverlayChange={onOverlayChange}
-                  onChange={(value) =>
-                    onOverlayChange(
-                      node.id,
-                      withVulnDefaults(document, node, { ...(node.overlay || {}), vulns: value })
-                    )
-                  }
-                />
+                <React.Fragment key={`${name}-${node.id}`}>
+                  <VulnPicker
+                    value={(node.overlay || {}).vulns}
+                    title={spec.title}
+                    ignored={ruleOf(name, spec).ignored}
+                    disabled={readOnly}
+                    provider={provider}
+                    document={document}
+                    hostId={node.id}
+                    onOverlayChange={onOverlayChange}
+                    onChange={(value) =>
+                      onOverlayChange(
+                        node.id,
+                        withVulnDefaults(document, node, { ...(node.overlay || {}), vulns: value })
+                      )
+                    }
+                  />
+                  {showsActivity(node) && !ruleOf(name, spec).ignored ? (
+                    <UserActivity
+                      node={node}
+                      document={document}
+                      provider={provider}
+                      findings={onField}
+                      disabled={readOnly}
+                      onChange={(overlay) => onOverlayChange(node.id, overlay)}
+                    />
+                  ) : null}
+                </React.Fragment>
               ) : name === "hardening" ? (
                 <HardeningPicker
                   key={`${name}-${node.id}`}

@@ -52,7 +52,7 @@ const optionValues = (select) => [...select.querySelectorAll("option")].map((o) 
 describe("domain user pickers", () => {
   test("a stored north\\user shows picked as NORTH\\user, and the document keeps it", () => {
     render(<Panel blueprint={LIGHT} id="winterfell" />);
-    const bot = screen.getByRole("combobox", { name: "bot_user" });
+    const bot = screen.getByRole("combobox", { name: "Logon bot user" });
     expect(bot.value).toBe("NORTH\\robb.stark");
     const groups = [...bot.querySelectorAll("optgroup")].map((g) => g.label);
     expect(groups).toEqual(["north.sevenkingdoms.local", "sevenkingdoms.local"]);
@@ -62,7 +62,7 @@ describe("domain user pickers", () => {
   test("picking a user writes DOMAIN\\user and the JSON follows", () => {
     const seen = [];
     render(<Panel blueprint={LIGHT} id="winterfell" seen={seen} />);
-    fireEvent.change(screen.getByRole("combobox", { name: "ntlm_relay_user" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Relay bot user" }), {
       target: { value: "SEVENKINGDOMS\\tywin.lannister" },
     });
     expect(last(seen).ntlm_relay_user).toBe("SEVENKINGDOMS\\tywin.lannister");
@@ -70,38 +70,45 @@ describe("domain user pickers", () => {
     expect(jsonValue().ntlm_relay_user).toBe("SEVENKINGDOMS\\tywin.lannister");
   });
 
-  test("an edit in the JSON shows in the form", () => {
+  test("an edit in the JSON shows in User activity", () => {
     render(<Panel blueprint={LIGHT} id="winterfell" />);
     const next = { ...jsonValue(), bot_user: "NORTH\\arya.stark" };
     fireEvent.change(json(), { target: { value: JSON.stringify(next) } });
-    expect(screen.getByRole("combobox", { name: "bot_user" }).value).toBe("NORTH\\arya.stark");
+    expect(screen.getByRole("combobox", { name: "Logon bot user" }).value).toBe("NORTH\\arya.stark");
   });
 
   test("Other takes a typed name and says when the range has no such user", () => {
     const seen = [];
     render(<Panel blueprint={LIGHT} id="winterfell" seen={seen} />);
-    fireEvent.change(screen.getByRole("combobox", { name: "bot_user" }), { target: { value: "__other__" } });
-    const typed = screen.getByRole("textbox", { name: "bot_user, typed" });
+    fireEvent.change(screen.getByRole("combobox", { name: "Logon bot user" }), { target: { value: "__other__" } });
+    const typed = screen.getByRole("textbox", { name: "Logon bot user, typed" });
     expect(typed.value).toBe("north\\robb.stark");
     fireEvent.change(typed, { target: { value: "NORTH\\ghost" } });
     expect(last(seen).bot_user).toBe("NORTH\\ghost");
-    expect(screen.getByText("Not a user in this range.")).toBeTruthy();
-    expect(screen.getByText("Type it as DOMAIN\\user.")).toBeTruthy();
+    const row = within(typed.closest(".rg-activity"));
+    expect(row.getByText("Not a user in this range.")).toBeTruthy();
+    expect(row.getByText("Type it as DOMAIN\\user.")).toBeTruthy();
   });
 
   test("a bare user picker offers this domain's users by name alone", () => {
     render(<Panel blueprint={LIGHT} id="winterfell" />);
-    const principal = screen.getByRole("combobox", { name: "gpo_abuse.principal" });
+    const principal = screen.getByRole("combobox", { name: "Can edit the GPO" });
     expect(principal.value).toBe("samwell.tarly");
     const users = optionValues(principal).filter((v) => v && v !== "__other__");
     expect(users.every((v) => !v.includes("\\"))).toBe(true);
     expect(users).not.toContain("tywin.lannister");
   });
 
-  test("a key two vulns read shows once", () => {
-    render(<Panel blueprint={LIGHT} id="winterfell" />);
-    expect(screen.getAllByRole("combobox", { name: "bot_user" })).toHaveLength(1);
-    expect(screen.getByText(/set under Responder-friendly posture above/)).toBeTruthy();
+  test("a key two activities read is one value, edited from either", () => {
+    const seen = [];
+    render(<Panel blueprint={LIGHT} id="winterfell" seen={seen} />);
+    const share = screen.getByRole("combobox", { name: "Share-browsing bot user" });
+    expect(share.value).toBe(screen.getByRole("combobox", { name: "Logon bot user" }).value);
+    fireEvent.change(share, { target: { value: "NORTH\\arya.stark" } });
+    expect(last(seen).bot_user).toBe("NORTH\\arya.stark");
+    expect(screen.getByRole("combobox", { name: "Logon bot user" }).value).toBe("NORTH\\arya.stark");
+    expect(screen.getByText("The same user as the logon bot: both read bot_user.")).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "Bot user" })).toBeNull();
   });
 });
 
@@ -109,11 +116,11 @@ describe("hosts and services", () => {
   test("a TERMSRV target is filled from a host pick and stays editable", () => {
     const seen = [];
     render(<Panel blueprint={LIGHT} id="winterfell" seen={seen} />);
-    const host = screen.getByRole("combobox", { name: "stored_credential.target host" });
+    const host = screen.getByRole("combobox", { name: "Saved credential target host" });
     expect(host.value).toBe("castelblack");
     fireEvent.change(host, { target: { value: "winterfell" } });
     expect(last(seen).stored_credential.target).toBe("TERMSRV/winterfell");
-    const text = screen.getByRole("textbox", { name: "stored_credential.target" });
+    const text = screen.getByRole("textbox", { name: "Saved credential target" });
     fireEvent.change(text, { target: { value: "TERMSRV/winterfell.north.sevenkingdoms.local" } });
     expect(last(seen).stored_credential).toEqual({
       owner: "north\\robb.stark", username: "north\\robb.stark",
@@ -123,8 +130,8 @@ describe("hosts and services", () => {
 
   test("the UNC targets are typed, since they must name a host that does not resolve", () => {
     render(<Panel blueprint={LIGHT} id="winterfell" />);
-    expect(screen.getByRole("textbox", { name: "responder_target" }).value).toBe("\\\\Bravos\\private");
-    expect(screen.queryByRole("combobox", { name: /responder_target/ })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Share the bot opens" }).value).toBe("\\\\Bravos\\private");
+    expect(screen.queryByRole("combobox", { name: /Share the bot opens/ })).toBeNull();
   });
 
   test("linked servers are checkboxes of the SQL hosts, cross domain", () => {
@@ -150,7 +157,7 @@ describe("hosts and services", () => {
   test("NTFS rights are a fixed list", () => {
     const seen = [];
     render(<Panel blueprint={LIGHT} id="castelblack" seen={seen} />);
-    const rights = screen.getByRole("combobox", { name: "permissions.rights" });
+    const rights = screen.getByRole("combobox", { name: "Rights" });
     expect(rights.value).toBe("FullControl");
     expect(optionValues(rights)).not.toContain("__other__");
     fireEvent.change(rights, { target: { value: "Modify" } });
@@ -165,15 +172,15 @@ describe("row editors", () => {
     const seen = [];
     render(<Panel blueprint={GOAD} id="castelblack" seen={seen} />);
     expect(screen.getByText("NORTH\\samwell.tarly may impersonate sa")).toBeTruthy();
-    const add = screen.getByRole("button", { name: "Add to mssql_execas_logins" });
+    const add = screen.getByRole("button", { name: "Add to EXECUTE AS logins" });
     expect(add.disabled).toBe(true);
-    expect(screen.getByRole("combobox", { name: "mssql_execas_logins new may impersonate" }).value).toBe("sa");
-    fireEvent.change(screen.getByRole("combobox", { name: "mssql_execas_logins new login" }), {
+    expect(screen.getByRole("combobox", { name: "EXECUTE AS logins new may impersonate" }).value).toBe("sa");
+    fireEvent.change(screen.getByRole("combobox", { name: "EXECUTE AS logins new login" }), {
       target: { value: "NORTH\\hodor" },
     });
     fireEvent.click(add);
     expect(last(seen).mssql_execas_logins.at(-1)).toEqual({ login: "NORTH\\hodor", target: "sa" });
-    fireEvent.click(screen.getByRole("button", { name: "Remove mssql_execas_logins row 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove EXECUTE AS logins row 1" }));
     expect(last(seen).mssql_execas_logins.map((r) => r.login)).toEqual([
       "NORTH\\brandon.stark", "NORTH\\hodor",
     ]);
@@ -181,7 +188,7 @@ describe("row editors", () => {
 
   test("a linked login picks its target from the linked servers", () => {
     render(<Panel blueprint={GOAD} id="castelblack" />);
-    const target = screen.getByRole("combobox", { name: "mssql_linked_logins new linked server" });
+    const target = screen.getByRole("combobox", { name: "Linked server logins new linked server" });
     expect(optionValues(target)).toContain("braavos.essos.local");
   });
 });
@@ -214,12 +221,12 @@ describe("defaults on tick", () => {
     fireEvent.click(screen.getByRole("button", { name: "Credentials" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Stored credential (CredMan)" }));
     expect(last(seen).stored_credential).toEqual({ target: "TERMSRV/castelblack" });
-    expect(screen.getByRole("combobox", { name: "stored_credential.owner" }).value).toBe("");
+    expect(screen.getByRole("combobox", { name: "Saved credential owner" }).value).toBe("");
   });
 });
 
 describe("required keys and findings", () => {
-  test("a required key says so and shows its RNG011 finding at its input", () => {
+  test("a missing bot user says so and shows its RNG011 finding at its activity", () => {
     const finding = {
       code: "RNG011", severity: "warning", target_ids: ["winterfell"],
       field: "vulns_vars.bot_user",
@@ -235,9 +242,12 @@ describe("required keys and findings", () => {
         }}
       />
     );
-    const field = screen.getByRole("combobox", { name: "bot_user" }).closest(".rg-vuln-key-field");
-    expect(within(field).getByText("required")).toBeTruthy();
-    expect(within(field).getByText(finding.message)).toBeTruthy();
+    const bot = screen.getByRole("combobox", { name: "Logon bot user" });
+    expect(bot.value).toBe("");
+    expect(within(bot).getByText("pick a user")).toBeTruthy();
+    expect(within(bot.closest(".rg-activity")).getByText(finding.message)).toBeTruthy();
+    const share = screen.getByRole("combobox", { name: "Share-browsing bot user" }).closest(".rg-activity");
+    expect(within(share).queryByText(finding.message)).toBeNull();
     expect(within(json().closest(".rg-field")).queryByText(finding.message)).toBeNull();
   });
 
@@ -251,10 +261,9 @@ describe("required keys and findings", () => {
         }}
       />
     );
-    const relay = screen.getByRole("combobox", { name: "ntlm_relay_user" });
+    const relay = screen.getByRole("combobox", { name: "Relay bot user" });
     expect(relay.value).toBe("");
-    expect(within(relay).getByText("uses bot_user: north\\robb.stark")).toBeTruthy();
-    expect(screen.getByText("required (or bot_user)")).toBeTruthy();
+    expect(within(relay).getByText("same as the bot user, north\\robb.stark")).toBeTruthy();
   });
 
   test("an ESC key set on another host in the domain says where", () => {
@@ -267,7 +276,7 @@ describe("required keys and findings", () => {
         }}
       />
     );
-    const manager = screen.getByRole("combobox", { name: "esc7_manager" });
+    const manager = screen.getByRole("combobox", { name: "Gets ManageCA" });
     expect(manager.value).toBe("");
     expect(within(manager).getByText("set on meereen: ESSOS\\viserys.targaryen")).toBeTruthy();
   });
@@ -276,7 +285,7 @@ describe("required keys and findings", () => {
 describe("read-only blueprints and accessibility", () => {
   test("a locked blueprint shows every value, disabled", () => {
     render(<Panel blueprint={GOAD} id="castelblack" readOnly />);
-    const rights = screen.getByRole("combobox", { name: "permissions.rights" });
+    const rights = screen.getByRole("combobox", { name: "Rights" });
     expect(rights.disabled).toBe(true);
     expect(rights.value).toBe("FullControl");
     expect(screen.getByRole("checkbox", { name: "Link to braavos.essos.local" }).disabled).toBe(true);
@@ -286,12 +295,21 @@ describe("read-only blueprints and accessibility", () => {
     expect(json().disabled).toBe(true);
   });
 
+  test("each setting reads by its plain label, with the raw key small beside it", () => {
+    render(<Panel blueprint={LIGHT} id="castelblack" />);
+    const field = screen.getByRole("combobox", { name: "Rights" }).closest(".rg-vuln-key-field");
+    expect(within(field).getByText("Rights").className).toBe("rg-vuln-key-label");
+    expect(within(field).getByText("permissions.rights").className).toBe("rg-vuln-key-raw");
+  });
+
   test("every control in the form has a name unique on the page", () => {
     for (const [blueprint, id] of [[LIGHT, "winterfell"], [GOAD, "castelblack"], [GOAD, "meereen"]]) {
       const { container, unmount } = render(<Panel blueprint={blueprint} id={id} />);
       const controls = [...container.querySelectorAll("input, select, textarea")];
       const names = controls.map((el) => computeAccessibleName(el));
-      const form = [...container.querySelectorAll(".rg-vuln-form input, .rg-vuln-form select, .rg-vuln-form textarea")];
+      const form = [...container.querySelectorAll(
+        [".rg-vuln-form", ".rg-activities"].flatMap((c) => ["input", "select", "textarea"].map((t) => `${c} ${t}`)).join(", ")
+      )];
       expect(form.length).toBeGreaterThan(3);
       for (const el of form) {
         const name = computeAccessibleName(el);
