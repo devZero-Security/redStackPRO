@@ -10,6 +10,11 @@ COPY frontend/ ./
 RUN npm run build
 
 FROM python:3.12-slim AS runtime
+# GHCR links the package to the repo through the source label.
+LABEL org.opencontainers.image.source="https://github.com/devZero-Security/redStackPRO" \
+      org.opencontainers.image.title="redStackPRO" \
+      org.opencontainers.image.description="Canvas for red team infrastructure and cyber ranges; exports Terraform and Ansible you run yourself." \
+      org.opencontainers.image.vendor="devZero Security"
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
