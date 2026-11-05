@@ -116,6 +116,12 @@ versioning, and dates are UTC.
 
 ### Changed
 
+- The logon bot (`rdp_scheduler`) logs on every 3 minutes by default, where it was
+  every minute, and the interval is set per host in `vulns_vars.bot_interval_minutes`,
+  a number in its User activity sentence. A value that is not a whole number from 1
+  up runs at the default, one over 31 days (Task Scheduler's limit) runs at 31 days,
+  and the canvas says so under the sentence. The DEFENSE-BRIEFING's User activity
+  table shows the interval.
 - As on GCP and AWS, the broadcast and multicast poisoning techniques
   (`llmnr_poisoning`, `nbtns_poisoning`, `responder`, `ntlm_relay`,
   `ldap_signing_off`) are not planted on Azure, whose network drops L2 broadcast and

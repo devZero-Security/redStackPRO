@@ -5,9 +5,9 @@ import { PICKS, choicesFor, getVar, isPlainObject, setVar, withVulnDefaults } fr
 import { hostDomain } from "./spnChoices.js";
 import { isNotice } from "./fieldRules.js";
 import {
-  ACTIVITIES, DEFAULT_COMMAND, DEFAULT_SCRIPT_PATH, DEFAULT_TASK, SCHEDULE_ACTIONS,
-  findingsByActivity, losesQuotes, onlyOn, providerBlock, readSchedule, scheduleWith, taskClash,
-  toggled,
+  ACTIVITIES, DEFAULT_BOT_MINUTES, DEFAULT_COMMAND, DEFAULT_SCRIPT_PATH, DEFAULT_TASK,
+  MAX_BOT_MINUTES, SCHEDULE_ACTIONS, botMinutes, findingsByActivity, losesQuotes, onlyOn,
+  providerBlock, readSchedule, scheduleWith, taskClash, toggled,
 } from "./activity.js";
 
 const Sentence = ({ children }) => <div className="rg-activity-sentence">{children}</div>;
@@ -252,13 +252,36 @@ export function UserActivity({ node, document, provider, findings, disabled, onC
     />
   );
   const botUser = typeof v("bot_user") === "string" ? v("bot_user") : "";
+  const botMins = v("bot_interval_minutes");
+  const botShown = botMins == null || botMins === "" ? DEFAULT_BOT_MINUTES : Number(botMins);
 
   const sentences = {
     rdp_scheduler: (
-      <Sentence>
-        {user("Logon bot user", "bot_user", "pick a user")}
-        <Words>logs on to this host every minute, so their credentials stay in memory.</Words>
-      </Sentence>
+      <>
+        <Sentence>
+          {user("Logon bot user", "bot_user", "pick a user")}
+          <Words>logs on to this host every</Words>
+          <input
+            type="number"
+            className="rg-activity-num"
+            aria-label="Logon bot interval in minutes"
+            min={1}
+            max={MAX_BOT_MINUTES}
+            step={1}
+            value={botMins ?? ""}
+            placeholder={String(DEFAULT_BOT_MINUTES)}
+            disabled={locked}
+            onChange={(e) => set("bot_interval_minutes", e.target.value === "" ? undefined : Number(e.target.value))}
+          />
+          <Words>{botShown === 1 ? "minute," : "minutes,"} so their credentials stay in memory.</Words>
+        </Sentence>
+        {botShown !== botMinutes(botMins) ? (
+          <Warn>
+            Not a whole number of minutes from 1 to {MAX_BOT_MINUTES} (31 days), so the bot
+            runs every {botMinutes(botMins)} minutes.
+          </Warn>
+        ) : null}
+      </>
     ),
     schedule: (
       <ScheduleActivity

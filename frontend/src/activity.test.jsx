@@ -66,7 +66,7 @@ describe("the section", () => {
       expect(box(name).checked).toBe(true);
     }
     expect(box("Scheduled task").checked).toBe(false);
-    expect(row("Logon bot").getByText(/logs on to this host every minute/)).toBeTruthy();
+    expect(row("Logon bot").getByText("logs on to this host every")).toBeTruthy();
     expect(row("Scheduled task").getByText(/does something on this host every few minutes/)).toBeTruthy();
     expect(screen.queryByRole("combobox", { name: "Scheduled task action" })).toBeNull();
   });
@@ -130,6 +130,40 @@ describe("the logon bot and the saved credential", () => {
     fireEvent.change(field("combobox", "Logon bot user"), { target: { value: "NORTH\\arya.stark" } });
     expect(last(seen).vulns_vars.bot_user).toBe("NORTH\\arya.stark");
     expect(jsonValue().bot_user).toBe("NORTH\\arya.stark");
+  });
+
+  test("the logon bot runs every 3 minutes until a number is typed", () => {
+    const seen = [];
+    render(winterfell({ seen }));
+    const mins = field("spinbutton", "Logon bot interval in minutes");
+    expect(mins.value).toBe("");
+    expect(mins.placeholder).toBe("3");
+    expect(row("Logon bot").getByText("minutes, so their credentials stay in memory.")).toBeTruthy();
+    expect(jsonValue().bot_interval_minutes).toBeUndefined();
+
+    fireEvent.change(mins, { target: { value: "10" } });
+    expect(last(seen).vulns_vars.bot_interval_minutes).toBe(10);
+    expect(last(seen).vulns_vars.bot_user).toBe("north\\robb.stark");
+    expect(jsonValue().bot_interval_minutes).toBe(10);
+
+    fireEvent.change(mins, { target: { value: "1" } });
+    expect(row("Logon bot").getByText("minute, so their credentials stay in memory.")).toBeTruthy();
+
+    fireEvent.change(mins, { target: { value: "" } });
+    expect(last(seen).vulns_vars).not.toHaveProperty("bot_interval_minutes");
+    expect(row("Logon bot").getByText("minutes, so their credentials stay in memory.")).toBeTruthy();
+  });
+
+  test("a logon bot interval the role cannot use says what it runs at instead", () => {
+    render(winterfell());
+    const mins = field("spinbutton", "Logon bot interval in minutes");
+    expect(row("Logon bot").queryByText(/Not a whole number of minutes/)).toBeNull();
+    fireEvent.change(mins, { target: { value: "0" } });
+    expect(row("Logon bot").getByText(/Not a whole number of minutes from 1 to 44640 .* every 3 minutes\./)).toBeTruthy();
+    fireEvent.change(mins, { target: { value: "50000" } });
+    expect(row("Logon bot").getByText(/so the bot runs every 44640 minutes\./)).toBeTruthy();
+    fireEvent.change(mins, { target: { value: "45" } });
+    expect(row("Logon bot").queryByText(/Not a whole number of minutes/)).toBeNull();
   });
 
   test("the saved credential reads as owner, account and target", () => {

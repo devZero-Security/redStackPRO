@@ -180,7 +180,8 @@ export const VULN_PARAMS = {
     { key: "gpo_abuse.link", label: "Linked to", pick: "ou", about: "Where the GPO is linked, as a distinguished name. Default the domain root." },
   ],
   rdp_scheduler: [
-    { key: "bot_user", label: "Bot user", required: true, pick: "domain_user", about: "Domain user the logon bot runs as, every minute.", example: "NORTH\\robb.stark" },
+    { key: "bot_user", label: "Bot user", required: true, pick: "domain_user", about: "Domain user the logon bot runs as.", example: "NORTH\\robb.stark" },
+    { key: "bot_interval_minutes", label: "Logon every (minutes)", input: "number", about: "How often the logon bot logs on, in minutes. Default 3.", example: 3 },
   ],
   responder: [
     { key: "bot_user", label: "Bot user", required: true, pick: "domain_user", about: "Domain user whose bot opens an unresolvable share every 2 minutes.", example: "NORTH\\robb.stark" },

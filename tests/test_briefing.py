@@ -211,6 +211,21 @@ def test_the_briefing_lists_who_each_bot_runs_as():
     text = range_briefing(doc, provider="azure")
     section = text[text.index("## User activity"):]
     assert r"| winterfell | logon bot (connect_bot) | north\robb.stark |" in section
+    logon = next(l for l in section.splitlines() if "logon bot (connect_bot)" in l)
+    assert logon.endswith("| 3 min |"), logon
     # Broadcast poisoning bots cannot plant on a cloud provider, and say so.
     assert r"| winterfell | share-browsing bot (responder_bot) | north\robb.stark | not planted on azure |" in section
     assert "saved credential" in section
+
+
+def test_the_briefing_shows_the_logon_bot_interval_set():
+    import json
+    from pathlib import Path
+    from redstackpro.briefing import range_briefing
+    root = Path(__file__).resolve().parent.parent
+    doc = json.loads((root / "frontend/public/goad/goad-light.json").read_text(encoding="utf-8"))
+    winterfell = next(n for n in doc["nodes"] if n["id"] == "winterfell")
+    winterfell["overlay"]["vulns_vars"]["bot_interval_minutes"] = 10
+    text = range_briefing(doc, provider="gcp")
+    logon = next(l for l in text.splitlines() if "logon bot (connect_bot)" in l)
+    assert logon.endswith("| 10 min |"), logon

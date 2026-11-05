@@ -13,8 +13,8 @@ export const ACTIVITIES = [
   {
     id: "rdp_scheduler",
     title: "Logon bot",
-    idle: "A domain user logs on to this host every minute, so their credentials stay in memory.",
-    keys: ["bot_user"],
+    idle: "A domain user logs on to this host every 3 minutes, so their credentials stay in memory.",
+    keys: ["bot_user", "bot_interval_minutes"],
     task: "connect_bot",
   },
   {
@@ -78,6 +78,20 @@ export const psQuote = (text) => `'${String(text).replace(QUOTE, "$&$&")}'`;
 export function psUnquote(text) {
   const m = LITERAL.exec(String(text ?? ""));
   return m ? m[1].replace(PAIR, "$1") : null;
+}
+
+// ------------------------------------------------------------ logon bot
+
+export const DEFAULT_BOT_MINUTES = 3;
+// Task Scheduler's longest repetition interval, 31 days.
+export const MAX_BOT_MINUTES = 44640;
+
+// The minutes the logon bot runs every, as rdp_scheduler.yml reads
+// bot_interval_minutes: anything but a whole number from 1 up is the default.
+export function botMinutes(value) {
+  const text = typeof value === "number" || typeof value === "string" ? String(value).trim() : "";
+  if (!/^[0-9]+$/.test(text) || Number(text) < 1) return DEFAULT_BOT_MINUTES;
+  return Math.min(Number(text), MAX_BOT_MINUTES);
 }
 
 // ------------------------------------------------------------- schedule
