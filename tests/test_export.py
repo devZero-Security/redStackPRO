@@ -291,6 +291,22 @@ def test_deployment_guide_documents_managing_the_range(redstack, registry):
     assert "teardown" in guide
 
 
+@pytest.mark.parametrize("provider,sweep", [
+    ("gcp", "It first deletes every redStackPRO instance in the GCP project"),
+    ("aws", "It first terminates every redStackPRO instance in the region"),
+    ("azure", "It first deletes the deployment's resource group and everything in"),
+])
+def test_the_guide_says_teardown_asks_first_and_what_force_deletes(redstack, provider, sweep):
+    guide = _guide(redstack, provider)
+    assert "asks you to type the range name (or `yes`)" in guide
+    assert "Add `--yes` to skip the question" in guide
+    assert "Run it with no command for a help\nscreen" in guide
+    assert sweep in guide
+    assert "deletes this deployment's instances in the\ncloud first" not in guide
+    range_guide = _guide(_goad_light(), provider)
+    assert "asks you to type the range name (or `yes`)" in range_guide
+
+
 @pytest.mark.parametrize("provider", ["../../roles", "..", "gcp/../aws", "/etc",
                                       "C:\Windows", "GCP", "", "aws/"])
 def test_static_files_refuses_a_provider_that_is_not_a_bare_name(provider):
