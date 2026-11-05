@@ -2,7 +2,7 @@
 # RDP scheduled logon: a recurring task that performs an interactive-style logon
 # as a domain user, so an attacker on the box can capture a live session or its
 # credentials (GOAD's connect_bot). Runs as a domain user with the shared lab
-# password.
+# password, every vulns_vars.bot_interval_minutes (default 3).
 
 - name: Ensure the setup directory exists
   ansible.windows.win_file:
@@ -29,16 +29,21 @@
   when: redstackpro_host_vulns_vars.bot_user | default('') | length > 0
 
 - name: Create the RDP logon bot
+  vars:
+    rsp_bot_interval: "{{ redstackpro_host_vulns_vars.bot_interval_minutes | default(3) | string | trim }}"
   ansible.windows.win_powershell:
     script: |
-      param($User, $Pass)
+      param($User, $Pass, $Mins)
       $ErrorActionPreference = "Stop"
       $a = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -File C:\setup\bot_rdp.ps1"
-      $t = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1)
+      $t = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes $Mins)
       Register-ScheduledTask -TaskName connect_bot -Action $a -Trigger $t `
         -User $User -Password $Pass -RunLevel Limited -Force | Out-Null
     parameters:
       User: "{{ redstackpro_host_vulns_vars.bot_user | default('') }}"
       Pass: "{{ (redstackpro_user_passwords | default({})).get(redstackpro_host_vulns_vars.bot_user | default(''), redstackpro_lab_password) }}"
+      # Anything but a whole number from 1 up is the default 3. Task Scheduler
+      # refuses a repetition interval over 31 days.
+      Mins: "{{ ([rsp_bot_interval | int, 44640] | min) if (rsp_bot_interval is match('^[0-9]+$') and rsp_bot_interval | int > 0) else 3 }}"
   changed_when: true
   when: redstackpro_host_vulns_vars.bot_user | default('') | length > 0

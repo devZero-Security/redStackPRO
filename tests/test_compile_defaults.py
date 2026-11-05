@@ -393,6 +393,58 @@ def test_every_bot_user_gets_batch_logon_before_its_task(task_file):
     assert grants[0] < registers[0], task_file
 
 
+def _logon_bot_interval(vulns_vars):
+    """The Mins the logon bot task hands its trigger, rendered as Ansible does:
+    the task var first, then the parameter that reads it."""
+    jinja2 = pytest.importorskip("jinja2")
+    tasks = yaml.safe_load((ROLES / "redstackpro.host_vulns/tasks/rdp_scheduler.yml")
+                           .read_text(encoding="utf-8"))
+    task = next(t for t in tasks if t["name"] == "Create the RDP logon bot")
+    env = jinja2.Environment()
+    # Ansible's match test.
+    env.tests["match"] = lambda value, pattern: re.match(pattern, str(value)) is not None
+    ctx = {"redstackpro_host_vulns_vars": vulns_vars}
+    ctx["rsp_bot_interval"] = env.from_string(task["vars"]["rsp_bot_interval"]).render(ctx)
+    ps = task["ansible.windows.win_powershell"]
+    assert "-RepetitionInterval (New-TimeSpan -Minutes $Mins)" in ps["script"]
+    return env.from_string(ps["parameters"]["Mins"]).render(ctx)
+
+
+def test_the_logon_bot_runs_every_3_minutes_by_default():
+    # It was a hard-coded 1 minute.
+    assert _logon_bot_interval({"bot_user": "north\\robb.stark"}) == "3"
+    assert _logon_bot_interval({}) == "3"
+
+
+def test_the_logon_bot_interval_is_set_from_vulns_vars():
+    doc = goad_light()
+    _node(doc, "winterfell")["overlay"]["vulns_vars"]["bot_interval_minutes"] = 10
+    files = compile_topology(doc, Registry(), provider="gcp")
+    vv = _yaml(files, "ansible/host_vars/def-winterfell.yml")["redstackpro_dc_vulns_vars"]
+    assert vv["bot_interval_minutes"] == 10
+    assert _logon_bot_interval(vv) == "10"
+    assert _logon_bot_interval({"bot_interval_minutes": 1}) == "1"
+    assert _logon_bot_interval({"bot_interval_minutes": " 15 "}) == "15"
+
+
+@pytest.mark.parametrize("value", [0, -5, 2.5, "abc", "", None, True, [5], {"m": 5}])
+def test_a_logon_bot_interval_that_is_not_a_whole_number_from_1_is_3(value):
+    assert _logon_bot_interval({"bot_interval_minutes": value}) == "3"
+
+
+def test_a_logon_bot_interval_over_31_days_is_capped():
+    # Task Scheduler refuses a repetition interval over 31 days.
+    assert _logon_bot_interval({"bot_interval_minutes": 50000}) == "44640"
+
+
+def test_the_briefing_reads_the_logon_bot_interval_as_the_role_does():
+    from redstackpro.briefing import logon_bot_minutes
+    for value in (1, 3, 10, "7", " 15 ", 0, -5, 2.5, "abc", "", None, True, [5], 50000):
+        vv = {"bot_interval_minutes": value}
+        assert str(logon_bot_minutes(vv)) == _logon_bot_interval(vv), value
+    assert str(logon_bot_minutes({})) == _logon_bot_interval({})
+
+
 def test_the_schedule_bot_does_not_reuse_the_logon_bot_task_name():
     # Both defaulted to connect_bot, so a host with both kept only one.
     text = (ROLES / "redstackpro.host_vulns/tasks/schedule.yml").read_text(encoding="utf-8")

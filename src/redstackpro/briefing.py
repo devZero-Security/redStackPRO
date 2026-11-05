@@ -13,6 +13,8 @@ credential not embedded is the generated lab password, which lives only in the
 Terraform state; the briefing points at `terraform output -raw lab_password`.
 """
 
+import re
+
 from .ansible import VULN_PROVIDERS
 from .naming import platform_account
 from .terraform.plan import HOST_KINDS
@@ -41,6 +43,16 @@ _KIND_ROLE = {
 # case that produces a password the document does not already state, and it is
 # rare: nearly every flagged GOAD account declares its own credential.
 _WEAK_PASSWORD = "Summer2024!"
+
+
+def logon_bot_minutes(vulns_vars):
+    """The logon bot's interval as host_vulns/tasks/rdp_scheduler.yml reads
+    bot_interval_minutes: a whole number from 1 up, capped at Task Scheduler's
+    31 days, and anything else the default 3."""
+    raw = str((vulns_vars or {}).get("bot_interval_minutes", 3)).strip()
+    if not re.fullmatch(r"[0-9]+", raw) or int(raw) < 1:
+        return 3
+    return min(int(raw), 44640)
 
 
 def _briefing_password(user):
@@ -396,7 +408,8 @@ def range_briefing(document, registry=None, provider=None):
         if "rdp_scheduler" in vulns and vv.get("bot_user"):
             activity.append((name, "logon bot (connect_bot)", vv["bot_user"],
                              "logs on and maps \\\\localhost\\C$, so the credentials "
-                             "stay in memory", "1 min", "rdp_scheduler"))
+                             "stay in memory", "%d min" % logon_bot_minutes(vv),
+                             "rdp_scheduler"))
         if "schedule" in vulns:
             s = vv.get("schedule") if isinstance(vv.get("schedule"), dict) else {}
             cmd = s.get("command") or "Start-Sleep -Seconds 5"

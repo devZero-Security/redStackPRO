@@ -5,9 +5,9 @@ import { readFileSync } from "node:fs";
 import { VULN_LABEL, VULN_PARAMS } from "./vulns.js";
 import { formKeys, formSections } from "./vulnForm.js";
 import {
-  ACTIVITIES, ACTIVITY_IDS, DEFAULT_SCRIPT_PATH, DEFAULT_TASK, SCHEDULE_ACTIONS, actionCommand,
-  findingsByActivity, losesQuotes, onlyOn, providerBlock, psQuote, psUnquote, readSchedule,
-  scheduleWith, showsActivity, taskClash, toggled,
+  ACTIVITIES, ACTIVITY_IDS, DEFAULT_BOT_MINUTES, DEFAULT_SCRIPT_PATH, DEFAULT_TASK, MAX_BOT_MINUTES,
+  SCHEDULE_ACTIONS, actionCommand, botMinutes, findingsByActivity, losesQuotes, onlyOn,
+  providerBlock, psQuote, psUnquote, readSchedule, scheduleWith, showsActivity, taskClash, toggled,
 } from "./activity.js";
 
 const load = (path) => JSON.parse(readFileSync(path, "utf8"));
@@ -180,6 +180,25 @@ test("the task name defaults to schedule_bot and is flagged when it takes anothe
   assert.strictEqual(taskClash("Connect_Bot", ["rdp_scheduler", "schedule"]).id, "rdp_scheduler");
   assert.strictEqual(taskClash("connect_bot", ["schedule"]), null);
   assert.strictEqual(taskClash("ntlm_bot", ["ntlm_relay"]).id, "ntlm_relay");
+});
+
+test("the logon bot interval reads as the role does: a whole number from 1 up, else 3", () => {
+  assert.strictEqual(DEFAULT_BOT_MINUTES, 3);
+  for (const unset of [undefined, null, ""]) assert.strictEqual(botMinutes(unset), 3);
+  assert.strictEqual(botMinutes(1), 1);
+  assert.strictEqual(botMinutes(15), 15);
+  assert.strictEqual(botMinutes("05"), 5);
+  for (const bad of [0, -2, 2.5, "abc", true, [5], { m: 5 }]) assert.strictEqual(botMinutes(bad), 3, String(bad));
+  assert.strictEqual(botMinutes(MAX_BOT_MINUTES + 1), MAX_BOT_MINUTES);
+  const role = readFileSync(
+    new URL("../../src/redstackpro/assets/ansible/roles/redstackpro.host_vulns/tasks/rdp_scheduler.yml", import.meta.url),
+    "utf8"
+  );
+  assert.ok(role.includes("bot_interval_minutes | default(3)"), "the role default moved");
+  assert.ok(role.includes(`, ${MAX_BOT_MINUTES}] | min`), "the role cap moved");
+  const param = VULN_PARAMS.rdp_scheduler.find((p) => p.key === "bot_interval_minutes");
+  assert.strictEqual(param.example, DEFAULT_BOT_MINUTES);
+  assert.match(param.about, /Default 3\./);
 });
 
 test("the poisoning bots are blocked on a cloud provider, with the reason", () => {
