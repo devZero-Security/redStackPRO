@@ -331,6 +331,33 @@ def test_the_summary_names_what_landed(tmp_path, monkeypatch, capsys):
     assert summary["planned"] == len(plan["slots"])
 
 
+def test_the_user_agent_names_the_version_it_is_given(tmp_path, monkeypatch):
+    seen = []
+
+    def record(*args, **kwargs):
+        seen.append(fetch.UA)
+        raise OSError("no egress")
+    monkeypatch.setattr(fetch, "_get", record)
+    monkeypatch.setattr(fetch, "UA", fetch.UA)
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(decoyassets.for_decoy("s", "healthcare")), encoding="utf-8")
+    assert fetch.main(["--plan", str(path), "--out", str(tmp_path / "out"),
+                       "--agent-version", "1.2.3"]) == 0
+    assert seen and set(seen) == {
+        "redStackPRO/1.2.3 decoy-asset-fetch (+https://redstackpro.com)"}
+
+
+def test_the_fetch_is_handed_the_package_version():
+    """The role copies the fetcher as is, so the version has to reach it as a
+    variable, or the user agent goes stale with the first release."""
+    from redstackpro.deploy import _redstackpro_version
+    vars_ = AnsiblePlan(_topology()).host_vars["off-rd01"]
+    assert vars_["redstackpro_decoy_fetch_version"] == _redstackpro_version()
+    tasks = open(os.path.join(os.path.dirname(os.path.dirname(FETCHER)),
+                              "tasks", "main.yml"), encoding="utf-8").read()
+    assert "--agent-version {{ redstackpro_decoy_fetch_version" in tasks
+
+
 def test_the_operator_pack_wins_over_a_search(tmp_path, monkeypatch):
     """A file the operator chose carries a licence they have already decided
     they can satisfy, and imagery they picked beats a keyword guess."""

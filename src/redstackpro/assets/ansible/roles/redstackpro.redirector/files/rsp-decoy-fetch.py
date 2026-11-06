@@ -45,9 +45,11 @@ API = "https://commons.wikimedia.org/w/api.php"
 FACE_URL = "https://thispersondoesnotexist.com/random-person.jpeg"
 
 # A real contact point, because Wikimedia asks for one and a request without it
-# is the first thing they rate-limit. It names the tool, not the deployment. No
-# version token: the role copies this file as is, so a number here goes stale.
-UA = "redStackPRO decoy-asset-fetch (+https://redstackpro.com)"
+# is the first thing they rate-limit. It names the tool and its version, not the
+# deployment. The version comes in as --agent-version: the role copies this file
+# as is, so a number written here would go stale.
+AGENT = "redStackPRO/%s decoy-asset-fetch (+https://redstackpro.com)"
+UA = AGENT % "unknown"
 
 # Licences that need no credit at all. Kept separate from the ones that do,
 # because these cost nothing: no credits entry, no obligation, no trace.
@@ -528,11 +530,14 @@ def unsourced_video(slot, pack):
 
 
 def main(argv=None):
+    global UA
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--pack", default="")
+    parser.add_argument("--agent-version", default="")
     args = parser.parse_args(argv)
+    UA = AGENT % (args.agent_version or "unknown")
 
     # A broken invocation must not look like a quiet success. See the module
     # docstring: this is the half that is allowed to fail.

@@ -109,6 +109,7 @@
       --plan /etc/redstackpro/decoy-assets.json
       --out /var/www/redstackpro-decoy/assets
       --pack {{ redstackpro_decoy_asset_pack | default('', true) | quote }}
+      --agent-version {{ redstackpro_decoy_fetch_version | default('', true) | quote }}
   when: redstackpro_decoy_assets is defined
   register: redstackpro_decoy_fetch
   changed_when: redstackpro_decoy_plan is changed

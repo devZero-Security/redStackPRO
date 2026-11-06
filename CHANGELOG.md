@@ -466,8 +466,9 @@ versioning, and dates are UTC.
   a folder that holds `terraform/terraform.tfstate` or a key in `keys/`, and says to
   pick a new folder or pass `--force`. A folder with neither is still replaced.
 - The redirector's decoy asset fetch named version 0.4 and redstackpro.dev in its
-  user agent. It sends `redStackPRO decoy-asset-fetch (+https://redstackpro.com)`,
-  with no version to go stale.
+  user agent. It sends
+  `redStackPRO/<package version> decoy-asset-fetch (+https://redstackpro.com)`, with
+  the version passed in at deploy time so it tracks the release.
 
 ## [0.9.2] (2026-11-04)
 

@@ -16,6 +16,7 @@ import string
 import yaml
 
 from . import decoyart, decoyassets
+from .deploy import _redstackpro_version
 from .naming import platform_account
 from .registry import Registry
 from .terraform.plan import AD_HOST_KINDS, DEFAULT_WINDOWS_OS, HOST_KINDS
@@ -562,6 +563,10 @@ class AnsiblePlan:
                     seed, decoy, video=bool(gating.get("decoy_video")))
                 if plan:
                     vars_["redstackpro_decoy_assets"] = plan
+                    # For the fetcher's user agent. The role copies the
+                    # fetcher as is, so the version arrives from here.
+                    vars_["redstackpro_decoy_fetch_version"] = \
+                        _redstackpro_version()
                 pack = gating.get("decoy_asset_pack")
                 if pack:
                     vars_["redstackpro_decoy_asset_pack"] = pack
