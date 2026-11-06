@@ -363,10 +363,10 @@ infrastructure running and billing.
   touches no account, so you subscribe once before the first Kali deploy.
 
 The quotas are per region. Running several ranges at once? Give each a distinct
-**prefix** so its host names stay clear; the few account-global names (the key pair
-and the auto-stop role) auto-suffix per deployment, so ranges never collide in one
-account. The full quota table, the increase commands, and the pre-deploy checklist
-are in the wiki:
+**prefix** so its host names stay clear; the few names AWS requires to be unique in
+the account or region (the key pair and the auto-stop role and schedule) auto-suffix
+per deployment, so ranges never collide in one account. The full quota table, the
+increase commands, and the pre-deploy checklist are in the wiki:
 [Providers](https://github.com/devZero-Security/redStackPRO/wiki/Providers) and
 [Deploying a Range](https://github.com/devZero-Security/redStackPRO/wiki/Deploying-a-Range).
 
