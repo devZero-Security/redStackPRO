@@ -547,7 +547,7 @@ function Manages({ node, document, onSelectNode }) {
 }
 
 // Overlay forms are generated from the document schema rather than hardcoded,
-// for the same reason the palette comes from the registry: a pro node kind
+// for the same reason the palette comes from the registry: a new node kind
 // should not need a change here. See 0013 and 0017.
 //
 // Fields marked derived never appear, because the compiler computes them and a

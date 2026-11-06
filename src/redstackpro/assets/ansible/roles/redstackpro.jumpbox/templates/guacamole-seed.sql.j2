@@ -36,9 +36,8 @@ DELETE FROM guacamole_entity WHERE name = 'guacadmin' AND type = 'USER';
 {% endif %}
 
 -- One account: the break-glass admin (the platform account, redop/blueop),
--- whose password is in the terraform outputs. Named per-person accounts with
--- their own passwords and access levels are an Enterprise concern;
--- the base tier is a single shared admin login.
+-- whose password is in the terraform outputs: a single shared admin login,
+-- with no per-person admin accounts or access levels.
 -- ---------------------------------------------------------------- accounts
 {# Create a portal user if absent and set its password once from :'labpw'. A
    re-run leaves an existing account's password and TOTP alone, the writable
@@ -82,8 +81,8 @@ ON CONFLICT DO NOTHING;
 {% endfor %}
 
 -- Per-operator accounts (the offense multi-user roster). Each declared operator
--- gets its own portal login on the shared lab password; per-user passwords are
--- an Enterprise concern. No system permissions: an operator drives
+-- gets its own portal login on the shared lab password. No system
+-- permissions: an operator drives
 -- the range, it does not administer the portal. The connection grant below is
 -- by USER, so these accounts pick up every tile without a per-account grant.
 {% for op in redstackpro_jumpbox_operators | default([]) %}

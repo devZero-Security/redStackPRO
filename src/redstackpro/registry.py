@@ -32,7 +32,7 @@ class Registry:
 
     def palette(self, mode="offense"):
         """What the canvas offers, grouped. The canvas reads this rather than
-        hardcoding kinds, so pro can add kinds by dropping files in. See 0013.
+        hardcoding kinds, so new kinds can be added by dropping files in. See 0013.
 
         Returns {group: [entry]} with entries ordered as declared.
         """

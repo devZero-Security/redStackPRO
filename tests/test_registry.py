@@ -1,5 +1,5 @@
 """The registry is the second artifact: kinds, providers, and roles as data, so
-pro can extend the palette by dropping files in rather than by patching code. The
+the palette is extended by dropping files in rather than by patching code. The
 palette itself is exercised in test_naming; this covers capabilities, the
 unsupported prose, and the requirement `when` clause. See 0013.
 """

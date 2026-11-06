@@ -114,8 +114,7 @@ redstackpro_guacamole_db_volume: /opt/redstackpro/guac-db
 # that would allow a present-but-off state is defeated by GUACAMOLE-2140, which
 # ignores and deletes a pre-seeded disable flag during rollout and force-enrols
 # everyone. So "enable TOTP" is a deploy-time choice for the whole portal, not a
-# click. Named accounts with mixed enforcement are an Enterprise concern; this
-# base tier is one admin who either wants 2FA on their login or not.
+# click: the one admin login either has 2FA or does not.
 redstackpro_jumpbox_totp: false
 # The beacon drop. Every RDP tile maps this one directory as a drive, and it is
 # bind-mounted here on the jumpbox, so a file put in it by any route -- scp,

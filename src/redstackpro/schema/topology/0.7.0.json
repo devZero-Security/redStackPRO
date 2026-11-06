@@ -24,7 +24,7 @@
         "offense",
         "defense"
       ],
-      "description": "The canvas mode: offense (attack infrastructure) or defense (an AD range to attack). Gates the palette, prefix, and chrome, not the compiler. Fixed at creation. Renamed from artie/haven in 0.7.0. See 0047."
+      "description": "The canvas mode: offense (attack infrastructure) or defense (an AD range to attack). Gates the palette, prefix, and chrome, not the compiler. Fixed at creation. Renamed from artie/haven in 0.7.0."
     },
     "name": {
       "title": "Topology name",
@@ -1499,7 +1499,7 @@
       }
     },
     "edge_joins": {
-      "description": "Range host to domain. The host is joined to the domain the edge points at. Logical membership, drawn as a badge rather than nesting, because a host is physically in a subnet and logically in a domain at once. See 0047.",
+      "description": "Range host to domain. The host is joined to the domain the edge points at. Logical membership, drawn as a badge rather than nesting, because a host is physically in a subnet and logically in a domain at once.",
       "properties": {
         "role": {
           "title": "Role",
@@ -1508,7 +1508,7 @@
       }
     },
     "edge_trusts": {
-      "description": "Domain to domain. Carries the trust direction, type, and transitivity. A two way trust is one edge with direction bidirectional, which the compiler expands to both sides. See 0047.",
+      "description": "Domain to domain. Carries the trust direction, type, and transitivity. A two way trust is one edge with direction bidirectional, which the compiler expands to both sides.",
       "properties": {
         "role": {
           "title": "Role",

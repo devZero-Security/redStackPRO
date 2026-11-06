@@ -171,7 +171,7 @@ def _compile(document, provider, region=None):
 @router.get("/registry/palette", tags=["registry"])
 def get_palette(mode: str = Query("offense")):
     """What the canvas offers. Read from the registry rather than hardcoded, so
-    pro adds a node kind by dropping a file in. See 0013."""
+    a node kind is added by dropping a file in. See 0013."""
     return {"mode": mode, "groups": registry.palette(mode)}
 
 

@@ -45,8 +45,9 @@ API = "https://commons.wikimedia.org/w/api.php"
 FACE_URL = "https://thispersondoesnotexist.com/random-person.jpeg"
 
 # A real contact point, because Wikimedia asks for one and a request without it
-# is the first thing they rate-limit. It names the tool, not the deployment.
-UA = "redStackPRO/0.4 decoy-asset-fetch (+https://redstackpro.dev)"
+# is the first thing they rate-limit. It names the tool, not the deployment. No
+# version token: the role copies this file as is, so a number here goes stale.
+UA = "redStackPRO decoy-asset-fetch (+https://redstackpro.com)"
 
 # Licences that need no credit at all. Kept separate from the ones that do,
 # because these cost nothing: no credits entry, no obligation, no trace.
