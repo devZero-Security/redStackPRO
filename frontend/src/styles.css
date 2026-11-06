@@ -190,12 +190,13 @@ body {
 .rg-provider-item:hover { background: var(--panel-2); }
 .rg-provider-item.is-active { color: var(--container-accent); }
 
-/* A pending backend: shown, because the compiler really does build it, but not
+/* A roadmap backend: shown, because the compiler really does build it, but not
    choosable, because none has been through a real range end to end.
 
-   The class is `is-pending` to match the badge the operator reads. The API
-   still sends `maturity: "preview"` for these, and that stays: it is the wire
-   contract, and renaming a value to match a label is how a schema drifts. */
+   The class is still `is-pending`, though the badge the operator reads says
+   "roadmap". The API still sends `maturity: "preview"` for these, and that
+   stays: it is the wire contract, and renaming a value to match a label is how
+   a schema drifts. */
 .rg-provider-item.is-pending {
   color: var(--muted);
   opacity: 0.55;
