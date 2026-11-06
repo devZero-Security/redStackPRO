@@ -2,7 +2,7 @@
   "schema_version": "0.7.0",
   "mode": "offense",
   "name": "Peered management and operations",
-  "description": "A management network and an operations network joined by a peering, the shape redStack actually runs. The jumpbox lives in the management network and reaches the redirector and teamserver in the operations network across the peering, so management is one blast radius and operations is another. Compiles on gcp and aws; proxmox refuses, since it cannot render network peering. See 0029, 0030, and 0031.",
+  "description": "A management network and an operations network joined by a peering, the shape redStack actually runs. The jumpbox lives in the management network and reaches the redirector and teamserver in the operations network across the peering, so management is one blast radius and operations is another. Compiles on gcp, aws, and azure; proxmox refuses, since it cannot render network peering.",
   "nodes": [
     {
       "id": "main-net01",
