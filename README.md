@@ -291,10 +291,6 @@ watches provisioning in `~/provision/run.log` on the jumpbox, the expected time,
 and the log path), or on a `FAILED` box naming the phase, the reason, and the
 exit code. Colour is for the terminal only; set `NO_COLOR` to turn it off.
 
-The opening of a GOAD-Light deploy on Azure, run as `.\deploy.ps1`:
-
-![The start of a deploy.ps1 run in PowerShell: the redStackPRO wordmark, a DEPLOY GOAD-Light title box with provider Azure eastus2 and the log path, a note that the SSH public key was derived from keys/id_ed25519, phase 1 of 8 (preflight) ending on an ok line for 5 VMs on Standard_D2as_v7, and phase 2 of 8 (Terraform apply) with its plan line of 47 to add and the first finished resources, one per line.](docs/images/terminal-deploy-hero.png)
-
 Every run writes a plain-text, secret-scrubbed log to
 `logs/deploy-<UTC timestamp>.log` in the export, with everything Terraform
 printed. It ends on a `result:` line, `result: ok` or
