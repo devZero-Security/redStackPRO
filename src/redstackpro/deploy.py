@@ -501,11 +501,13 @@ if (-not $bash) {
 
 # Git Bash reads a drive letter path happily as long as the separators are
 # forward slashes, so no /c/-style translation is needed.
-$here = (Split-Path -Parent $MyInvocation.MyCommand.Path) -replace '\\', '/'
+$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$here = $root -replace '\\', '/'
 @@PS1_COLOR@@
+@@PS1_KEY_ACL@@
 # REDSTACKPRO_FROM_PS1 has deploy.sh print its closing paths the PowerShell way
 # (keys\id_ed25519). Set for that one process, so it does not stay in the session.
-& $bash -lc "cd '$here' && REDSTACKPRO_FROM_PS1=1 REDSTACKPRO_COLOR=$color bash deploy.sh"
+& $bash -lc "cd '$here' && REDSTACKPRO_FROM_PS1=1 REDSTACKPRO_COLOR=$color REDSTACKPRO_KEY_ACL='$keyacl' bash deploy.sh"
 exit $LASTEXITCODE
 """
 
@@ -518,6 +520,43 @@ try {
   if (-not $env:NO_COLOR -and -not [Console]::IsOutputRedirected -and $Host.UI.SupportsVirtualTerminal) { $color = 1 }
 } catch {}"""
 DEPLOY_PS1 = DEPLOY_PS1.replace("@@PS1_COLOR@@", _PS1_COLOR)
+
+# Windows ssh refuses a private key that any account other than its owner, SYSTEM
+# or Administrators may read, and a key copied into keys\ takes the folder's
+# permissions (Authenticated Users on most non-system drives). Git Bash's ssh does
+# not check, so the deploy runs, but every ssh line it prints for PowerShell fails.
+# Give such a key the permissions ssh-keygen sets; deploy.sh notes which.
+# Kept PowerShell 5.1 compatible.
+_PS1_KEY_ACL = r"""# A key in keys\ that other accounts can read: make it yours only.
+$keyacl = @()
+try {
+  $me = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+  $allowed = @($me, 'S-1-5-18', 'S-1-5-32-544')
+  Get-ChildItem -LiteralPath (Join-Path $root 'keys') -File -Force -ErrorAction Stop |
+    Where-Object { $_.Name -notmatch '\.pub$|^\.keep$|README' } | ForEach-Object {
+      $key = $_
+      $open = @()
+      # 5.1 started from pwsh 7 inherits its module path and cannot load Get-Acl.
+      try { $acl = Get-Acl -LiteralPath $key.FullName } catch { $acl = $key.GetAccessControl() }
+      foreach ($rule in $acl.Access) {
+        if ($rule.AccessControlType -ne 'Allow') { continue }
+        $sid = $rule.IdentityReference.Value
+        try { $sid = $rule.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch {}
+        if ($allowed -notcontains $sid) { $open += $sid }
+      }
+      if ($open) {
+        # /inheritance:r drops inherited entries only; an explicit one needs /remove.
+        & icacls $key.FullName /inheritance:r /grant:r "*${me}:(F)" '*S-1-5-18:(F)' '*S-1-5-32-544:(F)' | Out-Null
+        $ok = ($LASTEXITCODE -eq 0)
+        foreach ($sid in ($open | Select-Object -Unique)) {
+          if ($sid -like 'S-1-*') { & icacls $key.FullName /remove:g "*$sid" | Out-Null; $ok = $ok -and ($LASTEXITCODE -eq 0) }
+        }
+        if ($ok -and $key.Name -match '^[\w.-]+$') { $keyacl += "keys/$($key.Name)" }
+      }
+    }
+} catch {}
+$keyacl = $keyacl -join ' '"""
+DEPLOY_PS1 = DEPLOY_PS1.replace("@@PS1_KEY_ACL@@", _PS1_KEY_ACL)
 
 
 # Find a Python that actually RUNS, rather than one that merely sits on PATH.
@@ -1125,6 +1164,8 @@ if grep -Eq '^[[:space:]]*ssh_public_key[[:space:]]*=[[:space:]]*""[[:space:]]*$
   printf 'ssh_public_key = "%s"\n' "$RSP_PUBKEY" > terraform/zz-derived.auto.tfvars
   note "ssh_public_key was empty in deploy.tfvars; derived it from $KEY"
 fi
+# deploy.ps1 names a key in keys/ whose permissions it reset (see _PS1_KEY_ACL).
+[ -z "${REDSTACKPRO_KEY_ACL:-}" ] || note "$REDSTACKPRO_KEY_ACL was readable by other Windows accounts; set it to yours only"
 # Fail fast from here on. Without this a failed apply ran on and the user saw a
 # misleading "unfilled address placeholders remain" instead of the real error;
 # the tolerant spots below guard themselves (|| true, trailing true, if/&&).

@@ -247,6 +247,58 @@ def test_windows_gets_a_wrapper_that_avoids_the_wsl_bash(tmp_path):
     assert "System32" in wrapper, "the wrapper does not explain the trap it avoids"
 
 
+def test_the_wrapper_makes_an_open_key_owner_only_and_deploy_says_so():
+    """A key copied into keys\\ takes the folder's ACL, Windows ssh then refuses it,
+    and every ssh line the deploy prints for PowerShell fails (found live
+    2026-11-06). The wrapper resets it and hands the name to deploy.sh's note."""
+    files = compile_topology(example("redstack.json"), Registry(), provider="gcp")
+    wrapper = files["deploy.ps1"]
+    assert "@@" not in wrapper
+    assert "/inheritance:r /grant:r" in wrapper
+    assert "REDSTACKPRO_KEY_ACL='$keyacl' bash deploy.sh" in wrapper
+    assert 'note "$REDSTACKPRO_KEY_ACL was readable by other Windows accounts' in files["deploy.sh"]
+
+
+def _windows_powershell():
+    if os.name != "nt":
+        return None
+    return shutil.which("powershell.exe")
+
+
+@pytest.mark.skipif(_windows_powershell() is None, reason="needs Windows PowerShell")
+def test_the_key_acl_snippet_runs_on_windows_powershell(tmp_path):
+    """Executed, on the oldest PowerShell the export supports: an open key is reset
+    to owner, SYSTEM and Administrators, the .pub is left alone, and a second run
+    reports nothing because there is nothing left to fix."""
+    from redstackpro.deploy import _PS1_KEY_ACL
+
+    keys = tmp_path / "keys"
+    keys.mkdir()
+    for name in ("id_ed25519", "id_ed25519.pub", ".keep"):
+        (keys / name).write_text("x\n", encoding="utf-8")
+    for name in ("id_ed25519", "id_ed25519.pub"):
+        subprocess.run(["icacls", str(keys / name), "/grant", "*S-1-5-11:(R)"],
+                       check=True, capture_output=True)
+    runner = tmp_path / "run.ps1"
+    runner.write_text("$root = '%s'\n%s\nWrite-Output \"KEYACL=$keyacl\"\n"
+                      % (tmp_path, _PS1_KEY_ACL), encoding="utf-8")
+
+    def run():
+        out = subprocess.run([_windows_powershell(), "-NoProfile", "-ExecutionPolicy", "Bypass",
+                              "-File", str(runner)], capture_output=True, text=True, check=True)
+        return out.stdout
+
+    def acl(name):
+        return subprocess.run(["icacls", str(keys / name)], capture_output=True,
+                              text=True).stdout
+
+    assert "KEYACL=keys/id_ed25519" in run()
+    assert "Authenticated Users" not in acl("id_ed25519")
+    assert "Users:" not in acl("id_ed25519").replace("Authenticated Users", "")
+    assert "Authenticated Users" in acl("id_ed25519.pub")
+    assert "KEYACL=\n" in run().replace("\r", "")
+
+
 def test_the_export_ships_a_place_for_the_operators_key(tmp_path):
     """An empty directory does not survive a zip, so the folder carries a
     non-readme marker file: the export ships exactly one doc, at its root."""
@@ -1901,7 +1953,7 @@ def test_the_ps1_wrappers_pass_their_colour_choice():
         assert "-not [Console]::IsOutputRedirected -and $Host.UI.SupportsVirtualTerminal" in ps1
         assert "-not $env:NO_COLOR" in ps1
         assert "@@" not in ps1
-    assert "REDSTACKPRO_COLOR=$color bash deploy.sh" in DEPLOY_PS1
+    assert "REDSTACKPRO_COLOR=$color REDSTACKPRO_KEY_ACL='$keyacl' bash deploy.sh" in DEPLOY_PS1
     assert MANAGE_PS1.count("REDSTACKPRO_COLOR=$color bash manage.sh") == 2
 
 

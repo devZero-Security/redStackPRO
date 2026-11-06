@@ -308,6 +308,10 @@ versioning, and dates are UTC.
 
 ### Fixed
 
+- On Windows, the `ssh` commands the deploy prints failed when the key in `keys\` had
+  been copied in rather than made with `ssh-keygen`: the copy takes the folder's
+  permissions, and Windows ssh refuses a key other accounts can read. `deploy.ps1` now
+  sets such a key to you, SYSTEM and Administrators only, and the deploy says so.
 - The deploy log held terraform's colour escape codes (over a thousand lines of
   them in a plan of about 50 resources). `deploy.sh` now writes the log through a
   filter that removes escape codes, so the file attached to an issue reads as text.
