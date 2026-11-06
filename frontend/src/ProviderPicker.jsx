@@ -63,7 +63,7 @@ export function ProviderPicker({ provider, providers, selectable, onChange, titl
       {open ? (
         <ul className="rg-provider-menu" role="listbox">
           {providers.map((name) => {
-            // A pending backend is shown but not choosable. Greyed rather than
+            // A roadmap backend is shown but not choosable. Greyed rather than
             // hidden because the compiler really does build it, so hiding would
             // understate what is here; disabled rather than selectable because
             // none of them has been through a real range end to end.
@@ -76,20 +76,19 @@ export function ProviderPicker({ provider, providers, selectable, onChange, titl
                   aria-selected={name === provider}
                   aria-disabled={!ready}
                   disabled={!ready}
-                  title={ready ? undefined : `${labelFor(name)} compiles, but no range has been deployed on it yet`}
+                  title={ready ? undefined : `${labelFor(name)} is on the roadmap and not yet supported. It compiles, but no range has been deployed on it.`}
                   className={`rg-provider-item ${name === provider ? "is-active" : ""} ${ready ? "" : "is-pending"}`}
                   onClick={() => ready && choose(name)}
                 >
                   <ProviderMark provider={name} />
                   <span className="rg-provider-label">{labelFor(name)}</span>
-                  {/* The badge reads "pending", not "preview". The maturity
+                  {/* The badge reads "roadmap", not "preview". The maturity
                       VALUE stays `preview` because that is the wire contract
                       the API sends; this is the label only. "Preview" invites
                       you to try it, which is the wrong promise for a backend
                       that compiles but has never had a range stood up on it.
-                      "Pending" says the work is not finished, which is what
-                      the tooltip below has always said in full. */}
-                  {ready ? null : <span className="rg-provider-tag">pending</span>}
+                      "Roadmap" matches the README and the wiki. */}
+                  {ready ? null : <span className="rg-provider-tag">roadmap</span>}
                 </button>
               </li>
             );

@@ -208,7 +208,7 @@ test("the poisoning bots are blocked on a cloud provider, with the reason", () =
   assert.strictEqual(providerBlock("responder", "proxmox"), null);
   assert.strictEqual(providerBlock("responder", undefined), null);
   assert.strictEqual(providerBlock("rdp_scheduler", "gcp"), null);
-  assert.strictEqual(onlyOn("responder"), "Proxmox and ESXi only");
+  assert.strictEqual(onlyOn("responder"), "Proxmox and ESXi only (roadmap)");
   assert.strictEqual(onlyOn("schedule"), null);
 });
 

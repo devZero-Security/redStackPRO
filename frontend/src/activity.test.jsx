@@ -193,7 +193,7 @@ describe("the poisoning bots and the provider", () => {
     for (const name of ["Share-browsing bot", "Relay bot"]) {
       expect(box(name).disabled).toBe(true);
       expect(row(name).getByText(/^Not planted on GCP: cloud networks drop/)).toBeTruthy();
-      expect(row(name).getByText("Proxmox and ESXi only")).toBeTruthy();
+      expect(row(name).getByText("Proxmox and ESXi only (roadmap)")).toBeTruthy();
     }
     expect(box("Logon bot").disabled).toBe(false);
   });
@@ -336,7 +336,8 @@ describe("the scheduled task", () => {
     render(minilab());
     expect(action().value).toBe("script");
     expect(field("textbox", "Scheduled task script path").value).toBe("C:\\bot.ps1");
-    expect(field("textbox", "Scheduled task script body").value).toMatch(/^New-PSDrive/);
+    expect(field("textbox", "Scheduled task script body").value).toMatch(/^# connect_bot:/);
+    expect(field("textbox", "Scheduled task script body").value).toMatch(/Invoke-Command -ComputerName ws -Authentication Credssp/);
     expect(field("combobox", "Scheduled task runs as").value).toBe("MINILAB\\alice");
     expect(field("textbox", "Scheduled task name").value).toBe("connect_bot");
   });

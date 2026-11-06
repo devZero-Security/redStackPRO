@@ -60,7 +60,7 @@ export function providerBlock(id, provider) {
 
 export function onlyOn(id) {
   const allowed = VULN_PROVIDERS[id];
-  return allowed ? `${allowed.map(labelFor).join(" and ")} only` : null;
+  return allowed ? `${allowed.map(labelFor).join(" and ")} only (roadmap)` : null;
 }
 
 // ------------------------------------------------------- console sign-in

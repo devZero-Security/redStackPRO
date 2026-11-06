@@ -45,8 +45,8 @@ export const TEMPLATES = {
         "The reference range, and the one the written solution follows. The full " +
         "sevenkingdoms ACL killchain, a cross-forest trust to essos, ADCS from " +
         "ESC1 to ESC15, constrained and unconstrained delegation, MSSQL links " +
-        "and impersonation. The poisoning and relay path plants on Proxmox and " +
-        "ESXi only, since cloud networks drop the broadcast it needs.",
+        "and impersonation. The poisoning and relay path is not planted on GCP, " +
+        "AWS or Azure, since cloud networks drop the broadcast it needs.",
     },
     {
       file: "goad/goad-light",
@@ -60,7 +60,7 @@ export const TEMPLATES = {
       teaches:
         "GOAD with the essos forest removed. The same ACL chain, delegation " +
         "and MSSQL over a single forest, so the trust hop is the only thing " +
-        "missing. The poisoning and relay path plants on Proxmox and ESXi only. " +
+        "missing. The poisoning and relay path is not planted on GCP, AWS or Azure. " +
         "Stands up in about half the time.",
     },
     {
@@ -77,7 +77,7 @@ export const TEMPLATES = {
       name: "NHA",
       group: "GOAD",
       blurb:
-        "Ninja Hacker Academy: two domains, five machines. A themed challenge lab.",
+        "Ninja Hacker Academy: two domains, five machines, in two separate forests.",
       teaches:
         "Two separate forests, not a parent and a child. MSSQL links and " +
         "impersonation, CredSSP, a writable share, and a certificate template " +
@@ -88,7 +88,7 @@ export const TEMPLATES = {
       name: "SCCM",
       group: "GOAD",
       blurb:
-        "One domain, four machines, for practising Configuration Manager attack paths.",
+        "One domain, four machines, for validating Configuration Manager attack paths.",
       teaches:
         "The attack surface here is a real service rather than planted " +
         "vulnerabilities: a Configuration Manager site, its database, and a " +
@@ -99,9 +99,9 @@ export const TEMPLATES = {
       name: "DRACARYS",
       group: "GOAD",
       blurb:
-        "A training challenge: find your way to domain admin on dracarys.lab. One domain, three machines.",
+        "No marked path: find your own way to domain admin on dracarys.lab. One domain, three machines.",
       teaches:
-        "A find-your-own-way challenge with no marked path. A KeePass vault, " +
+        "No marked path. A KeePass vault, " +
         "Kerberos constrained delegation, LDAPS, and a Linux domain member " +
         "alongside the Windows hosts.",
     },
@@ -131,7 +131,7 @@ export const TEMPLATES = {
         "The detection axis. Every technique here is meant to be caught as well " +
         "as run, so it is the range to point a detection at: roasting, " +
         "unconstrained delegation and GPP passwords, with a SIEM already " +
-        "collecting. Poisoning plants on Proxmox and ESXi only.",
+        "collecting. Poisoning is not planted on GCP, AWS or Azure.",
     },
     {
       file: "harbor",
@@ -141,8 +141,8 @@ export const TEMPLATES = {
       teaches:
         "Ours, and deliberately not a puzzle. An ordinary corporate forest with " +
         "the mistakes ordinary forests have: roastable service accounts, " +
-        "unconstrained delegation, open shares and a stored credential, plus " +
-        "poisoning on Proxmox and ESXi. The plain path from a phished " +
+        "unconstrained delegation, open shares and a stored credential " +
+        "(poisoning is not planted on GCP, AWS or Azure). The plain path from a phished " +
         "workstation user to the forest, with no theme in the way.",
     },
   ],

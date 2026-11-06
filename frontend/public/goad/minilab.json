@@ -143,7 +143,7 @@
           "schedule": {
             "name": "connect_bot",
             "script_path": "C:\\bot.ps1",
-            "script_content": "New-PSDrive -Name X -PSProvider FileSystem -Root \\\\ws\\C$ -ErrorAction SilentlyContinue | Out-Null\nStart-Sleep -Seconds 5\n",
+            "script_content": "# connect_bot: a recurring Domain Admin session from the DC to ws over CredSSP.\n# It runs as alice, and CredSSP delegates alice's plaintext credential to ws,\n# so anyone holding ws can recover it from the delegated logon. The same\n# pattern as the DRACARYS keepass_bot.\n$ErrorActionPreference = 'SilentlyContinue'\n$pass  = ConvertTo-SecureString 'spongebob' -AsPlainText -Force\n$creds = New-Object System.Management.Automation.PSCredential('MINILAB\\alice', $pass)\nInvoke-Command -ComputerName ws -Authentication Credssp -Credential $creds -ScriptBlock {\n    Start-Sleep -Seconds 20\n}\n",
             "command": "& C:\\bot.ps1",
             "interval_minutes": 1,
             "user": "MINILAB\\alice"

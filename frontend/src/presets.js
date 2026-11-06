@@ -50,7 +50,7 @@ export const HOST_PRESETS = [
     abbrev: "adcs",
     icon: "tabler/outline/certificate",
     color: SERVER_COLOR,
-    blurb: "Certificate authority (ESC template practice)",
+    blurb: "Certificate authority with ESC templates",
     overlay: { role: "adcs", os: WIN_SERVER, services: ["adcs"] },
   },
 ];

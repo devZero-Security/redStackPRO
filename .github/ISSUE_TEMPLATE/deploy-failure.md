@@ -21,7 +21,7 @@ Drag the newest `logs/deploy-*.log` onto this issue.
 
 ## Environment
 
-- Provider (gcp / aws / azure / proxmox / esxi):
+- Provider (gcp / aws / azure):
 - Blueprint or topology you deployed:
 - Fresh deploy, or a re-run over an existing one:
 

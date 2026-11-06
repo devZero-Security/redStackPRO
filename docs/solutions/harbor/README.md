@@ -50,7 +50,7 @@ backends declare fewer network capabilities (`src/redstackpro/schema/registry/pr
   then the same everywhere.
 
 Azure is supported from 0.10.0. This lab is not among those validated on Azure
-so far (the minilab, goad-light, and goad-wazuh blueprints). Azure has an
+so far (minilab, goad-light, goad-wazuh, goad and dracarys are). Azure has an
 allocated public address and network peering, like GCP and AWS. It declares no
 managed private DNS, so resolve range names with static hosts entries, as
 on-prem.

@@ -195,11 +195,11 @@ describe("extensions", () => {
 
 
 describe("blueprint picker text", () => {
-  test("any blueprint that mentions poisoning says it plants on Proxmox and ESXi only", () => {
+  test("any blueprint that mentions poisoning says it is not planted on the clouds", () => {
     for (const t of Object.values(TEMPLATES).flat()) {
       const words = `${t.blurb} ${t.teaches || ""}`;
       if (/poison/i.test(words)) {
-        expect(words, t.name).toMatch(/Proxmox and ESXi/);
+        expect(words, t.name).toMatch(/not planted on GCP, AWS or Azure/);
       }
     }
   });

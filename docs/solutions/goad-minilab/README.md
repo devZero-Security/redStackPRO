@@ -10,8 +10,9 @@ end. The short version: a weak, sprayable password gets you onto the workstation
 a Domain Admin's scheduled bot reaches that workstation over CredSSP every minute,
 and CredSSP hands you the admin's plaintext credential.
 
-> **Status: authored from the lab's own blueprint, not yet run against a live
-> range.** Every host, user, credential and scheduled task below was read out of
+> **Status: the lab deploys and validates on Azure (0.10.0); the attack chain
+> below is authored from the blueprint and not yet run end to end.** Every
+> host, user, credential and scheduled task below was read out of
 > `frontend/public/goad/minilab.json`. The commands follow the usual redStackPRO
 > shape but carry no "Live verification" block and should not be trusted the way
 > the validated parts of the [GOAD series](../goad/README.md) can be. Verify on a

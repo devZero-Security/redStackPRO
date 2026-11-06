@@ -181,9 +181,15 @@ versioning, and dates are UTC.
   redStackPRO from source still needs 3.11.
 - An Azure range's resource group defaults to `{prefix}-{topology name}-rg`, and
   the preflight stops when that group already exists outside this range's state.
+- The redStack, Harbor and GOAD-Wazuh blueprints are named as their picker cards
+  (`redStack`, `Harbor`, `GOAD-Wazuh`), where they were "redStack default
+  blueprint", "Harbor two domain forest" and "GOAD + Wazuh + WS01". The name titles
+  the DEPLOYMENT-GUIDE and the briefing, is what teardown asks you to type, names
+  the download, and sets the Azure default resource group: `off-redstack-rg`,
+  `def-harbor-rg` and `def-goad-wazuh-rg`.
 - The DEFENSE-BRIEFING shows Defender as off unless `defender_enabled` is set, and
   marks vulns the target provider cannot carry. Blueprint descriptions say poisoning
-  plants on Proxmox and ESXi only.
+  is not planted on GCP, AWS or Azure.
 - The prefix field accepts 1 to 8 lowercase letters or digits starting with a
   letter and explains the 15 character limit. The topology name field has a
   placeholder, and an emptied name or prefix goes back to its previous value. The
@@ -439,6 +445,18 @@ versioning, and dates are UTC.
   a failed check. It now says to install PyYAML and exits 2, could not run.
 - Peering findings (PEER001 to PEER003) showed in the canvas as a bare code with no
   family. They now read Peering, like every other family.
+- The palette's Generic teamserver dropped a Mythic teamserver (`myth-ts01`), though
+  its tooltip offers one with no preset C2. It now drops a plain Debian host with no
+  C2 installed and no control port (`c2` set to `none`, id `ts01`). Mythic, Sliver
+  and Adaptix stay their own palette items.
+- The `minilab` DC's `connect_bot` reaches `ws` with
+  `Invoke-Command -Authentication Credssp` as alice, as the DRACARYS bot does, so
+  CredSSP delegates her credential to `ws`. It mapped `\\ws\C$`, an SMB logon that
+  delegates nothing, so the lab's CredSSP step had no credential to recover.
+- `redstackpro compile -o` deleted its folder before writing, so compiling into the
+  folder of a deployed range removed its key and its Terraform state. It now refuses
+  a folder that holds `terraform/terraform.tfstate` or a key in `keys/`, and says to
+  pick a new folder or pass `--force`. A folder with neither is still replaced.
 
 ## [0.9.2] (2026-11-04)
 
