@@ -281,15 +281,18 @@ for detail.
 
 `deploy.sh` applies the Terraform and then provisions from the range's own
 jumpbox, because the managed hosts sit on a private subnet nothing else can
-reach. Your cloud credentials stay on your machine throughout. It opens on a
-title box naming the topology, provider, and region, then prints numbered phases
-(seven, or eight on Azure with the preflight first), each ending on an `ok` line.
-Terraform's output is condensed on screen to the plan line and one line per
-finished resource, with any error in full. The run finishes on a `DONE` box (the
-portal address, the command that prints the logins, a one-line ssh command that
-watches provisioning in `~/provision/run.log` on the jumpbox, the expected time,
-and the log path), or on a `FAILED` box naming the phase, the reason, and the
-exit code. Colour is for the terminal only; set `NO_COLOR` to turn it off.
+reach. Your cloud credentials stay on your machine throughout. It opens on the
+wordmark and a title box naming the topology, provider, and region, then prints
+numbered phases (seven, or eight on Azure with the preflight first), each ending
+on an `ok` line. Terraform's output is condensed on screen to the plan line and
+one line per finished resource, with any error in full. The run finishes on a
+`DONE` box (the portal address, the command that prints the logins, a one-line
+ssh command, `rsp-watch`, that follows `~/provision/run.log` on the jumpbox and
+returns when the run ends, the expected time, and the log path), or on a `FAILED`
+box naming the phase, the reason, and the exit code. Colour is for the terminal
+only; set `NO_COLOR` to turn it off.
+
+![The opening of a GOAD-Light deploy on Azure in PowerShell: the redStackPRO wordmark, a DEPLOY GOAD-Light title box, the preflight reporting 4 VMs on Standard_D2as_v7 at 8 of 10 vCPU, and the Terraform apply plan of 41 resources with the first ones created.](docs/images/terminal-deploy-hero.png)
 
 Every run writes a plain-text, secret-scrubbed log to
 `logs/deploy-<UTC timestamp>.log` in the export, with everything Terraform
