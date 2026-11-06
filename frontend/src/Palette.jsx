@@ -6,11 +6,12 @@ import { presetsForKind } from "./presets.js";
 // Some kinds are fully covered by their presets: an operator always has an OS
 // (Kali, Windows, Debian) and a redirector is Apache or Nginx, so their bare
 // kind buttons are hidden while the presets still render in the category. A
-// teamserver keeps its generic button (renamed to "Generic") because a
-// teamserver with no preset C2 is a real choice: load your own.
+// teamserver keeps its generic button (renamed to "Generic") because a plain
+// Debian teamserver with no C2 installed (c2 none) is a real choice: load your
+// own.
 const HIDE_GENERIC = new Set(["operator", "redirector"]);
 
-// Read from the registry, never hardcoded. A pro node kind is a file dropped
+// Read from the registry, never hardcoded. A new node kind is a file dropped
 // into schema/registry/kinds, with no change here. See 0013.
 export function Palette({ groups, onAdd, presets = [], onAddPreset, labsMode, labsTitle = "Blueprints", onLoadLab }) {
   return (

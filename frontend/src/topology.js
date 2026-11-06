@@ -423,7 +423,9 @@ const SEED_OVERLAY = {
   // ride all the way to a deploy that then asked for an A record nobody could
   // create. letsencrypt is the default so the name they choose gets a real cert.
   redirector: { server: "nginx", tls: { cert_source: "letsencrypt" } },
-  teamserver: { c2: "mythic" },
+  // The Generic button: a plain Debian host, no C2 and no control port. The
+  // Mythic, Sliver and Adaptix presets carry their own c2.
+  teamserver: { c2: "none" },
   collector: { sink: "opensearch" },
   // guacamole is the portal deploy.sh and the guide send the operator to.
   jumpbox: { services: ["ssh", "guacamole"] },
@@ -454,9 +456,9 @@ export function addNode(document, entry, position) {
   const overlay = structuredClone(SEED_OVERLAY[entry.kind] || {});
   if (entry.kind === "network") overlay.cidr = allocNetworkCidr(document);
   if (entry.kind === "segment") overlay.cidr = allocSegmentCidr(document);
-  // The id is derived from the kind and the seed overlay, so a Mythic
-  // teamserver arrives as myth-ts01 rather than a bare ordinal. It settles
-  // further once the node is nested and retitle runs. See idscheme.js.
+  // The id is derived from the kind and the seed overlay, so an Nginx
+  // redirector arrives as nginx-rd01 and a Generic teamserver as ts01. It
+  // settles further once the node is nested and retitle runs. See idscheme.js.
   const id = proposeId(document, { kind: entry.kind, overlay });
   return {
     ...document,

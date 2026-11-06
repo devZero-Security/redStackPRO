@@ -6,7 +6,7 @@ description: Runs the C2. Never publicly exposed.
 
 display:
   label: Generic
-  blurb: A teamserver with no preset C2, for loading your own
+  blurb: A plain Debian teamserver with no C2 installed, for loading your own
   icon: tabler/outline/server-2
   group: teamservers
   color: "#e03131"

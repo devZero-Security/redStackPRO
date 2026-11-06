@@ -87,10 +87,11 @@ test("a new node takes the next free id for its slug", () => {
 });
 
 test("adding a node seeds a schema valid overlay and a scheme id", () => {
+  // The Generic teamserver is a plain Debian host: c2 none, so no C2 slug.
   const next = addNode(doc, { kind: "teamserver", abbrev: "ts", category: "host" }, { x: 0, y: 0 });
   const added = next.nodes.at(-1);
-  assert.equal(added.id, "myth-ts02");
-  assert.ok(added.overlay.c2);
+  assert.equal(added.id, "ts01");
+  assert.equal(added.overlay.c2, "none");
 });
 
 test("adding a network allocates a fresh range", () => {
