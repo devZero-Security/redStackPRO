@@ -18,7 +18,7 @@ from redstackpro.authoring import set_redirector_hostname
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = ROOT / "src/redstackpro/schema/topology/examples/0.7.0"
-HOSTNAME = "cdn.redops.design"
+HOSTNAME = "cdn.range.invalid"
 
 
 def deployable(doc):

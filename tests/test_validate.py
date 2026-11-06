@@ -892,7 +892,7 @@ def test_rdr001_demands_a_real_domain_whatever_the_certificate_source(redstack):
         rdir["overlay"].pop("hostname", None)
         assert "RDR001" in errors(redstack), "no hostname, %s" % cert
 
-        rdir["overlay"]["hostname"] = "cdn.redops.design"
+        rdir["overlay"]["hostname"] = "cdn.range.invalid"
         assert "RDR001" not in codes(redstack), "real domain, %s" % cert
 
         # A placeholder is refused too: a beacon that calls a domain you do not own
@@ -900,7 +900,7 @@ def test_rdr001_demands_a_real_domain_whatever_the_certificate_source(redstack):
         for placeholder in ("cdn.example-lure.com", "cdn.example.com", "CHANGE-ME"):
             rdir["overlay"]["hostname"] = placeholder
             assert "RDR001" in errors(redstack), "%s, %s" % (placeholder, cert)
-        rdir["overlay"]["hostname"] = "cdn.redops.design"
+        rdir["overlay"]["hostname"] = "cdn.range.invalid"
 
 
 def test_every_shipped_redirector_example_demands_a_hostname_first():
@@ -928,7 +928,7 @@ def test_every_shipped_redirector_example_demands_a_hostname_first():
             # And supplying just the domain is enough to compile it.
             for node in topology["nodes"]:
                 if node.get("kind") == "redirector":
-                    node.setdefault("overlay", {})["hostname"] = "cdn.redops.design"
+                    node.setdefault("overlay", {})["hostname"] = "cdn.range.invalid"
             assert not errors(topology), name
     assert seen, "no shipped example carries a redirector"
 

@@ -31,7 +31,7 @@ from redstackpro.authoring import set_redirector_hostname  # noqa: E402
 from redstackpro.export import compile_topology  # noqa: E402
 
 TEMPLATES = ROOT / "frontend/public"
-HOSTNAME = "cdn.redops.design"
+HOSTNAME = "cdn.range.invalid"
 
 
 def _export(tmp_path, name, hostname=HOSTNAME, edit=None, provider="gcp"):
@@ -52,8 +52,8 @@ def _export(tmp_path, name, hostname=HOSTNAME, edit=None, provider="gcp"):
 @pytest.fixture(scope="module")
 def split_horizon(tmp_path_factory):
     return _export(tmp_path_factory.mktemp("sh"), "split-horizon.json",
-                   {"apa-rd01": "static.redops.design",
-                    "ngx-rd02": "status.redops.design"})
+                   {"apa-rd01": "static.range.invalid",
+                    "ngx-rd02": "status.range.invalid"})
 
 
 @pytest.fixture(scope="module")
@@ -67,8 +67,8 @@ def test_every_probe_comes_from_the_export(split_horizon):
     apache = doors["off-apa-rd01"]
     nginx = doors["off-ngx-rd02"]
 
-    assert apache["hostname"] == "static.redops.design"
-    assert nginx["hostname"] == "status.redops.design"
+    assert apache["hostname"] == "static.range.invalid"
+    assert nginx["hostname"] == "status.range.invalid"
     # Two doors, two gates. Reading one door's header off the other is the
     # mistake that makes a cross-door test pass for the wrong reason.
     assert apache["header_name"] != nginx["header_name"]
@@ -89,9 +89,9 @@ def test_no_deploy_is_written_down_in_the_checker():
     # The two tokens the replaced scripts carried in the clear.
     assert "t29quvzqywnthhnuaqccigyi" not in source
     assert "rkhydtb5qu6sa7h29hpo3ccn" not in source
-    # And the operator's own domain, which is his registrar entry and not a
-    # product default. See the cover-profile decision.
-    assert "redops.design" not in source
+    # And no redirector domain: a deployment's name is never a product default,
+    # so the test hostname stays out of the shipped script.
+    assert "range.invalid" not in source
 
 
 def test_the_probe_goes_one_segment_under_the_prefix(split_horizon):
@@ -159,8 +159,8 @@ def test_a_renamed_teamserver_is_still_found(tmp_path):
                     edge[end] = "haul-ts02"
 
     export = _export(tmp_path, "split-horizon.json",
-                     {"apa-rd01": "static.redops.design",
-                      "ngx-rd02": "status.redops.design"},
+                     {"apa-rd01": "static.range.invalid",
+                      "ngx-rd02": "status.range.invalid"},
                      edit=rename)
     assert "off-haul-ts02" in export.group("teamservers")
 
@@ -232,7 +232,7 @@ def test_a_door_that_is_down_still_lends_its_key_to_the_other(split_horizon, mon
 
     monkeypatch.setattr(verify, "_probe", record)
     verify.check_doors(split_horizon)
-    assert ("status.redops.design", "X-Request-Id") in asked, (
+    assert ("status.range.invalid", "X-Request-Id") in asked, (
         "the down door's key was never tried against the live one: %s" % asked)
 
 

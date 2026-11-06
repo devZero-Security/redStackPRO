@@ -1165,7 +1165,7 @@ def test_the_password_outputs_are_sensitive_in_a_range(provider):
 
 @pytest.mark.parametrize("provider", ["aws", "gcp", "azure"])
 def test_the_password_outputs_are_sensitive_in_an_offense_stack(provider, redstack):
-    set_redirector_hostname(redstack, "cdn.redops.design")
+    set_redirector_hostname(redstack, "cdn.range.invalid")
     outs = _password_outputs(redstack, provider)
     assert set(outs) == {"lab_password", "guacamole"}
     for name, body in outs.items():
@@ -1680,7 +1680,7 @@ def test_azure_renders_peering_and_an_offense_portal(redstack):
     emitted no lab_password output because guac/portal were gated on is_range. It
     now renders the peering module and, because a jumpbox is present, provisions the
     shared password and the portal outputs in offense too."""
-    set_redirector_hostname(redstack, "cdn.redops.design")
+    set_redirector_hostname(redstack, "cdn.range.invalid")
     azure = generate(redstack, provider="azure")  # full validation: no CAP004
     main = azure["terraform/main.tf"]
     assert "./modules/azure/peering" in main
@@ -1696,7 +1696,7 @@ def test_azure_offense_firewall_covers_the_families_with_unique_priorities(redst
     full offense set (fronts ingress + forward, ACME 80, C2 control ports, log
     shipping, and the internally-open stack rule), and every rule carries a priority
     unique within its NSG, which Azure requires."""
-    set_redirector_hostname(redstack, "cdn.redops.design")
+    set_redirector_hostname(redstack, "cdn.range.invalid")
     fw = generate(redstack, provider="azure")["terraform/firewall.tf"]
     for prefix in ("in_off_apache_rd01", "fwd_off_apache_rd01",
                    "acme_in_off_apache_rd01", "ctl_off_", "log_off_", "intra_off_"):
@@ -1724,7 +1724,7 @@ def test_azure_segment_gets_a_nat_gateway_for_private_egress(redstack):
     per region, so one gateway per subnet (one IP each) busted the cap. The segment
     only associates to the VNet's shared gateway. gcp decides egress the same way
     (Cloud NAT coexists with public IPs)."""
-    set_redirector_hostname(redstack, "cdn.redops.design")
+    set_redirector_hostname(redstack, "cdn.range.invalid")
     main = generate(redstack, provider="azure")["terraform/main.tf"]
     assert re.search(r"nat\s*=\s*true", main), "a segment should need egress"
     assert re.search(r"create_nat\s*=\s*true", main), "its VNet should create a NAT gateway"

@@ -36,7 +36,7 @@ jobs:
         # the way a person would in the canvas before pressing Compile. The rule is
         # not relaxed: test_every_shipped_redirector_example_demands_a_hostname_first
         # asserts the raw examples still refuse.
-        run: redstackpro validate --hostname cdn.redops.design
+        run: redstackpro validate --hostname cdn.range.invalid
 
   postgres:
     # The rest of the suite runs on SQLite, where create_app builds the schema
@@ -133,7 +133,7 @@ jobs:
         run: |
           redstackpro compile \
             src/redstackpro/schema/topology/examples/0.4.0/${{ matrix.example }}.json \
-            --provider ${{ matrix.provider }} --hostname cdn.redops.design -o export
+            --provider ${{ matrix.provider }} --hostname cdn.range.invalid -o export
 
       - name: The generated HCL is already formatted
         # The export panel is the product, so the file a person reads should be
@@ -172,7 +172,7 @@ jobs:
         run: |
           redstackpro compile \
             src/redstackpro/schema/topology/examples/0.4.0/redstack.json \
-            --hostname cdn.redops.design -o export
+            --hostname cdn.range.invalid -o export
 
       - name: Install the collections the export declares
         run: ansible-galaxy collection install -r export/ansible/requirements.yml

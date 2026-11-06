@@ -55,7 +55,7 @@ def rollover(redstack):
             # carries its own name. The gating value stays blank: FRT001 compares the
             # pool's values to each other and the compiler rolls one token for the
             # whole pool, so blank on both is the consistent state.
-            "hostname": "assets.redops.design",
+            "hostname": "assets.range.invalid",
             "tls": {"cert_source": "letsencrypt"},
             "gating": {
                 "header_name": "X-Request-Id",
