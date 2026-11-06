@@ -275,6 +275,7 @@ def test_rsp_watch_returns_when_the_run_ends(tmp_path):
     """Executed: it follows a live run and returns when the runner exits, with
     0 for ok=1; it prints a finished log and returns 1 for a failed one; and it
     says so when there is no run at all."""
+    import threading
     import time
     from redstackpro.deploy import _WATCH
     watch = tmp_path / "rsp-watch"
@@ -295,6 +296,12 @@ def test_rsp_watch_returns_when_the_run_ends(tmp_path):
     writer = subprocess.Popen([_bash(), "-c", 'echo $$ > "$HOME/provision/run.pid"; sleep 2; '
                                'echo " RUN EXITED ok=1 at now" >> "$HOME/provision/run.log"'],
                               env=env)
+    # rsp-watch follows run.log with `tail --pid`, which ends when that pid dies.
+    # The test is the writer's parent, so once the writer exits it lingers as a
+    # zombie, and a zombie still answers kill -0, so tail would wait on it until it
+    # is reaped. Reap it in a thread so tail sees it die. In production the real
+    # run.sh is reaped by its own parent, so only the test needs this.
+    threading.Thread(target=writer.wait, daemon=True).start()
     while not (prov / "run.pid").exists():
         time.sleep(0.05)
     t0 = time.time()
@@ -1057,6 +1064,35 @@ _INSTANCES = {
 }
 _CLI = {"aws": "aws", "gcp": "gcloud", "azure": "az"}
 
+_UTIL_PATH = None
+
+
+def _utility_path():
+    """A PATH with the system tools manage.sh needs but not the cloud CLIs. The CI
+    runners now ship az and gcloud in /usr/bin, so a bare /usr/bin on PATH let the
+    'CLI missing' case find the real CLI, and the test for a clear error broke.
+    Symlink the tools into a dir that omits az/gcloud/aws. On Git Bash (Windows)
+    Python cannot enumerate the MSYS /usr/bin as a POSIX path, and no cloud CLI
+    lives there, so fall back to the plain dirs."""
+    global _UTIL_PATH
+    if _UTIL_PATH is None:
+        import tempfile
+        dirs = [Path(d) for d in ("/usr/bin", "/bin", "/usr/local/bin") if Path(d).is_dir()]
+        if not dirs:
+            _UTIL_PATH = "/usr/bin:/bin"
+        else:
+            tb = Path(tempfile.mkdtemp(prefix="rsp-toolbin-"))
+            for dd in dirs:
+                for f in dd.iterdir():
+                    if f.name in ("az", "gcloud", "aws") or (tb / f.name).exists():
+                        continue
+                    try:
+                        (tb / f.name).symlink_to(f)
+                    except OSError:
+                        pass
+            _UTIL_PATH = _msys(tb)
+    return _UTIL_PATH
+
 
 def _manage_staged(tmp_path, provider, cli_body):
     files = compile_topology(example("redstack.json"), Registry(), provider=provider)
@@ -1072,7 +1108,7 @@ def _manage_staged(tmp_path, provider, cli_body):
     _stub(stubs, "python", 'exec %s "$@"' % Path(sys.executable).as_posix())
     if cli_body is not None:
         _stub(stubs, _CLI[provider], cli_body)
-    command = 'export PATH="%s:/usr/bin:/bin"; exec bash manage.sh status' % _msys(stubs)
+    command = 'export PATH="%s:%s"; exec bash manage.sh status' % (_msys(stubs), _utility_path())
     return subprocess.run([_bash(), "-c", command], cwd=export, env=dict(os.environ),
                           capture_output=True, text=True, timeout=120)
 
