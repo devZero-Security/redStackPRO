@@ -19,15 +19,17 @@ versioning, and dates are UTC.
   a Sliver beacon launched as patient zero in full GOAD called back through the
   redirector, and the playbook checks for recon, AS-REP roasting, Kerberoasting, ADCS
   enumeration, and MSSQL impersonation ran through it.
-- An Azure export builds each range as one resource group (`resource_group` in
-  `deploy.tfvars`), in `eastus2` by default, with VNet peering, a NAT gateway per VNet
-  for egress from private hosts, and Network Security Group rules. Ingress fails
-  closed as on GCP and AWS: the deploy stops until `operator_source_ranges` is set.
-  The Kali operator starts from a Debian 13 image that the operator role converts to
-  Kali, so no Marketplace plan acceptance is needed. As on GCP and AWS, the broadcast
+- Azure leaves preview. With what 0.9.2 listed, an Azure export builds each range
+  as one resource group (`resource_group` in `deploy.tfvars`), in `eastus2` by
+  default, with VNet peering, a NAT gateway per VNet for egress from private hosts,
+  and Network Security Group rules. Ingress fails closed as on GCP and AWS: the
+  deploy stops until `operator_source_ranges` is set. The Kali operator starts from
+  a Debian 13 image that the operator role converts to Kali, so no Marketplace plan
+  acceptance is needed. As on GCP and AWS, the broadcast
   and multicast poisoning techniques (`llmnr_poisoning`, `nbtns_poisoning`,
   `responder`, `ntlm_relay`, `ldap_signing_off`) are not planted on Azure, whose
-  network drops L2 broadcast and multicast; they stay limited to Proxmox and ESXi.
+  network drops L2 broadcast and multicast; they are planned for Proxmox and ESXi,
+  which are on the roadmap.
 - Azure VM sizes per role. The defaults are AMD sizes: `Standard_D2as_v5`,
   `Standard_D4as_v5` for the SIEM, and the burstable `Standard_B2as_v2` for
   workstations.
@@ -41,18 +43,18 @@ versioning, and dates are UTC.
   is created and prints a `vm_sizes` block that fits, the quota to raise, or the
   `az provider register` command. If it cannot reach Azure it warns and the deploy
   continues. `REDSTACKPRO_SKIP_PREFLIGHT=1` skips it.
-- Azure lifecycle. `manage.sh status`, `start`, and `stop` run through the Azure CLI;
-  `stop` deallocates the VMs, which halts compute billing, and the jumpbox keeps its
-  public IP. `manage.sh teardown --force` deletes the whole resource group with
+- Azure lifecycle, out of preview with what 0.9.2 listed. `manage.sh status`,
+  `start`, and `stop` run through the Azure CLI; `stop` deallocates the VMs, which
+  halts compute billing, and the jumpbox keeps its public IP.
+  `manage.sh teardown --force` deletes the whole resource group with
   `az group delete`. `status`, `start` and `stop` need `az` installed and logged
   in; without it, `teardown --force` runs `terraform destroy` alone and says so.
-  `deploy.sh` works with either `az login` or a
-  service principal in `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_TENANT_ID`, and
-  `ARM_SUBSCRIPTION_ID`.
-- Azure auto-stop, as a per-VM DevTestLab shutdown schedule (it needs
-  `Microsoft.DevTestLab` registered, which the preflight checks). The schedule takes a
-  Windows timezone id: common IANA names in the topology are translated, and any other
-  IANA name is refused at compile.
+  `deploy.sh` works with either `az login` or a service principal in
+  `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_TENANT_ID`, and `ARM_SUBSCRIPTION_ID`.
+- Azure auto-stop, out of preview with what 0.9.2 listed, as a per-VM DevTestLab
+  shutdown schedule (it needs `Microsoft.DevTestLab` registered, which the preflight
+  checks). The schedule takes a Windows timezone id: common IANA names in the
+  topology are translated, and any other IANA name is refused at compile.
 - The generated DEPLOYMENT-GUIDE has a Quotas section for each cloud provider in both
   modes, and an Azure section on `vm_sizes` and the preflight.
 - The validator checks every value against the topology schema (`SCH001`). A value
@@ -144,6 +146,8 @@ versioning, and dates are UTC.
   relative to it), and list the cloud CLI as a requirement. The Export panel gives
   the `winget` command that installs it when Deploy from is Windows, and a link to
   its install steps for macOS and Linux; the guide gives both.
+- The Export panel's Windows note and the DEPLOYMENT-GUIDE say that `deploy.ps1` and
+  `manage.ps1` are unsigned, so PowerShell's execution policy has to allow them.
 - `deploy.sh` prints the AWS IAM note for any auto-stop, `after_hours` included, not
   only a fixed `at`.
 - The `auto_stop.after_hours` schema description no longer says a re-apply moves the
@@ -164,9 +168,10 @@ versioning, and dates are UTC.
 - The hardening picker is read only and says the controls are recorded but not
   deployed, since no role applies them yet. A host with recorded hardening shows
   "hardening off" on the canvas, and goad-wazuh's ws01 no longer claims hardening.
-- Domain controllers and servers dropped from the palette start as Windows Server
-  2022 and workstations as Windows 11, a jumpbox starts with the Guacamole portal,
-  and the File Server preset plants an open SMB share.
+- A domain controller or a plain server dropped from the palette starts as Windows
+  Server 2022 and a workstation as Windows 11 (the SQL Server, Web Server, File
+  Server and AD CS presets start as Windows Server 2019), a jumpbox starts with the
+  Guacamole portal, and the File Server preset plants an open SMB share.
 - A KeePass vault with no master password is an error, since it fails the host's
   provisioning.
 - The Export panel lists the `deploy.tfvars` fields to set for the selected
@@ -190,6 +195,9 @@ versioning, and dates are UTC.
 - The DEFENSE-BRIEFING shows Defender as off unless `defender_enabled` is set, and
   marks vulns the target provider cannot carry. Blueprint descriptions say poisoning
   is not planted on GCP, AWS or Azure.
+- The provider picker marks Proxmox and ESXi "roadmap", where it said "pending", and
+  its tooltip says each is on the roadmap and not yet supported. The deploy-failure
+  issue template lists gcp, aws and azure.
 - The prefix field accepts 1 to 8 lowercase letters or digits starting with a
   letter and explains the 15 character limit. The topology name field has a
   placeholder, and an emptied name or prefix goes back to its previous value. The
@@ -282,7 +290,7 @@ versioning, and dates are UTC.
   teardown`: the plan line, one line per finished resource with its time and its
   name and kind (`+  1m55s  smk-wks01/redstackpro-winrm (virtual machine extension)`),
   an error block in full and a warning's title. A 47-resource Azure apply prints 48
-  lines instead of about 1300. Everything terraform printed is still in the deploy
+  lines instead of about 1220. Everything terraform printed is still in the deploy
   log, and teardown writes its own `logs/teardown-<UTC>.log`, named in its closing
   box.
 
@@ -457,6 +465,9 @@ versioning, and dates are UTC.
   folder of a deployed range removed its key and its Terraform state. It now refuses
   a folder that holds `terraform/terraform.tfstate` or a key in `keys/`, and says to
   pick a new folder or pass `--force`. A folder with neither is still replaced.
+- The redirector's decoy asset fetch named version 0.4 and redstackpro.dev in its
+  user agent. It sends `redStackPRO decoy-asset-fetch (+https://redstackpro.com)`,
+  with no version to go stale.
 
 ## [0.9.2] (2026-11-04)
 

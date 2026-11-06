@@ -31,7 +31,8 @@ like `192.168.56.0/24`, so do not let any tool assume the GOAD subnet).
 ## Provider differences
 
 redStackPRO compiles this range for cloud backends (`gcp`, `aws`, `azure`) and
-on-prem backends (`proxmox`, `esxi`). The attack chain is identical on all of
+on-prem backends (`proxmox`, `esxi`), which are on the roadmap and not yet
+supported. The attack chain is identical on all of
 them; what differs is the operator's path to the range, because the on-prem
 backends declare fewer network capabilities (`src/redstackpro/schema/registry/providers/`).
 
@@ -138,9 +139,10 @@ answers LLMNR and NBT-NS broadcasts. Run Responder over the pivot to catch a
 NetNTLM hash from routine name-resolution failures, an alternative first
 credential if the patient-zero context is thin.
 
-This step works on Proxmox and ESXi only. A cloud network (GCP, AWS, Azure) drops
-the broadcast and multicast it needs, so the compiler leaves both vulns out there
-and `DEFENSE-BRIEFING.md` marks them as not on that provider.
+This step does not run on GCP, AWS or Azure: a cloud network drops the broadcast
+and multicast it needs, so the compiler leaves both vulns out there and
+`DEFENSE-BRIEFING.md` marks them as not on that provider. It needs Proxmox or
+ESXi, which are on the roadmap.
 
 ```
 proxychains responder -I <iface>         # capture NetNTLMv2, then crack offline

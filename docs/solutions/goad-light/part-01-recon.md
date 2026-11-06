@@ -49,8 +49,8 @@ live C2 redirector does not belong in a solution.
 > as written. Optional add-on hosts (the-eyrie/wazuh) are not IP-pinned even on
 > full GOAD and stay DHCP-assigned - verify at runtime.
 
-- redStackPRO redirector (public, per-deploy): **cdn.redops.design** (an example
-  value, your deploy's own `--hostname` domain goes here) → Mythic C2.
+- redStackPRO redirector (public, per-deploy): your redirector domain (set per
+  deploy with `--hostname`) → Mythic C2.
 - Mythic teamserver: `10.30.20.4` (myth-ts01), UI `:7443` via jumpbox tunnel
   (Sliver `10.30.20.2`, Adaptix `10.30.20.3`; the redirector routes to each).
   These live in the separate redStackPRO offense project, reached only through the C2.
@@ -125,7 +125,8 @@ the jumpbox itself.
 Mythic scripting library on the teamserver, or the Mythic UI). The two things
 that matter are the callback host and the redirector's gating contract:
 
-- callback host `https://cdn.redops.design`, port `443`
+- callback host `https://` plus your redirector domain (set per deploy with
+  `--hostname`), port `443`
 - URIs **under `/api/v1/`** (e.g. `get_uri=api/v1/index`, `post_uri=api/v1/data`) -
   the redirector only forwards `/api/v1/*` to Mythic (`/cdn/assets/*`→Adaptix,
   `/updates/*`→Sliver)

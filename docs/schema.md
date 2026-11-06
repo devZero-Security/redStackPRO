@@ -5,15 +5,10 @@ and their examples stay in the repo as migration fixtures.
 
 The schema is the artifact, not this file.
 
-Four-digit codes (00NN) are internal design-decision references and are not
-published with this repo.
-
 - `src/redstackpro/schema/topology/0.7.0.json` is the document schema
 - `src/redstackpro/schema/topology/examples/0.7.0/` holds four worked examples that
   double as test fixtures
 - `docs/validation.md` holds the rules JSON Schema cannot express
-- Decision 0007 is why the model is shaped the way it is, 0021 is why exposure is
-  a per-host ceiling rather than a segment property, and 0029 is the `peers` role
 
 ## Shape in one paragraph
 
@@ -33,7 +28,7 @@ at all.
 Documents hold user-supplied values. Derived overlay fields and per-kind
 requirements are not in the document, because the compiler computes the first and
 declares the second per kind rather than per instance. Both live in the registry
-at `src/redstackpro/schema/registry/`. See 0013.
+at `src/redstackpro/schema/registry/`.
 
 - `kinds/<kind>.yaml`, one per node kind. Category, ansible group, derived
   fields, and requirements. Requirements may carry a `when` clause, which is
@@ -112,15 +107,15 @@ back to the key. The `$defs` (`identifier`, `cidr`, `ipv4`, `port`,
 
 **Instantiation parameters.** Per-operator templates mean the same topology spun up N
 times without CIDR, hostname, or domain collisions. A topology-level variables block.
-Not in 0.7.0. See 0012.
+Not in 0.7.0.
 
 ## Landed
 
 - `peers` landed in 0.4.0: a network to network role for same-cloud links that do
   not warrant an endpoint host, which relaxes the cross-network management,
-  logging, and fronting rules across the peered boundary (0029, 0030). The cloud
-  backends render it as network peering with CIDR based cross-network firewall
-  rules: gcp in 0030, aws in 0031, azure (VNet peering) in 0.10.0. Proxmox and
+  logging, and fronting rules across the peered boundary. The cloud backends
+  render it as network peering with CIDR based cross-network firewall rules: VPC
+  peering on GCP and AWS, and VNet peering on Azure since 0.10.0. Proxmox and
   ESXi cannot peer and refuse through `CAP004`. Both
   the `peered` example and the shipped redStack blueprint now run two networks, with
   redStack isolating its redirector in a network of its own peered to the main
@@ -133,7 +128,7 @@ Not in 0.7.0. See 0012.
 
 ## Roadmap
 
-Anticipated, not decided. None of these is an ADR yet.
+Anticipated, not decided.
 
 - `tunnel` as a standalone role if defense mode produces a pivot host case where
   the transport is the entire relationship

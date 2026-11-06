@@ -12,9 +12,12 @@
 
 # redStackPRO
 
-> A web canvas where you build infrastructure as a topology, then export a
-> complete, runnable working directory of Terraform and Ansible. You run it from
-> your own machine. **redStackPRO never holds your cloud credentials.**
+> A visual canvas for red team infrastructure and cyber ranges. Compose a topology,
+> export a complete, runnable working directory of Terraform and Ansible, and deploy
+> it from your own machine. **redStackPRO never holds your cloud credentials.**
+
+redStackPRO is a validation range for TTPs and tooling at production-operations
+level, not a training or CTF product.
 
 > [!IMPORTANT]
 > **redStackPRO is in prerelease (beta).** Features are still moving before 1.0.
@@ -161,9 +164,10 @@ line, same compiler, same output:
     redstackpro compile frontend/public/goad/goad-light.json -o export
 
 The command line defaults to GCP. Pass `--provider aws` for AWS or
-`--provider azure` for Azure. `-o` replaces the folder it writes to: compile a
-changed topology into a new folder, because recompiling over a deployed export
-deletes its key and its Terraform state.
+`--provider azure` for Azure. `-o` replaces the folder it writes to, but refuses
+one that holds a deployed range's Terraform state (`terraform/terraform.tfstate`)
+or a key in `keys/`, since deleting either leaves a running range with nothing to
+tear it down from: pick a new folder, or pass `--force` to replace it anyway.
 
 That writes about **200 files**: Terraform for the cloud, Ansible for everything
 that happens on the boxes, a `deploy.sh`, a `DEPLOYMENT-GUIDE.md` with the steps for
@@ -267,6 +271,9 @@ deploy needs a key with no passphrase, and Windows PowerShell 5.1 drops an empty
 
     ssh-keygen -t ed25519 -f keys\id_ed25519
     .\deploy.ps1
+
+`deploy.ps1` and `manage.ps1` are unsigned, so PowerShell's execution policy has
+to allow them.
 
 See the wiki
 [Deploying a Range](https://github.com/devZero-Security/redStackPRO/wiki/Deploying-a-Range)
@@ -393,9 +400,8 @@ line is the same pipeline for a shell agent, `redstackpro validate` and
 `redstackpro compile`.
 
 The running instance trusts the local caller, which suits a single-user or
-self-hosted deployment. Authenticated, multi-tenant agentic access over the API
-is part of the enterprise edition. redStackPRO holds no cloud credentials on any
-path: the export is the handoff, and you run it yourself.
+self-hosted deployment. redStackPRO holds no cloud credentials on any path: the
+export is the handoff, and you run it yourself.
 
 ---
 
@@ -445,7 +451,7 @@ target ranges on the same canvas.
 
 MIT. See LICENSE.
 
-The GOAD range templates under `frontend/public/goad/` are the exception: they are
+The GOAD range blueprints under `frontend/public/goad/` are the exception: they are
 derived from [GOAD](https://github.com/Orange-Cyberdefense/GOAD) (GPLv3) and are
 distributed under GPLv3, with the license and attribution in that directory. They
 are data, not code: the canvas loads them as native ranges that compile through

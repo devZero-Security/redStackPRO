@@ -93,8 +93,8 @@ see.
 goad**. It is `certutil -setreg policy\DisableExtensionList +1.3.6.1.4.1.311.25.2`,
 which stops the CA putting the SID security extension in anything it issues -
 the CA-wide version of what ESC9 asks for on one template. Turning it on here
-would make the ESC9 template teach nothing, because it would behave identically
-with its flag removed and a learner could not tell which misconfiguration they
+would make the ESC9 template prove nothing, because it would behave identically
+with its flag removed and an operator could not tell which misconfiguration they
 had exploited. A test enforces that no lab declares both. Use it as the centre of
 its own lab instead.
 

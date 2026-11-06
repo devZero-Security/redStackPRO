@@ -19,9 +19,9 @@ See the [range access model](../README.md#range-access-model). Conventions we fo
    opening the **patient-zero RDP tile** (it signs in as the phished user, e.g.
    `NORTH\hodor`, on a range host). The operator drops an **Apollo** payload onto
    the session's **GuacShare** drive and runs it; it calls home to Mythic through
-   the redirector (`cdn.redops.design`, an example value: your deploy's own
-   `--hostname` domain goes here instead). If the browser upload into GuacShare
-   stalls, smuggle the payload in over the range's own management plane instead:
+   the redirector, on your redirector domain (set per deploy with `--hostname`).
+   If the browser upload into GuacShare stalls, smuggle the payload in over the
+   range's own management plane instead:
    `scp` it to the jumpbox's shared drop, or copy it straight onto the host over
    WinRM from the jumpbox (`win_copy` / `Copy-Item` over a PSSession); a WinRM copy
    also carries no mark-of-the-web, so it runs without a SmartScreen prompt. This
@@ -48,8 +48,9 @@ operable purely from within redStack.
 
 > **Provider note (range access).** The public surface above (the jumpbox and the
 > redirector) assumes a cloud backend, where both get an allocated public address.
-> On an on-prem backend (`proxmox`, `esxi`) there is no allocated external IP: you
-> reach the jumpbox over your own network or VPN, whatever fronts the range. On
+> On an on-prem backend (`proxmox`, `esxi`, on the roadmap) there is no allocated
+> external IP: you reach the jumpbox over your own network or VPN, whatever fronts
+> the range. On
 > every backend, cloud included, name resolution runs off static hosts entries
 > (part 1). The attack chain itself is unchanged. See
 > [Provider differences](#provider-differences) below.
@@ -101,7 +102,8 @@ is `192.168.56.0/24`.
 ## Provider differences
 
 redStackPRO compiles this range for cloud backends (`gcp`, `aws`, `azure`) and
-on-prem backends (`proxmox`, `esxi`). The attack chain is identical on all of
+on-prem backends (`proxmox`, `esxi`), which are on the roadmap and not yet
+supported. The attack chain is identical on all of
 them; what differs is the operator's path to the range, because the on-prem
 backends declare fewer network capabilities (`src/redstackpro/schema/registry/providers/`).
 
@@ -133,30 +135,8 @@ entries, as on-prem.
 
 ## Standing objectives
 
-- **Beacon coverage: a stable Apollo beacon on every server.** As each host is
-  compromised, land a Mythic Apollo beacon and make it survive reboot/logoff
-  (persistence + a sane sleep/jitter), then confirm it re-checks in. Tracked
-  here and updated as we go:
-
-  | Host | Domain | Beacon | Persistent | Notes |
-  |------|--------|--------|-----------|-------|
-  | kingslanding | sevenkingdoms.local | ☑ | ☐ | DC - Apollo as SEVENKINGDOMS\administrator (high integrity), wmiexec + HTTP stage from the jumpbox |
-  | winterfell | north.sevenkingdoms.local | ☑ | ☐ | DC - Apollo as NORTH\administrator (high integrity) |
-  | meereen | essos.local | ☑ | ☐ | DC - Apollo as ESSOS\administrator (high integrity) |
-  | castelblack | north.sevenkingdoms.local | ☑ | ☐ | MSSQL member - Apollo as NORTH\administrator (also reachable via xp_cmdshell as NT Service\MSSQL$SQLEXPRESS) |
-  | braavos | essos.local | ☑ | ☐ | MSSQL/ADCS member - Apollo as ESSOS\administrator (high integrity) |
-  | the-eyrie (srv01) | sevenkingdoms.local | ☑ | ☐ | Exchange member (optional add-on, not in base goad.json) - Apollo as SEVENKINGDOMS\administrator (high integrity) |
-
-  Beacon coverage is verified end to end on a live range: every base server plus
-  the optional the-eyrie add-on runs a fresh Apollo beacon that checks in through
-  the redirector to Mythic and returns `whoami` on task. Delivery is uniform,
-  wmiexec as the host's domain administrator (lab password), staging `b2.exe` over
-  HTTP from the jumpbox foothold (192.168.56.4:1025), Defender off by default.
-  Persistence is still open: these beacons are in-memory only and do not survive a
-  reboot or a range stop/start.
-
-  Stability = callback holds through a reboot, uses jittered sleep, and routes
-  out via the redStack redirector (not a direct teamserver hit).
+Every base server, and the optional the-eyrie add-on, ran an Apollo beacon that
+checked in through the redirector on a live range; persistence is not covered.
 
 ## Parts
 

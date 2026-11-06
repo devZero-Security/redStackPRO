@@ -1,7 +1,7 @@
 # DRACARYS solution - redStackPRO edition
 
-DRACARYS is a GOAD challenge lab (by Cyril Servieres / Orange-Cyberdefense):
-start with no credentials and reach Domain Admin on `dracarys.lab`. Unlike the
+DRACARYS is a GOAD lab (by Cyril Servieres / Orange-Cyberdefense) with no marked
+path: start with no credentials and reach Domain Admin on `dracarys.lab`. Unlike the
 GOAD pwning series, mayfly deliberately publishes no solution. This page
 documents the intended chain against redStackPRO's faithful recreation of the
 lab, reconstructed from the upstream `ad/DRACARYS` definition and the redStackPRO
@@ -18,12 +18,13 @@ Same external red team framing as the [GOAD series](../goad/README.md), see the
 [range access model](../README.md#range-access-model): the jumpbox is the only
 public host, everything else is private, and the operator works through a
 beacon's SOCKS proxy (see [tests run through the beacon](../README.md#tests-run-through-the-beacon)).
-Within the lab, the challenge's own start point is the Linux member.
+Within the lab, the start point is the Linux member.
 
 ## Provider differences
 
 redStackPRO compiles this range for cloud backends (`gcp`, `aws`, `azure`) and
-on-prem backends (`proxmox`, `esxi`). The attack chain is identical on all of
+on-prem backends (`proxmox`, `esxi`), which are on the roadmap and not yet
+supported. The attack chain is identical on all of
 them; what differs is the operator's path to the range, because the on-prem
 backends declare fewer network capabilities (`src/redstackpro/schema/registry/providers/`).
 
@@ -58,7 +59,7 @@ jumpbox:
 |------|---------|----|--------------------|
 | balerion | BALERION | Server 2019 | DC, serves LDAPS, runs the CredSSP `keepass_bot` |
 | vhagar | VHAGAR | Server 2019 | member, holds the KeePass vault, runs `bot_ssh`, CredSSP server |
-| syrax | SYRAX | Debian 13 | Linux member, the challenge start point |
+| syrax | SYRAX | Debian 13 | Linux member, the lab's start point |
 | jumpbox | - | Debian | foothold, Guacamole, SSH |
 
 Cast: `drogon` (Domain Admin, also LinuxAdmins), `rhaegal` (local admin on
@@ -69,7 +70,7 @@ vhagar, LinuxAdmins), `viserion` (LinuxUsers, has WriteSPN over `vhagar$`),
 
 ### 0. Foothold on syrax
 
-The challenge starts on the Linux member. Reach it through the jumpbox pivot.
+The lab starts on the Linux member. Reach it through the jumpbox pivot.
 `LinuxUsers` and `LinuxAdmins` may SSH to syrax, so any low-user credential (or
 the capture in step 1) gets you a shell there.
 
@@ -162,17 +163,6 @@ Every element above is built by the canvas blueprint, not hand-placed:
   (WSMAN/vhagar) as an additional path, matching the upstream `wsman_kerb`
   breadcrumb. The upstream `set_spn` breadcrumb points at a host (`arrax`) that
   does not exist in the three-host lab and is left out.
-
-## Step results
-
-| step | result | notes |
-|------|--------|-------|
-| 0 foothold on syrax | | pivot + LinuxUsers SSH |
-| 1 capture viserion (bot_ssh) | | needs the bot running |
-| 2 WriteSPN kerberoast vhagar$ | | ACL wired |
-| 3 CredSSP capture rhaegal (keepass_bot) | | needs rhaegal local admin on vhagar |
-| 4 loot vault -> drogon | | keepass_vault |
-| 5 Domain Admin | | |
 
 Attribution: DRACARYS by Cyril Servieres / Orange-Cyberdefense GOAD. Recreated
 and documented in our own words for redStackPRO.

@@ -31,7 +31,8 @@ domain name in static hosts entries.
 ## Provider differences
 
 redStackPRO compiles this range for cloud backends (`gcp`, `aws`, `azure`) and
-on-prem backends (`proxmox`, `esxi`). The attack chain is identical on all of
+on-prem backends (`proxmox`, `esxi`), which are on the roadmap and not yet
+supported. The attack chain is identical on all of
 them; what differs is the operator's path to the range, because the on-prem
 backends declare fewer network capabilities (`src/redstackpro/schema/registry/providers/`).
 
@@ -130,16 +131,6 @@ proxychains secretsdump.py 'mini.lab/alice:<pw>@<dc-ip>'
 - **`schedule` on the DC.** The `connect_bot` task itself: confirm it exists, note
   the principal it runs as, and only take a task-rewrite escalation if its ACL
   actually lets a lower-privileged identity change its action.
-
-## Step results
-
-| step | result | notes |
-|------|--------|-------|
-| 1 enumerate + spray weak passwords | | anon LDAP read, then spray |
-| 2 land on ws (wsadmin = local admin) | | |
-| 3 capture CredSSP-delegated alice | | needs the bot running, validate both CredSSP sides |
-| 4 Domain Admin | | |
-| stored_credential on dc | | Credential Manager |
 
 Attribution: minilab follows the GOAD project's MINILAB. Recreated and documented
 in our own words for redStackPRO.

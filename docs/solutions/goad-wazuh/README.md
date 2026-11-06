@@ -32,7 +32,8 @@ reached Wazuh and whether a rule fired.
 ## Provider differences
 
 redStackPRO compiles this range for cloud backends (`gcp`, `aws`, `azure`) and
-on-prem backends (`proxmox`, `esxi`). The attack chain is identical on all of
+on-prem backends (`proxmox`, `esxi`), which are on the roadmap and not yet
+supported. The attack chain is identical on all of
 them; what differs is the operator's path to the range, because the on-prem
 backends declare fewer network capabilities (`src/redstackpro/schema/registry/providers/`).
 
@@ -138,20 +139,6 @@ Wazuh agent list; a disconnected agent means no detection is possible. The
 [coverage page](../labs/goad-wazuh.md) records what a live deploy has already
 proven (the telemetry pipeline end to end, and the weak-password 4625 row
 confirmed PASS).
-
-## Step results
-
-| step | offense | detection | notes |
-|------|---------|-----------|-------|
-| 1 recon + find users | | n/a | |
-| 2 LLMNR/NBT-NS poison | | blind (network) | |
-| 3 kerberoast + AS-REP | | good (4769/4768) | roast tooling from part 3 |
-| 4 weak pw + password in description | | good spray / blind description | 4625 spray confirmed live |
-| 5 IIS webshell + MSSQL impersonation | | blind (needs Sysmon / SQL audit) | |
-| 6 GPP cpassword | | blind (SYSVOL read) | |
-| 7 unconstrained delegation | | partial | coerce a DC |
-| 8 ACL chain to DA | | partial/blind (5136) | 12 edges, sevenkingdoms |
-| 9 child to parent trust | | partial | one forest |
 
 Attribution: GOAD and its wazuh/ws01 extensions are the GOAD project's. Recreated
 natively on the redStackPRO canvas and documented in our own words.

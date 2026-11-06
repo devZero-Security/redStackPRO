@@ -32,7 +32,8 @@ SOCKS and the two domains in `/etc/hosts`.
 ## Provider differences
 
 redStackPRO compiles this range for cloud backends (`gcp`, `aws`, `azure`) and
-on-prem backends (`proxmox`, `esxi`). The attack chain is identical on all of
+on-prem backends (`proxmox`, `esxi`), which are on the roadmap and not yet
+supported. The attack chain is identical on all of
 them; what differs is the operator's path to the range, because the on-prem
 backends declare fewer network capabilities (`src/redstackpro/schema/registry/providers/`).
 
@@ -170,7 +171,6 @@ or the lab keeps a live ESC1 that nothing declared.
 > assuming it - the name is what `-ca` has to match.
 
 ## The SQL host: a linked server that points at itself
-<!-- lab-requires: mssql_linked -->
 
 `sql` is the only SQL Server in nha, so its `mssql_linked` vuln links the instance
 to itself: a linked server named `sql.academy.ninja.lan` with `rpc out` on. The link

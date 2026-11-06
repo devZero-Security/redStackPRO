@@ -36,8 +36,8 @@ difference** in the series.
   filters them out of a cloud range and the canvas greys the checkbox with the
   reason. The observation above is why. A range that cannot demonstrate a
   technique should not carry the posture for it and leave a reader wondering
-  whether they ran it wrong. **On Proxmox or ESXi the full set is planted and
-  this step is the real one.**
+  whether they ran it wrong. Proxmox and ESXi, where the full set would be planted
+  and this step would be the real one, are on the roadmap and not yet supported.
 
 ## Step 2 - Coercion → NTLM relay (unicast, cloud-OK)
 
@@ -90,8 +90,8 @@ portal.
 > compiling for **Proxmox or ESXi**: a GCP/AWS/Azure compile silently drops it,
 > same as declaring nothing. The canvas greys the checkbox the same way on a
 > cloud-targeted range. On a cloud compile the toggle correctly does **not**
-> land; a Proxmox/ESXi run is the one that validates the relay payoff live.
-> `⏳ pending an on-prem run`
+> land; validating the relay payoff live needs Proxmox or ESXi, which are on the
+> roadmap. `⏳ not yet run`
 >
 > The second block, **drop-the-mic (CVE-2019-1040)**, is a code-path CVE and stays
 > **document-only** (a redundant MIC bypass we no longer need once signing is not

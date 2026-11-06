@@ -5,9 +5,6 @@ semantics and belongs in the topology layer validator, not in the compiler. Ever
 rule carries a machine-readable code and prose written for a reader, because the
 eventual agent harness iterates on the prose.
 
-Four-digit codes (00NN) are internal design-decision references and are not
-published with this repo.
-
 Severity is `error`, `warning` or `info`. The compiler refuses to run on any error.
 An `info` finding is a notice: the export is fine, it just may not be what you
 expect. A finding about one field carries that field's dotted path under its node
@@ -38,12 +35,11 @@ marked not implemented below are described but not yet written.
 
 ## Naming
 
-Names are composed from the topology `prefix` and the node `id`, never stored. See
-0016.
+Names are composed from the topology `prefix` and the node `id`, never stored.
 
 - `NAM001` error. A node id must carry the kind tag its kind declares in the
   registry as the trailing token: `myth-ts01` for a teamserver, `c2-sub01` for a
-  subnet. See 0044.
+  subnet.
 - `NAM002` error. Every node id must end in a two digit ordinal. The slug carries
   the meaning; the ordinal keeps siblings apart.
 - `NAM003` error. The composed name must be 15 characters or fewer. Windows
@@ -110,19 +106,19 @@ Names are composed from the topology `prefix` and the node `id`, never stored. S
   whether a management path is claimed; this asks whether it is possible. A peers
   edge is the transport, so cross-network management is legal exactly when the two
   networks are directly peered. Peering is not transitive, so an edge from A to B
-  and one from B to C does not let a jumpbox in A manage C. See 0029.
+  and one from B to C does not let a jumpbox in A manage C.
 - `NET003` error. A `fronts` edge whose redirector and teamserver are in different
   routing domains with no `peers` edge joining them. The redirector opens the
   upstream connection, so like `manages` and `logs_to` it is legal across a
   boundary exactly when a peering carries it; without one the cross-network rule
-  names a CIDR that has no route. See 0030.
+  names a CIDR that has no route.
 - `NET004` error. A range host's `internal_ip` (only `dc`, `srv`, `wks`, `fw`
   carry the field) falls outside the `cidr` of the segment it sits in. A pinned
   address terraform cannot even route to from its own subnet is not a config a
-  deploy could ever satisfy. See 0055.
+  deploy could ever satisfy.
 - `NET005` error. Two hosts in the same segment pinned to the same
   `internal_ip`. The second host's resource either fails to claim the address
-  or silently steals it from the first at apply time. See 0055.
+  or silently steals it from the first at apply time.
 - `NET006` error, provider-specific. A host's `internal_ip` falls inside the
   addresses the target provider reserves at either end of a subnet. AWS and Azure
   hold back the first four and the last; GCP holds back the first two and the last
@@ -131,7 +127,7 @@ Names are composed from the topology `prefix` and the node `id`, never stored. S
   on GCP and refused by AWS: the stock GOAD labs shipped a jumpbox pinned to
   `192.168.56.2` that deployed on GCP for months, then failed every AWS apply with
   "Address 192.168.56.2 is in subnet's reserved address range" two minutes in,
-  after a NAT gateway and five instances already existed. See 0055.
+  after a NAT gateway and five instances already existed.
 - `NET007` error. A subnet whose `cidr` is not inside its network's `cidr`. GCP
   takes it; AWS and Azure refuse it at apply. The remedy suggests a range inside
   the network.
@@ -178,7 +174,7 @@ Names are composed from the topology `prefix` and the node `id`, never stored. S
   stderr. A warning and not an error, because the page is genuinely fine without it:
   the hero falls back to the photograph planned alongside the clip, and then to drawn
   artwork. Nothing is broken; the operator is simply not getting what they asked for,
-  and is entitled to hear it while the topology is still in front of them. See 0059.
+  and is entitled to hear it while the topology is still in front of them.
 - `MGT002` error. A jumpbox is excluded from its own ProxyJump path. This is a
   compiler invariant, listed here because it is what the rule protects.
 
@@ -237,8 +233,7 @@ apply, never in the export.
 A `peers` edge joins two networks so hosts in one can reach hosts in the other on
 private addresses. It is what makes cross-network `manages` and `logs_to` legal.
 The cloud backends render it as VPC peering on GCP and AWS and VNet peering on
-Azure; Proxmox and ESXi, which cannot peer, refuse through `CAP004`. See 0029,
-0030, and 0031.
+Azure; Proxmox and ESXi, which cannot peer, refuse through `CAP004`.
 
 - `PEER001` error. A `peers` edge whose source and target are the same network. A
   network peered with itself is not a connection.
@@ -253,7 +248,7 @@ Azure; Proxmox and ESXi, which cannot peer, refuse through `CAP004`. See 0029,
 
 Since 0.3.0 the segment's `exposure` is a ceiling and each host carries
 `public_address`. These rules read the effective value, which is the host's own
-field bounded by its segment. See 0021.
+field bounded by its segment.
 
 - `EXP001` error. A jumpbox or redirector that holds no public address, so
   nothing outside can reach the thing that exists to be reached. Two ways to get
@@ -293,7 +288,7 @@ Requirements come from the node kind registry, not from the document.
   declares the `mixed_exposure_segment` capability alongside GCP. The rule had also
   never fired in practice, being gated on `exposure: internet` while every shipped
   blueprint uses `local`, and its description had drifted to the opposite of the
-  real failure. See 0054.
+  real failure.
 - `CAP005` info, provider-specific. A range host with `os: windows_10` or
   `windows_11` on GCP or AWS. Neither publishes a Windows client image, so the
   host boots Windows Server 2022. Azure has the client images.
@@ -308,19 +303,19 @@ Requirements come from the node kind registry, not from the document.
   peering. GCP, AWS, and Azure do; Proxmox and ESXi cannot peer at all, since
   joining two networks is a property of the host network's routing that
   redStackPRO does not control. The
-  reason travels from the provider registry. See 0029, 0030, and 0031.
+  reason travels from the provider registry.
 
 ## Collector
 
 - `LOG001` error. A `logs_to` edge whose endpoints share no routing domain and
   are not joined by a `peers` edge. Log shipping is push over TCP, so the sender
   has to be able to open a connection to the collector, and a peering carries that
-  across a network boundary. See 0029.
+  across a network boundary.
 - `LOG002` warning. A collector with `tls: false`.
 - `LOG003` **removed**, deliberately. It warned that a collector sharing a segment
   with the jumpbox belongs in its own tier. redStack runs the collector in the one
   internal segment alongside the jumpbox and the operator boxes, so warning about
-  the shipped shape every time was noise. See 0039.
+  the shipped shape every time was noise.
 
 ## Ordering
 
@@ -335,7 +330,7 @@ than the ordering logic.
 These fire only in defense mode (`mode: defense`); the offense rules above are gated
 off there, since a lab jumpbox on a local subnet is correct and defense blueprints
 keep GOAD's host names instead of the kind tag and ordinal id scheme (`NAM001`,
-`NAM002`). See 0047. The shipped defense blueprints are clean of all of them.
+`NAM002`). The shipped defense blueprints are clean of all of them.
 
 - `RNG001` warning. A domain member (`dc`, `srv`, or `wks`) with no `joins`
   edge. In an AD range a host that joins no domain is drawn but part of nothing.
@@ -412,9 +407,9 @@ keep GOAD's host names instead of the kind tag and ordinal id scheme (`NAM001`,
 - `SVC002` info. A `fw` or `appliance` host. No role installs anything on it yet,
   so it boots as a plain host on its subnet.
 
-`RNG006` and `RNG007` are the first of the compile pre-flight checks 0050 calls
-for: things that must hold before a range is provisioned, reported on the canvas
-now rather than surfacing as a failure mid-run.
+`RNG006` and `RNG007` are the first of the compile pre-flight checks: things
+that must hold before a range is provisioned, reported on the canvas now rather
+than surfacing as a failure mid-run.
 
 ## Not implemented
 
@@ -425,7 +420,7 @@ now rather than surfacing as a failure mid-run.
 ## Open questions this file cannot yet answer
 
 - Resolved by removal. `tunnel` endpoint kinds no longer matter because the role
-  is gone. See the amendment in 0007.
+  is gone.
 - Whether `manages` may target an individual host, for the per-host exception
   case. Currently a validator relaxation with no schema change.
 - Instantiation parameters for per-operator templates. Not in 0.7.0.

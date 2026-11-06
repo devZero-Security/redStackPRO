@@ -66,27 +66,3 @@ Every lab still has to clear the **stand-up gate**: it compiles from the canvas
 with no errors, `deploy.sh` reaches `RUN EXITED ok=1` in a single pass, and the
 jumpbox comes up with the Guacamole portal and the assumed-breach foothold
 account. That gate is independent of technique coverage and applies to all nine.
-
-## Measured deploy runtimes (2026-09-09, GCP us-east4 / AWS us-east-1)
-
-Wall clock from `deploy.sh` launch to `RUN EXITED`, from the live round that stood
-every lab up. Read the attempt count with the time: the retry loop is generous, so
-a lab that hit a bug spent most of its wall clock replaying, not building. Only the
-single-pass rows describe how long a lab actually takes.
-
-| lab | hosts | attempts | wall clock | note |
-|-----|-------|----------|-----------|------|
-| nha | 6 | **1** | **~24 min** | clean single pass, the honest reference number |
-| dracarys | 4 | 2 | ~20 min | one post-join WinRM flap |
-| AWS goad | 9 | 3 | ~47 min | attempts 1-2 lost to the bare `Get-ADDomain` bug |
-| goad-wazuh | 6 | 5 | ~56 min | attempts 1-4 lost to the Sysmon stderr and YAML-null bugs |
-| goad-light | 5 | 3 | ~82 min | child-domain password-policy revert |
-| minilab | 3 | 1 (re-run) | ~3 min | on already-built hosts; its first run exhausted 8 attempts |
-
-Two things worth carrying: a ~6 host AD lab builds in well under half an hour when
-nothing is broken, and each failed attempt costs roughly the full play time plus a
-150 s backoff, so a single mid-play bug can quadruple the wall clock. That is why
-the failures above were worth fixing rather than retrying around.
-
-These numbers predate the fixes for the bugs named in the notes, so the affected
-labs should now land far closer to the nha figure. Re-measure after a clean round.

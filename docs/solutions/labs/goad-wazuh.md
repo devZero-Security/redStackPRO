@@ -118,7 +118,7 @@ not verified live:
 | 1 recon | yes | six hosts across two domains |
 | 2 find users | yes | |
 | 3 enumeration with user | yes | kerberoasting and AS-REP are both planted |
-| 4 poison and relay | partial | `llmnr_poisoning` on winterfell, on Proxmox and ESXi only; a cloud network drops the broadcast it needs |
+| 4 poison and relay | partial | `llmnr_poisoning` on winterfell, not planted on GCP, AWS or Azure: a cloud network drops the broadcast it needs |
 | 5 exploit with user | no | none of the five credential-material techniques are set |
 | 6 ADCS | no | no CA and no ESC template |
 | 7 MSSQL | partial | `mssql_impersonation` on castelblack; no linked server, so the cross-forest hop drops |

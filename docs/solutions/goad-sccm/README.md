@@ -40,7 +40,8 @@ substitutes (for example `smbclient.py` in place of a plain `nxc` share list).
 ## Provider differences
 
 redStackPRO compiles this range for cloud backends (`gcp`, `aws`, `azure`) and
-on-prem backends (`proxmox`, `esxi`). The attack chain is identical on all of
+on-prem backends (`proxmox`, `esxi`), which are on the roadmap and not yet
+supported. The attack chain is identical on all of
 them; what differs is the operator's path to the range, because the on-prem
 backends declare fewer network capabilities (`src/redstackpro/schema/registry/providers/`).
 
@@ -131,11 +132,9 @@ missing host to the canvas), not a role change.
 | 2 | part 0x2, low user | [part-02-low-user.md](part-02-low-user.md) | not yet run |
 | 3 | part 0x3, admin user | [part-03-admin-user.md](part-03-admin-user.md) | not yet run |
 
-## How we validate
+## How to validate
 
-Same rule as the GOAD series: run each part against the live deployment, mark
-every step PASS, FAIL or N-A, note any gaps for your own retest, fix and commit,
-then rerun until the part matches the documented outcome.
+Run each part against your deployment and mark every step PASS, FAIL or N-A.
 
 Attribution: adapted from mayfly277's SCCM LAB series (mayfly277.github.io) and
 the Misconfiguration Manager project. Rewritten in our own words for
