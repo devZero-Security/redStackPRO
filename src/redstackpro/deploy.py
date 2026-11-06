@@ -1858,7 +1858,8 @@ def _wrap(text, width=HELP_WIDTH):
     """Wrapped lines; a (parenthesized) group, usually a command, stays whole."""
     import re
     import textwrap
-    kept = re.sub(r"\([^)]*\)", lambda m: m.group(0).replace(" ", "\0"), text)
+    # Possessive [^)]*+ so the match cannot backtrack (CodeQL polynomial-redos).
+    kept = re.sub(r"\([^)]*+\)", lambda m: m.group(0).replace(" ", "\0"), text)
     return [line.replace("\0", " ") for line in textwrap.wrap(
         kept, width, break_on_hyphens=False, break_long_words=False)]
 

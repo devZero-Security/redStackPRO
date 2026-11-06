@@ -8,6 +8,7 @@ a real compiled export, so the manifest and tfvars it reads are the shipped ones
 import json
 import re
 import subprocess
+from urllib.parse import urlparse
 
 import pytest
 
@@ -72,7 +73,7 @@ class FakeArm:
         for marker in self.fail:
             if marker in url:
                 raise ap.ApiError("HTTP 403 AuthorizationFailed")
-        if "login.microsoftonline.com" in url:
+        if urlparse(url).hostname == "login.microsoftonline.com":
             return {"access_token": TOKEN}
         assert headers["Authorization"] == "Bearer " + TOKEN
         if "/Microsoft.Compute/skus" in url:
