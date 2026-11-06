@@ -58,6 +58,12 @@ assert.equal(PLATFORMS.windows.run, ".\\deploy.ps1");
 assert.match(PLATFORMS.windows.note, /WSL/);
 assert.equal(PLATFORMS.unix.run, "bash deploy.sh");
 
+// The scripts are unsigned. The note says so and stops there: no policy change
+// or bypass is spelled out.
+assert.match(PLATFORMS.windows.note, /unsigned, so PowerShell's execution policy has to allow them/);
+assert.doesNotMatch(PLATFORMS.windows.note, /Bypass|Unblock-File|Set-ExecutionPolicy/);
+assert.doesNotMatch(PLATFORMS.unix.note, /execution policy/);
+
 // The keygen line is platform specific. Windows PowerShell 5.1 drops an empty
 // argument to a native program, so -N '' or -N "" leaves -N with no value and
 // ssh-keygen stops without writing a key. The Windows line leaves -N off and

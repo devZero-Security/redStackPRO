@@ -375,6 +375,9 @@ RUN_THE_DEPLOY = """**Windows** (PowerShell, from this folder):
 .\\deploy.ps1
 ```
 
+`deploy.ps1` and `manage.ps1` are unsigned, so PowerShell's execution policy has
+to allow them.
+
 **macOS and Linux**:
 
 ```bash

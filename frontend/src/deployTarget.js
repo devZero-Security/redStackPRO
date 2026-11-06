@@ -33,7 +33,8 @@ export const PLATFORMS = {
     // C:\Windows\System32\bash.exe, the WSL launcher, so the deploy runs in a
     // different filesystem with a different home and different cloud
     // credentials, and fails for reasons that look nothing like the cause.
-    note: "Run it from PowerShell. Not bash deploy.sh there: that is WSL's bash, not Git Bash.",
+    note: "Run it from PowerShell. Not bash deploy.sh there: that is WSL's bash, not Git Bash. " +
+      "deploy.ps1 and manage.ps1 are unsigned, so PowerShell's execution policy has to allow them.",
     // Windows PowerShell 5.1 drops an empty argument, so -N '' leaves -N with no
     // value and ssh-keygen stops. No -N plus Enter twice works on 5.1 and 7. The
     // key must have no passphrase: deploy.sh uses BatchMode.

@@ -239,6 +239,19 @@ def test_the_guide_watches_provisioning_with_one_command(redstack):
         assert "'tail -f" not in guide
 
 
+def test_the_run_step_says_the_powershell_scripts_are_unsigned(redstack):
+    """One sentence where deploy.ps1 is run. It names the execution policy and
+    stops there: no bypass or policy change is spelled out."""
+    for doc in (redstack, _goad_light()):
+        guide = _guide(doc)
+        start = guide.index(".\\deploy.ps1\n```")
+        run = guide[start:guide.index("**macOS and Linux**", start)]
+        assert ("`deploy.ps1` and `manage.ps1` are unsigned, so PowerShell's "
+                "execution policy has\nto allow them.") in run
+        for word in ("Bypass", "Unblock-File", "Set-ExecutionPolicy"):
+            assert word not in guide
+
+
 def test_tzdata_is_a_dependency():
     """zoneinfo finds no zones on Windows or a slim image without it, and the
     export embeds a zone's offset only when the compiler can resolve the zone."""
