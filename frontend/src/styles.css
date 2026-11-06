@@ -2,6 +2,12 @@
    Accent colors come from the registry, not from here. */
 
 :root {
+  /* The app is dark only. Tell the browser so native controls (radios, the
+     time picker's clock icon, checkboxes, unstyled text inputs, scrollbars)
+     render in their dark variant instead of light on dark: a selected but
+     disabled radio on a locked blueprint, the auto-stop "stop at" clock icon,
+     and the access-rights inputs were all drawing light. */
+  color-scheme: dark;
   --bg: #1a1b1e;
   --panel: #212327;
   --panel-2: #25272b;

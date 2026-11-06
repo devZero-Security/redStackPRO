@@ -308,6 +308,10 @@ versioning, and dates are UTC.
 
 ### Fixed
 
+- The canvas is dark, but native form controls were drawing in their light variant:
+  a selected auto-stop radio on a locked blueprint looked unselected, the auto-stop
+  "stop at" clock icon was invisible, and some Inspector text inputs rendered white.
+  The app now declares a dark `color-scheme`, so the controls render dark to match.
 - On Windows, the `ssh` commands the deploy prints failed when the key in `keys\` had
   been copied in rather than made with `ssh-keygen`: the copy takes the folder's
   permissions, and Windows ssh refuses a key other accounts can read. `deploy.ps1` now
