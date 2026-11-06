@@ -230,13 +230,12 @@ def test_a_zone_the_export_cannot_resolve_says_the_check_did_not_run(registry, t
 
 
 def test_the_guide_watches_provisioning_with_one_command(redstack):
-    """The same one-line form the DONE box prints: ssh and the remote tail
-    together, the remote half double quoted for PowerShell and bash."""
+    """The same one-line form the DONE box prints: ssh running rsp-watch, which
+    returns when the run ends. tail -f never returned (Mike, 2026-11-06)."""
     for doc, user in ((redstack, "redop"), (_goad_light(), "blueop")):
         guide = _guide(doc)
-        assert ('\nssh -i keys/id_ed25519 %s@<jumpbox> "tail -f ~/provision/run.log"\n'
-                % user) in guide
-        assert "'tail -f" not in guide
+        assert "\nssh -i keys/id_ed25519 %s@<jumpbox> rsp-watch\n" % user in guide
+        assert "tail -f" not in guide
 
 
 def test_the_run_step_says_the_powershell_scripts_are_unsigned(redstack):

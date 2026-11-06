@@ -426,9 +426,11 @@ versioning, and dates are UTC.
   each sits alone on its own line.
 - The `DONE` box split the command that watches provisioning over two lines, so a
   user who copied the first line got an interactive ssh session and then ran
-  `tail -f` in PowerShell. It is now one line,
-  `ssh -i keys\id_ed25519 blueop@<jumpbox> "tail -f ~/provision/run.log"`, with the
-  key path in the form of the shell the deploy ran from. Every command the deploy
+  `tail -f` in PowerShell, and `tail -f` never returned once the run was over. It
+  is now one line, `ssh -i keys\id_ed25519 blueop@<jumpbox> rsp-watch`, with the
+  key path in the form of the shell the deploy ran from. `rsp-watch` follows
+  `~/provision/run.log` and returns when the run ends, exit 0 for
+  `RUN EXITED ok=1`. Every command the deploy
   prints, in the `DONE` box and in the reasons it stops (the cloud sign-in, an empty
   `project` or `subscription_id`, a missing key, an unregistered Azure provider),
   sits alone on its own line under a label that says to run it.

@@ -259,6 +259,56 @@ def test_the_wrapper_makes_an_open_key_owner_only_and_deploy_says_so():
     assert 'note "$REDSTACKPRO_KEY_ACL was readable by other Windows accounts' in files["deploy.sh"]
 
 
+def test_the_deploy_installs_rsp_watch_and_the_runner_names_its_pid(script):
+    """The DONE box's watch command has to exist before the jumpbox role runs, so
+    deploy.sh installs it beside run.sh; the runner records the pid it follows."""
+    from redstackpro.deploy import _WATCH
+    assert "sudo tee /usr/local/bin/rsp-watch" in script
+    assert _WATCH.strip() in script
+    assert "\necho $$ > run.pid\n" in script
+    assert "tail -f ~/provision/run.log" not in script
+
+
+@pytest.mark.skipif(os.name == "nt" or _bash() is None,
+                    reason="tail --pid follows POSIX processes; Git Bash cannot see them")
+def test_rsp_watch_returns_when_the_run_ends(tmp_path):
+    """Executed: it follows a live run and returns when the runner exits, with
+    0 for ok=1; it prints a finished log and returns 1 for a failed one; and it
+    says so when there is no run at all."""
+    import time
+    from redstackpro.deploy import _WATCH
+    watch = tmp_path / "rsp-watch"
+    watch.write_text(_WATCH, encoding="utf-8", newline="\n")
+    home = tmp_path / "home"
+    prov = home / "provision"
+    prov.mkdir(parents=True)
+    env = dict(os.environ, HOME=str(home))
+
+    def rsp_watch():
+        return subprocess.run([_bash(), str(watch)], env=env, capture_output=True,
+                              text=True, timeout=30)
+
+    assert rsp_watch().returncode == 2
+
+    log = prov / "run.log"
+    log.write_text("started\n", encoding="utf-8")
+    writer = subprocess.Popen([_bash(), "-c", 'echo $$ > "$HOME/provision/run.pid"; sleep 2; '
+                               'echo " RUN EXITED ok=1 at now" >> "$HOME/provision/run.log"'],
+                              env=env)
+    while not (prov / "run.pid").exists():
+        time.sleep(0.05)
+    t0 = time.time()
+    done = rsp_watch()
+    writer.wait()
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "started" in done.stdout and "RUN EXITED ok=1" in done.stdout
+    assert time.time() - t0 < 15
+
+    log.write_text("started\n RUN EXITED ok=0 at now\n", encoding="utf-8")
+    done = rsp_watch()
+    assert done.returncode == 1 and "RUN EXITED ok=0" in done.stdout
+
+
 def _windows_powershell():
     if os.name != "nt":
         return None
@@ -1808,8 +1858,8 @@ def test_a_full_run_prints_every_phase_then_the_done_box(tmp_path):
         " Logins, run:",
         "   terraform -chdir=terraform output guacamole",
         "",
-        " Watch provisioning, run (Ctrl-C stops watching, not the build):",
-        '   ssh -i keys/id_ed25519 blueop@%s "tail -f ~/provision/run.log"' % JUMP_IP,
+        " Watch provisioning, run (it returns when the run ends):",
+        "   ssh -i keys/id_ed25519 blueop@%s rsp-watch" % JUMP_IP,
         "",
         " Finished  when run.log shows RUN EXITED ok=1 (45-75 min)"]
     assert re.fullmatch(r" Log       logs/deploy-\d{8}-\d{6}Z\.log", box[11]), box[11]
@@ -1830,7 +1880,7 @@ def test_from_deploy_ps1_the_done_box_writes_windows_paths(tmp_path):
     export, stubs, _ = _range_export(tmp_path)
     done = _run(export, stubs, env_extra={"REDSTACKPRO_FROM_PS1": "1"})
     assert done.returncode == 0, done.stdout + done.stderr
-    assert ('\n   ssh -i keys\\id_ed25519 blueop@%s "tail -f ~/provision/run.log"\n'
+    assert ('\n   ssh -i keys\\id_ed25519 blueop@%s rsp-watch\n'
             % JUMP_IP) in done.stdout
     assert re.search(r"^ Log       logs\\deploy-\d{8}-\d{6}Z\.log$", done.stdout, re.M)
 
@@ -1965,7 +2015,7 @@ def test_a_key_path_with_a_space_is_quoted_in_the_watch_command(tmp_path):
     key.write_text("not a real key", encoding="utf-8")
     done = _run(export, stubs, env_extra={"REDSTACKPRO_SSH_KEY": "my keys/id_ed25519"})
     assert done.returncode == 0, done.stdout + done.stderr
-    assert ('\n   ssh -i "my keys/id_ed25519" blueop@%s "tail -f ~/provision/run.log"\n'
+    assert ('\n   ssh -i "my keys/id_ed25519" blueop@%s rsp-watch\n'
             % JUMP_IP) in done.stdout
 
 

@@ -317,8 +317,7 @@ rsp_drain(){
 }
 
 # A command in the box sits alone on its own line, under a label ending "run:",
-# so a copied line is the whole command and nothing else. The remote command is
-# double quoted, which bash and PowerShell both pass to ssh as one argument.
+# so a copied line is the whole command and nothing else, in bash or PowerShell.
 rsp_done(){
   rsp_k="$(rsp_path "$KEY")"
   case "$rsp_k" in *" "*) rsp_k="\"$rsp_k\"" ;; esac
@@ -331,8 +330,8 @@ rsp_done(){
   echo " Logins, run:"
   echo "   ${C_CYN}terraform -chdir=terraform output guacamole$C_OFF"
   echo
-  echo " Watch provisioning, run (Ctrl-C stops watching, not the build):"
-  echo "   ${C_CYN}ssh -i $rsp_k $JUMPUSER@$JUMP \"tail -f ~/provision/run.log\"$C_OFF"
+  echo " Watch provisioning, run (it returns when the run ends):"
+  echo "   ${C_CYN}ssh -i $rsp_k $JUMPUSER@$JUMP rsp-watch$C_OFF"
   echo
   echo " Finished  when run.log shows RUN EXITED ok=1 (@@ETA@@)"
   printf '%s' "$RSP_DNS_TODO" | while IFS= read -r rsp_l; do
@@ -856,7 +855,8 @@ def generate_deploy_script(topology, registry=None, provider=None):
             ("@@AZURE_PREFLIGHT@@", _AZURE_PREFLIGHT if provider == "azure" else ""),
             ("@@INIT@@", "" if provider == "azure" else _INIT),
             ("@@DNS_ACTIONS@@", dns_actions),
-            ("@@RUNNER@@", runner)):
+            ("@@RUNNER@@", runner),
+            ("@@WATCH@@", _WATCH)):
         script = script.replace(token, value)
     assert "@@" not in script, "an unfilled token in the deploy template"
     return script
@@ -902,6 +902,7 @@ fi
 _RUNNER = r'''#!/usr/bin/env bash
 set -uo pipefail
 cd ~/provision
+echo $$ > run.pid
 export PATH="$HOME/.local/bin:$PATH" ANSIBLE_HOST_KEY_CHECKING=False
 C=(-e ansible_ssh_common_args='' -e redstackpro_ssh_key_path=$HOME/.ssh/deploy-key)
 # The operator's one password, in both modes. A range needs it to provision
@@ -990,6 +991,22 @@ done
 say "$THIN"
 [ "$ok" = 1 ] || say " The last attempt failed. Lines marked !! above name the failed tasks."
 say " Every line Ansible printed: ~/provision/run-full.log" "$RULE"
+'''
+
+# /usr/local/bin/rsp-watch on the jumpbox: the DONE box's watch command. tail -f
+# alone never returns; --pid ends it when the runner (run.pid) exits.
+_WATCH = r'''#!/usr/bin/env bash
+# Follow ~/provision/run.log until the provisioning run exits.
+# Exit 0 when it ended ok=1, 1 when it did not, 2 when there is no run here.
+LOG="$HOME/provision/run.log"
+[ -f "$LOG" ] || { echo "no provisioning run here: $LOG is missing"; exit 2; }
+PID="$(cat "$HOME/provision/run.pid" 2>/dev/null)"
+if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+  tail -n +1 -f --pid="$PID" "$LOG"
+else
+  cat "$LOG"
+fi
+grep -q '^ RUN EXITED ok=1 ' "$LOG"
 '''
 
 
@@ -1272,7 +1289,10 @@ ok "staged in $(took)"
 phase "Write the provision runner"
 $SSH "$JUMPUSER@$JUMP" "cat > ~/provision/run.sh" <<'RUNNER' || fail "writing ~/provision/run.sh on the jumpbox failed"
 @@RUNNER@@RUNNER
-ok "~/provision/run.sh written"
+# Installed here, not by the jumpbox role: the DONE box names it before that runs.
+$SSH "$JUMPUSER@$JUMP" "sudo tee /usr/local/bin/rsp-watch >/dev/null && sudo chmod 0755 /usr/local/bin/rsp-watch" <<'WATCH' || fail "installing rsp-watch on the jumpbox failed"
+@@WATCH@@WATCH
+ok "~/provision/run.sh and rsp-watch written"
 
 phase "Launch provisioning on the jumpbox"
 # Quitting the screen does not reap the ansible-playbook it launched: that process

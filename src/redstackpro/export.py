@@ -457,10 +457,12 @@ Provisioning runs in a detached `screen` and keeps going if you disconnect. The
 filled in, as one command that pastes into PowerShell or bash alike:
 
 ```bash
-ssh -i keys/id_ed25519 {jumpuser}@<jumpbox> "tail -f ~/provision/run.log"
+ssh -i keys/id_ed25519 {jumpuser}@<jumpbox> rsp-watch
 ```
 
-Ctrl-C stops the watching, not the build.
+`rsp-watch` shows `~/provision/run.log` from the top and returns when the run
+ends: exit 0 for `RUN EXITED ok=1`, 1 otherwise. Ctrl-C stops the watching, not
+the build.
 
 {run_log}
 
@@ -647,10 +649,12 @@ Provisioning runs in a detached `screen` and keeps going if you disconnect. The
 filled in, as one command that pastes into PowerShell or bash alike:
 
 ```bash
-ssh -i keys/id_ed25519 {jumpuser}@<jumpbox> "tail -f ~/provision/run.log"
+ssh -i keys/id_ed25519 {jumpuser}@<jumpbox> rsp-watch
 ```
 
-Ctrl-C stops the watching, not the build.
+`rsp-watch` shows `~/provision/run.log` from the top and returns when the run
+ends: exit 0 for `RUN EXITED ok=1`, 1 otherwise. Ctrl-C stops the watching, not
+the build.
 
 {run_log}
 
