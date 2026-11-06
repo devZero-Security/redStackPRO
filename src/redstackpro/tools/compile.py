@@ -6,6 +6,9 @@
 
 A formatter over the same file map the API returns, so the CLI and the download
 button cannot produce different output. See 0010.
+
+-o replaces its folder, except one that holds a deployed range's Terraform state
+or key: that needs --force.
 """
 
 import argparse
@@ -24,7 +27,12 @@ from . import _report, provider_arg
 
 def configure(ap):
     ap.add_argument("topology")
-    ap.add_argument("-o", "--out", default="build")
+    ap.add_argument("-o", "--out", default="build",
+                    help="folder to write (default build); an existing one is "
+                         "replaced, unless it holds a deployed range's state or key")
+    ap.add_argument("--force", action="store_true",
+                    help="replace the -o folder even when it holds "
+                         "terraform/terraform.tfstate or a key in keys/")
     ap.add_argument("--provider", default="gcp", type=provider_arg)
     ap.add_argument("--region", default=None,
                     help="cloud region for the deploy; overrides a region on "
@@ -43,6 +51,20 @@ def configure(ap):
                     help="domain to give every redirector, or node=domain "
                          "(repeatable) to name them one at a time")
     return ap
+
+
+def deployed_files(out):
+    """What in an export folder belongs to a deployed range: the Terraform state
+    and any key in keys/ (keys/.keep ships empty in every export). Deleting
+    either leaves a billing range with nothing to tear it down from."""
+    found = []
+    if (out / "terraform" / "terraform.tfstate").is_file():
+        found.append("terraform/terraform.tfstate")
+    keys = out / "keys"
+    if keys.is_dir():
+        found += sorted("keys/" + p.name for p in keys.iterdir()
+                        if p.is_file() and p.name != ".keep")
+    return found
 
 
 def run(args, error):
@@ -91,6 +113,13 @@ def run(args, error):
 
     out = Path(args.out)
     if out.exists():
+        held = deployed_files(out) if out.is_dir() else []
+        if held and not args.force:
+            sys.stderr.write(
+                "%s holds a deployed range's state or key (%s), so compile will "
+                "not replace it. Pick a new folder with -o, or pass --force.\n"
+                % (out, ", ".join(held)))
+            sys.exit(1)
         shutil.rmtree(out)
     for path, contents in sorted(files.items()):
         target = out / path
