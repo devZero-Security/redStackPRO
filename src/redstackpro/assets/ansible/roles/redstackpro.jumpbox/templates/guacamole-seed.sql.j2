@@ -114,12 +114,18 @@ SELECT connection_id, '{{ key }}', '{{ value }}'
 {%   if (vars.ansible_connection is defined and vars.ansible_connection == 'psrp')
         or (vars.redstackpro_operator_os is defined and vars.redstackpro_operator_os == 'windows')
         or (vars.redstackpro_operator_desktop | default(false)) %}
+{#   Promotion keeps only the built-in Administrator (as the domain's), so a DC
+     tile signs in as that, the account provisioning uses; see ansible.py. #}
+{%   set dc = host in groups.get('domain_controllers', []) %}
 -- {{ host }} (rdp)
 {{ conn(host, 'rdp') }}
 {{ param(host, 'hostname', vars.ansible_host) }}
 {{ param(host, 'port', '3389') }}
-{{ param(host, 'username', redstackpro_guac_operator) }}
+{{ param(host, 'username', redstackpro_range_admin_user | default('Administrator') if dc else redstackpro_guac_operator) }}
 {{ param(host, 'password', redstackpro_guac_password) }}
+{%   if dc and vars.redstackpro_join_netbios is defined %}
+{{ param(host, 'domain', vars.redstackpro_join_netbios) }}
+{%   endif %}
 {{ param(host, 'security', 'nla') }}
 {{ param(host, 'ignore-cert', 'true') }}
 {{ param(host, 'enable-drive', 'true') }}

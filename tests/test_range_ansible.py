@@ -180,7 +180,7 @@ def test_the_seed_sql_is_safe_and_idempotent():
     assert "CREATE EXTENSION IF NOT EXISTS pgcrypto" in seed
 
 
-def _render_guac_seed(hostvars):
+def _render_guac_seed(hostvars, groups=None):
     """Render the real template with a fabricated inventory, StrictUndefined so a
     missing var fails loud rather than falling through to the wrong branch.
     Jinja is a test convenience here; Ansible renders this in production."""
@@ -197,9 +197,27 @@ def _render_guac_seed(hostvars):
         redstackpro_jumpbox_user="redop",
         redstackpro_guac_ssh_key="fake-key",
         inventory_hostname="off-jump-bx01",
-        groups={"all": ["off-jump-bx01"] + list(hostvars)},
+        groups={"all": ["off-jump-bx01"] + list(hostvars), **(groups or {})},
         hostvars=hostvars,
     )
+
+
+def test_a_domain_controller_tile_signs_in_as_the_domain_administrator():
+    """Promotion keeps only the built-in Administrator, as the domain's, so a DC
+    tile signing in as the operator account could never log in (found live on
+    Azure minilab, 2026-11-06). A member host keeps the operator account."""
+    seed = _render_guac_seed({
+        "def-dc": {"ansible_host": "192.168.56.10", "ansible_connection": "psrp",
+                   "redstackpro_join_netbios": "MINILAB"},
+        "def-ws": {"ansible_host": "192.168.56.11", "ansible_connection": "psrp",
+                   "redstackpro_join_netbios": "MINILAB"},
+    }, groups={"domain_controllers": ["def-dc"]})
+    dc = seed.split("-- def-dc (rdp)")[1].split("-- def-ws (rdp)")[0]
+    ws = seed.split("-- def-ws (rdp)")[1]
+    assert "'username', 'Administrator'" in dc
+    assert "'domain', 'MINILAB'" in dc
+    assert "'username', 'redop'" in ws
+    assert "'domain'" not in ws
 
 
 def test_a_desktop_kali_operator_gets_an_rdp_tile_not_ssh():
