@@ -40,6 +40,10 @@ own peered network, with the teamservers, collector, and operators behind a jump
 
 ![Split horizon C2 on the canvas: two redirector networks, Apache fronting Sliver and Nginx fronting Mythic and Adaptix, over a shared C2 subnet with the teamservers, an OpenSearch collector, operators and a jumpbox.](docs/images/split-horizon.png)
 
+The two errors in the top bar are the canvas validating as you build: the redirectors
+have no domain yet, which you set to one you control before deploying. It is caught
+here, not at apply time.
+
 **Multiple operators, one stack.** An attack-infrastructure jumpbox can name a
 list of `operators` (handle plus role), and each gets a Guacamole portal login
 on the shared lab password. Set the jumpbox's `access_mode` to `wireguard` or
